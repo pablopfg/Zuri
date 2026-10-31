@@ -186,8 +186,10 @@ function NewTask({ projects, forToday }: { projects: Project[]; forToday: boolea
 
   const placeholder = forToday && !date ? t("web.tasks.addForToday") : t("web.tasks.addOne");
   // With the panel closed, what is chosen in it stays in view.
+  const dueAtChosen = date ? dueFromInputs(date, time, timeZone) : "";
   const chosen = [
-    date && formatDue(dueFromInputs(date, time, timeZone) || "", locale, timeZone),
+    // A date the browser accepts but the deadline can't be (a 5-digit year) is left out, not formatted (SEC-6R-03).
+    dueAtChosen && formatDue(dueAtChosen, locale, timeZone),
     projects.find((project) => project.id === projectId)?.name,
     priority !== "medium" && t(PRIORITY_LABEL[priority]),
   ].filter(Boolean);

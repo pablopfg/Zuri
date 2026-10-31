@@ -63,10 +63,12 @@ o [SemVer](https://semver.org/lang/pt-BR/). Cada PR escreve a sua entrada em
 - `GET` e `PATCH /api/settings` e `GET /api/auth/activity`.
 - Tarefas: criar, editar, concluir e reabrir, com prazo no seu fuso (dia só,
   ou dia e hora), prioridade, projeto e as visões Hoje, Próximas, Atrasadas,
-  Concluídas e Todas, além de filtro por projeto e busca.
+  Concluídas e Todas, além de filtro por projeto e busca. Adição rápida no
+  topo: na visão Hoje, uma tarefa sem data vence hoje.
 - Notas em Markdown, com editor e visualização (sem HTML, sem imagens de
   fora e só links `http`, `https` e `mailto`), e busca em texto completo que
-  acha palavras com ou sem acento.
+  acha palavras com ou sem acento. No computador a lista fica ao lado do
+  editor, e sair com alterações não salvas pede confirmação.
 - Projetos para agrupar tarefas e notas. Apagar um projeto não apaga o que
   está nele.
 - Lixeira em Configurações › Dados: tarefas, notas e projetos apagados ficam

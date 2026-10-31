@@ -127,6 +127,14 @@ test("a note: write Markdown, preview it safely, search, delete and restore @mob
   await leave.getByRole("button", { name: "Continuar editando" }).click();
   await expect(leave).toBeHidden();
   await expect(page.getByLabel("Texto da nota")).toHaveValue(/- canela/);
+  if (!narrow) {
+    // Clicking the note already open stays put, and leaving for another one still asks.
+    await page.getByRole("link", { name: new RegExp(title) }).click();
+    await expect(leave).toBeHidden();
+    await page.getByRole("link", { name: "Nova nota" }).click();
+    await expect(leave).toBeVisible();
+    await leave.getByRole("button", { name: "Continuar editando" }).click();
+  }
   await page.getByLabel("Texto da nota").press("ControlOrMeta+s");
   await expect(page.getByText("Alterações não salvas")).toBeHidden();
 

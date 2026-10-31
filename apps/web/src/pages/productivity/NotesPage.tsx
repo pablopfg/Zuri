@@ -25,10 +25,12 @@ export function NotesPage() {
   // editor reports whether it has any, and leaving then asks first.
   const [dirty, setDirty] = useState(false);
   const [leavingTo, setLeavingTo] = useState<string | null>(null);
+  const { pathname } = useLocation();
   const guard = (to: string) => (event: MouseEvent) => {
     if (!dirty) return;
     event.preventDefault();
-    setLeavingTo(to);
+    // The note already open: nothing to leave, and asking would lose track of the unsaved text (SEC-6R-01).
+    if (to !== pathname) setLeavingTo(to);
   };
   const heading = id === "nova" ? t("web.notes.new") : t("web.notes.edit");
 

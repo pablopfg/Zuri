@@ -124,6 +124,22 @@ digitado não é renderizado, imagens nunca são carregadas (aparecem como
 abrindo em outra aba com `noopener noreferrer`. Nenhum
 `dangerouslySetInnerHTML`.
 
+## Telas
+
+- **Tarefas** (`/tarefas`): adição rápida no topo. Na visão Hoje, uma tarefa
+  sem data vence hoje às 23:59 no seu fuso, para aparecer onde foi digitada.
+  Prazo, hora, projeto e prioridade ficam num painel que abre quando
+  precisa; com ele fechado, o que foi escolhido aparece ao lado. Depois de
+  adicionar, tudo volta ao padrão. Concluídas e Atrasadas não têm adição
+  rápida, porque a tarefa nova não apareceria nelas.
+- **Notas** (`/notas`): em telas largas a lista fica ao lado do editor; no
+  celular, uma de cada vez. Sair de uma nota com alterações não salvas pela
+  lista, por "Nova nota", pela lixeira ou por "Todas as notas" pede
+  confirmação, e fechar a aba avisa. Limitação conhecida: os links da casca
+  (menu lateral, barra de baixo, Sair) e o voltar do navegador ainda não
+  perguntam, porque o app usa `BrowserRouter`, sem o `useBlocker` do React
+  Router.
+
 ## Backup
 
 Tarefas, notas e projetos entram no backup da etapa 23. A lixeira e os
