@@ -221,6 +221,20 @@ partir de 1/12/2026 eles gastariam a cota diária gratuita de ingestão, a mesma
 dos logs. O `wrangler`
 não envia métricas de uso (`send_metrics: false`).
 
+O código do Worker escreve nos logs só por `apps/agent/src/log.ts`. Toda linha
+tem o mesmo formato: `level`, `event` (lista fechada, como `unhandled_error` e
+`ai_error`), e quando houver `code` (o código da API), `route` (`POST
+/api/tasks/:id`: só as palavras das rotas do Worker ficam, o resto vira
+`:id`, e a query string nunca entra), `requestId`
+(o `cf-ray` da requisição, que a Cloudflare também devolve no cabeçalho
+`cf-ray` da resposta), `error` (só o nome do erro) e `secrets` (nomes de
+configurações faltando). Valores fora do formato esperado são descartados. Para
+achar um erro no painel da Cloudflare, filtre por `event` ou pelo `cf-ray`. O
+Biome (`noConsole`) e um teste falham se outro arquivo do servidor chamar
+`console` direto. O plano
+completo de monitoramento está em
+[planos/observabilidade.md](planos/observabilidade.md).
+
 ## Desenvolvimento local
 
 O `npm run dev` monta a interface e sobe o Worker com `wrangler dev` em

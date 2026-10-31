@@ -126,6 +126,10 @@ test("creates the owner: password rules from the server, then only the second st
   // Turning it on, with the keyboard-friendly manual key's twin from the server's answer.
   const setup = page.waitForResponse((r) => r.url().endsWith("/api/auth/mfa/setup"));
   await page.getByRole("button", { name: "Ligar a verificação em duas etapas" }).click();
+  // Turning it on asks for the password right now, even just after creating the account.
+  const confirm = page.getByRole("dialog", { name: "Antes de ligar, confirme que é você" });
+  await confirm.getByLabel("Senha", { exact: true }).fill(PASSWORD);
+  await confirm.getByRole("button", { name: "Continuar" }).click();
   const { secret } = (await (await setup).json()) as { secret: string };
   await page.getByLabel("Código de 6 dígitos").fill(await totpCode(secret, totpStep(Date.now())));
   await page.getByRole("button", { name: "Confirmar e ligar" }).click();

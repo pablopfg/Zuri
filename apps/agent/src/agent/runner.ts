@@ -10,6 +10,7 @@ import { ALL_TOOLS } from "../tools/index.ts";
 import { type ToolContext, type ToolDefinition, ToolExecutor } from "../tools/registry.ts";
 import { contextBudget, contextWindow, SUMMARIZE_THRESHOLD, summaryRequest } from "./context.ts";
 import { buildSystemPrompt, SUMMARY_SYSTEM } from "./prompt.ts";
+import { log } from "../log.ts";
 
 /** Messages read for one prompt, newest first, before the token budget picks. */
 const HISTORY_ROWS = 200;
@@ -212,7 +213,7 @@ export class AgentRunner {
         return;
       }
       const appError = error instanceof AppError ? error : new AppError("INTERNAL_ERROR");
-      if (!(error instanceof AppError)) console.error(JSON.stringify({ message: "chat turn failed", error: error instanceof Error ? error.name : typeof error }));
+      if (!(error instanceof AppError)) log("error", "chat_turn_failed", { error });
       yield { type: "error", code: appError.code, message: t(locale, appError.messageKey), ...(appError.details ? { details: appError.details } : {}) };
       yield { type: "done", message: finish("error", { code: appError.code, key: appError.messageKey }) };
     }

@@ -283,7 +283,7 @@ describe("until two-step sign-in is on", () => {
         expect(apiErrorSchema.parse(await response.json()).details).toEqual({ secondStepRequired: true });
       }
 
-      const setup = (await (await send(h, "/api/auth/mfa/setup", { method: "POST", cookie: session })).json()) as { secret: string };
+      const setup = (await (await send(h, "/api/auth/mfa/setup", { body: { password: OWNER.password }, cookie: session })).json()) as { secret: string };
       const enabled = await send(h, "/api/auth/mfa/enable", { body: { code: await totpCode(setup.secret, totpStep(h.clock.now())) }, cookie: session });
       expect(enabled.status).toBe(200);
       expect((await send(h, "/api/auth/activity", { cookie: session })).status).toBe(200);

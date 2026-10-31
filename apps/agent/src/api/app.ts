@@ -11,6 +11,7 @@ import {
   mfaCodeRequestSchema,
   passkeyAssertionSchema,
   passkeyRegistrationSchema,
+  passwordProofSchema,
   passkeyRenameSchema,
   SESSION_TIMEOUT_RANGES,
   settingsUpdateSchema,
@@ -44,6 +45,7 @@ import {
 import { type ChatDeps, registerChatRoutes } from "./chat.ts";
 import { registerMemoryRoutes } from "./memory.ts";
 import { registerProductivityRoutes } from "./productivity.ts";
+import { log } from "../log.ts";
 
 export interface ApiEnv {
   Bindings: WorkerEnv;
@@ -102,7 +104,7 @@ const WHILE_SECOND_STEP_SETUP = new Set([
 export function createApi(deps: ApiDeps) {
   const app = new Hono<ApiEnv>().basePath("/api");
 
-  app.onError((error) => errorResponse(error, deps.locale()));
+  app.onError((error, c) => errorResponse(error, deps.locale(), c.req.raw));
   app.notFound(() => errorResponse(new AppError("NOT_FOUND"), deps.locale()));
 
   // Public: says only whether the Worker is up and configured. Never data, never
@@ -110,7 +112,7 @@ export function createApi(deps: ApiDeps) {
   app.get("/health", () => {
     // Configured: a password exists, or the first access can still be done with the code.
     if (!deps.passwordSecretSet() && deps.setupCodeSet?.() !== true && !deps.auth().passwordConfigured()) {
-      console.warn(JSON.stringify({ message: "not configured: set SETUP_CODE for the first access" }));
+      log("warn", "not_configured", { secrets: ["SETUP_CODE"] });
       throw new AppError("NOT_CONFIGURED");
     }
     return Response.json({ ok: true });
@@ -312,7 +314,11 @@ export function createApi(deps: ApiDeps) {
 
   app.get("/auth/mfa", () => Response.json(deps.auth().twoStep.status()));
 
-  app.post("/auth/mfa/setup", async (c) => Response.json(await deps.auth().mfaSetup(c.get("session"))));
+  // Adding a way in asks for the password typed right now, not the 15-minute window.
+  app.post("/auth/mfa/setup", async (c) => {
+    const proof = await readJson(c.req.raw, passwordProofSchema, 4 * 1024);
+    return Response.json(await deps.auth().mfaSetup(c.get("session"), proof, client(c)));
+  });
 
   app.post("/auth/mfa/enable", async (c) => {
     const { code } = await readJson(c.req.raw, mfaCodeRequestSchema, 1024);
@@ -334,7 +340,10 @@ export function createApi(deps: ApiDeps) {
 
   app.get("/auth/passkeys", () => Response.json({ passkeys: deps.auth().listPasskeys() }));
 
-  app.post("/auth/passkeys/options", async (c) => Response.json({ options: await deps.auth().passkeyRegistrationOptions(c.get("session")) }));
+  app.post("/auth/passkeys/options", async (c) => {
+    const proof = await readJson(c.req.raw, passwordProofSchema, 4 * 1024);
+    return Response.json({ options: await deps.auth().passkeyRegistrationOptions(c.get("session"), proof, client(c)) });
+  });
 
   app.post("/auth/passkeys", async (c) => {
     const input = await readJson(c.req.raw, passkeyRegistrationSchema, 48 * 1024);

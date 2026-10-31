@@ -1,6 +1,7 @@
 import {
   type ChangePasswordRequest,
   type ConfirmRequest,
+  type PasswordProof,
   hashPassword,
   hmacSha256Hex,
   isPasswordHash,
@@ -630,15 +631,40 @@ export class AuthService {
       if (!this.twoStep.enabled()) throw new AppError("INVALID_CREDENTIALS", "auth.mfa.wrongCode");
       await this.checkCode(row, proof.totp, client, { recovery: false }, "confirm");
     } else {
-      const attempt = this.beginChecked(client, "confirm_failure");
-      if (!(await this.checkPassword(source, proof.password))) {
-        this.events.record("confirm_failure", client, { reason: "password", session: row.id.slice(0, 16) });
-        throw new AppError("INVALID_CREDENTIALS", "auth.password.wrong");
-      }
-      this.limiter.succeed(attempt);
+      await this.checkConfirmPassword(row, source, proof.password, client);
     }
     this.sessions.confirm(row.id);
     this.events.record("confirm_success", client, { session: row.id.slice(0, 16) });
+  }
+
+  /** The password again under the network's own tries; INVALID_CREDENTIALS when wrong, the session as it was. */
+  private async checkConfirmPassword(row: SessionRow, source: PasswordSource, password: string, client: ClientInfo): Promise<void> {
+    const attempt = this.beginChecked(client, "confirm_failure");
+    if (!(await this.checkPassword(source, password))) {
+      this.events.record("confirm_failure", client, { reason: "password", session: row.id.slice(0, 16) });
+      throw new AppError("INVALID_CREDENTIALS", "auth.password.wrong");
+    }
+    this.limiter.succeed(attempt);
+  }
+
+  /**
+   * The password typed right now, for the steps that add a way in (two-step
+   * sign-in, a passkey): a session stolen in its first 15 minutes, or a code
+   * from the app, must not be enough to plant the attacker's own factor. A
+   * right password also opens the 15-minute window, like `confirm`, so the
+   * rest of the same ceremony (the code, the browser's answer) goes through.
+   * Returns the session as it is now: another tab may have ended it meanwhile.
+   */
+  private async requirePasswordNow(row: SessionRow, proof: PasswordProof, client: ClientInfo, reason: "mfa_setup" | "passkey"): Promise<SessionRow> {
+    // Sync first: a reset from the panel must drop the old password before it is read.
+    await this.sync();
+    const source = this.requireConfigured();
+    await this.checkConfirmPassword(row, source, proof.password, client);
+    this.sessions.confirm(row.id);
+    const current = this.sessions.get(row.id);
+    if (!current) throw new AppError("UNAUTHORIZED");
+    this.events.record("confirm_success", client, { reason, session: row.id.slice(0, 16) });
+    return current;
   }
 
   /** Behind a live session: the network's own 3 tries apply, the distributed-guess locks don't. */
@@ -885,8 +911,10 @@ export class AuthService {
   }
 
   /** A new secret to scan. CONFLICT while the second step is on: turn it off first to use another app. */
-  async mfaSetup(row: SessionRow): Promise<MfaSetup> {
-    this.requireRecentAuth(row);
+  async mfaSetup(row: SessionRow, proof: PasswordProof, client: ClientInfo): Promise<MfaSetup> {
+    // Already on is answered before the password: nothing to protect, no try spent.
+    if (this.twoStep.enabled()) throw new AppError("CONFLICT", "auth.mfa.alreadyOn");
+    await this.requirePasswordNow(row, proof, client, "mfa_setup");
     if (this.twoStep.enabled()) throw new AppError("CONFLICT", "auth.mfa.alreadyOn");
     return this.twoStep.beginSetup(this.deps.secrets.agentName?.trim() || "Zuri");
   }
@@ -957,18 +985,29 @@ export class AuthService {
     if (!this.twoStep.enabled()) throw new AppError("CONFLICT", "auth.passkey.needsMfa");
   }
 
-  async passkeyRegistrationOptions(row: SessionRow) {
-    this.requireRecentAuth(row);
+  private assertPasskeyRoom(): void {
     this.assertPasskeysAllowed();
     if (this.passkeys.count() >= MAX_PASSKEYS) throw new AppError("CONFLICT", "auth.passkey.limit");
+  }
+
+  /**
+   * The ceremony starts with the password typed right now; its challenge is
+   * kept for this session only, so the browser's answer (`addPasskey`) counts
+   * only from the session that typed it.
+   */
+  async passkeyRegistrationOptions(row: SessionRow, proof: PasswordProof, client: ClientInfo) {
+    // Refusals that need no password come first: no try spent on them.
+    this.assertPasskeyRoom();
+    const current = await this.requirePasswordNow(row, proof, client, "passkey");
+    this.assertPasskeyRoom();
     const name = this.deps.secrets.agentName?.trim() || "Zuri";
-    return this.passkeys.registrationOptions(this.relyingParty, { rpName: name, userName: name });
+    return this.passkeys.registrationOptions(this.relyingParty, { rpName: name, userName: name }, current.id);
   }
 
   async addPasskey(row: SessionRow, input: PasskeyRegistration, client: ClientInfo): Promise<PasskeyInfo> {
     this.requireRecentAuth(row);
     this.assertPasskeysAllowed();
-    const passkey = await this.passkeys.register(passkeyName(input.name), input.response, this.relyingParty, () => this.twoStep.enabled());
+    const passkey = await this.passkeys.register(passkeyName(input.name), input.response, this.relyingParty, row.id, () => this.twoStep.enabled());
     if (!passkey) throw new AppError("VALIDATION_FAILED", "auth.passkey.notAccepted", { fields: ["response"] });
     this.events.record("passkey_added", client, { session: row.id.slice(0, 16), alert: true });
     return passkey;

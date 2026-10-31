@@ -1,5 +1,6 @@
 import type { z } from "zod";
 import { AppError } from "../http/errors.ts";
+import { log } from "../log.ts";
 
 export interface ModelMessage {
   role: "user" | "assistant";
@@ -113,7 +114,7 @@ export function classifyAiError(error: unknown): AppError {
     return new AppError("SERVICE_UNAVAILABLE", "error.aiModelUnavailable");
   }
   // Only the name: the message may quote what the owner wrote.
-  console.error(JSON.stringify({ message: "workers ai error", error: error instanceof Error ? error.name : typeof error }));
+  log("error", "ai_error", { code: "SERVICE_UNAVAILABLE", error });
   return new AppError("SERVICE_UNAVAILABLE", "error.aiUnavailable");
 }
 
