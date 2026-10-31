@@ -1,4 +1,4 @@
-import { Brain, House, ListTodo, LogOut, MessageCircle, NotebookPen, PanelLeftClose, PanelLeftOpen, Search, Settings, ShieldCheck } from "lucide-react";
+import { Brain, Clock, House, ListTodo, LogOut, MessageCircle, NotebookPen, PanelLeftClose, PanelLeftOpen, Search, Settings, ShieldCheck } from "lucide-react";
 import { lazy, type ReactNode, Suspense, useEffect, useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router";
 import { useSession } from "../hooks/session.tsx";
@@ -24,16 +24,19 @@ const CommandPalette = lazy(() => import("./CommandPalette.tsx").then((m) => ({ 
 export function AppShell() {
   const { t } = useI18n();
   const { session, signOut } = useSession();
-  const sections = [
+  // Only the home link needs `end` (it would match every address otherwise).
+  const sections: { to: string; label: string; icon: typeof House; end?: boolean }[] = [
     { to: "/", label: t("web.nav.home"), icon: House, end: true },
-    { to: "/conversa", label: t("web.nav.chat"), icon: MessageCircle, end: false },
-    { to: "/tarefas", label: t("web.nav.tasks"), icon: ListTodo, end: false },
-    { to: "/notas", label: t("web.nav.notes"), icon: NotebookPen, end: false },
-    { to: "/memoria", label: t("web.nav.memory"), icon: Brain, end: false },
-    { to: "/acessos", label: t("web.nav.accessLog"), icon: ShieldCheck, end: false },
+    { to: "/conversa", label: t("web.nav.chat"), icon: MessageCircle },
+    { to: "/tarefas", label: t("web.nav.tasks"), icon: ListTodo },
+    { to: "/notas", label: t("web.nav.notes"), icon: NotebookPen },
+    { to: "/automacoes", label: t("web.nav.automations"), icon: Clock },
+    { to: "/memoria", label: t("web.nav.memory"), icon: Brain },
+    { to: "/acessos", label: t("web.nav.accessLog"), icon: ShieldCheck },
   ];
-  // Five places fit the phone's bar. Settings sit in the top bar there, and the access log one tap away in Settings > Security.
-  const mobileItems = sections.filter((s) => s.to !== "/acessos");
+  // Five places fit the phone's bar. Settings sit in the top bar there; the access log and the
+  // automations are one tap away in the Settings list (and in the search).
+  const mobileItems = sections.filter((s) => s.to !== "/acessos" && s.to !== "/automacoes");
   const [collapsed, setCollapsed] = useState(readSidebarCollapsed);
   // On a phone "Sair" sits next to the bell, where a thumb lands by mistake: it asks first.
   const [confirmSignOut, setConfirmSignOut] = useState(false);
@@ -126,7 +129,7 @@ export function AppShell() {
             {sections.map(({ to, label, icon: Icon, end }) => (
               <li key={to}>
                 <Tip label={collapsed ? label : null} hidden={tipsHidden}>
-                  <NavLink to={to} end={end} className={sideLink}>
+                  <NavLink to={to} end={!!end} className={sideLink}>
                     <Icon className="h-5 w-5 shrink-0" aria-hidden />
                     <Label text={label} hidden={collapsed} />
                   </NavLink>
@@ -211,7 +214,7 @@ export function AppShell() {
             <li key={to}>
               <NavLink
                 to={to}
-                end={end}
+                end={!!end}
                 className={({ isActive }) =>
                   cn("flex min-h-14 flex-col items-center justify-center gap-1 px-0.5 text-[11px] font-medium leading-tight", isActive ? "text-accent-text" : "text-fg-muted")
                 }

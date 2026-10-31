@@ -99,7 +99,7 @@ export const ptBRAutomations = {
   "web.automations.schedule.daily": "Todo dia às {time}",
   "web.automations.schedule.weekdays": "De segunda a sexta às {time}",
   "web.automations.schedule.weekend": "Sábado e domingo às {time}",
-  "web.automations.schedule.weekly": "Toda {days} às {time}",
+  "web.automations.schedule.weekly": "{days}, às {time}",
   "web.automations.schedule.monthly": "Todo dia {day} às {time}",
   "web.automations.schedule.monthlyEnd": "Todo dia {day} às {time} (ou no último dia do mês)",
   "web.automations.schedule.hourly": "A cada hora",
@@ -124,5 +124,4 @@ export const ptBRAutomations = {
   "web.automations.problem.ai_unavailable": "a IA não respondeu a tempo. A próxima execução tenta de novo.",
   "web.automations.problem.interrupted": "o sistema reiniciou no meio da execução. Ela não é repetida para não avisar duas vezes.",
   "web.automations.problem.failed": "algo deu errado. A próxima execução tenta de novo.",
-  "web.automations.chatLink": "Revisar em Automações",
 } as const;

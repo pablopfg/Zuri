@@ -13,6 +13,8 @@ export type Schedule =
   | { type: "monthly"; day: number; time: string }
   | { type: "interval"; minutes: number };
 export type ScheduleType = Schedule["type"];
+/** The kinds of schedule, in the order the form offers them. */
+export const SCHEDULE_TYPES = ["once", "daily", "weekly", "monthly", "interval"] as const satisfies readonly ScheduleType[];
 
 const LOCAL_MINUTE = /^(\d{4})-(\d{2})-(\d{2})T([01]\d|2[0-3]):([0-5]\d)$/;
 

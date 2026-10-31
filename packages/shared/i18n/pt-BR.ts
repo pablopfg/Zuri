@@ -15,7 +15,6 @@ export const ptBRCore = {
   "app.name": "Zuri",
   "error.internal": "Algo deu errado. Seus dados estão seguros; tente de novo.",
   "format.dateTime": "{date} às {time}",
-  "auth.passkey.needsMfa": "Ligue antes a verificação em duas etapas com um aplicativo autenticador. Os códigos de recuperação dele são o caminho de volta se você perder as passkeys.",
   "web.loading": "Carregando…",
   "web.retry": "Tentar de novo",
   "web.cancel": "Cancelar",

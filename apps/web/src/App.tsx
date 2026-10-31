@@ -16,6 +16,7 @@ const TasksPage = lazy(() => import("./pages/productivity/TasksPage.tsx").then((
 const MemoryPage = lazy(() => import("./pages/memory/MemoryPage.tsx").then((m) => ({ default: m.MemoryPage })));
 const AccessLogPage = lazy(() => import("./pages/security/AccessLogPage.tsx").then((m) => ({ default: m.AccessLogPage })));
 const ChatPage = lazy(() => import("./pages/chat/ChatPage.tsx").then((m) => ({ default: m.ChatPage })));
+const AutomationsPage = lazy(() => import("./pages/automations/AutomationsPage.tsx").then((m) => ({ default: m.AutomationsPage })));
 const NotesPage = lazy(() => import("./pages/productivity/NotesPage.tsx").then((m) => ({ default: m.NotesPage })));
 
 /** While the password must change, the server refuses everything else: so does the interface. */
@@ -66,6 +67,14 @@ export function App() {
           element={
             <Suspense fallback={<Spinner />}>
               <NotesPage />
+            </Suspense>
+          }
+        />
+        <Route
+          path="automacoes"
+          element={
+            <Suspense fallback={<Spinner />}>
+              <AutomationsPage />
             </Suspense>
           }
         />

@@ -4,6 +4,8 @@ import {
   Bell,
   Bot,
   Brain,
+  CalendarPlus,
+  Clock,
   CircleCheck,
   Database,
   FilePlus2,
@@ -27,6 +29,13 @@ import { cn } from "./ui.tsx";
 
 // The palette's texts come with its download, the first time it opens (rule P11).
 addMessages(ptBRPalette);
+
+/**
+ * "Nova automação" opens the form on the Automations page: by the address when
+ * the page still has to load, by an event when it is already open. Plain
+ * strings, so that lazy screen needs no shared module (armadilhas.md).
+ */
+const NEW_AUTOMATION = "nova-automacao";
 
 /** How many of each kind the search lists: a shortcut, not the full page. */
 const PER_KIND = 5;
@@ -84,6 +93,7 @@ export function CommandPalette({ onClose, navigate }: { onClose: () => void; nav
       { id: "home", group: go, label: t("web.nav.home"), icon: House, to: "/" },
       { id: "tasks", group: go, label: t("web.nav.tasks"), icon: ListTodo, to: "/tarefas" },
       { id: "notes", group: go, label: t("web.nav.notes"), icon: NotebookPen, to: "/notas" },
+      { id: "automations", group: go, label: t("web.nav.automations"), icon: Clock, to: "/automacoes" },
       { id: "memory", group: go, label: t("web.nav.memory"), icon: Brain, to: "/memoria" },
       { id: "access", group: go, label: t("web.nav.accessLog"), icon: ShieldCheck, to: "/acessos" },
       section("conta", "web.settings.tab.account", User),
@@ -93,6 +103,7 @@ export function CommandPalette({ onClose, navigate }: { onClose: () => void; nav
       section("integracoes", "web.settings.tab.integrations", Plug),
       section("dados", "web.settings.tab.data", Database),
       { id: "new-task", group: t("web.palette.groupCreate"), label: t("web.palette.newTask"), icon: ListPlus, to: "/tarefas", state: { newTask: true } },
+      { id: "new-automation", group: t("web.palette.groupCreate"), label: t("web.palette.newAutomation"), icon: CalendarPlus, to: `/automacoes#${NEW_AUTOMATION}`, before: () => window.dispatchEvent(new Event(NEW_AUTOMATION)) },
       { id: "new-note", group: t("web.palette.groupCreate"), label: t("web.palette.newNote"), icon: FilePlus2, to: "/notas/nova" },
     ];
   }, [t]);

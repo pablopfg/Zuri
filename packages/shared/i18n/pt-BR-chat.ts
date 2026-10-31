@@ -143,4 +143,5 @@ export const ptBRChat = {
   "web.chat.tool.propose_ai_routine": "Propor rotina",
   "web.chat.tool.notify_owner": "Avisar você",
   "web.chat.approval.cancel_automation": "Excluir a automação “{target}”. Ela para de rodar na hora.",
+  "web.chat.automationLink": "Revisar em Automações",
 } as const;
