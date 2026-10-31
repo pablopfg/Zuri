@@ -86,3 +86,4 @@ export {
   zonedTimeToUtc,
 } from "./dates.ts";
 export * from "./productivity.ts";
+export * from "./memory.ts";

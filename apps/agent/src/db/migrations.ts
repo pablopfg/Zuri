@@ -261,6 +261,86 @@ export const MIGRATIONS: readonly Migration[] = [
       END`,
     ],
   },
+  {
+    version: 5,
+    name: "memories",
+    statements: [
+      // Facts about the owner, with history (step 7): data, never instructions (rule 2).
+      // `superseded_by` links a past fact to the one that replaced it; the service
+      // never lets a link point at the memory itself or close a loop. `valid_from`
+      // and `valid_until` hold only dates the owner stated. `dedupe_key` is a hash of
+      // the folded text, so the duplicate check reads one index entry, not the table.
+      // In the backup (step 23), with the links checked on import.
+      `CREATE TABLE IF NOT EXISTS zur_memories (
+        id TEXT PRIMARY KEY,
+        content TEXT NOT NULL,
+        category TEXT NOT NULL DEFAULT 'other' CHECK (category IN ('preference', 'fact', 'goal', 'project', 'habit', 'person', 'other')),
+        origin TEXT NOT NULL DEFAULT 'app' CHECK (origin IN ('app', 'telegram', 'import')),
+        status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'uncertain', 'historical')),
+        superseded_by TEXT CHECK (superseded_by IS NULL OR superseded_by != id),
+        valid_from TEXT,
+        valid_until TEXT,
+        dedupe_key INTEGER NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      )`,
+      // The list by filter, newest first; the "preferences" the recall always adds.
+      `CREATE INDEX IF NOT EXISTS zur_memories_status_updated ON zur_memories (status, updated_at)`,
+      `CREATE INDEX IF NOT EXISTS zur_memories_category ON zur_memories (category, updated_at)`,
+      `CREATE INDEX IF NOT EXISTS zur_memories_updated ON zur_memories (updated_at)`,
+      `CREATE INDEX IF NOT EXISTS zur_memories_superseded_by ON zur_memories (superseded_by) WHERE superseded_by IS NOT NULL`,
+      `CREATE INDEX IF NOT EXISTS zur_memories_dedupe ON zur_memories (dedupe_key)`,
+      `CREATE VIRTUAL TABLE IF NOT EXISTS zur_memories_fts USING fts5(
+        content, content='zur_memories', content_rowid='rowid', tokenize='unicode61 remove_diacritics 2'
+      )`,
+      `CREATE TRIGGER IF NOT EXISTS zur_memories_fts_insert AFTER INSERT ON zur_memories BEGIN
+        INSERT INTO zur_memories_fts (rowid, content) VALUES (new.rowid, new.content);
+      END`,
+      `CREATE TRIGGER IF NOT EXISTS zur_memories_fts_delete AFTER DELETE ON zur_memories BEGIN
+        INSERT INTO zur_memories_fts (zur_memories_fts, rowid, content) VALUES ('delete', old.rowid, old.content);
+      END`,
+      `CREATE TRIGGER IF NOT EXISTS zur_memories_fts_update AFTER UPDATE OF content ON zur_memories BEGIN
+        INSERT INTO zur_memories_fts (zur_memories_fts, rowid, content) VALUES ('delete', old.rowid, old.content);
+        INSERT INTO zur_memories_fts (rowid, content) VALUES (new.rowid, new.content);
+      END`,
+      // Possible conflicts waiting for the owner: the newer memory and the older one.
+      // `reason` and `topic` are codes the interface words. Not in the backup.
+      `CREATE TABLE IF NOT EXISTS zur_memory_reviews (
+        id TEXT PRIMARY KEY,
+        memory_id TEXT NOT NULL,
+        other_id TEXT NOT NULL CHECK (other_id != memory_id),
+        relationship TEXT NOT NULL CHECK (relationship IN ('contradiction', 'possible_update')),
+        reason TEXT NOT NULL CHECK (reason IN ('explicit_change', 'topic_change', 'refines', 'same_topic')),
+        topic TEXT CHECK (topic IS NULL OR topic IN ('residence', 'vehicle', 'job', 'diet', 'relationship')),
+        created_at TEXT NOT NULL,
+        UNIQUE (memory_id, other_id)
+      )`,
+      `CREATE INDEX IF NOT EXISTS zur_memory_reviews_other ON zur_memory_reviews (other_id)`,
+      `CREATE INDEX IF NOT EXISTS zur_memory_reviews_created ON zur_memory_reviews (created_at)`,
+      // Counters per status and of reviews, so the page's numbers read five rows, not the table.
+      `INSERT INTO zur_counts (kind, n) SELECT 'memories', count(*) FROM zur_memories WHERE 1 ON CONFLICT (kind) DO UPDATE SET n = excluded.n`,
+      `INSERT INTO zur_counts (kind, n) SELECT 'memories_active', count(*) FROM zur_memories WHERE status = 'active' ON CONFLICT (kind) DO UPDATE SET n = excluded.n`,
+      `INSERT INTO zur_counts (kind, n) SELECT 'memories_uncertain', count(*) FROM zur_memories WHERE status = 'uncertain' ON CONFLICT (kind) DO UPDATE SET n = excluded.n`,
+      `INSERT INTO zur_counts (kind, n) SELECT 'memories_historical', count(*) FROM zur_memories WHERE status = 'historical' ON CONFLICT (kind) DO UPDATE SET n = excluded.n`,
+      `INSERT INTO zur_counts (kind, n) SELECT 'memory_reviews', count(*) FROM zur_memory_reviews WHERE 1 ON CONFLICT (kind) DO UPDATE SET n = excluded.n`,
+      `CREATE TRIGGER IF NOT EXISTS zur_counts_memories_insert AFTER INSERT ON zur_memories BEGIN
+        UPDATE zur_counts SET n = n + 1 WHERE kind IN ('memories', 'memories_' || new.status);
+      END`,
+      `CREATE TRIGGER IF NOT EXISTS zur_counts_memories_delete AFTER DELETE ON zur_memories BEGIN
+        UPDATE zur_counts SET n = n - 1 WHERE kind IN ('memories', 'memories_' || old.status);
+      END`,
+      `CREATE TRIGGER IF NOT EXISTS zur_counts_memories_status AFTER UPDATE OF status ON zur_memories WHEN old.status != new.status BEGIN
+        UPDATE zur_counts SET n = n - 1 WHERE kind = 'memories_' || old.status;
+        UPDATE zur_counts SET n = n + 1 WHERE kind = 'memories_' || new.status;
+      END`,
+      `CREATE TRIGGER IF NOT EXISTS zur_counts_memory_reviews_insert AFTER INSERT ON zur_memory_reviews BEGIN
+        UPDATE zur_counts SET n = n + 1 WHERE kind = 'memory_reviews';
+      END`,
+      `CREATE TRIGGER IF NOT EXISTS zur_counts_memory_reviews_delete AFTER DELETE ON zur_memory_reviews BEGIN
+        UPDATE zur_counts SET n = n - 1 WHERE kind = 'memory_reviews';
+      END`,
+    ],
+  },
 ];
 
 export const LATEST_SCHEMA_VERSION = MIGRATIONS.at(-1)?.version ?? 0;

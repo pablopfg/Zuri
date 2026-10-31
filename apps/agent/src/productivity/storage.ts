@@ -6,9 +6,17 @@ const LIMIT_MESSAGE: Record<StorageKind, MessageKey> = {
   tasks: "error.storageLimit.tasks",
   notes: "error.storageLimit.notes",
   projects: "error.storageLimit.projects",
+  memories: "error.storageLimit.memories",
 };
 
-export type CountKind = StorageKind | "trash" | "trash_bytes";
+export type CountKind =
+  | StorageKind
+  | "trash"
+  | "trash_bytes"
+  | "memories_active"
+  | "memories_uncertain"
+  | "memories_historical"
+  | "memory_reviews";
 
 /**
  * The limits per kind and the database ceiling (rule 9). They only ever refuse

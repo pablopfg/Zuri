@@ -20,7 +20,7 @@ export type TaskView = (typeof TASK_VIEWS)[number];
 export type TrashKind = (typeof TRASH_KINDS)[number];
 
 /** Most records of each kind ("Constantes padrão"). One more is refused; nothing is deleted to make room. */
-export const STORAGE_LIMITS = { tasks: 20_000, notes: 5_000, projects: 1_000 } as const;
+export const STORAGE_LIMITS = { tasks: 20_000, notes: 5_000, projects: 1_000, memories: 10_000 } as const;
 export type StorageKind = keyof typeof STORAGE_LIMITS;
 
 /** The database ceiling (rule 9): below the 1 GB a SQLite Durable Object gets on the Free plan. */

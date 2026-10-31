@@ -35,6 +35,7 @@ for (const scheme of ["light", "dark"] as const) {
       for (const [path, heading] of [
         ["/tarefas", "Tarefas"],
         ["/notas", "Notas"],
+        ["/memoria", "Memória"],
       ] as const) {
         await page.goto(path);
         await expect(page.getByRole("heading", { level: 1, name: heading })).toBeVisible();
@@ -81,7 +82,7 @@ test("every control is at least 44 px tall on a phone @mobile", async ({ page })
   await expect(page.getByRole("heading", { name: "Atividade de acesso" })).toBeVisible();
   await expect(page.getByRole("status").filter({ hasText: "Carregando" })).toHaveCount(0);
   expect(await tooSmall()).toEqual([]);
-  for (const path of ["/tarefas", "/notas", "/notas/nova", "/configuracoes/dados"]) {
+  for (const path of ["/tarefas", "/notas", "/notas/nova", "/memoria", "/configuracoes/dados"]) {
     await page.goto(path);
     await expect(page.getByRole("main")).toBeVisible();
     await expect(page.getByRole("status").filter({ hasText: "Carregando" })).toHaveCount(0);

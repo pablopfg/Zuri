@@ -18,6 +18,7 @@ const STORAGE_KEYS = {
   sessionIdleMinutes: "session_idle_minutes",
   sessionPresenceMinutes: "session_presence_minutes",
   sessionMaxHours: "session_max_hours",
+  memoryConflictReview: "memory_conflict_review",
 } as const satisfies Record<keyof Settings, string>;
 
 type Field = keyof Settings;
@@ -52,6 +53,13 @@ export class SettingsRepository {
       if (valid.success) settings[field] = valid.data;
     }
     return settings as Settings;
+  }
+
+  /** One setting, reading one row instead of all of them. */
+  field<K extends Field>(field: K): Settings[K] {
+    const stored = this.read(STORAGE_KEYS[field]);
+    const valid = stored === undefined ? null : settingsSchema.shape[field].safeParse(stored);
+    return valid?.success ? (valid.data as Settings[K]) : this.#defaults[field];
   }
 
   /** The language of the text the server writes on its own (API errors, bot, e-mail). */
