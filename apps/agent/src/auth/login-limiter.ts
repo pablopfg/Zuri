@@ -187,6 +187,9 @@ export class LoginLimiter {
     // Requests that passed the limit together come back from siteverify after it
     // closed: past the hard limit there is nothing left to learn from another row.
     if (this.countGlobal() >= GLOBAL_FAILURES_HARD) return;
+    // Nor past this network's own limit: a burst that passed the check together
+    // while siteverify answered must not write a row each.
+    if (this.count([TURNSTILE_FAILED], network) >= MAX_TURNSTILE_FAILURES_PER_NETWORK) return;
     this.insert(network, TURNSTILE_FAILED);
   }
 

@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { signInTurnstile } from "../src/agent/zuri-agent.ts";
 import { AppError } from "../src/http/errors.ts";
 import { client, fakeTurnstile, live, MINUTE, noCookies, outcome, rebuild, right, TEST_PASSWORD, withAuth, wrong } from "./auth-harness.ts";
 
@@ -62,6 +63,26 @@ describe("brute force: 3 failures per network in 15 minutes", () => {
       expect(results.filter((r) => r === "INVALID_CREDENTIALS")).toHaveLength(3);
       expect(results.filter((r) => r === "RATE_LIMITED")).toHaveLength(7);
     });
+  });
+
+  it("still gives 10 at once only 3 guesses while each one waits for siteverify first", async () => {
+    const turnstile = fakeTurnstile();
+    // A slow siteverify: every try is past the first limit check before any is counted.
+    const verify = turnstile.verify.bind(turnstile);
+    turnstile.verify = async (token, ip) => {
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      return verify(token, ip);
+    };
+    await withAuth(
+      "limit-race-turnstile",
+      async ({ auth }) => {
+        const results = await Promise.all(Array.from({ length: 10 }, () => outcome(auth.login(wrong({ turnstileToken: "t" }), client(NET), noCookies))));
+        expect(results.filter((r) => r === "INVALID_CREDENTIALS")).toHaveLength(3);
+        expect(results.filter((r) => r === "RATE_LIMITED")).toHaveLength(7);
+        expect(turnstile.calls).toHaveLength(10);
+      },
+      { turnstile },
+    );
   });
 
   it("refuses a wrong e-mail like a wrong password, and still runs PBKDF2 for it", async () => {
@@ -387,6 +408,26 @@ describe("Turnstile on every sign-in", () => {
     );
   });
 
+  it("a burst that passed the check together writes no more than the network's 10 refused checks", async () => {
+    const turnstile = fakeTurnstile("failed");
+    const verify = turnstile.verify.bind(turnstile);
+    turnstile.verify = async (token, ip) => {
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      return verify(token, ip);
+    };
+    await withAuth(
+      "turnstile-burst",
+      async ({ auth, db }) => {
+        for (let i = 0; i < 9; i++) await outcome(auth.login(right({ turnstileToken: "x" }), client(NET), noCookies));
+        const results = await Promise.all(Array.from({ length: 50 }, () => outcome(auth.login(right({ turnstileToken: "x" }), client(NET), noCookies))));
+        expect(results.every((r) => r === "TURNSTILE_REQUIRED")).toBe(true);
+        expect(db.one<{ n: number }>(`SELECT count(*) AS n FROM zur_login_attempts WHERE outcome = 2`)?.n).toBe(10);
+        expect(await outcome(auth.login(right({ turnstileToken: "x" }), client(NET), noCookies))).toBe("RATE_LIMITED");
+      },
+      { turnstile },
+    );
+  });
+
   it("SEC-3-N1: while 10 failures pile up, refusals from thousands of networks fold into one row", async () => {
     const turnstile = fakeTurnstile();
     await withAuth(
@@ -430,5 +471,50 @@ describe("Turnstile on every sign-in", () => {
       },
       { turnstile },
     );
+  });
+});
+
+describe("the deploy's robot check (signInTurnstile)", () => {
+  const prod = "https://zuri.exemplo.com.br";
+  const real = { TURNSTILE_SITE_KEY: "0x4AAAAAAAsite", TURNSTILE_SECRET_KEY: "0x4AAAAAAAsecret" };
+  const test = { TURNSTILE_SITE_KEY: "1x00000000000000000000AA", TURNSTILE_SECRET_KEY: "1x0000000000000000000000000000000AA" };
+
+  it.each([
+    ["production without keys", { PUBLIC_URL: prod }, false, true],
+    ["production with Cloudflare's test keys", { PUBLIC_URL: prod, ...test }, false, true],
+    ["production with real keys", { PUBLIC_URL: prod, ...real }, true, true],
+    ["development without keys", { PUBLIC_URL: "http://127.0.0.1:8787" }, false, false],
+    ["development with test keys", { PUBLIC_URL: "http://localhost:8787", ...test }, true, false],
+  ])("%s", (_label, env, on, mandatory) => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const setup = signInTurnstile(env);
+    expect(setup.turnstile !== null).toBe(on);
+    expect(setup.turnstileMandatory).toBe(mandatory);
+  });
+
+  it("closes the sign-in of a production deploy without usable keys, before any limit or PBKDF2", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    for (const [name, env] of [
+      ["none", { PUBLIC_URL: prod }],
+      ["test", { PUBLIC_URL: prod, ...test }],
+    ] as const) {
+      const setup = signInTurnstile(env);
+      await withAuth(
+        `deploy-closed-${name}`,
+        async ({ auth }) => {
+          const error = await auth.login(right({ turnstileToken: "XXXX.DUMMY.TOKEN.XXXX" }), client(NET), noCookies).catch((e: AppError) => e);
+          expect((error as AppError).code).toBe("NOT_CONFIGURED");
+          expect((error as AppError).messageKey).toBe("error.turnstileNotConfigured");
+        },
+        { turnstile: setup.turnstile, turnstileMandatory: setup.turnstileMandatory },
+      );
+    }
+  });
+
+  it("verifies the token on PUBLIC_URL's host with real keys", async () => {
+    const fetcher = vi.fn(async () => Response.json({ success: true, action: "login", hostname: "zuri.exemplo.com.br" }));
+    const setup = signInTurnstile({ PUBLIC_URL: prod, ...real }, fetcher as unknown as typeof fetch);
+    expect(await setup.turnstile?.verify("t", "203.0.113.7")).toBe("ok");
+    expect(fetcher).toHaveBeenCalledTimes(1);
   });
 });

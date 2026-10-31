@@ -185,7 +185,21 @@ describe("sign-in options", () => {
     expect((await options({}, {})).status).toBe(403);
     expect((await options({}, { ...CSRF, origin: "https://outro.exemplo.com.br" })).status).toBe(403);
     const post = await call(`${ORIGIN}${LOGIN_OPTIONS_PATH}`, { method: "POST", headers: CSRF });
-    expect(post.status).not.toBe(200);
+    expect(post.status).toBe(401);
+    expect((await errorBody(post)).code).toBe("UNAUTHORIZED");
+  });
+
+  it("says in the health check, outside development, that the sign-in is closed without usable keys", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    for (const keys of [NO_TURNSTILE, { TURNSTILE_SITE_KEY: "1x00000000000000000000AA", TURNSTILE_SECRET_KEY: "1x0000000000000000000000000000000AA" }]) {
+      const health = await call(`${ORIGIN}/api/health`, {}, keys);
+      expect(health.status).toBe(503);
+      expect((await errorBody(health)).code).toBe("NOT_CONFIGURED");
+    }
+    expect(JSON.stringify(warn.mock.calls)).toContain("TURNSTILE_SECRET_KEY");
+    expect(JSON.stringify(warn.mock.calls)).not.toContain("1x0000");
+    // Local development may run without them.
+    expect((await call("http://127.0.0.1:8787/api/health", {}, { PUBLIC_URL: "http://127.0.0.1:8787", ...NO_TURNSTILE })).status).toBe(200);
   });
 
   it("passes the host gate first", async () => {

@@ -339,3 +339,20 @@ describe("the reusable check (bot approvals, step 16)", () => {
     });
   });
 });
+
+describe("the shared pause of wrong codes", () => {
+  it("passkey options need the owner's browser on the owner's network, not the network alone", async () => {
+    await withAuth("pk-pause", async (h) => {
+      const owner = await h.auth.login(right(), client(NET), noCookies);
+      const { row } = await turnOn(h);
+      await addPasskey(h.service, row);
+      for (let i = 0; i < 10; i++) h.service.twoStep.reserveWrongCode();
+      const neighbour = await challenge(h);
+      expect(await failure(h.service.passkeyOptions(neighbour.token, client(NET), noCookies))).toMatchObject({ code: "RATE_LIMITED" });
+      const browser = { session: null, device: owner.deviceToken };
+      const result = await h.service.login(right(), client(NET), browser);
+      if (!("mfa" in result)) throw new Error("expected the second step");
+      expect((await h.service.passkeyOptions(result.mfa.token, client(NET), browser)).challenge).toMatch(/^[A-Za-z0-9_-]{43}$/);
+    });
+  });
+});

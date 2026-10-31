@@ -52,8 +52,10 @@ const REASON_LABEL: Record<string, MessageKey> = {
 export function reasonLabels(reason: string): MessageKey[] {
   return reason
     .split(",")
-    .map((part) => REASON_LABEL[part.trim()])
-    .filter((key): key is MessageKey => key !== undefined);
+    .map((part) => part.trim())
+    // Own keys only: a reason such as "constructor" must not reach Object's prototype.
+    .filter((part) => Object.hasOwn(REASON_LABEL, part))
+    .map((part) => REASON_LABEL[part] as MessageKey);
 }
 
 const GROUP_OF = new Map<AuthEventKind, AuthActivityGroup>(

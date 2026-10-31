@@ -31,8 +31,11 @@ correção e passa depois.
 | LOGIN-04 | baixa | `safeNext` decidia antes de resolver os segmentos de ponto: `?next=/..//site` virava `//site`. O roteador recusava a navegação externa, mas a tela ficava em branco depois do login. | Corrigido: o caminho resolvido também não pode começar com `//`. | `apps/web/test/next.test.ts` (4 casos novos) |
 | LOGIN-05 | baixa | O alerta de códigos errados saía só no 3º erro seguido; um chute lento ao TOTP por dias não avisava mais o dono. | Corrigido: alerta a cada 3 erros seguidos, entre desafios. | `auth-mfa.test.ts` › "every 3rd wrong answer in a row" |
 | LOGIN-06 | baixa | A pausa global dos códigos isentava qualquer pedido vindo de uma rede onde o dono entrou. Numa rede compartilhada (CGNAT da operadora, Wi-Fi público, relay), quem tem a senha seguia chutando códigos sem a pausa. | Corrigido: no login, a isenção exige a rede do dono **e** um cookie de aparelho que já entrou. | `auth-mfa.test.ts` › "10 wrong codes in 15 minutes pause unknown networks" |
+| LOGIN-07 | baixa | Segunda rodada (auditoria das correções): uma rajada de pedidos simultâneos com token falso passava junto pela trava e gravava uma linha de recusa cada, acima das 10 por rede. | Corrigido: a recusa só é gravada enquanto a rede está abaixo das 10. | `auth-limits.test.ts` › "a burst that passed the check together writes no more than the network's 10" |
+| LOGIN-08 | baixa | Segunda rodada (QA): sem as chaves do Turnstile em produção o login fechava calado; o `/api/health` respondia "ok". | Corrigido: o health responde 503 `NOT_CONFIGURED` e o log do dono nomeia os dois segredos (sem valores). | `gates.test.ts` › "says in the health check, outside development, that the sign-in is closed" |
+| LOGIN-09 | baixa | Segunda rodada (QA): um motivo gravado como `constructor` ou `__proto__` lia o protótipo de objeto na tela de acessos. | Corrigido: só chaves próprias do catálogo de motivos. | `apps/web/test/activity.test.ts` |
 
-Nenhum achado crítico ou alto.
+Nenhum achado crítico ou alto, nas duas rodadas.
 
 ## Verificado sem problema
 
@@ -59,6 +62,16 @@ teto de 50.000 linhas e recusas repetidas dobradas numa linha. Esta revisão
 não precisou de migration. Entregou a área própria na interface, a página
 **Acessos**, com filtros de período, tipo e IP e páginas de 50.
 
+## Decisão pendente com o Pablo
+
+- **Ataque lento ao código do 2FA** (levantado também pela thread de QA, PR
+  #16): com a senha vazada, alguém em muitas redes ainda testa centenas de
+  códigos por dia, limitado pela pausa global (10 erros em 15 minutos). Esta
+  revisão já faz o aviso se repetir a cada 3 erros seguidos e tira a isenção de
+  quem só divide a rede com o dono. A proposta de suspender o segundo passo
+  para redes desconhecidas acima de 100 erros em 24 horas espera a decisão do
+  Pablo e fica com a thread de QA.
+
 ## Riscos aceitos
 
 - **Vizinho na mesma rede.** As 3 falhas por rede em 15 minutos valem também
@@ -71,6 +84,11 @@ não precisou de migration. Entregou a área própria na interface, a página
   mudaria o idioma dos erros (o idioma do dono está no banco). A recomendação é
   a regra gratuita de rate limiting do WAF, em
   [configuracao-cloudflare.md](../configuracao-cloudflare.md).
+- **Filtro de IP sem índice.** O filtro pelo começo do IP percorre as linhas
+  do período pelo índice de tempo; no pior caso (90 dias, teto de 50.000
+  linhas, nenhum resultado) uma página lê a tabela inteira. Só o dono, com
+  sessão, faz essa busca; um índice novo custaria uma escrita a mais em cada
+  tentativa de login, que é a cota mais apertada.
 - **Pseudo IPv4.** Com "Overwrite headers" na zona, o IP registrado seria
   inventado e o agrupamento por /64 se perderia. A configuração recomendada
   está em [configuracao-cloudflare.md](../configuracao-cloudflare.md).

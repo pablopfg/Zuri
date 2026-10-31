@@ -84,7 +84,7 @@ export function AccessLogPage() {
       <PageHeader title={t("web.accessLog.title")} description={t("web.accessLog.description")} />
 
       <Card>
-        <div className="grid gap-4 sm:grid-cols-[repeat(3,minmax(0,1fr))_auto] sm:items-end">
+        <div className="grid gap-4 sm:grid-cols-[repeat(3,minmax(0,1fr))_auto] sm:items-start">
           <SelectField label={t("web.accessLog.period")} value={String(period)} onChange={(e) => update("periodo", e.target.value === String(DEFAULT_PERIOD) ? "" : e.target.value)}>
             {AUTH_ACTIVITY_PERIODS.map((days) => (
               <option key={days} value={days}>
@@ -111,7 +111,7 @@ export function AccessLogPage() {
             value={ipInput}
             onChange={(e) => update("ip", e.target.value)}
           />
-          <Button variant="secondary" disabled={!filtered} onClick={() => setParams(new URLSearchParams(), { replace: true })} className="sm:mb-6">
+          <Button variant="secondary" disabled={!filtered} onClick={() => setParams(new URLSearchParams(), { replace: true })} className="sm:mt-7">
             {t("web.accessLog.clear")}
           </Button>
         </div>
