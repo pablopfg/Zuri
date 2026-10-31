@@ -18,8 +18,16 @@ etapas ficam detalhadas; as mais antigas viram uma linha na tabela.
 | 0 | mesclada (31/10/2026) | #1 | Monorepo, CI, CodeQL, rulesets, Dependabot |
 | 1 | mesclada (31/10/2026) | #6 | Worker único, Durable Object `ZuriAgent` e os seis portões |
 | 2 | mesclada (31/10/2026) | #7 | Migration 1, configurações (idioma e fuso), erros no idioma do dono, lint de i18n |
+| 3 | mesclada (31/10/2026) | #8 | Login, sessões, CSRF, força bruta, Turnstile adaptativo, atividade de acesso |
 
 ## Últimas etapas (detalhe)
+
+### Etapa 3 · Login e sessões
+- Entregou: `packages/shared/src/{crypto,password,auth}.ts`, `apps/agent/src/auth/` (`service`, `sessions`, `login-limiter`, `events`, `client`, `turnstile`), `src/api/{app,http}.ts` (rotas `/api/auth/*`, CSRF, trava `PASSWORD_CHANGE_REQUIRED`), `src/db/internal-state.ts`. Doc: `docs/seguranca.md`.
+- Migrations: versão 2 (`zur_sessions`, `zur_login_attempts`, `zur_auth_events`, `zur_auth_events_daily`, `zur_devices`).
+- Decisões técnicas: senha em `OWNER_PASSWORD_HASH` ou `OWNER_PASSWORD` (opcionais; o `secrets.required` lista só `SESSION_SECRET`, `OWNER_EMAIL`, `PASSWORD_PEPPER`); redefinição pelo painel por impressão digital dos segredos; contagem global de recusas em memória do DO (custo no plano Free); `zur_login_attempts.outcome` 0 falha, 1 sucesso, 2 Turnstile recusado, 3 falha sob confiança de cookie; um acerto não zera as falhas (regra literal, decisão aberta para o Pablo no PR).
+- Ficou para depois: TOTP no `confirm` (etapa 4, hoje 400); entrega dos `alert_pending` (etapa 11); tela de atividade (etapa 5); regra de rate limiting do WAF no guia (etapa 24).
+- Atenção para a próxima: rota nova sensível chama `auth.requireRecentAuth(session)`; todo pedido da API precisa de `x-zuri-request: 1`; testes que gravam direto em `zur_login_attempts` precisam de `rebuild()` (veja `armadilhas.md`).
 
 ### Etapa 2 · Banco, configurações e i18n
 - Entregou: `apps/agent/src/db/{database,migrations,settings,activity}.ts`, `ZuriAgent.store` (banco aberto e migrado no primeiro uso; falha não fica em cache), `packages/shared/src/{settings,format}.ts`, `plural()`/`createTranslator()` no i18n, `scripts/lint-i18n.ts` + `i18n-ignore.json` (no `npm run lint` e no job `i18n`).
@@ -33,11 +41,6 @@ etapas ficam detalhadas; as mais antigas viram uma linha na tabela.
 - `PUBLIC_URL`, `ACCESS_*` documentados como **segredo** no painel: o `wrangler deploy` apaga variáveis do painel que não estão no `wrangler.jsonc`. A etapa 24 confirma isso no deploy.
 - e2e sobe o Worker real (`wrangler dev` com `tests/e2e/worker.env`). `npm run dev` exige `apps/agent/.dev.vars` só com os segredos.
 - Atenção para a próxima: o catálogo exige que toda chave seja usada; erros vêm de `DEFAULT_ERROR_MESSAGE` em `packages/shared`. A etapa 2 trocou `DEFAULT_LOCALE` em `http/errors.ts` pelo idioma das configurações. Armadilhas novas do Agents SDK em `armadilhas.md`.
-
-### Etapa 0 · Repositório e esteira
-- Entregou: monorepo (`packages/shared`, `apps/agent` e `apps/web` ainda de esqueleto), CI com os 7 checks, CodeQL, `branch-policy`, rulesets em `.github/rulesets/`, Dependabot, testes do próprio repositório em `tests/repo/`.
-- Decisões técnicas: Node 26 (LTS atual) no `.nvmrc`, `engines >=24`; TypeScript 6.0.3, Vitest 4.1.12 (compatível com `vitest-pool-workers`), Biome 2.5.15, Playwright 1.64.1; squash na `develop`, merge commit na `main`; plugin `cloudflare` fixado por `sha`.
-- Ficou para depois: nada (lint de literais entregue na etapa 2, Worker na etapa 1).
 
 <!-- Modelo, até 10 linhas por etapa:
 ### Etapa NN · <nome>
@@ -57,6 +60,6 @@ etapas ficam detalhadas; as mais antigas viram uma linha na tabela.
 
 ## Próxima etapa
 
-- Número e nome: 3 · Login e sessões
-- Dependências mescladas: sim (etapa 2, #7)
+- Número e nome: 4 · 2FA e passkeys
+- Dependências mescladas: sim (etapa 3, #8)
 - Precisa de algo do Pablo antes: não
