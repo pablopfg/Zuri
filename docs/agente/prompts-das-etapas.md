@@ -4,6 +4,7 @@ Depois que o PR da etapa 0 estiver mesclado, envie um prompt por vez, na ordem.
 
 - **Mande o próximo só depois de mesclar o PR anterior.** A exceção são as etapas marcadas como *paralela*, que você pode pedir em conversas separadas.
 - **Copie só o bloco da etapa.** O agente já tem as instruções do projeto e a especificação, e cada prompt aponta a seção certa.
+- **Etapa com tela nova ou alterada** sempre traz no PR as capturas de como a tela ficou (computador e celular, claro e escuro), mesmo que o bloco não diga. A regra está em `.claude/rules/capturas.md`.
 - **Responda antes de continuar** quando o prompt disser "▶ Antes, você fornece". Nunca cole token, senha ou id no chat. O agente explica onde colocar cada um: segredo do Worker no painel da Cloudflare ou ambiente `production` do GitHub.
 
 > **Com o modo contínuo ligado (padrão), você não precisa mandar estes prompts.** O agente fecha cada etapa, mescla na `develop` e abre sozinho uma thread nova com o bloco da etapa seguinte, tirado da cópia deste arquivo no repositório (`docs/agente/prompts-das-etapas.md`). Ele só para quando precisa de você. Veja `06-modo-continuo.md`. Use os blocos abaixo para rodar uma etapa à mão, refazer uma etapa ou depois de desligar o modo contínuo.
@@ -73,7 +74,7 @@ Execute a etapa 5 da especificação ("Casca da interface").
 - Leia antes .claude/rules/web-ui.md e a seção "Telas e estados". Faça uma revisão de UX (estados vazio, carregando, erro, teclado, leitor de tela) e registre no PR.
 - Proponha a identidade visual do Zuri (logo, cores, favicon) em até 3 opções e me pergunte qual prefiro antes de fechar. Enquanto isso, siga com a sua recomendação.
 - Aceite: e2e de login, logout e expiração, axe sem violação séria, Lighthouse de acessibilidade ≥ 90, PWA instalável, /api/* com Cache-Control: no-store.
-- Fluxo completo de etapa, PR para develop, link, capturas de tela (claro e escuro, celular e computador) e resultado dos testes.
+- Fluxo completo de etapa, PR para develop, link, capturas de tela (claro e escuro, celular e computador) no corpo do PR, conforme .claude/rules/capturas.md, e resultado dos testes.
 ```
 
 ---
