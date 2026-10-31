@@ -66,4 +66,10 @@ export const ptBRSettings = {
   "web.settings.later.notifications": "Push, e-mail, Telegram e categorias de aviso chegam junto com a central de avisos.",
   "web.settings.later.integrations": "Servidores MCP e Google Agenda chegam numa próxima versão.",
   "web.settings.later.data": "Backup e uso do armazenamento chegam numa próxima versão.",
+  "web.account.preferences": "Idioma e fuso horário",
+  "web.account.preferencesHint": "Valem para a interface, as mensagens do servidor e, depois, o bot.",
+  "web.account.language": "Idioma",
+  "web.account.timeZone": "Fuso horário",
+  "web.account.timeZoneHint": "Datas, lembretes e rotinas seguem este fuso.",
+  "web.account.signOutTitle": "Sair deste aparelho",
 } as const;

@@ -57,12 +57,20 @@ Cada pessoa publica o próprio Zuri na própria conta Cloudflare, e ele atende s
 
 As capturas abaixo acompanham o tema do seu GitHub (claro ou escuro) e saem da `develop` com dados de exemplo.
 
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/capturas/conversa-computador-escuro.png">
+    <img src="docs/capturas/conversa-computador-claro.png" alt="Tela Conversa: o dono pede ajuda para organizar a mudança e o agente responde com um plano de quatro tarefas, com prioridades e prazos, e os botões Criar 4 tarefas, Editar e Descartar" width="85%">
+  </picture>
+</p>
+<p align="center"><b>Conversa</b>: o agente propõe, você confere e confirma</p>
+
 <table>
   <tr>
     <td width="50%" valign="top">
       <picture>
         <source media="(prefers-color-scheme: dark)" srcset="docs/capturas/inicio-computador-escuro.png">
-        <img src="docs/capturas/inicio-computador-claro.png" alt="Início do Zuri no computador: barra lateral com Início, Tarefas, Notas, Memória e Acessos, e cartões de Segurança e Sessão">
+        <img src="docs/capturas/inicio-computador-claro.png" alt="Início do Zuri no computador: barra lateral com Início, Conversa, Tarefas, Notas, Memória e Acessos, e cartões de Segurança e Sessão">
       </picture>
       <p align="center"><b>Início</b>: segurança da conta e sessão num relance</p>
     </td>
@@ -119,12 +127,17 @@ As capturas abaixo acompanham o tema do seu GitHub (claro ou escuro) e saem da `
   &nbsp;
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="docs/capturas/inicio-celular-escuro.png">
-    <img src="docs/capturas/inicio-celular-claro.png" alt="Início no celular, com a navegação inferior" width="30%">
+    <img src="docs/capturas/inicio-celular-claro.png" alt="Início no celular, com a navegação inferior" width="23%">
   </picture>
   &nbsp;
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="docs/capturas/tarefas-celular-escuro.png">
-    <img src="docs/capturas/tarefas-celular-claro.png" alt="Tarefas no celular" width="30%">
+    <img src="docs/capturas/tarefas-celular-claro.png" alt="Tarefas no celular" width="23%">
+  </picture>
+  &nbsp;
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/capturas/conversa-celular-escuro.png">
+    <img src="docs/capturas/conversa-celular-claro.png" alt="Conversa no celular, com o cartão do plano de tarefas" width="23%">
   </picture>
 </p>
 </details>

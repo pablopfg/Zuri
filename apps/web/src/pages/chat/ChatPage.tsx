@@ -446,7 +446,10 @@ function Thread({
     const node = end.current;
     if (!node) return;
     const nearBottom = window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 240;
-    if (nearBottom || growth.endsWith(":0:0:")) node.scrollIntoView({ block: "end", behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+    // To the page's very end, not the thread's: the composer sticks to the bottom and would cover the last card.
+    if (nearBottom || growth.endsWith(":0:0:")) {
+      window.scrollTo({ top: document.documentElement.scrollHeight, behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+    }
   }, [growth]);
 
   async function loadOlder() {

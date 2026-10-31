@@ -112,4 +112,15 @@ export const ptBRProductivity = {
   "web.trash.emptyConfirm": "Tudo o que está na lixeira vai sumir e não dá para desfazer.",
   "web.trash.emptied.one": "{count} item apagado de vez.",
   "web.trash.emptied.other": "{count} itens apagados de vez.",
+  // Refusals only the server says; kept with the screen rather than in the first bundle (rule P11).
+  "error.storageLimit.tasks": "Você chegou ao limite de tarefas. Apague as concluídas que não precisa mais para criar novas.",
+  "error.storageLimit.notes": "Você chegou ao limite de notas. Apague as que não precisa mais para criar novas.",
+  "error.storageLimit.projects": "Você chegou ao limite de projetos. Apague os que não precisa mais para criar novos.",
+  "error.projectMissing": "Este projeto não existe mais. Escolha outro.",
+  "error.taskNotFound": "Esta tarefa não existe mais.",
+  "error.noteNotFound": "Esta nota não existe mais.",
+  "error.projectNotFound": "Este projeto não existe mais.",
+  "error.trashGone": "Este item não está mais na lixeira.",
+  "error.trashBroken": "Este item não pode ser restaurado.",
+  "error.trashAlreadyBack": "Este item já foi restaurado.",
 } as const;

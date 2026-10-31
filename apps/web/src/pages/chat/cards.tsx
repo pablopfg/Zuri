@@ -5,6 +5,7 @@ import { useId, useState } from "react";
 import { Link } from "react-router";
 import { Button, cn, fieldClass } from "../../components/ui.tsx";
 import { api, errorMessage } from "../../lib/api.ts";
+import { dueFromInputs, formatDue } from "../../lib/due.ts";
 import { useI18n } from "../../lib/i18n.tsx";
 import { APPROVAL_LABEL, APPROVAL_STATUS_LABEL, PLAN_STATUS_LABEL, PRIORITY_LABEL, PROBLEM_LABEL } from "./labels.ts";
 
@@ -119,7 +120,13 @@ export function ApprovalCard({ action, onChange }: { action: PendingAction; onCh
  * the server refuses tasks the agent did not propose).
  */
 export function PlanCard({ plan, onChange }: { plan: TaskPlan; onChange: (plan: TaskPlan) => void }) {
-  const { t, plural } = useI18n();
+  const { t, plural, locale, timeZone, dateTime } = useI18n();
+  // A plan keeps local "YYYY-MM-DD[THH:MM]" dates; show them as the tasks screen does.
+  const showDue = (due: string) => {
+    const [date = "", time = ""] = due.split("T");
+    const iso = dueFromInputs(date, time, timeZone);
+    return iso ? formatDue(iso, locale, timeZone, dateTime) : due;
+  };
   const refresh = useRefreshData();
   const [draft, setDraft] = useState<TaskPlanContent>(plan.plan);
   const [editing, setEditing] = useState(false);
@@ -207,7 +214,7 @@ export function PlanCard({ plan, onChange }: { plan: TaskPlan; onChange: (plan: 
                   {task.due && (
                     <span className="inline-flex items-center gap-1">
                       <CalendarClock className="h-3 w-3" aria-hidden />
-                      {task.due.replace("T", " ")}
+                      {showDue(task.due)}
                       {task.dueSuggested && <span className="rounded bg-raised px-1">{t("web.chat.plan.suggested")}</span>}
                     </span>
                   )}
