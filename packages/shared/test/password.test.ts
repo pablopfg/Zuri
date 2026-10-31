@@ -3,6 +3,7 @@ import {
   BREACH_API,
   hashPassword,
   isBreachedPassword,
+  MIN_BREACH_LINES,
   isPasswordHash,
   PASSWORD_MAX_LENGTH,
   PASSWORD_MIN_LENGTH,
@@ -96,9 +97,12 @@ describe("breach check (Have I Been Pwned, k-anonymity)", () => {
   // SHA-1("password") = 5BAA61E4C9B93F3F0682250B6CF8331B7EE68FD8
   const PREFIX = "5BAA6";
   const SUFFIX = "1E4C9B93F3F0682250B6CF8331B7EE68FD8";
+  /** Padding as the API sends it: lines with count 0 for suffixes nobody looked up. */
+  const padding = (n = MIN_BREACH_LINES) =>
+    Array.from({ length: n }, (_, i) => `${i.toString(16).toUpperCase().padStart(35, "F")}:0`).join("\r\n");
 
   it("sends only the first 5 hex characters, asks for padding and never follows redirects", async () => {
-    const fetcher = vi.fn(async () => new Response(`0018A45C4D1DEF81644B54AB7F969B88D65:0\r\n${SUFFIX}:42\r\n`));
+    const fetcher = vi.fn(async () => new Response(`${padding()}\r\n${SUFFIX}:42\r\n`));
     expect(await isBreachedPassword("password", fetcher as typeof fetch)).toBe(true);
     const [url, init] = fetcher.mock.calls[0] as unknown as [string, RequestInit];
     expect(url).toBe(`${BREACH_API}${PREFIX}`);
@@ -108,7 +112,7 @@ describe("breach check (Have I Been Pwned, k-anonymity)", () => {
   });
 
   it("is false when the suffix is absent or only a padding line with count 0", async () => {
-    const fetcher = async () => new Response(`${SUFFIX}:0\nAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA:3\n`);
+    const fetcher = async () => new Response(`${SUFFIX}:0\nAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA:3\n${padding()}\n`);
     expect(await isBreachedPassword("password", fetcher as typeof fetch)).toBe(false);
   });
 
@@ -117,6 +121,11 @@ describe("breach check (Have I Been Pwned, k-anonymity)", () => {
     ["a timeout", async () => Promise.reject(new DOMException("timed out", "TimeoutError"))],
     ["an error status", async () => new Response("down", { status: 503 })],
     ["a redirect", async () => new Response(null, { status: 302, headers: { location: "https://exemplo.com.br" } })],
+    // SEC-3-04: a 200 that is not the API's full answer is no answer either.
+    ["an empty 200", async () => new Response("")],
+    ["an HTML page with status 200", async () => new Response(`<html>${padding()}</html>`)],
+    ["a body cut short (n−1 lines)", async () => new Response(padding(MIN_BREACH_LINES - 1))],
+    ["one malformed line among the padding", async () => new Response(`${padding()}\nnot-a-hash:1`)],
   ])("answers null (unknown) on %s, so the caller can fail closed", async (_case, fetcher) => {
     expect(await isBreachedPassword("password", fetcher as typeof fetch)).toBeNull();
   });

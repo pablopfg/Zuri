@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { AppError } from "../src/http/errors.ts";
-import { client, fakeTurnstile, MINUTE, noCookies, outcome, right, withAuth, wrong } from "./auth-harness.ts";
+import { client, fakeTurnstile, live, MINUTE, noCookies, outcome, rebuild, right, TEST_PASSWORD, withAuth, wrong } from "./auth-harness.ts";
 
 const NET = "203.0.113.7";
 const OTHER = "198.51.100.20";
@@ -103,6 +103,108 @@ describe("brute force: 3 failures per network in 15 minutes", () => {
     });
   });
 
+  it("keeps waiting on the 4th and 5th tries (n+1), with Retry-After counting down", async () => {
+    await withAuth("limit-n-plus-1", async ({ auth, clock }) => {
+      for (let i = 0; i < 3; i++) await outcome(auth.login(wrong(), client(NET), noCookies));
+      const fourth = await auth.login(right(), client(NET), noCookies).catch((e: AppError) => e);
+      expect((fourth as AppError).details).toEqual({ retryAfter: 15 * 60 });
+      clock.advance(MINUTE);
+      const fifth = await auth.login(right(), client(NET), noCookies).catch((e: AppError) => e);
+      expect((fifth as AppError).code).toBe("RATE_LIMITED");
+      expect((fifth as AppError).details).toEqual({ retryAfter: 14 * 60 });
+      // Waiting tries are not failures: the window still ends 15 min after the 3rd.
+      clock.advance(14 * MINUTE);
+      expect(await outcome(auth.login(right(), client(NET), noCookies))).toBe("ok");
+    });
+  });
+
+  it("does not wipe the window's failures on a success: 3 per 15 minutes, literally", async () => {
+    await withAuth("limit-literal", async ({ auth }) => {
+      await outcome(auth.login(wrong(), client(NET), noCookies));
+      await outcome(auth.login(wrong(), client(NET), noCookies));
+      expect(await outcome(auth.login(right(), client(NET), noCookies))).toBe("ok");
+      expect(await outcome(auth.login(wrong(), client(NET), noCookies))).toBe("INVALID_CREDENTIALS");
+      expect(await outcome(auth.login(right(), client(NET), noCookies))).toBe("RATE_LIMITED");
+    });
+  });
+
+  it("at 24 failures across networks (n−1), an unknown network still has its 3", async () => {
+    await withAuth("limit-distributed-24", async ({ auth }) => {
+      for (let i = 0; i < 24; i++) await outcome(auth.login(wrong(), client(`192.0.2.${i}`), noCookies));
+      expect(await outcome(auth.login(wrong(), client("192.0.2.200"), noCookies))).toBe("INVALID_CREDENTIALS");
+      // That was the 25th: from now on a new network gets one try, and this one used it.
+      expect(await outcome(auth.login(right(), client("192.0.2.200"), noCookies))).toBe("RATE_LIMITED");
+    });
+  });
+
+  it("at 99 failures (n−1) an unknown network still gets its one try; at 100 none", async () => {
+    await withAuth("limit-hard-99", async (h) => {
+      const at = h.clock.now();
+      for (let i = 0; i < 99; i++) h.db.run(`INSERT INTO zur_login_attempts (network, outcome, at) VALUES (?, 0, ?)`, `10.0.${i}.1`, at);
+      expect(await outcome(h.auth.login(wrong(), client("192.0.2.251"), noCookies))).toBe("INVALID_CREDENTIALS");
+      expect(await outcome(h.auth.login(right(), client("192.0.2.252"), noCookies))).toBe("RATE_LIMITED");
+    });
+  });
+
+  it("SEC-3-02: counts refused robot checks toward a distributed guess, one per unknown network", async () => {
+    await withAuth("limit-robots-global", async (h) => {
+      const at = h.clock.now();
+      for (let i = 0; i < 24; i++) h.db.run(`INSERT INTO zur_login_attempts (network, outcome, at) VALUES (?, 2, ?)`, `10.2.${i}.1`, at);
+      h.db.run(`INSERT INTO zur_login_attempts (network, outcome, at) VALUES (?, 2, ?)`, "192.0.2.90", at);
+      // 25 refusals and no wrong password: the network that already spent its one try waits.
+      expect(await outcome(h.auth.login(right(), client("192.0.2.90"), noCookies))).toBe("RATE_LIMITED");
+      expect(await outcome(h.auth.login(right(), client("192.0.2.91"), noCookies))).toBe("ok");
+    });
+  });
+
+  it("SEC-3-02: during a distributed guess, refusals from thousands of networks cost no write each", async () => {
+    await withAuth("limit-flood", async (h) => {
+      const at = h.clock.now();
+      for (let i = 0; i < 100; i++) h.db.run(`INSERT INTO zur_login_attempts (network, outcome, at) VALUES (?, 0, ?)`, `10.3.${i}.1`, at);
+      const before = h.db.one<{ n: number }>(`SELECT count(*) AS n FROM zur_auth_events`)?.n ?? 0;
+      for (let i = 0; i < 200; i++) {
+        expect(await outcome(h.auth.login(right(), client(`2001:db8:${i.toString(16)}::`), noCookies))).toBe("RATE_LIMITED");
+      }
+      const refused = h.events().filter((e) => e.kind === "login_rate_limited");
+      expect(refused).toHaveLength(1);
+      expect(refused[0]).toMatchObject({ network: "" });
+      expect((h.db.one<{ n: number }>(`SELECT count(*) AS n FROM zur_auth_events`)?.n ?? 0) - before).toBeLessThanOrEqual(2);
+      expect(h.db.one<{ n: number }>(`SELECT count(*) AS n FROM zur_login_attempts`)?.n).toBe(100);
+    });
+  });
+
+  it("SEC-3-03: a browser that signed in before keeps its 3 tries through a distributed guess", async () => {
+    await withAuth("limit-known-device", async (h) => {
+      const owner = await h.auth.login(right(), client(OTHER), noCookies);
+      const at = h.clock.now();
+      for (let i = 0; i < 100; i++) h.db.run(`INSERT INTO zur_login_attempts (network, outcome, at) VALUES (?, 0, ?)`, `10.4.${i}.1`, at);
+      const fresh = rebuild(h, {});
+      // A new network (the owner travelling): without the device cookie it waits like anyone.
+      expect(await outcome(fresh.login(right(), client("192.0.2.140"), noCookies))).toBe("RATE_LIMITED");
+      const known = { session: null, device: owner.deviceToken };
+      expect(await outcome(fresh.login(wrong(), client("192.0.2.141"), known))).toBe("INVALID_CREDENTIALS");
+      expect(await outcome(fresh.login(right(), client("192.0.2.141"), known))).toBe("ok");
+      // The network's own 3 still apply to it.
+      for (let i = 0; i < 2; i++) await outcome(fresh.login(wrong(), client("192.0.2.141"), known));
+      expect(await outcome(fresh.login(right(), client("192.0.2.141"), known))).toBe("RATE_LIMITED");
+      // A cookie that names no known browser counts for nothing.
+      const forged = { session: null, device: "A".repeat(43) };
+      expect(await outcome(fresh.login(right(), client("192.0.2.142"), forged))).toBe("RATE_LIMITED");
+    });
+  });
+
+  it("SEC-3-03: a live session confirms its password through a distributed guess", async () => {
+    await withAuth("limit-session-trusted", async (h) => {
+      const { token } = await h.auth.login(right(), client("192.0.2.150"), noCookies);
+      const at = h.clock.now();
+      for (let i = 0; i < 100; i++) h.db.run(`INSERT INTO zur_login_attempts (network, outcome, at) VALUES (?, 0, ?)`, `10.5.${i}.1`, at);
+      const fresh = rebuild(h, {});
+      const row = await live(fresh, token);
+      // The owner moved to another network with the session open.
+      await fresh.confirm(row, { password: TEST_PASSWORD }, client("192.0.2.151"));
+    });
+  });
+
   it("groups an IPv6 /64 as one network", async () => {
     await withAuth("limit-ipv6", async ({ auth }) => {
       const { networkKey } = await import("../src/auth/client.ts");
@@ -142,14 +244,16 @@ describe("adaptive Turnstile", () => {
     const turnstile = fakeTurnstile();
     await withAuth(
       "turnstile-10",
-      async ({ auth, db, clock }) => {
+      async (h) => {
         const add = (n: number) => {
-          for (let i = 0; i < n; i++) db.run(`INSERT INTO zur_login_attempts (network, outcome, at) VALUES (?, 0, ?)`, `10.1.${i}.${n}`, clock.now());
+          for (let i = 0; i < n; i++) h.db.run(`INSERT INTO zur_login_attempts (network, outcome, at) VALUES (?, 0, ?)`, `10.1.${i}.${n}`, h.clock.now());
         };
         add(9);
-        expect(await outcome(auth.login(right(), client("192.0.2.1"), noCookies))).toBe("ok");
+        expect(await outcome(h.auth.login(right(), client("192.0.2.1"), noCookies))).toBe("ok");
         add(1);
-        expect(await outcome(auth.login(right(), client("192.0.2.2"), noCookies))).toBe("TURNSTILE_REQUIRED");
+        // Rows written behind the limiter's back: a new object reads them again.
+        const fresh = rebuild(h, {}, turnstile);
+        expect(await outcome(fresh.login(right(), client("192.0.2.2"), noCookies))).toBe("TURNSTILE_REQUIRED");
       },
       { turnstile },
     );
@@ -203,6 +307,53 @@ describe("adaptive Turnstile", () => {
         expect(await outcome(auth.login(right({ turnstileToken: "x" }), client(NET), noCookies))).toBe("RATE_LIMITED");
         // A waiting network costs no siteverify call.
         expect(turnstile.calls).toHaveLength(calls);
+      },
+      { turnstile },
+    );
+  });
+
+  it("is still asked for with 2 failures (n+1)", async () => {
+    const turnstile = fakeTurnstile();
+    await withAuth(
+      "turnstile-2",
+      async ({ auth }) => {
+        await outcome(auth.login(wrong(), client(NET), noCookies));
+        await outcome(auth.login(wrong({ turnstileToken: "t" }), client(NET), noCookies));
+        expect(await outcome(auth.login(right(), client(NET), noCookies))).toBe("TURNSTILE_REQUIRED");
+      },
+      { turnstile },
+    );
+  });
+
+  it("applies a check that became needed while the request waited (checked again before counting)", async () => {
+    const turnstile = fakeTurnstile();
+    await withAuth(
+      "turnstile-race",
+      async ({ auth, db }) => {
+        // Not needed when the request arrived; needed by the time it would be counted.
+        const required = vi.spyOn(auth.limiter, "turnstileRequired").mockReturnValueOnce(false).mockReturnValueOnce(true);
+        const derive = vi.spyOn(crypto.subtle, "deriveBits");
+        expect(await outcome(auth.login(right(), client(NET), noCookies))).toBe("TURNSTILE_REQUIRED");
+        expect(derive).not.toHaveBeenCalled();
+        expect(db.one<{ n: number }>(`SELECT count(*) AS n FROM zur_login_attempts`)?.n).toBe(0);
+        required.mockRestore();
+        derive.mockRestore();
+      },
+      { turnstile },
+    );
+  });
+
+  it("keeps each kind of refused check on its own row (a missing token doesn't hide an outage)", async () => {
+    const turnstile = fakeTurnstile("unavailable");
+    await withAuth(
+      "turnstile-reasons",
+      async ({ auth, events }) => {
+        await outcome(auth.login(wrong(), client(NET), noCookies));
+        await outcome(auth.login(right(), client(NET), noCookies));
+        await outcome(auth.login(right({ turnstileToken: "t" }), client(NET), noCookies));
+        await outcome(auth.login(right(), client(NET), noCookies));
+        const rows = events().filter((e) => e.kind === "login_turnstile");
+        expect(rows.map((e) => e.reason)).toEqual(["missing", "unavailable"]);
       },
       { turnstile },
     );

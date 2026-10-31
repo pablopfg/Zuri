@@ -32,6 +32,8 @@ const FOLDED_KINDS: readonly AuthEventKind[] = ["login_rate_limited", "login_tur
 /** A folded row's count reaches storage at most this often, so hammering a blocked sign-in costs no extra writes. */
 const FOLD_WRITE_INTERVAL_MS = 60_000;
 const PRUNE_INTERVAL_MS = 3600_000;
+/** Where a trim leaves the detail: 10% under the cap, so the next full count waits for 5,000 new rows. */
+export const AUTH_EVENTS_CAP_TARGET = MAX_AUTH_EVENTS - MAX_AUTH_EVENTS / 10;
 const DAY_MS = 24 * 3600_000;
 
 export interface AuthEventOptions {
@@ -42,6 +44,11 @@ export interface AuthEventOptions {
   knownDevice?: boolean;
   /** Tell the owner out of band. Step 11 delivers the rows marked here. */
   alert?: boolean;
+  /**
+   * A folded refusal during a distributed guess: one row for every network, with
+   * no visitor's details, so thousands of networks can't each cost a write.
+   */
+  everyNetwork?: boolean;
 }
 
 /**
@@ -53,16 +60,21 @@ export interface AuthEventOptions {
  * Never stored: passwords, codes, tokens, the e-mail typed in a failed try.
  */
 export class AuthEvents {
+  #prunedAt: number | undefined;
+
   constructor(
     private readonly db: Database,
     private readonly state: InternalState,
     private readonly clock: () => number,
   ) {}
 
-  record(kind: AuthEventKind, client: ClientInfo | null, options: AuthEventOptions = {}): void {
+  record(kind: AuthEventKind, given: ClientInfo | null, options: AuthEventOptions = {}): void {
     const now = this.clock();
     this.prune(now);
-    if (FOLDED_KINDS.includes(kind) && client && this.fold(kind, client.network, now)) return;
+    const folded = FOLDED_KINDS.includes(kind);
+    const client = folded && options.everyNetwork ? null : given;
+    const reason = (options.reason ?? "").slice(0, 32);
+    if (folded && this.fold(kind, client?.network ?? "", reason, now)) return;
     const geo = client?.geo;
     this.db.run(
       `INSERT INTO zur_auth_events
@@ -71,7 +83,7 @@ export class AuthEvents {
       now,
       now,
       kind,
-      (options.reason ?? "").slice(0, 32),
+      reason,
       client?.network ?? "",
       client?.ip ?? "",
       geo?.country ?? "",
@@ -86,13 +98,17 @@ export class AuthEvents {
     );
   }
 
-  /** Adds to this network's row of the window, when there is one. The count is a lower bound under a flood. */
-  private fold(kind: AuthEventKind, network: string, now: number): boolean {
+  /**
+   * Adds to this network's row of the window for the same refusal, when there is
+   * one (network "" is every network). The count is a lower bound under a flood.
+   */
+  private fold(kind: AuthEventKind, network: string, reason: string, now: number): boolean {
     const row = this.db.one<{ id: number; last_at: number }>(
-      `SELECT id, last_at FROM zur_auth_events WHERE network = ? AND kind = ? AND at > ? ORDER BY at DESC LIMIT 1`,
+      `SELECT id, last_at FROM zur_auth_events WHERE network = ? AND kind = ? AND at > ? AND reason = ? ORDER BY at DESC LIMIT 1`,
       network,
       kind,
       now - LOGIN_WINDOW_MS,
+      reason,
     );
     if (!row) return false;
     if (now - row.last_at >= FOLD_WRITE_INTERVAL_MS) {
@@ -107,8 +123,13 @@ export class AuthEvents {
    * newest RESERVED_OWNER_AUTH_EVENTS of the owner's own always among them.
    */
   prune(now = this.clock()): void {
-    const last = this.state.get<number>("auth_events_pruned_at");
-    if (typeof last === "number" && now - last < PRUNE_INTERVAL_MS && last <= now) return;
+    // Remembered in memory too: a flood of refusals shouldn't read the timestamp on every row.
+    const last = this.#prunedAt ?? this.state.get<number>("auth_events_pruned_at");
+    if (typeof last === "number" && now - last < PRUNE_INTERVAL_MS && last <= now) {
+      this.#prunedAt = last;
+      return;
+    }
+    this.#prunedAt = undefined;
     this.db.transaction(() => {
       const cutoff = now - AUTH_EVENT_DETAIL_DAYS * DAY_MS;
       this.db.run(
@@ -124,25 +145,43 @@ export class AuthEvents {
       this.cap();
       this.state.set("auth_events_pruned_at", now);
     });
+    this.#prunedAt = now;
   }
 
-  /** Ids only grow, so their spread bounds the row count: the full count runs only when it might be over. */
+  /**
+   * Over MAX_AUTH_EVENTS rows, trims down to AUTH_EVENTS_CAP_TARGET. Counting the
+   * rows reads them all, so it runs only when an estimate says it might be over:
+   * the count left by the last trim plus the ids handed out since (ids only grow).
+   * Trimming below the cap keeps the full count from running every hour after.
+   */
   private cap(): void {
-    const span = this.db.one<{ n: number | null }>(`SELECT max(id) - min(id) + 1 AS n FROM zur_auth_events`)?.n ?? 0;
-    if (span <= MAX_AUTH_EVENTS) return;
-    const owner = OWNER_KINDS.map(() => "?").join(", ");
-    this.db.run(
-      `WITH reserved AS (
-         SELECT id FROM zur_auth_events WHERE kind IN (${owner}) ORDER BY at DESC, id DESC LIMIT ?
-       ), rest AS (
-         SELECT id FROM zur_auth_events WHERE id NOT IN (SELECT id FROM reserved)
-         ORDER BY at DESC, id DESC LIMIT max(0, ? - (SELECT count(*) FROM reserved))
-       )
-       DELETE FROM zur_auth_events WHERE id NOT IN (SELECT id FROM reserved) AND id NOT IN (SELECT id FROM rest)`,
-      ...OWNER_KINDS,
-      RESERVED_OWNER_AUTH_EVENTS,
-      MAX_AUTH_EVENTS,
-    );
+    const ids = this.db.one<{ low: number | null; high: number | null }>(`SELECT min(id) AS low, max(id) AS high FROM zur_auth_events`);
+    const high = ids?.high ?? 0;
+    const mark = this.state.get<string>("auth_events_cap_mark");
+    const [markId, markCount] = typeof mark === "string" ? mark.split("|").map(Number) : [];
+    const estimate =
+      markId !== undefined && markCount !== undefined && Number.isFinite(markId) && Number.isFinite(markCount) && markId <= high
+        ? markCount + (high - markId)
+        : high - (ids?.low ?? 0) + 1;
+    if (estimate <= MAX_AUTH_EVENTS) return;
+    let count = this.db.one<{ n: number }>(`SELECT count(*) AS n FROM zur_auth_events`)?.n ?? 0;
+    if (count > MAX_AUTH_EVENTS) {
+      const owner = OWNER_KINDS.map(() => "?").join(", ");
+      this.db.run(
+        `WITH reserved AS (
+           SELECT id FROM zur_auth_events WHERE kind IN (${owner}) ORDER BY at DESC, id DESC LIMIT ?
+         ), rest AS (
+           SELECT id FROM zur_auth_events WHERE id NOT IN (SELECT id FROM reserved)
+           ORDER BY at DESC, id DESC LIMIT max(0, ? - (SELECT count(*) FROM reserved))
+         )
+         DELETE FROM zur_auth_events WHERE id NOT IN (SELECT id FROM reserved) AND id NOT IN (SELECT id FROM rest)`,
+        ...OWNER_KINDS,
+        RESERVED_OWNER_AUTH_EVENTS,
+        AUTH_EVENTS_CAP_TARGET,
+      );
+      count = Math.min(count, AUTH_EVENTS_CAP_TARGET);
+    }
+    this.state.set("auth_events_cap_mark", `${high}|${count}`);
   }
 
   /** Rows waiting for step 11 to tell the owner about them. */

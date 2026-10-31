@@ -12,7 +12,8 @@ export type InternalKey =
   | "auth_password_change_required"
   | "auth_first_sign_in_at"
   | "auth_attack_alerted_at"
-  | "auth_events_pruned_at";
+  | "auth_events_pruned_at"
+  | "auth_events_cap_mark";
 
 export class InternalState {
   constructor(private readonly db: Database) {}

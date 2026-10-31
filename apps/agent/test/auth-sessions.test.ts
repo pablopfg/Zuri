@@ -1,5 +1,5 @@
 import { hashPassword, isPasswordHash } from "@zuri/shared";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { AppError } from "../src/http/errors.ts";
 import { client, HOUR, live, MINUTE, noCookies, outcome, rebuild, right, TEST_PASSWORD, withAuth } from "./auth-harness.ts";
 import { testEnv } from "./helpers.ts";
@@ -172,11 +172,21 @@ describe("password typed recently (15 minutes)", () => {
 
       expect(await outcome(auth.confirm(row, { password: "errada errada errada" }, client(NET)))).toBe("INVALID_CREDENTIALS");
       // A code proves nothing until two-step sign-in exists (step 4).
-      expect(await outcome(auth.confirm(row, { totp: "123456" }, client(NET)))).toBe("INVALID_CREDENTIALS");
+      expect(await outcome(auth.confirm(row, { totp: "123456" }, client(NET)))).toBe("VALIDATION_FAILED");
       await auth.confirm(row, { password: TEST_PASSWORD }, client(NET));
       row = await live(auth, token);
       expect(() => auth.requireRecentAuth(row)).not.toThrow();
       expect(auth.state(row).recentAuthUntil).toBe(new Date(clock.now() + 15 * MINUTE).toISOString());
+    });
+  });
+
+  it("refuses a code without spending the network's tries while two-step sign-in doesn't exist", async () => {
+    await withAuth("step-up-totp", async ({ auth, db }) => {
+      const { token } = await auth.login(right(), client(NET), noCookies);
+      const row = await live(auth, token);
+      for (let i = 0; i < 4; i++) expect(await outcome(auth.confirm(row, { totp: "123456" }, client(NET)))).toBe("VALIDATION_FAILED");
+      expect(db.one<{ n: number }>(`SELECT count(*) AS n FROM zur_login_attempts WHERE outcome = 0`)?.n).toBe(0);
+      expect(await outcome(auth.login(right(), client(NET), noCookies))).toBe("ok");
     });
   });
 
@@ -367,6 +377,51 @@ describe("reset from the Cloudflare panel", () => {
       expect(await outcome(after.login(right({ password: NEW_PASSWORD }), client("198.51.100.5"), noCookies))).toBe("INVALID_CREDENTIALS");
       expect(await outcome(after.login(right({ password: resetTo }), client("198.51.100.6"), noCookies))).toBe("ok");
       expect(h.events().find((e) => e.kind === "credentials_reset")).toMatchObject({ alert_pending: 1 });
+    });
+  });
+
+  it("SEC-3-01: the old password can't sign in even as the first request after the reset", async () => {
+    await withAuth("reset-first-login", async (h) => {
+      const signed = await h.auth.login(right(), client(NET), noCookies);
+      const row = await live(h.auth, signed.token);
+      await h.auth.changePassword(row, { currentPassword: TEST_PASSWORD, newPassword: NEW_PASSWORD }, client(NET));
+      const resetTo = "nova senha do painel bem longa";
+      const after = rebuild(h, { passwordHash: await hashPassword(resetTo, testEnv.PASSWORD_PEPPER) });
+      // Nothing else ran on the new object first: no validate to sync it.
+      expect(await outcome(after.login(right({ password: NEW_PASSWORD }), client("198.51.100.5"), noCookies))).toBe("INVALID_CREDENTIALS");
+      expect(h.db.one<{ n: number }>(`SELECT count(*) AS n FROM zur_sessions`)?.n).toBe(0);
+    });
+  });
+
+  it("SEC-3-01: two sign-ins with the old password racing the reset both fail", async () => {
+    await withAuth("reset-race", async (h) => {
+      const signed = await h.auth.login(right(), client(NET), noCookies);
+      const row = await live(h.auth, signed.token);
+      await h.auth.changePassword(row, { currentPassword: TEST_PASSWORD, newPassword: NEW_PASSWORD }, client(NET));
+      const after = rebuild(h, { passwordHash: await hashPassword("nova senha do painel bem longa", testEnv.PASSWORD_PEPPER) });
+      const results = await Promise.all([
+        outcome(after.login(right({ password: NEW_PASSWORD }), client("198.51.100.7"), noCookies)),
+        outcome(after.login(right({ password: NEW_PASSWORD }), client("198.51.100.8"), noCookies)),
+      ]);
+      expect(results).toEqual(["INVALID_CREDENTIALS", "INVALID_CREDENTIALS"]);
+      expect(h.db.one<{ n: number }>(`SELECT count(*) AS n FROM zur_sessions`)?.n).toBe(0);
+    });
+  });
+
+  it("SEC-3-01: a password replaced while PBKDF2 runs opens no session for the old one", async () => {
+    await withAuth("reset-during-check", async (h) => {
+      const replacement = await hashPassword(NEW_PASSWORD, testEnv.PASSWORD_PEPPER);
+      const subtle = crypto.subtle;
+      const derive = subtle.deriveBits.bind(subtle);
+      // The change lands in the middle of this sign-in's password check.
+      const spy = vi.spyOn(subtle, "deriveBits").mockImplementationOnce(async (...args: Parameters<SubtleCrypto["deriveBits"]>) => {
+        h.state.set("auth_password_hash", replacement);
+        return derive(...args);
+      });
+      expect(await outcome(h.auth.login(right(), client(NET), noCookies))).toBe("INVALID_CREDENTIALS");
+      spy.mockRestore();
+      expect(h.db.one<{ n: number }>(`SELECT count(*) AS n FROM zur_sessions`)?.n).toBe(0);
+      expect(h.events().some((e) => e.kind === "login_success")).toBe(false);
     });
   });
 

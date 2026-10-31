@@ -1,4 +1,4 @@
-import { AGENT_INSTANCE_NAME, BREACH_API, sessionStateSchema } from "@zuri/shared";
+import { AGENT_INSTANCE_NAME, BREACH_API, MIN_BREACH_LINES, sessionStateSchema } from "@zuri/shared";
 import { runInDurableObject } from "cloudflare:test";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ZuriAgent } from "../src/agent/zuri-agent.ts";
@@ -39,7 +39,8 @@ function fakeBreachApi(answer: "clean" | "down") {
     const url = String(input instanceof Request ? input.url : input);
     if (!url.startsWith(BREACH_API)) throw new Error(`unexpected fetch ${url}`);
     if (answer === "down") throw new TypeError("Network connection lost.");
-    return new Response("0018A45C4D1DEF81644B54AB7F969B88D65:0\n");
+    // A padded answer without the new password's suffix.
+    return new Response(Array.from({ length: MIN_BREACH_LINES }, (_, i) => `${i.toString(16).toUpperCase().padStart(35, "0")}:0`).join("\n"));
   });
 }
 
@@ -59,6 +60,8 @@ describe("PASSWORD_CHANGE_REQUIRED", () => {
     const session = await call(`${ORIGIN}/api/auth/session`, { headers });
     expect(session.status).toBe(200);
     expect(sessionStateSchema.parse(await session.json()).passwordChangeRequired).toBe(true);
+    // HEAD is the same route as GET.
+    expect((await call(`${ORIGIN}/api/auth/session`, { method: "HEAD", headers })).status).toBe(200);
     await inOwner((state) => state.delete("auth_password_change_required"));
   });
 });

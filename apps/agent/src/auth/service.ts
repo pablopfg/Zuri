@@ -59,7 +59,15 @@ export interface SignedIn {
   deviceToken: string;
 }
 
+/** A device cookie that names a browser seen at an earlier sign-in, or nothing. */
+type KnownDevice = { known: true; token: string; id: string } | { known: false; token: null; id: null };
+
 type PasswordSource = { kind: "stored" | "hash"; hash: string } | { kind: "plain"; password: string };
+
+function sameSource(a: PasswordSource, b: PasswordSource | null): boolean {
+  if (!b || a.kind !== b.kind) return false;
+  return a.kind === "plain" ? b.kind === "plain" && a.password === b.password : b.kind !== "plain" && a.hash === b.hash;
+}
 
 /** E-mail addresses compare without case or surrounding spaces. */
 function normalizeEmail(email: string): string {
@@ -201,12 +209,15 @@ export class AuthService {
    * the e-mail (both always run, and a refusal never says which was wrong).
    */
   async login(input: LoginRequest, client: ClientInfo, cookies: { session: string | null; device: string | null }): Promise<SignedIn> {
-    const source = this.requireConfigured();
+    // Sync first: a reset from the panel must drop the old password before it is read.
     await this.sync();
+    const source = this.requireConfigured();
+    const device = await this.knownDevice(cookies.device);
+    const context = { trusted: device.known };
     try {
-      this.limiter.assertAllowed(client.network);
+      this.limiter.assertAllowed(client.network, context);
     } catch (error) {
-      this.events.record("login_rate_limited", client);
+      this.recordRefusal("login_rate_limited", client);
       this.alertIfUnderAttack();
       throw error;
     }
@@ -218,9 +229,9 @@ export class AuthService {
     }
     let attempt: number;
     try {
-      attempt = this.limiter.begin(client.network);
+      attempt = this.limiter.begin(client.network, context);
     } catch (error) {
-      this.events.record("login_rate_limited", client);
+      this.recordRefusal("login_rate_limited", client);
       throw error;
     }
     const [passwordOk, emailOk] = await Promise.all([this.checkPassword(source, input.password), this.checkEmail(input.email)]);
@@ -232,7 +243,23 @@ export class AuthService {
     // Before the success is written, or this very sign-in would make the network look known.
     const newNetwork = this.limiter.isNewNetwork(client.network);
     this.limiter.succeed(attempt);
-    return this.openSession(client, cookies, source, input.password, newNetwork);
+    return this.openSession(client, cookies.session, device, source, input.password, newNetwork);
+  }
+
+  /** The browser's device cookie, when it names one that signed in before. */
+  private async knownDevice(cookie: string | null): Promise<KnownDevice> {
+    if (!cookie || !/^[A-Za-z0-9_-]{43}$/.test(cookie)) return { known: false, token: null, id: null };
+    const id = await this.deviceId(cookie);
+    return this.events.isKnownDevice(id) ? { known: true, token: cookie, id } : { known: false, token: null, id: null };
+  }
+
+  /**
+   * Refusals that repeat (a blocked network, a robot check) fold into one row per
+   * network and window; during a distributed guess, into one row for all, so a
+   * flood from thousands of networks costs no write per request.
+   */
+  private recordRefusal(kind: "login_rate_limited" | "login_turnstile", client: ClientInfo, reason = ""): void {
+    this.events.record(kind, client, { reason, everyNetwork: this.limiter.underAttack() });
   }
 
   /** Runs before the try is counted and before any PBKDF2. True when a token was confirmed. */
@@ -240,18 +267,18 @@ export class AuthService {
     const turnstile = this.turnstile;
     if (!turnstile || !this.limiter.turnstileRequired(client.network)) return false;
     if (!token) {
-      this.events.record("login_turnstile", client, { reason: "missing" });
+      this.recordRefusal("login_turnstile", client, "missing");
       throw this.turnstileError("error.turnstileRequired");
     }
     const result = await turnstile.verify(token, client.ip);
     if (result === "ok") return true;
     if (result === "unavailable") {
       // Fail closed: no answer from Cloudflare is no pass.
-      this.events.record("login_turnstile", client, { reason: "unavailable" });
+      this.recordRefusal("login_turnstile", client, "unavailable");
       throw new AppError("SERVICE_UNAVAILABLE", "error.turnstileUnavailable", { turnstileSiteKey: turnstile.siteKey });
     }
     this.limiter.noteTurnstileFailure(client.network);
-    this.events.record("login_turnstile", client, { reason: "failed" });
+    this.recordRefusal("login_turnstile", client, "failed");
     throw this.turnstileError("error.turnstileFailed");
   }
 
@@ -271,19 +298,25 @@ export class AuthService {
   /** Everything after a right password: the old session ends, the device is noted, a new session opens. */
   private async openSession(
     client: ClientInfo,
-    cookies: { session: string | null; device: string | null },
+    sessionCookie: string | null,
+    device: KnownDevice,
     source: PasswordSource,
     password: string,
     newNetwork: boolean,
   ): Promise<SignedIn> {
     // A session cookie this browser already had ends here, so a planted one can't ride along.
-    const previous = await this.sessions.find(cookies.session);
-    const knownDeviceId = cookies.device && /^[A-Za-z0-9_-]{43}$/.test(cookies.device) ? await this.deviceId(cookies.device) : null;
-    const known = this.events.isKnownDevice(knownDeviceId);
-    const deviceToken = known && cookies.device ? cookies.device : randomToken(32);
-    const deviceId = known && knownDeviceId ? knownDeviceId : await this.deviceId(deviceToken);
+    const previous = await this.sessions.find(sessionCookie);
+    const known = device.known;
+    const deviceToken = device.token ?? randomToken(32);
+    const deviceId = device.id ?? (await this.deviceId(deviceToken));
     const { token, row } = await this.sessions.create(client);
-    this.deps.db.transaction(() => {
+    const current = this.deps.db.transaction(() => {
+      // The password checked may have been replaced while PBKDF2 ran (a change in
+      // another tab): a session opened by the old one must not outlive it.
+      if (!sameSource(source, this.passwordSource())) {
+        this.sessions.revoke(row.id);
+        return false;
+      }
       if (previous) this.sessions.revoke(previous.id);
       this.notePasswordStrength(source, password);
       const first = this.deps.state.get<number>("auth_first_sign_in_at") === undefined;
@@ -296,7 +329,9 @@ export class AuthService {
         reason: !known ? "new_device" : newNetwork ? "new_network" : "",
         alert: !first && (!known || newNetwork),
       });
+      return true;
     });
+    if (!current) throw new AppError("INVALID_CREDENTIALS");
     return { token, session: row, deviceToken };
   }
 
@@ -365,13 +400,15 @@ export class AuthService {
 
   /** Opens the 15-minute window. Same limit as the sign-in; a wrong password leaves the session as it was. */
   async confirm(row: SessionRow, proof: ConfirmRequest, client: ClientInfo): Promise<void> {
-    const source = this.requireConfigured();
+    // Sync first: a reset from the panel must drop the old password before it is read.
     await this.sync();
+    const source = this.requireConfigured();
+    // Two-step codes arrive in step 4. Until then a code is a malformed request,
+    // refused before the limiter: it must not spend the network's three tries.
+    if (!("password" in proof)) throw new AppError("VALIDATION_FAILED", undefined, { fields: ["totp"] });
     const attempt = this.beginChecked(client, "confirm_failure");
-    // Two-step codes arrive in step 4; until then a code proves nothing.
-    const ok = "password" in proof ? await this.checkPassword(source, proof.password) : false;
-    if (!ok) {
-      this.events.record("confirm_failure", client, { reason: "password" in proof ? "password" : "totp", session: row.id.slice(0, 16) });
+    if (!(await this.checkPassword(source, proof.password))) {
+      this.events.record("confirm_failure", client, { reason: "password", session: row.id.slice(0, 16) });
       throw new AppError("INVALID_CREDENTIALS", "auth.password.wrong");
     }
     this.limiter.succeed(attempt);
@@ -379,9 +416,10 @@ export class AuthService {
     this.events.record("confirm_success", client, { session: row.id.slice(0, 16) });
   }
 
+  /** Behind a live session: the network's own 3 tries apply, the distributed-guess locks don't. */
   private beginChecked(client: ClientInfo, kind: "confirm_failure" | "password_change_failure"): number {
     try {
-      return this.limiter.begin(client.network);
+      return this.limiter.begin(client.network, { trusted: true });
     } catch (error) {
       this.events.record(kind, client, { reason: "rate_limited" });
       throw error;
@@ -395,8 +433,9 @@ export class AuthService {
    * one everywhere: every session ends, this browser's too, and it gets a new one.
    */
   async changePassword(row: SessionRow, input: ChangePasswordRequest, client: ClientInfo): Promise<{ token: string; session: SessionRow }> {
-    const source = this.requireConfigured();
+    // Sync first: a reset from the panel must drop the old password before it is read.
     await this.sync();
+    const source = this.requireConfigured();
     const attempt = this.beginChecked(client, "password_change_failure");
     if (!(await this.checkPassword(source, input.currentPassword))) {
       this.events.record("password_change_failure", client, { reason: "current", session: row.id.slice(0, 16) });

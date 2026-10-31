@@ -94,6 +94,9 @@ export function passwordProblem(password: string, personal: readonly string[] = 
 
 export const BREACH_API = "https://api.pwnedpasswords.com/range/";
 const BREACH_TIMEOUT_MS = 5_000;
+/** A padded answer has 800 to 1,000 lines; fewer means it was cut short or is not the API's. */
+export const MIN_BREACH_LINES = 100;
+const BREACH_LINE = /^[0-9A-F]{35}:\d+$/;
 
 /**
  * Asks Have I Been Pwned whether the password appeared in a known breach, by
@@ -101,7 +104,7 @@ const BREACH_TIMEOUT_MS = 5_000;
  * and the padded answer hides which suffix was looked at.
  *
  * true: breached; false: not found; null: no answer (network down, timeout, an
- * error status, a redirect). The caller treats null as a refusal (fail closed).
+ * error status, a redirect, a body that is not a full padded answer). The caller treats null as a refusal (fail closed).
  */
 export async function isBreachedPassword(password: string, fetcher: typeof fetch = fetch): Promise<boolean | null> {
   try {
@@ -118,11 +121,14 @@ export async function isBreachedPassword(password: string, fetcher: typeof fetch
       return null;
     }
     const suffix = hex.slice(5);
-    for (const line of (await response.text()).split("\n")) {
-      const [candidate, count] = line.trim().split(":");
-      if (candidate === suffix && Number(count) > 0) return true;
-    }
-    return false;
+    const lines = (await response.text())
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean);
+    // Fail closed on the content too: an error page, a challenge or a short body
+    // that happens to be 200 must not read as "not breached".
+    if (lines.length < MIN_BREACH_LINES || !lines.every((line) => BREACH_LINE.test(line))) return null;
+    return lines.some((line) => line.startsWith(`${suffix}:`) && Number(line.slice(36)) > 0);
   } catch {
     return null;
   }

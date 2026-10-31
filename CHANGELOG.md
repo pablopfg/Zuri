@@ -53,6 +53,13 @@ o [SemVer](https://semver.org/lang/pt-BR/). Cada PR escreve a sua entrada em
 - Força bruta: 3 falhas por rede em 15 min, limite reduzido num ataque
   distribuído, Turnstile adaptativo opcional depois de 1 falha da rede ou 10 no
   total, sempre antes do PBKDF2 e com falha fechada.
+- Redefinir a senha pelo painel da Cloudflare vale já na primeira requisição
+  depois do deploy: a senha antiga não entra nem uma vez.
+- Durante um ataque distribuído, cada recusa custa quase nenhuma leitura ou
+  gravação no banco, para o atacante não esgotar as cotas diárias do plano
+  Free. Navegadores que já entraram continuam podendo entrar. Recomendado:
+  uma regra gratuita de rate limiting do WAF em `/api/auth/*`
+  (`docs/seguranca.md`).
 
 ### Atualização
 

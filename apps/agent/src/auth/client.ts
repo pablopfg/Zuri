@@ -5,6 +5,7 @@ import { AppError } from "../http/errors.ts";
  * edge. Any copy sent by the client is removed first (index.ts), so the API
  * never trusts a location that came from the browser.
  */
+/** The edge's location as percent-encoded JSON: header values are bytes, and "São Paulo" is not ASCII. */
 export const CLIENT_GEO_HEADER = "x-zuri-client-geo";
 
 export interface ClientGeo {
@@ -44,9 +45,9 @@ export function geoFromCf(cf: IncomingRequestCfProperties | undefined): ClientGe
 }
 
 function parseGeo(header: string | null): ClientGeo {
-  if (!header || header.length > 1024) return geoFromCf(undefined);
+  if (!header || header.length > 4096) return geoFromCf(undefined);
   try {
-    return geoFromCf(JSON.parse(header) as IncomingRequestCfProperties);
+    return geoFromCf(JSON.parse(decodeURIComponent(header)) as IncomingRequestCfProperties);
   } catch {
     return geoFromCf(undefined);
   }

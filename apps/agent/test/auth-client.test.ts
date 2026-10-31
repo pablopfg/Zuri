@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { CLIENT_GEO_HEADER, clientInfo, networkKey } from "../src/auth/client.ts";
 import { createTurnstile, TURNSTILE_VERIFY_URL } from "../src/auth/turnstile.ts";
+import { withClientGeo } from "../src/index.ts";
 
 describe("networkKey", () => {
   it.each([
@@ -31,7 +32,7 @@ describe("clientInfo", () => {
       request({
         "cf-connecting-ip": "2001:db8:1:2::7",
         "user-agent": `Mozilla\u0001\t\u007f${"x".repeat(400)}`,
-        [CLIENT_GEO_HEADER]: JSON.stringify({ country: "BR", city: "São Paulo", region: "SP", asn: 64500, colo: "GRU", extra: "x" }),
+        [CLIENT_GEO_HEADER]: encodeURIComponent(JSON.stringify({ country: "BR", city: "São Paulo", region: "SP", asn: 64500, colo: "GRU", extra: "x" })),
       }),
       false,
     );
@@ -42,8 +43,18 @@ describe("clientInfo", () => {
     expect(info.geo).toEqual({ country: "BR", region: "SP", city: "São Paulo", asn: 64500, colo: "GRU" });
   });
 
+  it("carries an accented location from request.cf as ASCII and reads it back whole", () => {
+    const incoming = new Request("https://zuri.exemplo.com.br/api/auth/login", {
+      headers: { "cf-connecting-ip": "203.0.113.1" },
+      cf: { country: "BR", region: "São Paulo", city: "Ribeirão Preto", asn: 64500, colo: "GRU" },
+    } as RequestInit);
+    const forwarded = withClientGeo(incoming);
+    expect(forwarded.headers.get(CLIENT_GEO_HEADER)).toMatch(/^[\x21-\x7e]+$/);
+    expect(clientInfo(forwarded, false).geo).toEqual({ country: "BR", region: "São Paulo", city: "Ribeirão Preto", asn: 64500, colo: "GRU" });
+  });
+
   it("treats a malformed location as unknown", () => {
-    for (const geo of ["{", "[]", '{"country": 7, "asn": -1}', "x".repeat(2000)]) {
+    for (const geo of ["{", "[]", "%E0%A4%A", '{"country": 7, "asn": -1}', "x".repeat(5000)]) {
       expect(clientInfo(request({ "cf-connecting-ip": "203.0.113.1", [CLIENT_GEO_HEADER]: geo }), false).geo).toEqual({
         country: "",
         region: "",

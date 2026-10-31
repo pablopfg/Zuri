@@ -92,7 +92,9 @@ export function createApi(deps: ApiDeps) {
       response.headers.append("set-cookie", sessionCookie(c.req.raw, null));
       return response;
     }
-    const route = `${c.req.method} ${c.req.path.replace(/\/+$/, "")}`;
+    // HEAD is a GET without the body, and the router answers it with the GET route.
+    const method = c.req.method === "HEAD" ? "GET" : c.req.method;
+    const route = `${method} ${c.req.path.replace(/\/+$/, "")}`;
     if (auth.passwordChangeRequired() && !WHILE_PASSWORD_CHANGE.has(route)) throw new AppError("PASSWORD_CHANGE_REQUIRED");
     c.set("session", session);
     await next();

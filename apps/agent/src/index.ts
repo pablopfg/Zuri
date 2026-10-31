@@ -161,7 +161,7 @@ export function withoutInternalHeaders(request: Request): Request {
  */
 export function withClientGeo(request: Request): Request {
   const headers = new Headers(request.headers);
-  headers.set(CLIENT_GEO_HEADER, JSON.stringify(geoFromCf(request.cf as IncomingRequestCfProperties | undefined)));
+  headers.set(CLIENT_GEO_HEADER, encodeURIComponent(JSON.stringify(geoFromCf(request.cf as IncomingRequestCfProperties | undefined))));
   return new Request(request, { headers });
 }
 

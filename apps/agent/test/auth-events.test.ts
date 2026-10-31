@@ -1,6 +1,6 @@
 import { MAX_AUTH_EVENTS, RESERVED_OWNER_AUTH_EVENTS } from "@zuri/shared";
 import { describe, expect, it } from "vitest";
-import { AuthEvents } from "../src/auth/events.ts";
+import { AUTH_EVENTS_CAP_TARGET, AuthEvents } from "../src/auth/events.ts";
 import { client, FakeClock, HOUR, MINUTE, noCookies, outcome, right, withAuth, wrong } from "./auth-harness.ts";
 
 const NET = "203.0.113.7";
@@ -135,10 +135,42 @@ describe("retention", () => {
         clock.advance(2 * HOUR);
         log.prune();
         const counts = db.all<{ kind: string; n: number }>(`SELECT kind, count(*) AS n FROM zur_auth_events GROUP BY kind ORDER BY kind`);
+        // Trimmed below the cap, so the next full count waits for 5,000 new rows.
         expect(counts).toEqual([
-          { kind: "login_failure", n: MAX_AUTH_EVENTS - RESERVED_OWNER_AUTH_EVENTS },
+          { kind: "login_failure", n: AUTH_EVENTS_CAP_TARGET - RESERVED_OWNER_AUTH_EVENTS },
           { kind: "login_success", n: RESERVED_OWNER_AUTH_EVENTS },
         ]);
+        expect(state.get("auth_events_cap_mark")).toMatch(new RegExp(`\\|${AUTH_EVENTS_CAP_TARGET}$`));
+      },
+      { clock },
+    );
+  });
+
+  it("SEC-3-02: after a trim, counts the rows again only once the estimate passes the cap", async () => {
+    const clock = new FakeClock();
+    await withAuth(
+      "cap-estimate",
+      async ({ db, state }) => {
+        const log = new AuthEvents(db, state, clock.now);
+        const add = (n: number) =>
+          db.transaction(() => {
+            for (let i = 0; i < n; i++) db.run(`INSERT INTO zur_auth_events (at, last_at, kind) VALUES (?, ?, 'login_failure')`, clock.now(), clock.now());
+          });
+        add(MAX_AUTH_EVENTS + 1);
+        clock.advance(2 * HOUR);
+        log.prune();
+        const rows = () => db.one<{ n: number }>(`SELECT count(*) AS n FROM zur_auth_events`)?.n;
+        expect(rows()).toBe(AUTH_EVENTS_CAP_TARGET);
+        // n: exactly at the cap by the estimate, nothing is counted or trimmed.
+        add(MAX_AUTH_EVENTS - AUTH_EVENTS_CAP_TARGET);
+        clock.advance(2 * HOUR);
+        log.prune();
+        expect(rows()).toBe(MAX_AUTH_EVENTS);
+        // n+1: over it, trimmed again.
+        add(1);
+        clock.advance(2 * HOUR);
+        log.prune();
+        expect(rows()).toBe(AUTH_EVENTS_CAP_TARGET);
       },
       { clock },
     );
