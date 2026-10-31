@@ -2,6 +2,7 @@ import { AGENT_INSTANCE_NAME, BREACH_API, MIN_BREACH_LINES, sessionStateSchema }
 import { runInDurableObject } from "cloudflare:test";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ZuriAgent } from "../src/agent/zuri-agent.ts";
+import { createApi } from "../src/api/app.ts";
 import { TURNSTILE_VERIFY_URL } from "../src/auth/turnstile.ts";
 import { InternalState } from "../src/db/internal-state.ts";
 import { Database } from "../src/db/database.ts";
@@ -67,6 +68,52 @@ describe("PASSWORD_CHANGE_REQUIRED", () => {
     // HEAD is the same route as GET.
     expect((await call(`${ORIGIN}/api/auth/session`, { method: "HEAD", headers })).status).toBe(200);
     await inOwner((state) => state.delete("auth_password_change_required"));
+  });
+});
+
+/** Every route the API registers, read from the router itself, so a new route is covered without editing this list. */
+function registeredRoutes(): string[] {
+  const unused = () => {
+    throw new Error("not used");
+  };
+  const app = createApi({ locale: () => "pt-BR", auth: unused, settings: unused, productivity: unused, passwordSecretSet: () => true, origin: () => ORIGIN, development: () => false });
+  return [...new Set(app.routes.filter((r) => r.method !== "ALL").map((r) => `${r.method} ${r.path}`))];
+}
+
+/** Routes that never need a session: health and the steps of signing in. */
+const PUBLIC = new Set(["GET /api/health", "POST /api/auth/login", "POST /api/auth/mfa", "POST /api/auth/mfa/passkey/options", "POST /api/auth/mfa/passkey"]);
+/** The four the owner can still use while the password must change. */
+const ALLOWED = new Set(["GET /api/auth/session", "POST /api/auth/heartbeat", "POST /api/auth/logout", "POST /api/auth/password"]);
+
+describe("PASSWORD_CHANGE_REQUIRED on every route", () => {
+  it("blocks every registered signed-in route but the four allowed, without running it", async () => {
+    const routes = registeredRoutes();
+    for (const known of [...PUBLIC, ...ALLOWED]) expect(routes, known).toContain(known);
+    const guarded = routes.filter((r) => !PUBLIC.has(r) && !ALLOWED.has(r));
+    // A sanity floor: settings, activity, MFA, passkeys, tasks, notes, projects and trash.
+    expect(guarded.length).toBeGreaterThanOrEqual(30);
+
+    const ip = "192.0.2.41";
+    const token = await signIn(ip);
+    await inOwner((state) => state.set("auth_password_change_required", true));
+    const before = await inOwner((_s, db) => db.all<{ n: number }>(`SELECT (SELECT count(*) FROM zur_tasks) + (SELECT count(*) FROM zur_notes) + (SELECT count(*) FROM zur_projects) AS n`)[0]?.n);
+    try {
+      for (const route of guarded) {
+        const [method = "GET", path = ""] = route.split(" ");
+        const url = `${ORIGIN}${path.replace(/:id\b/g, "0b8f8a52-5b2c-4c55-9a4c-2f1f3e1f4a10")}`;
+        const res = await call(url, {
+          method,
+          headers: { ...CSRF, "content-type": "application/json", "cf-connecting-ip": ip, cookie: `__Host-zuri_session=${token}` },
+          ...(method === "GET" ? {} : { body: JSON.stringify({ title: "x", content: "x", name: "x", code: "123456", password: TEST_PASSWORD }) }),
+        });
+        expect(res.status, route).toBe(403);
+        expect((await errorBody(res)).code, route).toBe("PASSWORD_CHANGE_REQUIRED");
+      }
+      const after = await inOwner((_s, db) => db.all<{ n: number }>(`SELECT (SELECT count(*) FROM zur_tasks) + (SELECT count(*) FROM zur_notes) + (SELECT count(*) FROM zur_projects) AS n`)[0]?.n);
+      expect(after).toBe(before);
+    } finally {
+      await inOwner((state) => state.delete("auth_password_change_required"));
+    }
   });
 });
 

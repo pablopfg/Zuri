@@ -46,6 +46,12 @@ describe.each([
     expect(pr?.parameters?.allowed_merge_methods).toEqual([merge]);
   });
 
+  it("requires the branch to be up to date with its target before merging", () => {
+    // Parallel threads merge on their own: a PR green against an old develop
+    // could break develop once merged next to another one. Strict checks rerun it.
+    expect(rule(rs, "required_status_checks")?.parameters?.strict_required_status_checks_policy).toBe(true);
+  });
+
   it("requires every CI check", () => {
     expect(checks(rs).sort()).toEqual([...REQUIRED_CI_JOBS, ...REQUIRED_CODEQL_CHECKS, ...extra].sort());
   });

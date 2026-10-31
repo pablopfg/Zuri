@@ -122,4 +122,33 @@ describe("localDayBounds", () => {
       end: "2018-11-05T02:00:00.000Z",
     });
   });
+
+  it("handle the 25-hour day the clocks went back (São Paulo 2019, New York 2026)", () => {
+    const hours = (b: { start: string; end: string }) => (Date.parse(b.end) - Date.parse(b.start)) / 3_600_000;
+    const sp = localDayBounds("America/Sao_Paulo", new Date("2019-02-16T15:00:00Z"));
+    expect(sp).toEqual({ start: "2019-02-16T02:00:00.000Z", end: "2019-02-17T03:00:00.000Z" });
+    expect(hours(sp)).toBe(25);
+    const ny = localDayBounds("America/New_York", new Date("2026-11-01T15:00:00Z"));
+    expect(ny).toEqual({ start: "2026-11-01T04:00:00.000Z", end: "2026-11-02T05:00:00.000Z" });
+    expect(hours(ny)).toBe(25);
+    expect(hours(localDayBounds("America/New_York", new Date("2026-03-08T15:00:00Z")))).toBe(23);
+    // A half-hour shift (Lord Howe): 23.5 hours.
+    expect(hours(localDayBounds("Australia/Lord_Howe", new Date("2026-10-04T05:00:00Z")))).toBe(23.5);
+  });
+
+  it("an instant on the edge of a day belongs to the day it starts", () => {
+    const day = localDayBounds("America/Sao_Paulo", new Date("2026-10-31T03:00:00.000Z"));
+    expect(day.start).toBe("2026-10-31T03:00:00.000Z");
+    const before = localDayBounds("America/Sao_Paulo", new Date("2026-10-31T02:59:59.999Z"));
+    expect(before.end).toBe("2026-10-31T03:00:00.000Z");
+  });
+});
+
+describe("year limits", () => {
+  it("take the first and last instants allowed and refuse one past each", () => {
+    expect(instantSchema.safeParse("2000-01-01T00:00:00Z").success).toBe(true);
+    expect(instantSchema.safeParse("2199-12-31T23:59:59Z").success).toBe(true);
+    expect(instantSchema.safeParse("1999-12-31T23:59:59Z").success).toBe(false);
+    expect(instantSchema.safeParse("2200-01-01T00:00:00Z").success).toBe(false);
+  });
 });

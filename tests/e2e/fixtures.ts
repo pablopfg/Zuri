@@ -1,4 +1,4 @@
-import { test as base, expect } from "@playwright/test";
+import { test as base, type BrowserContext, expect } from "@playwright/test";
 
 /** Cloudflare's public test token: the e2e Worker runs with Cloudflare's always-pass test keys (playwright.config.ts). */
 export const HUMAN_TOKEN = "XXXX.DUMMY.TOKEN.XXXX";
@@ -22,12 +22,17 @@ window.turnstile = {
   remove() {},
 };`;
 
+/** Serves the stand-in widget to every page of a context (also used by the Lighthouse run's own browser). */
+export async function routeFakeTurnstile(context: BrowserContext) {
+  await context.route("https://challenges.cloudflare.com/turnstile/**", (route) =>
+    route.fulfill({ status: 200, contentType: "text/javascript", body: FAKE_TURNSTILE }),
+  );
+}
+
 export const test = base.extend<{ fakeTurnstile: undefined }>({
   fakeTurnstile: [
     async ({ context }, use) => {
-      await context.route("https://challenges.cloudflare.com/turnstile/**", (route) =>
-        route.fulfill({ status: 200, contentType: "text/javascript", body: FAKE_TURNSTILE }),
-      );
+      await routeFakeTurnstile(context);
       await use(undefined);
     },
     { auto: true },

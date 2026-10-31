@@ -1,13 +1,47 @@
 /** Search helpers shared by tasks (instr) and notes (FTS5). Nothing typed by the owner is ever SQL. */
 
+/** Capitals SQLite's lower() leaves alone that pt-BR (and es, fr, de) text uses, with their small letters. */
+const LATIN_CAPITALS = "ÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏÐÑÒÓÔÕÖØÙÚÛÜÝÞ";
+const LATIN_SMALL = "àáâãäåæçèéêëìíîïðñòóôõöøùúûüýþ";
+
 /**
- * The search text folded the way SQLite's lower() folds a column: ASCII only.
- * Compared with `instr(lower(col), ?)`, it matches like LIKE did (A–Z ignore
- * case, everything else exact), and %, _ and \ are plain characters. LIKE is
- * out because the platform caps a LIKE pattern at 50 bytes.
+ * A column folded for a literal search: SQLite's lower() (A–Z only) over the
+ * column with the accented Latin capitals made small first, so "Água" matches
+ * "água". Built from constants only; no text typed by the owner is in it.
  */
-export function asciiLower(query: string): string {
-  return query.replace(/[A-Z]/g, (c) => c.toLowerCase());
+export function foldedColumn(column: string): string {
+  let sql = column;
+  for (let i = 0; i < LATIN_CAPITALS.length; i++) sql = `replace(${sql}, '${LATIN_CAPITALS[i]}', '${LATIN_SMALL[i]}')`;
+  return `lower(${sql})`;
+}
+
+/**
+ * True when a folded search has an accented Latin letter. Only then does the
+ * column need foldedColumn's 30 replace() calls: without one, folding the
+ * column's accented capitals can't change whether instr() finds the text, and
+ * the plain lower(column) costs about 20 times less CPU on a long table.
+ */
+export function needsLatinFold(folded: string): boolean {
+  for (const c of folded) if (LATIN_SMALL.includes(c)) return true;
+  return false;
+}
+
+/** The column expression to compare with foldSearch(q): folded only when q needs it. */
+export function searchColumn(column: string, folded: string): string {
+  return needsLatinFold(folded) ? foldedColumn(column) : `lower(${column})`;
+}
+
+/**
+ * The search text folded exactly as foldedColumn folds a column, in NFC (the
+ * form stored text is kept in). Compared with `instr(<folded column>, ?)`, %, _
+ * and \ are plain characters. LIKE is out because the platform caps a LIKE
+ * pattern at 50 bytes (CF-6-01).
+ */
+export function foldSearch(query: string): string {
+  return query.normalize("NFC").replace(/[A-Z\u00c0-\u00de]/g, (c) => {
+    const at = LATIN_CAPITALS.indexOf(c);
+    return at >= 0 ? (LATIN_SMALL[at] ?? c) : c.toLowerCase();
+  });
 }
 
 /** Words too common to narrow a search (pt-BR and en). */

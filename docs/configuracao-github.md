@@ -18,8 +18,13 @@ arquivo, confira a tela e clique em **Create**.
 
 | Arquivo | Protege | Regras |
 | --- | --- | --- |
-| `develop.json` | `develop` | PR obrigatório, **nenhuma aprovação humana** (o agente mescla no modo contínuo), só squash, histórico linear, checks `typecheck`, `lint`, `test`, `i18n`, `build`, `e2e`, `audit` e os dois do CodeQL (`analyze (javascript-typescript)` e `analyze (actions)`), sem force-push nem exclusão, ninguém dispensa as regras |
+| `develop.json` | `develop` | PR obrigatório, **nenhuma aprovação humana** (o agente mescla no modo contínuo), só squash, histórico linear, checks `typecheck`, `lint`, `test`, `i18n`, `build`, `e2e`, `audit`, `lighthouse` e os dois do CodeQL (`analyze (javascript-typescript)` e `analyze (actions)`), branch atualizada com a `develop` antes de mesclar, sem force-push nem exclusão, ninguém dispensa as regras |
 | `main.json` | `main` | PR obrigatório, só merge commit, os mesmos checks mais `source-branch` (só aceita PR vindo da `develop` deste repositório), sem force-push nem exclusão |
+
+Quando um arquivo de ruleset mudar (por exemplo, um check novo), atualize a
+ruleset no GitHub: abra a ruleset em **Settings → Rules → Rulesets**, apague-a e
+importe o arquivo de novo (ou ajuste a tela para ficar igual ao arquivo). Até
+lá, o check novo roda em todo PR mas não bloqueia a mesclagem.
 
 O check `source-branch` roda o `branch-policy.yml` da própria branch do PR. Um
 PR de outra branch que altere esse arquivo poderia deixá-lo verde. Por isso,

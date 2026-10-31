@@ -136,8 +136,16 @@ acrescente aqui cada armadilha nova que encontrar (sem dados pessoais).
 
 - Um padrão de `LIKE` ou `GLOB` passa de 50 bytes e a consulta falha (500),
   mas só quando a tabela tem linhas; em teste com tabela vazia passa. Para
-  busca literal use `instr(lower(coluna), ?)` com o texto dobrado só em A–Z
-  (`asciiLower`), como na etapa 6 (CF-6-01).
+  busca literal use `instr(<searchColumn(coluna, q)>, ?)` com `q = foldSearch(texto)`
+  (`productivity/search.ts`), como na etapa 6 (CF-6-01).
+- `lower()` do SQLite só dobra A–Z: `lower('Água')` continua `Água`, e "água"
+  não achava "Água". Por isso `foldedColumn` troca as maiúsculas acentuadas
+  latinas antes do `lower()`, mas só quando a busca tem acento: as 30 trocas
+  por linha custam cerca de 20 vezes mais CPU numa tabela grande.
+- Texto gravado em NFD antes de 31/10/2026 só é achado por busca com acento
+  depois de editado (a busca vai em NFC). Navegadores mandam NFC, então é raro.
+- O SQLite guarda UTF-8: um surrogate solto vira U+FFFD sem aviso. Os schemas de
+  texto recusam surrogate solto e guardam em NFC.
 - Sem `ANALYZE`, o planejador prefere um índice `(status, due_at)` a um índice
   parcial e ordena tudo. Confira `EXPLAIN QUERY PLAN` e `rowsRead` com algumas
   mil linhas antes de confiar num índice novo (CF-6-03).
@@ -146,3 +154,23 @@ acrescente aqui cada armadilha nova que encontrar (sem dados pessoais).
   imports do `index.ts` deixa de valer: todo arquivo que cria schema Zod
   importa `./zod-config.ts` primeiro, senão o Zod testa `new Function` e a
   CSP registra uma violação (`polish.spec.ts`).
+
+## Navegador e CSP
+
+- O Zod testa `new Function("")` na primeira validação para decidir se compila
+  validadores rápidos. Com a CSP sem `unsafe-eval`, isso gera uma violação da
+  CSP em toda página (o Lighthouse marca em "inspector issues"). O
+  `packages/shared` liga `z.config({ jitless: true })` em `zod-config.ts`, que
+  todo arquivo com schema importa primeiro (veja acima). `tests/e2e/csp.spec.ts`
+  pega a volta.
+- Pedido recusado antes de ler o corpo (CSRF, sem sessão) faz o workerd
+  registrar "Can't read from request stream after response has been sent" no
+  `wrangler dev`. Não afeta a resposta; cancelar o corpo no objeto não resolve
+  (o erro nasce no Worker, que repassa o fluxo). Fica para investigar.
+
+## Ambiente de nuvem
+
+- O e2e e o Lighthouse precisam de Node 26 e de
+  `PLAYWRIGHT_CHROMIUM_EXECUTABLE=/opt/pw-browsers/chromium-*/chrome-linux*/chrome`.
+- O Biome lê a pasta `coverage/` se ela existir; ela está fora do lint em
+  `biome.json`.

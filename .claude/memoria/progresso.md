@@ -55,6 +55,10 @@ etapas ficam detalhadas; as mais antigas viram uma linha na tabela.
 - Migrations: nenhuma (o registro com IP já existia em `zur_auth_events`).
 - Atenção: testes de rota precisam de `turnstileToken: HUMAN_TOKEN` (vitest com chaves inventadas e `test/setup-turnstile.ts`); e2e importa `test` de `tests/e2e/fixtures.ts`. Antes do deploy o Pablo grava `TURNSTILE_SITE_KEY` e `TURNSTILE_SECRET_KEY`.
 
+## Exigências de QA (desde 31/10/2026)
+
+- Toda etapa cumpre os "Portões obrigatórios" e as "Exigências por área" de `docs/qa/estrategia-de-testes.md`. A CI tem pisos de cobertura (`npm run test:coverage`) e o check `lighthouse`.
+
 ## Esperando o Pablo
 
 <!-- Itens "▶ Antes, você fornece" das próximas etapas e perguntas abertas. -->

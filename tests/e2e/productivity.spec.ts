@@ -29,10 +29,14 @@ test("a task: create with a deadline and a project, edit, complete, delete and r
   const form = page.getByRole("region", { name: "Nova tarefa" });
 
   // In the Today view, a title alone is due today by the end of the day (23:59 in São Paulo).
+  // The page's "now" is frozen at this test's "now", so "today" is the same day on
+  // both sides even when the test runs across midnight in São Paulo.
+  const now = new Date();
+  await page.clock.setFixedTime(now);
   await form.getByLabel("Adicionar uma tarefa para hoje").fill(`${title} hoje`);
   const quick = page.waitForResponse((r) => r.url().endsWith("/api/tasks") && r.request().method() === "POST");
   await form.getByLabel("Adicionar uma tarefa para hoje").press("Enter");
-  const today = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(new Date());
+  const today = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(now);
   const tomorrowUtc = new Date(Date.parse(`${today}T00:00:00Z`) + 86_400_000).toISOString().slice(0, 10);
   expect(((await (await quick).json()) as { task: { dueAt: string } }).task.dueAt).toBe(`${tomorrowUtc}T02:59:00.000Z`);
   await expect(page.getByRole("region", { name: "Lista de tarefas" }).getByRole("button", { name: `${title} hoje` })).toBeVisible();
@@ -281,4 +285,32 @@ test("moving a note with unsaved text to the trash does not ask about leaving", 
   await expect(page).toHaveURL(/\/notas$/);
   await expect(page.getByText("Nota movida para a lixeira.")).toBeVisible();
   await expect(page.getByRole("dialog", { name: "Sair sem salvar?" })).toHaveCount(0);
+});
+
+test.describe("a device in another zone than the owner's", () => {
+  // The device says Tokyo (UTC+9); the owner's setting says São Paulo (UTC-3).
+  // Deadlines are typed and read in the owner's zone, never the device's.
+  test.use({ timezoneId: "Asia/Tokyo" });
+
+  test("a deadline typed in is read in the owner's zone", async ({ page }) => {
+    // The owner's settings (the zone the form uses) arrive right after signing in.
+    const settings = page.waitForResponse((r) => r.url().endsWith("/api/settings") && r.request().method() === "GET");
+    await openSignedIn(page, "/tarefas");
+    expect((await settings).status()).toBe(200);
+    await expect(page.getByRole("heading", { level: 1, name: "Tarefas" })).toBeVisible();
+    const form = page.getByRole("region", { name: "Nova tarefa" });
+    const title = "Prazo no fuso do dono";
+    await form.getByLabel("Adicionar uma tarefa para hoje").fill(title);
+    await form.getByRole("button", { name: "Prazo, projeto e prioridade" }).click();
+    await form.getByLabel("Prazo").fill("2099-12-10");
+    await form.getByLabel("Hora").fill("18:30");
+    const created = page.waitForResponse((r) => r.url().endsWith("/api/tasks") && r.request().method() === "POST");
+    await form.getByRole("button", { name: "Adicionar tarefa" }).click();
+    const { task } = (await (await created).json()) as { task: { id: string; dueAt: string } };
+    expect(task.dueAt).toBe("2099-12-10T21:30:00.000Z");
+
+    await page.getByRole("button", { name: "Próximas", exact: true }).click();
+    await expect(page.getByRole("region", { name: "Lista de tarefas" }).getByText("Prazo: 10/12/2099 às 18:30")).toBeVisible();
+    expect((await page.request.delete(`/api/tasks/${task.id}`, { headers: CSRF })).status()).toBe(200);
+  });
 });

@@ -99,3 +99,24 @@ describe("notes and projects", () => {
     expect(projectCreateSchema.safeParse({ name: "Casa", status: "deleted" }).success).toBe(false);
   });
 });
+
+describe("stored text is well formed and in one form", () => {
+  it("refuses an unpaired surrogate in titles, text, names and searches (SQLite would store U+FFFD instead)", () => {
+    for (const bad of ["z\udc00z", "\ud83d", "fim \ud800"]) {
+      expect(taskCreateSchema.safeParse({ title: bad }).success, "task title").toBe(false);
+      expect(taskCreateSchema.safeParse({ title: "x", description: bad }).success, "task description").toBe(false);
+      expect(noteCreateSchema.safeParse({ title: "x", content: bad }).success, "note content").toBe(false);
+      expect(noteUpdateSchema.safeParse({ title: bad }).success, "note title").toBe(false);
+      expect(projectCreateSchema.safeParse({ name: bad }).success, "project name").toBe(false);
+      expect(taskListQuerySchema.safeParse({ q: bad }).success, "search").toBe(false);
+    }
+    // A real pair (an emoji) is fine.
+    expect(taskCreateSchema.parse({ title: "café ☕ 😀" }).title).toBe("café ☕ 😀");
+  });
+
+  it("keeps text in NFC: an accent typed apart becomes one letter", () => {
+    const decomposed = "Reunião épica";
+    expect(taskCreateSchema.parse({ title: decomposed }).title).toBe("Reunião épica");
+    expect(noteCreateSchema.parse({ title: "x", content: decomposed }).content).toBe("Reunião épica");
+  });
+});

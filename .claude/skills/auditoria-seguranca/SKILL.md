@@ -18,6 +18,7 @@ Nenhum ajuste está pronto antes desta auditoria.
    - `git diff origin/develop...HEAD | grep -nEi "(api[_-]?key|secret|token|password|senha|bearer)\s*[:=]"` → nenhum valor real;
    - nada de domínio, e-mail ou id real em arquivos versionados;
    - `npm audit --audit-level=high` sem vulnerabilidade nova.
-7. **Corrija** cada achado confirmado, com teste que falhava antes (id do achado no nome do teste).
+7. **Corrija** cada achado confirmado, com teste que falhava antes (id do achado no nome do teste). Confirme o vermelho quebrando a correção de propósito e desfazendo.
+   Controles que precisam de teste sempre que a etapa os toca: CSP sem violação (`csp.spec.ts`), XSS do conteúdo do dono, senha recente, cabeçalhos de IP forjados, corpo acima do limite em fluxo, rotas no teste de `app.routes`.
 8. **Teste tudo** com a skill `verificar`.
 9. **Registre** no PR (seção "Segurança"): o que foi auditado, achados, correções ou "nenhum achado" com o que foi coberto. Correção de vulnerabilidade entra no changelog em `### Segurança`.
