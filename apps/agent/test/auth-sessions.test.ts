@@ -200,7 +200,7 @@ describe("changing the password", () => {
   it.each([
     ["14 characters", "abcdefghijklmn".replace(/./g, (c) => String.fromCharCode(((c.charCodeAt(0) * 7) % 26) + 97)), "tooShort"],
     ["predictable", "senha123senha123senha", "predictable"],
-    ["the owner's e-mail", "dono@exemplo.com.br2026", "predictable"],
+    ["the owner's e-mail", "dono@exemplo.com.br", "predictable"],
     ["the same as now", TEST_PASSWORD, "sameAsCurrent"],
   ])("refuses %s with VALIDATION_FAILED and keeps the old password", async (_label, next, problem) => {
     await withAuth(`change-${problem}-${next.length}`, async ({ auth, breached }) => {
