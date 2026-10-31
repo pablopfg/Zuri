@@ -35,6 +35,8 @@ describe("TOTP (RFC 6238)", () => {
     expect(base32Decode(text)).toEqual(bytes);
     expect(base32Decode(`${text.toLowerCase().replace(/(.{4})/g, "$1 ")}===`)).toEqual(bytes);
     expect(base32Decode("ABC1")).toBeNull();
+    // A long run of "=" in the middle is refused at once (no backtracking).
+    expect(base32Decode(`${"=".repeat(100_000)}A`)).toBeNull();
   });
 
   it("a new secret has 160 bits", () => {
