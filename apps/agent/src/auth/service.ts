@@ -26,7 +26,7 @@ import type { Database } from "../db/database.ts";
 import type { InternalState } from "../db/internal-state.ts";
 import type { SettingsRepository } from "../db/settings.ts";
 import { AppError } from "../http/errors.ts";
-import type { ClientInfo } from "./client.ts";
+import { type ClientInfo, stripControl } from "./client.ts";
 import { AuthEvents } from "./events.ts";
 import { LoginLimiter } from "./login-limiter.ts";
 import { type ChallengeRow, type MfaFactor, TwoStep } from "./mfa.ts";
@@ -98,6 +98,13 @@ type PasswordSource = { kind: "stored" | "hash"; hash: string } | { kind: "plain
 function sameSource(a: PasswordSource, b: PasswordSource | null): boolean {
   if (!b || a.kind !== b.kind) return false;
   return a.kind === "plain" ? b.kind === "plain" && a.password === b.password : b.kind !== "plain" && a.hash === b.hash;
+}
+
+/** A passkey's name without control characters (it shows in lists and, later, in the bot). */
+function passkeyName(name: string): string {
+  const clean = stripControl(name).trim();
+  if (!clean) throw new AppError("VALIDATION_FAILED", undefined, { fields: ["name"] });
+  return clean;
 }
 
 /** E-mail addresses compare without case or surrounding spaces. */
@@ -379,7 +386,7 @@ export class AuthService {
     check: (row: ChallengeRow) => Promise<MfaFactor | null>,
   ): Promise<SignedIn> {
     await this.sync();
-    this.requireConfigured();
+    const source = this.requireConfigured();
     const row = await this.liveChallenge(token, client);
     this.assertCodesAllowed(client, reason);
     const attempts = this.twoStep.reserveAttempt(row.id);
@@ -401,7 +408,9 @@ export class AuthService {
     if (!this.twoStep.takeChallenge(row.id)) throw this.challengeExpired();
     const device = await this.knownDevice(cookies.device);
     const newNetwork = this.limiter.isNewNetwork(client.network);
-    const signedIn = await this.openSession(client, cookies.session, device, () => this.twoStep.enabled(), row.weak_password === 1, newNetwork, factor);
+    // A password change drops the challenges; one that lands during the awaits below must still win.
+    const stillValid = () => this.twoStep.enabled() && sameSource(source, this.passwordSource());
+    const signedIn = await this.openSession(client, cookies.session, device, stillValid, row.weak_password === 1, newNetwork, factor);
     if (row.login_attempt !== null) this.limiter.succeed(row.login_attempt);
     return signedIn;
   }
@@ -647,8 +656,9 @@ export class AuthService {
    * shared pause. INVALID_CREDENTIALS when wrong; the session stays.
    */
   async checkCode(row: SessionRow, code: string, client: ClientInfo, options: { recovery: boolean }, reason: string): Promise<MfaFactor> {
-    const attempt = this.beginChecked(client, "mfa_failure");
+    // The shared pause first: a paused network spends none of its own tries.
     this.assertCodesAllowed(client, reason);
+    const attempt = this.beginChecked(client, "mfa_failure");
     const factor = await this.twoStep.verify(code, options);
     if (!factor) {
       this.noteWrongSecondStep(client, reason);
@@ -731,7 +741,7 @@ export class AuthService {
   async addPasskey(row: SessionRow, input: PasskeyRegistration, client: ClientInfo): Promise<PasskeyInfo> {
     this.requireRecentAuth(row);
     this.assertPasskeysAllowed();
-    const passkey = await this.passkeys.register(input.name, input.response, this.relyingParty, () => this.twoStep.enabled());
+    const passkey = await this.passkeys.register(passkeyName(input.name), input.response, this.relyingParty, () => this.twoStep.enabled());
     if (!passkey) throw new AppError("VALIDATION_FAILED", "auth.passkey.notAccepted", { fields: ["response"] });
     this.events.record("passkey_added", client, { session: row.id.slice(0, 16), alert: true });
     return passkey;
@@ -739,7 +749,7 @@ export class AuthService {
 
   renamePasskey(row: SessionRow, id: string, name: string): void {
     this.requireRecentAuth(row);
-    if (!this.passkeys.rename(id, name)) throw new AppError("NOT_FOUND");
+    if (!this.passkeys.rename(id, passkeyName(name))) throw new AppError("NOT_FOUND");
   }
 
   removePasskey(row: SessionRow, id: string, client: ClientInfo): void {

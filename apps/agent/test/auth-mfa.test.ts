@@ -242,7 +242,7 @@ describe("signing in with the second step on", () => {
 
   it("10 wrong codes in 15 minutes pause unknown networks; the owner's own keep trying", async () => {
     await withAuth("mfa-pause", async (h) => {
-      const { secret } = await turnOn(h);
+      const { secret, row } = await turnOn(h);
       const wrong = () => wrongCode(h, secret);
       // Two networks per challenge so the per-network limit of 3 sign-ins isn't what stops them.
       for (let i = 0; i < 9; i++) {
@@ -259,6 +259,12 @@ describe("signing in with the second step on", () => {
 
       // The owner's network (signed in within 30 days) is not paused.
       expect(await outcome(h.service.completeMfa(await challenge(h, OWN), await code(h, secret), client(OWN), noCookies))).toBe("ok");
+
+      // A session used from an unknown network is paused too, and spends none of that network's own 3 tries.
+      const stranger = "203.0.113.130";
+      expect(await outcome(h.service.mfaDisable(row, await code(h, secret, 1), client(stranger)))).toBe("RATE_LIMITED");
+      expect(h.service.limiter.failures(stranger)).toBe(0);
+      expect(h.service.twoStep.enabled()).toBe(true);
 
       h.clock.advance(MFA_WRONG_CODES_WINDOW_MS);
       expect(
