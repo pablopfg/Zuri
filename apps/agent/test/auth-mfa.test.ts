@@ -1,4 +1,12 @@
-import { MFA_CHALLENGE_TTL_MS, MFA_SETUP_TTL_MS, MFA_WRONG_CODES_WINDOW_MS, totpCode, totpStep } from "@zuri/shared";
+import {
+  MFA_CHALLENGE_TTL_MS,
+  MFA_SETUP_TTL_MS,
+  MFA_WRONG_CODES_DAILY,
+  MFA_WRONG_CODES_DAILY_WINDOW_MS,
+  MFA_WRONG_CODES_WINDOW_MS,
+  totpCode,
+  totpStep,
+} from "@zuri/shared";
 import { describe, expect, it } from "vitest";
 import type { MfaPending, SignedIn } from "../src/auth/service.ts";
 import type { AppError } from "../src/http/errors.ts";
@@ -281,6 +289,107 @@ describe("signing in with the second step on", () => {
       expect(
         await outcome(h.service.completeMfa(await challenge(h, "203.0.113.122"), await code(h, secret, 1), client("203.0.113.122"), noCookies)),
       ).toBe("ok");
+    });
+  });
+});
+
+describe("the daily cap of wrong codes", () => {
+  /** One wrong code every 100 s: 9 in any 15 minutes, always under the short pause. */
+  const SLOW = MFA_WRONG_CODES_WINDOW_MS / 9;
+
+  /** A slow guess from the outside: `count` wrong codes, spaced so the short pause never starts. */
+  function slowGuess(h: Harness, count: number) {
+    for (let i = 0; i < count; i++) {
+      h.service.twoStep.reserveWrongCode();
+      h.clock.advance(SLOW);
+    }
+  }
+
+  const retryAfter = (error: AppError | null) => (error?.details as { retryAfter?: number } | undefined)?.retryAfter;
+
+  it("SEC-4-02: a guess that stays under the short pause stops at the daily cap of wrong codes in 24 h, for unknown networks only", async () => {
+    await withAuth("mfa-daily-cap", async (h) => {
+      const { secret, ownerBrowser } = await turnOn(h);
+      const start = h.clock.now();
+      slowGuess(h, MFA_WRONG_CODES_DAILY - 1);
+      // n−1: the short pause never started and the day is one short of the cap.
+      expect(h.service.twoStep.pausedUntil()).toBeNull();
+
+      // n: the last wrong code of the cap, through the real sign-in, fills the day and tells the owner once.
+      const net = "203.0.113.170";
+      expect(await outcome(h.service.completeMfa(await challenge(h, net), await wrongCode(h, secret), client(net), noCookies))).toBe(
+        "INVALID_CREDENTIALS",
+      );
+      const capped = h.events().filter((e) => e.kind === "mfa_failure").at(-1);
+      expect(capped).toMatchObject({ reason: "code,daily_cap", alert_pending: 1 });
+      const until = h.service.twoStep.pausedUntil();
+      expect(until).toBe(start + MFA_WRONG_CODES_DAILY_WINDOW_MS);
+
+      // A right code from an unknown network is refused, with the wait until the oldest wrong code is a day old.
+      h.clock.advance(MFA_WRONG_CODES_WINDOW_MS);
+      const stranger = "203.0.113.171";
+      const refused = await failure(h.service.completeMfa(await challenge(h, stranger), await code(h, secret), client(stranger), noCookies));
+      expect(refused?.code).toBe("RATE_LIMITED");
+      expect(retryAfter(refused)).toBe(Math.ceil(((until ?? 0) - h.clock.now()) / 1000));
+
+      // The owner's own browser still signs in, and a wrong code of theirs is no second alert.
+      const own = await h.service.login(right(), client(OWN), ownerBrowser);
+      if (!("mfa" in own)) throw new Error("expected the second step");
+      expect(await outcome(h.service.completeMfa(own.mfa.token, await wrongCode(h, secret), client(OWN), ownerBrowser))).toBe("INVALID_CREDENTIALS");
+      expect(h.events().filter((e) => e.kind === "mfa_failure").at(-1)).toMatchObject({ reason: "code" });
+      expect(h.events().filter((e) => e.reason.includes("daily_cap"))).toHaveLength(1);
+      expect(await outcome(h.service.completeMfa(own.mfa.token, await code(h, secret), client(OWN), ownerBrowser))).toBe("ok");
+    });
+  });
+
+  it("holds to the last millisecond of the day and lifts once the oldest wrong code is a day old", async () => {
+    await withAuth("mfa-daily-cap-edge", async (h) => {
+      const { secret } = await turnOn(h);
+      const start = h.clock.now();
+      slowGuess(h, MFA_WRONG_CODES_DAILY);
+      h.clock.advance(start + MFA_WRONG_CODES_DAILY_WINDOW_MS - 1 - h.clock.now());
+      const net = "203.0.113.172";
+      expect(await outcome(h.service.completeMfa(await challenge(h, net), await code(h, secret), client(net), noCookies))).toBe("RATE_LIMITED");
+      // n+1: the oldest leaves the day; one fewer than the cap remain and an unknown network may try again.
+      h.clock.advance(1);
+      expect(h.service.twoStep.pausedUntil()).toBeNull();
+      const later = "203.0.113.173";
+      expect(await outcome(h.service.completeMfa(await challenge(h, later), await code(h, secret, 1), client(later), noCookies))).toBe("ok");
+    });
+  });
+
+  it("a right code gives its reservation back: the cap counts only wrong answers", async () => {
+    await withAuth("mfa-daily-cap-right", async (h) => {
+      const { secret } = await turnOn(h);
+      slowGuess(h, MFA_WRONG_CODES_DAILY - 1);
+      const net = "203.0.113.174";
+      expect(await outcome(h.service.completeMfa(await challenge(h, net), await code(h, secret), client(net), noCookies))).toBe("ok");
+      expect(h.service.twoStep.pausedUntil()).toBeNull();
+      expect(h.events().filter((e) => e.reason.includes("daily_cap"))).toEqual([]);
+    });
+  });
+
+  it("checks from a signed-in session count toward the same day and also raise the alert", async () => {
+    await withAuth("mfa-daily-cap-session", async (h) => {
+      const { secret, row } = await turnOn(h);
+      // All at once, so the session's recent sign-in still counts; the owner's network is exempt from the short pause.
+      for (let i = 0; i < MFA_WRONG_CODES_DAILY - 1; i++) h.service.twoStep.reserveWrongCode();
+      expect(await outcome(h.service.mfaDisable(row, await wrongCode(h, secret), client(OWN)))).toBe("INVALID_CREDENTIALS");
+      expect(h.events().filter((e) => e.kind === "mfa_failure").at(-1)).toMatchObject({ alert_pending: 1 });
+      expect(h.events().filter((e) => e.kind === "mfa_failure").at(-1)?.reason).toContain("daily_cap");
+      expect(h.service.twoStep.pausedUntil()).not.toBeNull();
+    });
+  });
+
+  it("keeps a bounded list in storage, and ignores a corrupt or future-dated one", async () => {
+    await withAuth("mfa-daily-cap-storage", async (h) => {
+      await turnOn(h);
+      for (let i = 0; i < MFA_WRONG_CODES_DAILY * 3; i++) h.service.twoStep.reserveWrongCode();
+      expect(JSON.parse(h.state.get<string>("auth_mfa_wrong_codes") ?? "[]")).toHaveLength(MFA_WRONG_CODES_DAILY);
+      for (const raw of ["{", "null", '"x"', JSON.stringify([h.clock.now() + 1_000, "1", null])]) {
+        h.state.set("auth_mfa_wrong_codes", raw);
+        expect(h.service.twoStep.pausedUntil(), raw).toBeNull();
+      }
     });
   });
 });
