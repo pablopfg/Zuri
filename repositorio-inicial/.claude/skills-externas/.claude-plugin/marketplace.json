@@ -1,0 +1,46 @@
+{
+  "name": "zuri-skills-externas",
+  "description": "Skills de terceiros usadas pelo agente do Zuri, cada uma fixada num commit revisado. Atualizar só por PR, depois de ler o diff.",
+  "owner": { "name": "Zuri" },
+  "plugins": [
+    {
+      "name": "mattpocock-skills",
+      "description": "Skills de engenharia de Matt Pocock: TDD, diagnóstico de bugs, design de código, modelagem de domínio, code review em dois eixos.",
+      "source": {
+        "source": "github",
+        "repo": "mattpocock/skills",
+        "sha": "a496f5513d4a4cf889bc48e189e579f4b0bdf6aa"
+      }
+    },
+    {
+      "name": "nateherk-design",
+      "description": "scroll-craft: páginas de apresentação com rolagem, com verificação de contraste, movimento e acessibilidade.",
+      "source": {
+        "source": "git-subdir",
+        "url": "nateherkai/scroll-craft",
+        "path": "plugins/nateherk-design",
+        "sha": "75d81f74e83692add18cd7a8a8e078b8a887a579"
+      }
+    },
+    {
+      "name": "cloudflare-security-audit",
+      "description": "security-audit da Cloudflare: auditoria de segurança com reconhecimento, caça por cobertura e validação independente.",
+      "source": {
+        "source": "git-subdir",
+        "url": "cloudflare/security-audit-skill",
+        "path": "skills/security-audit",
+        "sha": "c1c8a8c1471069fb0e188eeaff69b8e8db6564a8"
+      },
+      "skills": ["./"]
+    },
+    {
+      "name": "humanizer",
+      "description": "Revisa texto para tirar marcas de escrita de IA sem mudar o que ele diz.",
+      "source": {
+        "source": "github",
+        "repo": "blader/humanizer",
+        "sha": "0ef9fe5bc3572734fd3ae6c448fe00a30cd5dcf0"
+      }
+    }
+  ]
+}
