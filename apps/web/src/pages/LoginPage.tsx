@@ -1,12 +1,13 @@
 import type { startAuthentication as startAuthenticationFn } from "@simplewebauthn/browser";
 import { useQuery } from "@tanstack/react-query";
 import { LOGIN_OPTIONS_PATH, loginOptionsSchema, mfaRequiredSchema, type SessionState, sessionStateSchema } from "@zuri/shared";
-import { Fingerprint, RotateCw } from "lucide-react";
+import { Fingerprint, LockKeyhole, Mail, RotateCw } from "lucide-react";
 import { type FormEvent, useEffect, useRef, useState } from "react";
 import { Navigate, useNavigate, useSearchParams } from "react-router";
 import { Logo } from "../components/Logo.tsx";
+import { SessionChecking } from "../components/RequireSession.tsx";
 import { TurnstileWidget } from "../components/TurnstileWidget.tsx";
-import { Button, Notice, PasswordField, Spinner, TextField, useDocumentTitle } from "../components/ui.tsx";
+import { Button, Notice, PasswordField, TextField, useDocumentTitle } from "../components/ui.tsx";
 import { useSession } from "../hooks/session.tsx";
 import { ApiError, api, errorMessage } from "../lib/api.ts";
 import { useI18n } from "../lib/i18n.tsx";
@@ -34,6 +35,8 @@ export function LoginPage() {
   const [password, setPassword] = useState("");
   const [code, setCode] = useState("");
   const [error, setError] = useState<string | null>(null);
+  // The button never locks on an empty field: a try marks what is missing, right under it.
+  const [attempted, setAttempted] = useState(false);
   const [pending, setPending] = useState(false);
   const [retryAt, setRetryAt] = useState<number | null>(null);
   const [now, setNow] = useState(Date.now());
@@ -49,9 +52,11 @@ export function LoginPage() {
   const siteKey = refusedKey ?? options.data?.turnstileSiteKey ?? null;
   const [humanToken, setHumanToken] = useState<string | null>(null);
   const [humanBroken, setHumanBroken] = useState(false);
+  const [humanNudge, setHumanNudge] = useState(false);
   const [humanRound, setHumanRound] = useState(0);
   // Kept from when the screen opened, so the message doesn't vanish on the first keystroke.
   const [endedReason] = useState(ended);
+  const emailRef = useRef<HTMLInputElement>(null);
   const passwordRef = useRef<HTMLInputElement>(null);
   const codeRef = useRef<HTMLInputElement>(null);
   useDocumentTitle(t("web.login.submit"));
@@ -73,7 +78,11 @@ export function LoginPage() {
   // Until the options arrive the form can't know whether the check is on; if they fail, the server's refusal tells.
   const optionsPending = options.isPending && refusedKey === null;
 
-  if (loading) return <Spinner />;
+  const emailMissing = attempted && step.kind === "password" && !email.trim();
+  const passwordMissing = attempted && step.kind === "password" && !password;
+  const codeMissing = attempted && step.kind === "code" && !code.trim();
+
+  if (loading) return <SessionChecking />;
   if (session) return <Navigate to={next} replace />;
 
   const finish = (state: SessionState) => {
@@ -94,7 +103,19 @@ export function LoginPage() {
 
   async function submitPassword(e: FormEvent) {
     e.preventDefault();
-    if (!email.trim() || !password || pending || waitSeconds > 0 || humanMissing || optionsPending) return;
+    if (pending || waitSeconds > 0) return;
+    if (!email.trim() || !password) {
+      setAttempted(true);
+      setError(null);
+      (email.trim() ? passwordRef : emailRef).current?.focus();
+      return;
+    }
+    // The robot check comes first: its own line, right above, turns into the alert.
+    if (optionsPending || humanMissing) {
+      setHumanNudge(true);
+      return;
+    }
+    setAttempted(false);
     setPending(true);
     setError(null);
     const token = humanToken;
@@ -139,7 +160,13 @@ export function LoginPage() {
 
   async function submitCode(e: FormEvent) {
     e.preventDefault();
-    if (!code.trim() || pending) return;
+    if (pending) return;
+    if (!code.trim()) {
+      setAttempted(true);
+      codeRef.current?.focus();
+      return;
+    }
+    setAttempted(false);
     setPending(true);
     setError(null);
     try {
@@ -180,24 +207,29 @@ export function LoginPage() {
   );
 
   return (
-    <main className="flex min-h-full items-center justify-center p-6">
-      <div className="w-full max-w-sm">
-        <div className="mb-8 flex flex-col items-center text-center">
-          <Logo className="h-14 w-14" />
+    <main className="login-backdrop flex min-h-full items-center justify-center p-4 sm:p-6">
+      <div className="w-full max-w-sm motion-safe:animate-rise">
+        <div className="mb-6 flex flex-col items-center text-center sm:mb-8">
+          {/* The light pulses while the server checks: the logo is the sign of work. */}
+          <Logo className="h-14 w-14 drop-shadow-sm" working={pending} />
           <h1 className="mt-4 text-3xl font-bold tracking-tight">{t("app.name")}</h1>
           <p className="mt-1.5 text-sm text-fg-muted">{t("app.tagline")}</p>
         </div>
+        <div className="rounded-2xl border border-border bg-surface p-5 shadow-sm sm:p-7">
 
         {step.kind === "password" ? (
           <form onSubmit={submitPassword} className="space-y-4" noValidate aria-describedby={error ? "login-error" : undefined}>
             {endedReason && !error && <Notice>{endedReason === "idle" ? t("web.login.endedIdle") : t("web.login.ended")}</Notice>}
             <TextField
               label={t("web.login.email")}
+              ref={emailRef}
               type="email"
               autoComplete="username"
               autoFocus
               required
               maxLength={254}
+              icon={<Mail aria-hidden />}
+              error={emailMissing ? t("web.login.emailRequired") : null}
               value={email}
               onChange={(e) => setEmail(e.target.value)}
             />
@@ -207,13 +239,22 @@ export function LoginPage() {
               autoComplete="current-password"
               required
               maxLength={1024}
+              icon={<LockKeyhole aria-hidden />}
+              error={passwordMissing ? t("web.login.passwordRequired") : null}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
             />
-            {optionsPending && <p className="min-h-[65px] text-sm leading-6 text-fg-muted">{t("web.login.humanLoading")}</p>}
+            {optionsPending && (
+              <p className={humanNudge ? "min-h-[65px] text-sm leading-6 text-danger" : "min-h-[65px] text-sm leading-6 text-fg-muted"} role={humanNudge ? "alert" : undefined}>
+                {t("web.login.humanLoading")}
+              </p>
+            )}
             {siteKey !== null && (
               <div className="space-y-1.5">
-                <p className={humanBroken ? "text-sm leading-6 text-danger" : "text-sm leading-6 text-fg-muted"} role={humanBroken ? "alert" : undefined}>
+                <p
+                  className={humanBroken || humanNudge ? "text-sm leading-6 text-danger" : "text-sm leading-6 text-fg-muted"}
+                  role={humanBroken || humanNudge ? "alert" : undefined}
+                >
                   {humanBroken ? t("web.login.humanBroken") : t("web.login.humanHint")}
                 </p>
                 {humanBroken && (
@@ -235,13 +276,16 @@ export function LoginPage() {
                   siteKey={siteKey}
                   onToken={(value) => {
                     setHumanToken(value);
-                    if (value) setHumanBroken(false);
+                    if (value) {
+                      setHumanBroken(false);
+                      setHumanNudge(false);
+                    }
                   }}
                   onError={() => setHumanBroken(true)}
                 />
               </div>
             )}
-            <Button type="submit" className="w-full" loading={pending} disabled={!email.trim() || !password || waitSeconds > 0 || humanMissing || optionsPending}>
+            <Button type="submit" className="w-full" loading={pending} disabled={waitSeconds > 0}>
               {waitSeconds > 0 ? t("web.login.waitSeconds", { seconds: waitSeconds }) : t("web.login.submit")}
             </Button>
             {errorLine}
@@ -260,10 +304,11 @@ export function LoginPage() {
               spellCheck={false}
               maxLength={step.recovery ? 40 : 8}
               autoFocus
+              error={codeMissing ? t("web.login.codeRequired") : null}
               value={code}
               onChange={(e) => setCode(e.target.value)}
             />
-            <Button type="submit" className="w-full" loading={pending} disabled={!code.trim()}>
+            <Button type="submit" className="w-full" loading={pending}>
               {t("web.login.verify")}
             </Button>
             {step.passkey && (
@@ -280,6 +325,7 @@ export function LoginPage() {
                 onClick={() => {
                   setStep({ kind: "password" });
                   setError(null);
+                  setAttempted(false);
                 }}
               >
                 {t("web.login.back")}
@@ -291,6 +337,7 @@ export function LoginPage() {
                   setStep({ ...step, recovery: !step.recovery });
                   setCode("");
                   setError(null);
+                  setAttempted(false);
                 }}
               >
                 {step.recovery ? t("web.login.useApp") : t("web.login.useRecovery")}
@@ -298,6 +345,7 @@ export function LoginPage() {
             </div>
           </form>
         )}
+        </div>
       </div>
     </main>
   );

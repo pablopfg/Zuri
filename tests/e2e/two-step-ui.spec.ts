@@ -30,6 +30,11 @@ test("turns two-step sign-in on in Settings and asks for the code at the next si
     await signIn(page);
     await expect(page.getByRole("heading", { name: "Verificação em duas etapas" })).toBeVisible();
 
+    // An empty code is marked under the field, without a request.
+    await page.getByRole("button", { name: "Confirmar" }).click();
+    await expect(page.getByText("Digite o código.")).toBeVisible();
+    await expect(page.getByLabel("Código do aplicativo")).toBeFocused();
+
     // A wrong code says so and keeps the step; the next code signs in.
     await page.getByLabel("Código do aplicativo").fill("000000");
     await page.getByRole("button", { name: "Confirmar" }).click();

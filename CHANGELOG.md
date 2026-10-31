@@ -105,6 +105,14 @@ o [SemVer](https://semver.org/lang/pt-BR/). Cada PR escreve a sua entrada em
 - Os textos em pt-BR de Tarefas, Notas, Projetos, Lixeira e Acessos chegam
   junto com essas telas, como os da Memória, e não mais no pacote inicial. Com
   isso a tela de Memória entrou sem passar do teto de 140 KB (fica em 139,9 KB).
+- A tela de entrar ficou em um cartão com ícones nos campos, um brilho verde
+  suave atrás do logo, entrada suave (parada com "reduzir movimento") e o
+  sinal do logo pulsando enquanto confere a senha.
+- O botão Entrar não trava mais com campo vazio: ao tocar, o campo que falta
+  é marcado logo abaixo dele, e nada é enviado. O mesmo vale para o código do
+  segundo passo e para a verificação contra robôs, cuja linha vira o aviso.
+- O logo aparece antes do JavaScript carregar, já no tema do sistema, no
+  mesmo lugar onde a tela de conferir a sessão o desenha, sem saltos.
 - Abertura ainda mais leve: o JavaScript inicial caiu de 158 para 140 KB
   (gzip). A interface passou a validar as respostas da API com o Zod Mini, e o
   Zod completo ficou só no servidor. As validações são as mesmas.

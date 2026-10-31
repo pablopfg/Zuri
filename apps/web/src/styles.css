@@ -34,6 +34,19 @@
   --color-brand-mark: #f8fafc;
   --color-brand-signal: #22c55e;
   --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  /* The sign-in card rising into place (motion-safe only, where used). */
+  --animate-rise: rise 0.45s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+
+  @keyframes rise {
+    from {
+      opacity: 0;
+      transform: translateY(12px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
 }
 
 .dark {
@@ -76,6 +89,26 @@ body {
   color: var(--color-fg);
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
+}
+
+/*
+ * Static shell (index.html): drawn by this stylesheet before any JavaScript
+ * runs, then replaced by React. No theme class exists yet, so it follows the
+ * system's dark mode on its own; the colors are the .dark tokens above.
+ */
+@media (prefers-color-scheme: dark) {
+  :root:not(.dark):has(#boot) {
+    --color-bg: #0b0f19;
+    --color-brand-tile: #1a2233;
+    color-scheme: dark;
+  }
+}
+
+/* The sign-in page: one soft green light behind the mark, nothing to load. */
+.login-backdrop {
+  background:
+    radial-gradient(36rem 22rem at 50% 0%, color-mix(in srgb, var(--color-brand-signal) 14%, transparent), transparent 70%),
+    var(--color-bg);
 }
 
 /* One visible focus ring for every control, keyboard only. */

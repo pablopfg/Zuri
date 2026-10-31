@@ -1,6 +1,7 @@
 import { ptBRMemory } from "./pt-BR-memory.ts";
 import { ptBRProductivity } from "./pt-BR-productivity.ts";
 import { ptBRSecurity } from "./pt-BR-security.ts";
+import { ptBRTwoStep } from "./pt-BR-two-step.ts";
 
 // Default and fallback catalog. Every key must also exist in en.ts and be used in the code (npm run lint).
 // The texts of the lazy screens live in their own files (pt-BR-memory.ts, pt-BR-productivity.ts,
@@ -90,6 +91,9 @@ export const ptBRCore = {
   "web.login.humanBroken": "A verificação contra robôs não carregou. Sem ela não dá para entrar.",
   "web.login.humanRetry": "Carregar a verificação de novo",
   "web.login.humanLoading": "Carregando a verificação contra robôs…",
+  "web.login.emailRequired": "Digite o seu e-mail.",
+  "web.login.passwordRequired": "Digite a sua senha.",
+  "web.login.codeRequired": "Digite o código.",
   "web.login.codeTitle": "Verificação em duas etapas",
   "web.login.codeHint": "Digite o código de 6 dígitos do seu aplicativo autenticador.",
   "web.login.recoveryHint": "Digite um dos seus códigos de recuperação. Cada código vale uma vez.",
@@ -173,49 +177,6 @@ export const ptBRCore = {
   "web.theme.system": "Como o sistema",
   "web.theme.light": "Claro",
   "web.theme.dark": "Escuro",
-  "web.mfa.title": "Verificação em duas etapas",
-  "web.mfa.description": "Depois da senha, o Zuri pede um código do aplicativo autenticador (ou uma passkey).",
-  "web.mfa.off": "Desligada. Ligue para proteger a conta mesmo se a senha vazar.",
-  "web.mfa.on": "Ligada.",
-  "web.mfa.onSince": "Ligada desde {time}.",
-  "web.mfa.codesLeft.one": "Resta {count} código de recuperação.",
-  "web.mfa.codesLeft.other": "Restam {count} códigos de recuperação.",
-  "web.mfa.start": "Ligar a verificação em duas etapas",
-  "web.mfa.setupStep1": "Abra o aplicativo autenticador (Google Authenticator, Aegis, 1Password, Bitwarden…) e leia o QR code.",
-  "web.mfa.setupStep2": "Digite o código de 6 dígitos que aparecer para confirmar.",
-  "web.mfa.qrLabel": "QR code para o aplicativo autenticador",
-  "web.mfa.manualKey": "Sem câmera? Digite esta chave no aplicativo:",
-  "web.mfa.setupExpires": "Esta configuração vale até {time}.",
-  "web.mfa.codeLabel": "Código de 6 dígitos",
-  "web.mfa.codeOrRecovery": "Código do aplicativo ou de recuperação",
-  "web.mfa.enable": "Confirmar e ligar",
-  "web.mfa.disable": "Desligar",
-  "web.mfa.disableHint": "Desligar remove também as passkeys como segunda etapa.",
-  "web.mfa.regenerate": "Gerar novos códigos de recuperação",
-  "web.mfa.regenerateHint": "Os códigos antigos param de valer.",
-  "web.mfa.codesTitle": "Códigos de recuperação",
-  "web.mfa.codesWarning": "Guarde estes códigos num lugar seguro, fora deste aparelho. Eles aparecem só agora e cada um vale uma vez, se você perder o celular.",
-  "web.mfa.copyCodes": "Copiar os códigos",
-  "web.mfa.codesSaved": "Já guardei",
-  "web.passkeys.title": "Passkeys",
-  "web.passkeys.description": "Entre com a digital, o rosto ou a chave de segurança no lugar do código.",
-  "web.passkeys.emptyTitle": "Nenhuma passkey",
-  "web.passkeys.emptyBody": "Adicione uma para confirmar o login sem digitar código.",
-  "web.passkeys.add": "Adicionar passkey",
-  "web.passkeys.create": "Criar passkey",
-  "web.passkeys.name": "Nome da passkey",
-  "web.passkeys.nameHint": "Para reconhecer depois, por exemplo \"Celular\" ou \"Notebook\".",
-  "web.passkeys.created": "Criada em {time}",
-  "web.passkeys.lastUsed": "usada em {time}",
-  "web.passkeys.neverUsed": "nunca usada",
-  "web.passkeys.otherAddress": "Feita em outro endereço: não funciona aqui.",
-  "web.passkeys.rename": "Renomear",
-  "web.passkeys.renameNamed": "Renomear a passkey {name}",
-  "web.passkeys.remove": "Remover",
-  "web.passkeys.removeNamed": "Remover a passkey {name}",
-  "web.passkeys.removeConfirm": "Remover a passkey \"{name}\"? Ela deixa de entrar no Zuri.",
-  "web.passkeys.cancelled": "A operação foi cancelada no navegador.",
-  "web.passkeys.unsupported": "Este navegador não aceita passkeys.",
   "web.sessions.title": "Saída automática",
   "web.sessions.description": "Quando o Zuri encerra a sessão sozinho. Mudar pede a senha de novo.",
   "web.sessions.idle": "Sem uso",
@@ -243,9 +204,9 @@ export const ptBRCore = {
 } as const;
 
 /** Joins catalog parts. Marked pure so a bundle that never uses the whole catalog drops the call. */
-function join<A extends object, B extends object, C extends object, D extends object>(a: A, b: B, c: C, d: D): A & B & C & D {
-  return { ...a, ...b, ...c, ...d };
+function join<A extends object, B extends object, C extends object, D extends object, E extends object>(a: A, b: B, c: C, d: D, e: E): A & B & C & D & E {
+  return { ...a, ...b, ...c, ...d, ...e };
 }
 
 /** The whole pt-BR catalog: what the server, the tests and the lint use. */
-export const ptBR = /* @__PURE__ */ join(ptBRCore, ptBRMemory, ptBRProductivity, ptBRSecurity);
+export const ptBR = /* @__PURE__ */ join(ptBRCore, ptBRMemory, ptBRProductivity, ptBRSecurity, ptBRTwoStep);

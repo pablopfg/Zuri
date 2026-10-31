@@ -74,6 +74,7 @@ test("a revealed password goes out hidden and stays hidden after a refusal", asy
   await field.fill("senha errada para o teste de revelar");
   await page.getByRole("button", { name: "Mostrar senha" }).click();
   await expect(field).toHaveAttribute("type", "text");
+  await page.locator('[data-testid="turnstile"][data-solved="true"]').waitFor();
   await page.getByRole("button", { name: "Entrar" }).click();
   await expect(page.getByRole("alert")).toBeVisible();
   await expect(field).toHaveValue("");

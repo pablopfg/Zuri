@@ -17,6 +17,7 @@ export {
   ptBRMemory,
   ptBRProductivity,
   ptBRSecurity,
+  ptBRTwoStep,
   t,
 } from "../i18n/index.ts";
 export { AGENT_INSTANCE_NAME } from "./constants.ts";

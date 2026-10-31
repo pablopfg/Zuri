@@ -81,9 +81,17 @@ test("the robot check that fails to load says so and loads again on request", as
   await page.getByLabel("E-mail").fill(EMAIL);
   await page.getByLabel("Senha", { exact: true }).fill(PASSWORD);
   await expect(page.getByRole("alert").filter({ hasText: "A verificação contra robôs não carregou. Sem ela não dá para entrar." })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Entrar" })).toBeDisabled();
+  // The button stays active; without the check's token, a try sends nothing.
+  const tries: string[] = [];
+  page.on("request", (r) => {
+    if (r.url().endsWith("/api/auth/login")) tries.push(r.url());
+  });
+  await page.getByRole("button", { name: "Entrar" }).click();
+  await expect(page.getByRole("alert").filter({ hasText: "A verificação contra robôs não carregou." })).toBeVisible();
+  expect(tries).toEqual([]);
   await page.getByRole("button", { name: "Carregar a verificação de novo" }).click();
-  await expect(page.getByRole("button", { name: "Entrar" })).toBeEnabled();
+  // Once the new widget answers, the marked line goes back to a plain hint.
+  await expect(page.getByRole("alert")).toHaveCount(0);
   await page.getByRole("button", { name: "Entrar" }).click();
   await expect(page.getByRole("heading", { level: 1, name: "Olá!" })).toBeVisible();
 });
@@ -93,11 +101,13 @@ test("without the form's options the server's refusal brings the robot check", a
   await page.goto("/entrar");
   await page.getByLabel("E-mail").fill(EMAIL);
   await page.getByLabel("Senha", { exact: true }).fill(PASSWORD);
-  await expect(page.getByRole("button", { name: "Entrar" })).toBeEnabled({ timeout: 10_000 });
+  // Until the options fail the form can't tell whether the check is on: a try only marks that line.
+  await expect(page.getByText("Carregando a verificação contra robôs…")).toBeHidden({ timeout: 10_000 });
   await page.getByRole("button", { name: "Entrar" }).click();
   await expect(page.getByText("Confirme que você não é um robô e tente de novo.")).toBeVisible();
   await expect(page.getByTestId("turnstile")).toBeVisible();
   await page.getByLabel("Senha", { exact: true }).fill(PASSWORD);
+  await page.locator('[data-testid="turnstile"][data-solved="true"]').waitFor();
   await page.getByRole("button", { name: "Entrar" }).click();
   await expect(page.getByRole("heading", { level: 1, name: "Olá!" })).toBeVisible();
 });

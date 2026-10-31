@@ -10,6 +10,8 @@ export const CSRF = { "x-zuri-request": "1" };
 export async function signIn(page: Page, password = PASSWORD) {
   await page.getByLabel("E-mail").fill(EMAIL);
   await page.getByLabel("Senha", { exact: true }).fill(password);
+  // The button no longer waits for the robot check (it marks it instead): the helper does.
+  await page.locator('[data-testid="turnstile"][data-solved="true"]').waitFor();
   await page.getByRole("button", { name: "Entrar" }).click();
 }
 
