@@ -1,6 +1,11 @@
 import type { AuthActivityEvent, AuthActivityGroup, AuthEventKind, MessageKey } from "@zuri/shared";
-import { AUTH_ACTIVITY_GROUPS } from "@zuri/shared";
+import { AUTH_ACTIVITY_GROUPS, ptBRSecurity } from "@zuri/shared";
+import { addMessages } from "../../lib/i18n.tsx";
 import { describeUserAgent } from "../../lib/user-agent.ts";
+
+// The Access log page and the activity card import this module: their pt-BR texts arrive
+// with it, not in the first bundle (rule P11).
+addMessages(ptBRSecurity);
 
 /** Each kind of access event, in the owner's words. */
 export const KIND_LABEL: Record<AuthEventKind, MessageKey> = {

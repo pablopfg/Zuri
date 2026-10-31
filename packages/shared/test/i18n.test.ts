@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { catalogs, createTranslator, DEFAULT_LOCALE, isLocale, LOCALES, loadCatalog, ptBR, ptBRCore, ptBRMemory, t } from "../i18n/index.ts";
+import { catalogs, createTranslator, DEFAULT_LOCALE, isLocale, LOCALES, loadCatalog, ptBR, ptBRCore, ptBRMemory, ptBRProductivity, ptBRSecurity, t } from "../i18n/index.ts";
 
 const placeholders = (text: string) => [...text.matchAll(/\{(\w+)\}/g)].map((m) => m[1]).sort();
 
@@ -62,8 +62,12 @@ describe("isLocale", () => {
     // pt-BR is never fetched: it is in every bundle already.
     await expect(loadCatalog("pt-BR" as "en")).rejects.toThrow("no catalog for pt-BR");
     // The whole pt-BR catalog is its core plus each screen's part, nothing more and nothing less.
-    expect({ ...ptBRCore, ...ptBRMemory }).toEqual(ptBR);
-    expect(Object.keys(ptBRCore).some((key) => key.startsWith("web.memory."))).toBe(false);
+    expect({ ...ptBRCore, ...ptBRMemory, ...ptBRProductivity, ...ptBRSecurity }).toEqual(ptBR);
+    const parts = [ptBRCore, ptBRMemory, ptBRProductivity, ptBRSecurity].map((part) => Object.keys(part));
+    // No key in two parts: one of them would silently win.
+    expect(parts.flat().length).toBe(new Set(parts.flat()).size);
+    const lazy = /^web\.(memory|tasks|notes|trash|projects|accessLog|activity)\./;
+    expect(Object.keys(ptBRCore).filter((key) => lazy.test(key))).toEqual([]);
   });
 
   it("knows only the shipped locales", () => {
