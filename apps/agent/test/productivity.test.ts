@@ -254,7 +254,7 @@ describe("notes", () => {
 describe("limits per kind", () => {
   it("take exactly the limit and refuse one more with STORAGE_LIMIT_REACHED (n-1, n, n+1)", async () => {
     await withWorld(({ p }) => {
-      p.storage.limits = { tasks: 3, notes: 2, projects: 1 };
+      p.storage.limits = { tasks: 3, notes: 2, projects: 1, memories: 10_000 };
       p.tasks.create({ title: "1" });
       p.tasks.create({ title: "2" });
       expect(p.storage.count("tasks")).toBe(2);

@@ -86,6 +86,7 @@ describe("the migration list", () => {
       3: "42d9a6b3b30214125e809253e2f1d4472fdd885fdf77e3a5a017100a52ec63a2",
       4: "c66593e92a8fc765ad8096be69f544cac424de2a815e8eb3776dd4a98cc95ef7",
       5: "8c5284cbf1f107f27133133552387e56029c61885b3bc0d9940c2f8bd648fbf1",
+      6: "fcebcd8e24cdf35cfa227b8e884e5a8fef72dd5858b886054fa7dade848e5730",
     };
     for (const m of MIGRATIONS) {
       const digest = createHash("sha256").update(statementText(m).replace(/\r\n/g, "\n")).digest("hex");
@@ -101,9 +102,9 @@ describe("migrate", () => {
       expect(zurObjects(db)).toEqual([]);
 
       expect(migrate(db)).toBe(LATEST_SCHEMA_VERSION);
-      expect(schemaVersion(db)).toBe(5);
+      expect(schemaVersion(db)).toBe(6);
       // FTS5 keeps shadow tables of its own (zur_notes_fts_data and others): only ours are listed.
-      expect(zurObjects(db).filter((name) => !/^table:zur_notes_fts_/.test(name))).toEqual([
+      expect(zurObjects(db).filter((name) => !/^table:zur_(notes|memories)_fts_/.test(name))).toEqual([
         "table:zur_activity",
         "index:zur_activity_at",
         "table:zur_auth_events",
@@ -112,6 +113,11 @@ describe("migrate", () => {
         "table:zur_auth_events_daily",
         "index:zur_auth_events_network",
         "table:zur_counts",
+        "trigger:zur_counts_memories_delete",
+        "trigger:zur_counts_memories_insert",
+        "trigger:zur_counts_memories_status",
+        "trigger:zur_counts_memory_reviews_delete",
+        "trigger:zur_counts_memory_reviews_insert",
         "trigger:zur_counts_notes_delete",
         "trigger:zur_counts_notes_insert",
         "trigger:zur_counts_projects_delete",
@@ -124,6 +130,20 @@ describe("migrate", () => {
         "table:zur_login_attempts",
         "index:zur_login_attempts_at",
         "index:zur_login_attempts_network",
+        "table:zur_memories",
+        "index:zur_memories_category",
+        "index:zur_memories_dedupe",
+        "table:zur_memories_fts",
+        "trigger:zur_memories_fts_delete",
+        "trigger:zur_memories_fts_insert",
+        "trigger:zur_memories_fts_update",
+        "index:zur_memories_status_category",
+        "index:zur_memories_status_updated",
+        "index:zur_memories_superseded_by",
+        "index:zur_memories_updated",
+        "table:zur_memory_reviews",
+        "index:zur_memory_reviews_created",
+        "index:zur_memory_reviews_other",
         "table:zur_mfa_challenges",
         "table:zur_mfa_secrets",
         "table:zur_notes",
@@ -238,11 +258,50 @@ describe("migrate", () => {
     });
   });
 
+  it("upgrades a database at version 5 to 6: memories with full-text search, reviews and counters per status", async () => {
+    await withEmptyDatabase("from-5", (db) => {
+      expect(migrate(db, MIGRATIONS.slice(0, 5))).toBe(5);
+      db.run(`INSERT INTO zur_notes (id, title, content, created_at, updated_at) VALUES ('n1', 'Nota', 'texto', 'x', 'x')`);
+      expect(migrate(db)).toBe(6);
+      const count = (kind: string) => db.one<{ n: number }>(`SELECT n FROM zur_counts WHERE kind = ?`, kind)?.n;
+      expect([count("notes"), count("memories"), count("memories_active"), count("memories_uncertain"), count("memories_historical"), count("memory_reviews")]).toEqual([
+        1, 0, 0, 0, 0, 0,
+      ]);
+      const insert = (id: string, content: string, status = "active") =>
+        db.run(`INSERT INTO zur_memories (id, content, status, dedupe_key, created_at, updated_at) VALUES (?, ?, ?, 1, 'x', 'x')`, id, content, status);
+      insert("m1", "Moro em São Paulo");
+      insert("m2", "Dirijo um Gol", "historical");
+      expect([count("memories"), count("memories_active"), count("memories_historical")]).toEqual([2, 1, 1]);
+      db.run(`UPDATE zur_memories SET status = 'uncertain' WHERE id = 'm1'`);
+      // Same status again: no change in the counters.
+      db.run(`UPDATE zur_memories SET status = 'uncertain' WHERE id = 'm1'`);
+      expect([count("memories_active"), count("memories_uncertain")]).toEqual([0, 1]);
+      db.run(`INSERT INTO zur_memory_reviews (id, memory_id, other_id, relationship, reason, created_at) VALUES ('r', 'm1', 'm2', 'contradiction', 'same_topic', 'x')`);
+      expect(count("memory_reviews")).toBe(1);
+      const found = (q: string) => db.all<{ id: string }>(`SELECT m.id FROM zur_memories_fts f JOIN zur_memories m ON m.rowid = f.rowid WHERE zur_memories_fts MATCH ?`, q);
+      expect(found('"sao"')).toEqual([{ id: "m1" }]);
+      db.run(`UPDATE zur_memories SET content = 'Moro em Curitiba' WHERE id = 'm1'`);
+      expect(found('"sao"')).toEqual([]);
+      expect(found('"curitiba"')).toEqual([{ id: "m1" }]);
+      db.run(`DELETE FROM zur_memory_reviews WHERE id = 'r'`);
+      db.run(`DELETE FROM zur_memories WHERE id = 'm1'`);
+      expect(found('"curitiba"')).toEqual([]);
+      expect([count("memories"), count("memories_uncertain"), count("memory_reviews")]).toEqual([1, 0, 0]);
+
+      // Values outside the lists, a self link and a self review are refused by the tables themselves.
+      expect(() => insert("m3", "x", "deleted")).toThrow();
+      expect(() => db.run(`INSERT INTO zur_memories (id, content, origin, dedupe_key, created_at, updated_at) VALUES ('m4', 'x', 'remote', 1, 'x', 'x')`)).toThrow();
+      expect(() => db.run(`INSERT INTO zur_memories (id, content, superseded_by, dedupe_key, created_at, updated_at) VALUES ('m5', 'x', 'm5', 1, 'x', 'x')`)).toThrow();
+      expect(() => db.run(`INSERT INTO zur_memory_reviews (id, memory_id, other_id, relationship, reason, created_at) VALUES ('r2', 'm2', 'm2', 'contradiction', 'same_topic', 'x')`)).toThrow();
+      expect(() => db.run(`INSERT INTO zur_memory_reviews (id, memory_id, other_id, relationship, reason, created_at) VALUES ('r3', 'm2', 'mx', 'contradiction', 'because', 'x')`)).toThrow();
+    });
+  });
+
   it("upgrades a database at version 4 to 5: the task list's order as an index, tasks kept", async () => {
     await withEmptyDatabase("from-4", (db) => {
       expect(migrate(db, MIGRATIONS.slice(0, 4))).toBe(4);
       db.run(`INSERT INTO zur_tasks (id, title, created_at, updated_at) VALUES ('t1', 'Ligar', 'x', 'x')`);
-      expect(migrate(db)).toBe(5);
+      expect(migrate(db, MIGRATIONS.slice(0, 5))).toBe(5);
       expect(db.all(`SELECT id FROM zur_tasks`)).toEqual([{ id: "t1" }]);
       expect(zurObjects(db)).toContain("index:zur_tasks_board");
     });

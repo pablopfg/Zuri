@@ -13,6 +13,10 @@ export {
   type PluralBase,
   plural,
   ptBR,
+  ptBRCore,
+  ptBRMemory,
+  ptBRProductivity,
+  ptBRSecurity,
   t,
 } from "../i18n/index.ts";
 export { AGENT_INSTANCE_NAME } from "./constants.ts";
@@ -92,3 +96,4 @@ export {
   zonedTimeToUtc,
 } from "./dates.ts";
 export * from "./productivity.ts";
+export * from "./memory.ts";

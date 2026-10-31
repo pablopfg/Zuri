@@ -10,7 +10,7 @@ import {
   type MessageKey,
   type Messages,
   type PluralBase,
-  ptBR,
+  ptBRCore,
 } from "@zuri/shared";
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { setFallbackMessages } from "./api.ts";
@@ -53,6 +53,18 @@ interface I18nValue {
 const I18nContext = createContext<I18nValue | null>(null);
 
 /**
+ * pt-BR as the interface holds it: the core texts from the first bundle, plus
+ * each lazy screen's texts once that screen's code arrives (addMessages). The
+ * translator reads this object on every call, so additions show up at once.
+ */
+const ptBR = { ...ptBRCore } as Messages;
+
+/** A lazy screen hands over its pt-BR texts when its module loads, before it renders. */
+export function addMessages(messages: Partial<Messages>): void {
+  Object.assign(ptBR, messages);
+}
+
+/**
  * Only pt-BR travels in the first bundle (.claude/rules/performance.md, P11).
  * Another language loads on demand: before the first render when the browser
  * already chose it, and before switching when the owner's settings ask for it,
@@ -69,6 +81,7 @@ export function I18nProvider({ children }: { children: ReactNode }) {
   const wanted = useRef(locale);
 
   const ensure = useCallback(async (next: Locale) => {
+    if (next === "pt-BR") return true;
     const messages = await loadCatalog(next).catch(() => null);
     // Without the catalog (offline, an old tab after a deploy) the app stays in pt-BR.
     if (messages) setLoaded((current) => (current[next] ? current : { ...current, [next]: messages }));

@@ -85,6 +85,15 @@ o [SemVer](https://semver.org/lang/pt-BR/). Cada PR escreve a sua entrada em
   que tinha). Depois de apagar, a tela oferece "Desfazer".
 - Rotas `/api/tasks`, `/api/notes`, `/api/projects` e `/api/trash`
   (detalhes em `docs/produtividade.md`).
+- Tela de Memória (`/memoria`): fatos duráveis sobre o dono, com estado atual,
+  incerto ou passado, busca sem acentos, filtro por categoria, edição,
+  "atualizar o fato" (a antiga vira passada e o histórico guarda as duas) e
+  exclusão definitiva. Até 10.000 memórias de até 2.000 caracteres.
+- Fila "Para revisar": quando um fato novo parece mudar ou contradizer um
+  antigo (moradia, carro, emprego, dieta, relacionamento, em pt-BR e en), o
+  Zuri pergunta antes de mexer. As regras nunca aposentam uma memória
+  sozinhas. A revisão pode ser desligada na própria tela.
+- Rotas `/api/memories` (detalhes em `docs/memoria.md`).
 - Botão de mostrar e ocultar nos campos de senha (login e troca de senha).
   O campo volta a ficar oculto quando o formulário é enviado.
 - Cada página dá nome à aba do navegador, como "Segurança · Configurações ·
@@ -93,6 +102,9 @@ o [SemVer](https://semver.org/lang/pt-BR/). Cada PR escreve a sua entrada em
 
 ### Alterado
 
+- Os textos em pt-BR de Tarefas, Notas, Projetos, Lixeira e Acessos chegam
+  junto com essas telas, como os da Memória, e não mais no pacote inicial. Com
+  isso a tela de Memória entrou sem passar do teto de 140 KB (fica em 139,9 KB).
 - Abertura ainda mais leve: o JavaScript inicial caiu de 158 para 140 KB
   (gzip). A interface passou a validar as respostas da API com o Zod Mini, e o
   Zod completo ficou só no servidor. As validações são as mesmas.
@@ -129,6 +141,10 @@ o [SemVer](https://semver.org/lang/pt-BR/). Cada PR escreve a sua entrada em
 
 ### Segurança
 
+- Memórias entram no prompt só como dado, em blocos `<data>`: sinais que
+  imitam tags (inclusive `‹ › ＜ ＞`) são trocados e caracteres invisíveis
+  (bidi, largura zero, "tags" Unicode) somem, então um texto guardado não
+  consegue fechar o bloco nem esconder instruções.
 - A interface não provoca mais violação de CSP: o Zod deixa de testar
   `new Function` (`jitless`), o que a política já recusava.
 - A interface pede aos buscadores que não a indexem (`noindex` e
@@ -192,6 +208,8 @@ o [SemVer](https://semver.org/lang/pt-BR/). Cada PR escreve a sua entrada em
   (gratuito) e grave `TURNSTILE_SITE_KEY` e `TURNSTILE_SECRET_KEY` como
   segredos do Worker. Sem eles o login responde "falta configurar a
   verificação contra robôs". Passo a passo em `docs/configuracao-cloudflare.md`.
+- Migration 6 cria `zur_memories` (com busca FTS5) e `zur_memory_reviews`,
+  além dos contadores de memórias. Nada muda nos dados que já existem.
 - Migration 5 cria o índice `zur_tasks_board`, com a ordem da lista de
   tarefas. Com 2.000 tarefas, "Todas" passa a ler 201 linhas do banco em vez
   de 4.001, e "Próximas", 711 em vez de 2.491. As migrations conferidas ao

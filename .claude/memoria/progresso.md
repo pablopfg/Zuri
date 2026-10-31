@@ -22,8 +22,16 @@ etapas ficam detalhadas; as mais antigas viram uma linha na tabela.
 | 4 | mesclada (31/10/2026) | #9 | 2FA TOTP, códigos de recuperação, desafio em cookie, passkeys reutilizáveis |
 | 5 | mesclada (31/10/2026) | #10 | Casca da interface: login com 2FA, guarda de sessão, configurações, PWA (fecha a fase A) |
 | 6 | mesclada (31/10/2026) | #12 | Tarefas, notas (Markdown, FTS5), projetos, lixeira de 30 dias, limites por tipo |
+| 7 | PR aberto (31/10/2026) | ver PR da branch `feat/etapa-07-memoria-historico` | Memória com estados atual/incerta/passada, substituição sem ciclos, fila de revisão, recordação em `<data>` |
 
 ## Últimas etapas (detalhe)
+
+### Etapa 7 · Memória e histórico
+- Entregou: `packages/shared/src/memory.ts` (schemas e limites), `apps/agent/src/memory/` (`text`, `conflict`, `intent`, `dates`, `repository`, `lifecycle`, `service`, `recall`), `apps/agent/src/agent/data.ts` (`dataLine`, `neutralize`), rotas `/api/memories*`, tela `/memoria` com fila "Para revisar", chave `memoryConflictReview` nas configurações. Doc: `docs/memoria.md`.
+- Migrations: versão 6 (`zur_memories` + FTS5, `zur_memory_reviews`, índices por estado e por estado+categoria, contadores em `zur_counts`).
+- Decisões técnicas: conflito só por regras (sem IA/Clef); regras nunca aposentam memória, só abrem revisão (máx. 500 pendentes); apagar é definitivo (sem lixeira, sem log); fato que vira passado leva as revisões; editar/restaurar para texto de outra atual = 409; busca ranqueia nas 200 ocorrências mais novas (conflito: 50); `fold` só tira acentos latinos.
+- Ficou para depois: verificação de conflito por IA; paginação além de 200 por filtro (o resto aparece na busca); importar backup usa `cleanImportedLinks` e precisa `rebuild` do FTS (etapa 23).
+- Atenção para a próxima: etapa 9 liga `selectRelevantMemories` + `memoryPromptSection` (orçamento `memoryTokenBudget`) ao runner; `remember` → `create`, `update_memory` → `correct`; `update` sem histórico e revisão `replace`/`cancel` só como `destructive` (`.claude/rules/ferramentas.md`). Todo conteúdo guardado no prompt passa por `dataLine`.
 
 ### Etapa 6 · Tarefas, notas e projetos
 - Entregou: `packages/shared/src/{dates,productivity}.ts` (datas checadas campo a campo, `zonedTimeToUtc`, schemas estritos), `apps/agent/src/productivity/` (`TaskRepository`, `NoteRepository`, `ProjectRepository`, `Trash`, `StorageGuard`, `search.ts`), rotas `/api/tasks`, `/api/notes`, `/api/projects`, `/api/trash`; telas `/tarefas`, `/notas/:id?`, lixeira na aba Dados; `components/Markdown.tsx`. Doc: `docs/produtividade.md`.
@@ -31,13 +39,6 @@ etapas ficam detalhadas; as mais antigas viram uma linha na tabela.
 - Decisões técnicas: busca de tarefas por `instr(lower(col), ?)` e não `LIKE` (o DO recusa padrão de LIKE acima de 50 bytes; CF-6-01); limite por tipo lido de `zur_counts`; edição que cresce em bytes respeita o teto de 900 MB; lixeira guarda cópia JSON e restaura por lista fixa de colunas; prazo só com dia vale 23:59 no fuso do dono; Markdown com react-markdown 10.1.0 + remark-gfm 4.0.1, sem HTML, links só http/https/mailto.
 - Ficou para depois: a busca de tarefas ainda varre a tabela (Todas e Próximas ganharam índice na migration 5, PR de performance).
 - Atenção para a próxima: as ferramentas da etapa 9 chamam os repositórios (que validam de novo com Zod); conteúdo de notas e tarefas entra no prompt em `<data>`; memória (etapa 7) pode reusar `search.ts` (`ftsQuery`, `asciiLower`) e o padrão de `zur_counts`.
-
-### Etapa 5 · Casca da interface
-- Entregou: `apps/web` em React (rotas `/entrar`, `/`, `/configuracoes/:tab` com 6 abas, 404), `lib/{api,activity,deadlines,next,i18n,theme}.ts`, `hooks/session.tsx`, `SessionGuard` (aviso 2 min antes, heartbeat único por Web Locks, saída em todas as abas), telas de 2FA, passkeys, limites de sessão e atividade. API: `GET`/`PATCH /api/settings`, `GET /api/auth/activity`. PWA sem cache no service worker. Docs: `docs/interface.md`.
-- Migrations: nenhuma.
-- Decisões técnicas: `x-zuri-activity` só em POST/PATCH/DELETE até 10 s após toque ou tecla; CSP do Turnstile em todas as páginas quando ligado (SPA; documentado em `seguranca.md`); identidade "Brisa" (opção A) aplicada enquanto o Pablo não escolhe; orçamento de duração do DO em `arquitetura.md` (6 h de uso ≈ 21% da cota diária).
-- Ficou para depois: resolvido em 31/10/2026 pela revisão de QA (Lighthouse na CI e `session-background.spec.ts`).
-- Atenção para a próxima: todo texto pelo catálogo com chave literal (`lint-i18n`); e2e roda contra `wrangler dev` com estado novo por execução (`.wrangler/e2e`); login tem limite de 3 falhas por rede em 15 min, então e2e não deve errar senha à toa; telas novas entram no `a11y.spec.ts`.
 
 <!-- Modelo, até 10 linhas por etapa:
 ### Etapa NN · <nome>
@@ -71,6 +72,6 @@ etapas ficam detalhadas; as mais antigas viram uma linha na tabela.
 
 ## Próxima etapa
 
-- Número e nome: 7 · Memória e histórico (paralela com 8; uma de cada vez no modo contínuo)
-- Dependências mescladas: sim (etapa 6, #12)
+- Número e nome: 8 · Provedor de IA e medição de uso
+- Dependências mescladas: sim (etapas 6 e 7)
 - Precisa de algo do Pablo antes: não

@@ -41,6 +41,8 @@ export const settingsSchema = /* @__PURE__ */ z
     sessionIdleMinutes: range(SESSION_TIMEOUT_RANGES.sessionIdleMinutes),
     sessionPresenceMinutes: range(SESSION_TIMEOUT_RANGES.sessionPresenceMinutes),
     sessionMaxHours: range(SESSION_TIMEOUT_RANGES.sessionMaxHours),
+    /** Step 7: look for older memories a new one may replace or contradict (rules only, no AI). */
+    memoryConflictReview: z.boolean(),
   })
   .strict();
 
@@ -60,4 +62,5 @@ export const DEFAULT_SETTINGS: Settings = Object.freeze({
   sessionIdleMinutes: SESSION_TIMEOUT_RANGES.sessionIdleMinutes.default,
   sessionPresenceMinutes: SESSION_TIMEOUT_RANGES.sessionPresenceMinutes.default,
   sessionMaxHours: SESSION_TIMEOUT_RANGES.sessionMaxHours.default,
+  memoryConflictReview: true,
 });

@@ -155,6 +155,21 @@ acrescente aqui cada armadilha nova que encontrar (sem dados pessoais).
   importa `./zod-config.ts` primeiro, senão o Zod testa `new Function` e a
   CSP registra uma violação (`polish.spec.ts`).
 
+## Pacote da interface
+
+- Uma tela nova sob demanda pode fazer o rolldown dividir o pacote inicial em
+  pedaços (`ui-*.js`, `useQuery-*.js`), e o JS inicial sobe de 2 a 11 KB sem
+  código novo no começo. Na etapa 7, duas coisas fizeram isso: schemas de
+  `packages/shared/src/memory.ts` sem `/* @__PURE__ */` (levaram o zod
+  clássico para a tela) e `hooks/settings.ts` usado por duas telas sob demanda
+  (virou um pedaço comum que o pedaço de entrada importava). Corrigir os dois
+  baixou de 151 para 142,4 KB, mas ainda sobram `ui-*.js` e `useQuery-*.js`
+  divididos, sem causa achada: uma tela de teste que só importa `cn` de
+  `ui.tsx` já divide a develop. As opções do rolldown (`chunkOptimization`,
+  `strictExecutionOrder`, `preserveEntrySignatures`, grupos em
+  `codeSplitting`) não resolveram. Rode `npm run size` a cada import novo e
+  compare a lista de arquivos com a da develop.
+
 ## Navegador e CSP
 
 - O Zod testa `new Function("")` na primeira validação para decidir se compila

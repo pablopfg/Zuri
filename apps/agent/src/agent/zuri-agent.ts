@@ -10,6 +10,7 @@ import { migrate } from "../db/migrations.ts";
 import { SettingsRepository } from "../db/settings.ts";
 import type { WorkerEnv } from "../env.ts";
 import { AppError, errorResponse } from "../http/errors.ts";
+import { MemoryService } from "../memory/service.ts";
 import { Productivity } from "../productivity/index.ts";
 
 /**
@@ -36,6 +37,7 @@ interface Store {
   settings: SettingsRepository;
   auth: AuthService;
   productivity: Productivity;
+  memories: MemoryService;
 }
 
 /**
@@ -50,6 +52,7 @@ export class ZuriAgent extends Agent<WorkerEnv> {
     auth: () => this.store.auth,
     settings: () => this.store.settings,
     productivity: () => this.store.productivity,
+    memories: () => this.store.memories,
     passwordSecretSet: () =>
       isPasswordHash(this.env.OWNER_PASSWORD_HASH) || (this.env.OWNER_PASSWORD?.length ?? 0) >= MIN_OWNER_PASSWORD_LENGTH,
     origin: () => this.publicUrl().origin,
@@ -93,7 +96,8 @@ export class ZuriAgent extends Agent<WorkerEnv> {
       const productivity = new Productivity(db, { timeZone: () => settings.get().timeZone });
       // The trash's 30 days also end while nobody opens it: checked each time the object wakes.
       productivity.trash.purgeExpired();
-      this.#store = { db, settings, auth, productivity };
+      const memories = new MemoryService(db, productivity.storage, { conflictReview: () => settings.field("memoryConflictReview") });
+      this.#store = { db, settings, auth, productivity, memories };
     }
     return this.#store;
   }

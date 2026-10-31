@@ -13,6 +13,7 @@ import { PasswordChangePage } from "./pages/PasswordChangePage.tsx";
 // Settings carry the QR code and passkey code, notes the Markdown renderer: loaded only when opened.
 const SettingsPage = lazy(() => import("./pages/SettingsPage.tsx").then((m) => ({ default: m.SettingsPage })));
 const TasksPage = lazy(() => import("./pages/productivity/TasksPage.tsx").then((m) => ({ default: m.TasksPage })));
+const MemoryPage = lazy(() => import("./pages/memory/MemoryPage.tsx").then((m) => ({ default: m.MemoryPage })));
 const AccessLogPage = lazy(() => import("./pages/security/AccessLogPage.tsx").then((m) => ({ default: m.AccessLogPage })));
 const NotesPage = lazy(() => import("./pages/productivity/NotesPage.tsx").then((m) => ({ default: m.NotesPage })));
 
@@ -56,6 +57,14 @@ export function App() {
           element={
             <Suspense fallback={<Spinner />}>
               <NotesPage />
+            </Suspense>
+          }
+        />
+        <Route
+          path="memoria"
+          element={
+            <Suspense fallback={<Spinner />}>
+              <MemoryPage />
             </Suspense>
           }
         />

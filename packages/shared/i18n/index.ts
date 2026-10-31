@@ -1,5 +1,8 @@
 import { en } from "./en.ts";
-import { ptBR } from "./pt-BR.ts";
+import { ptBR, ptBRCore } from "./pt-BR.ts";
+import { ptBRMemory } from "./pt-BR-memory.ts";
+import { ptBRProductivity } from "./pt-BR-productivity.ts";
+import { ptBRSecurity } from "./pt-BR-security.ts";
 
 export type MessageKey = keyof typeof ptBR;
 export type Messages = Record<MessageKey, string>;
@@ -10,8 +13,12 @@ export const DEFAULT_LOCALE: Locale = "pt-BR";
 
 export const catalogs: Record<Locale, Messages> = { "pt-BR": ptBR, en };
 
-/** The default catalog, which every bundle carries. */
-export { ptBR };
+/**
+ * The default catalog. The server carries all of it (`ptBR`); the interface
+ * starts with `ptBRCore` and adds a screen's part (`ptBRMemory`,
+ * `ptBRProductivity`, `ptBRSecurity`) when that screen loads.
+ */
+export { ptBR, ptBRCore, ptBRMemory, ptBRProductivity, ptBRSecurity };
 
 export type Params = Record<string, string | number>;
 
@@ -61,13 +68,14 @@ export function createTranslator<K extends string>(
 }
 
 /**
- * The catalog of one locale, fetched on demand. The web app keeps only pt-BR in its
+ * A catalog other than pt-BR, fetched on demand. The web app keeps only pt-BR in its
  * first bundle and loads English the first time someone needs it; the Worker uses
- * `catalogs`, which holds both.
+ * `catalogs`, which holds both. pt-BR never goes through here: it is already in
+ * the bundle, and referencing the whole of it would pull every screen's texts in.
  */
-export async function loadCatalog(locale: Locale): Promise<Messages> {
+export async function loadCatalog(locale: Exclude<Locale, "pt-BR">): Promise<Messages> {
   if (locale === "en") return (await import("./en.ts")).en;
-  return ptBR;
+  throw new Error(`no catalog for ${locale}`);
 }
 
 // Built on first use, so a bundle that never translates through these (the web app)

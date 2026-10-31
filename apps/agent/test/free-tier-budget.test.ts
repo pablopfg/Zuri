@@ -12,6 +12,7 @@ import { CSRF, call, HUMAN_TOKEN, ORIGIN, TEST_EMAIL, TEST_PASSWORD, testEnv } f
 const IP = "192.0.2.160";
 const TASKS = 2000;
 const NOTES = 500;
+const MEMORIES = 2000;
 let cookie = "";
 
 const owner = () => testEnv.AGENT.get(testEnv.AGENT.idFromName(AGENT_INSTANCE_NAME));
@@ -68,6 +69,11 @@ beforeAll(async () => {
           done ? at : null,
         );
       }
+      // Memories through the repository (no conflict check, to load fast), half of them past facts.
+      for (let i = 0; i < MEMORIES; i++) {
+        agent.store.memories.repo.insert({ content: `memória ${i} sobre tema${i % 40}`, category: i % 5 === 0 ? "preference" : "fact", origin: "app", validFrom: null });
+      }
+      db.run(`UPDATE zur_memories SET status = 'historical' WHERE rowid % 2 = 0`);
       for (let i = 0; i < NOTES; i++) {
         const at = new Date(now - i * 1000).toISOString();
         db.run(`INSERT INTO zur_notes (id, title, content, created_at, updated_at) VALUES (?, ?, ?, ?, ?)`, crypto.randomUUID(), `note ${i}`, `word${i}`, at, at);
@@ -184,5 +190,80 @@ describe("the Free plan budget of each route", () => {
     const created = await cost("POST", "/tasks", { title: "Pagar a conta" });
     expect(created.status).toBe(201);
     expect(created.written).toBeLessThanOrEqual(10);
+  });
+
+  it("memories: a page of the list, the counters, a search and the review queue read about one page", async () => {
+    // The counters come from five rows of zur_counts, never a count(*) of the table.
+    // CF-07-01 and CF-07-02: "current" merges two index walks; a status with a category has its own index.
+    for (const path of [
+      "/memories",
+      "/memories?status=historical",
+      "/memories?status=active",
+      "/memories?category=preference",
+      "/memories?status=current",
+      "/memories?status=active&category=preference",
+      "/memories?status=historical&category=preference",
+    ]) {
+      const res = await cost("GET", path);
+      expect(res.status, path).toBe(200);
+      // One row per memory on the page, the session check and the five counters.
+      // "current" may take a full page from each of its two statuses before merging.
+      const pages = path.includes("status=current") ? 2 : 1;
+      expect(res.read, path).toBeLessThanOrEqual(pages * LIST_LIMIT_DEFAULT + 15);
+      expect(res.written, path).toBe(0);
+    }
+    // A rare word: a few dozen rows.
+    const rare = await cost("GET", "/memories?q=memória 1234");
+    expect(rare.status).toBe(200);
+    expect(rare.read).toBeLessThan(60);
+    // A word in every memory: FTS5 stops at the 200 newest matches (about three rows each).
+    const common = await cost("GET", "/memories?q=sobre memória");
+    expect(common.status).toBe(200);
+    expect(common.read).toBeLessThanOrEqual(3 * 200 + 20);
+    const reviews = await cost("GET", "/memories/reviews");
+    expect(reviews.status).toBe(200);
+    expect(reviews.read).toBeLessThanOrEqual(5);
+  });
+
+  it("memories: saving, a duplicate, the conflict check and the lifecycle write a handful of rows", async () => {
+    const created = await cost("POST", "/memories", { content: "Moro em Curitiba desde 2024" });
+    expect(created.status).toBe(201);
+    expect(created.read).toBeLessThan(60);
+    expect(created.written).toBeLessThanOrEqual(12);
+    const duplicate = await cost("POST", "/memories", { content: "moro em curitiba desde 2024" });
+    expect(duplicate.status).toBe(200);
+    expect(duplicate.read).toBeLessThanOrEqual(5);
+    // The row and its four indexes on updated_at.
+    expect(duplicate.written).toBeLessThanOrEqual(5);
+    // A new fact on the same topic: one review more (row, index and counter).
+    const conflict = await cost("POST", "/memories", { content: "Moro em Joinville" });
+    expect(conflict.status).toBe(201);
+    expect(conflict.read).toBeLessThan(150);
+    expect(conflict.written).toBeLessThanOrEqual(20);
+
+    // CF-07-03: a fact sharing a word with every memory: the conflict check looks at the newest 50 matches per search.
+    const crowded = await cost("POST", "/memories", { content: "Uma memória sobre tema7 que mora em Curitiba" });
+    expect(crowded.status).toBe(201);
+    expect(crowded.read).toBeLessThan(500);
+    expect(crowded.written).toBeLessThanOrEqual(200);
+
+    const ids = await runInDurableObject(owner(), (agent: ZuriAgent) =>
+      agent.store.db.all<{ id: string }>(`SELECT id FROM zur_memories WHERE content IN ('Moro em Curitiba desde 2024', 'Moro em Joinville') ORDER BY created_at`).map((r) => r.id),
+    );
+    const [older, newer] = ids as [string, string];
+    const history = await cost("GET", `/memories/${newer}/history`);
+    expect(history.status).toBe(200);
+    expect(history.read).toBeLessThanOrEqual(5);
+    const status = await cost("POST", `/memories/${older}/status`, { status: "uncertain" });
+    expect(status.status).toBe(200);
+    expect(status.written).toBeLessThanOrEqual(8);
+    const corrected = await cost("POST", `/memories/${older}/correct`, { content: "Moro em Blumenau" });
+    expect(corrected.status).toBe(201);
+    expect(corrected.read).toBeLessThan(150);
+    expect(corrected.written).toBeLessThanOrEqual(40);
+    const deleted = await cost("DELETE", `/memories/${newer}`);
+    expect(deleted.status).toBe(204);
+    expect(deleted.read).toBeLessThan(30);
+    expect(deleted.written).toBeLessThanOrEqual(20);
   });
 });

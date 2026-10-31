@@ -1,10 +1,14 @@
 import { useQueryClient } from "@tanstack/react-query";
-import type { MessageKey, Project, TaskPriority, TaskStatus, TaskView, TrashItem } from "@zuri/shared";
+import { type MessageKey, type Project, ptBRProductivity, type TaskPriority, type TaskStatus, type TaskView, type TrashItem } from "@zuri/shared";
 import { useState } from "react";
 import { Button, Notice } from "../../components/ui.tsx";
 import { NOTES_KEY, PROJECTS_KEY, TASKS_KEY, TRASH_KEY } from "../../hooks/productivity.ts";
 import { api, errorMessage } from "../../lib/api.ts";
-import { useI18n } from "../../lib/i18n.tsx";
+import { addMessages, useI18n } from "../../lib/i18n.tsx";
+
+// Every screen with tasks, notes, projects or the trash imports this module: their pt-BR texts
+// arrive with it, not in the first bundle (rule P11).
+addMessages(ptBRProductivity);
 
 export const VIEW_LABEL: Record<TaskView, MessageKey> = {
   today: "web.tasks.view.today",

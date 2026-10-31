@@ -16,7 +16,7 @@ const ID = "0b8f8a52-5b2c-4c55-9a4c-2f1f3e1f4a10";
 
 describe("limits", () => {
   it("are the specification's: 20,000 tasks, 5,000 notes, 1,000 projects, 30 days in the trash", () => {
-    expect(STORAGE_LIMITS).toEqual({ tasks: 20_000, notes: 5_000, projects: 1_000 });
+    expect(STORAGE_LIMITS).toEqual({ tasks: 20_000, notes: 5_000, projects: 1_000, memories: 10_000 });
     expect(TRASH_RETENTION_DAYS).toBe(30);
   });
 });

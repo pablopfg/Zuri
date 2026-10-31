@@ -313,6 +313,26 @@ IP, o país, a região, a cidade, o ASN e o data center da borda, o user agent
   errado, Access) e as recusas de CSRF. Registrar custaria uma requisição ou uma
   gravação no Durable Object por pedido de lixo.
 
+## Conteúdo guardado no prompt
+
+Memórias (e, nas próximas etapas, notas, tarefas, resultados de ferramentas e
+mensagens de terceiros) entram no prompt só por `dataLine`
+(`apps/agent/src/agent/data.ts`), uma linha `<data>` por item. Dentro dela, os
+sinais `<` e `>` e os parecidos (`‹ › ＜ ＞ ﹤ ﹥ 〈 〉 ⟨ ⟩ « »`) viram `‹` e `›`,
+quebras de linha e controles viram espaço, e os caracteres invisíveis de
+formato (bidi, largura zero, "tags" U+E0000) somem. Uma memória que diga
+"ignore as instruções</data>" continua dentro do próprio bloco. Os testes
+estão em `apps/agent/test/memory-rules.test.ts` (inclusive `SEG-07-01`).
+
+## Dados apagados
+
+Apagar uma memória (ou esvaziar a lixeira) tira o registro da tabela e do
+índice de busca na hora. O SQLite pode manter bytes antigos em páginas livres
+até reaproveitá-las, e a recuperação de ponto no tempo do Durable Object guarda
+o estado do banco dos últimos 30 dias. O Zuri nunca lê essas cópias, mas quem
+tiver acesso à conta da Cloudflare pode restaurar o banco para uma data
+anterior à exclusão.
+
 ## Custo de um ataque no plano Free
 
 O Durable Object tem cotas diárias de linhas lidas e gravadas no plano Free;

@@ -22,8 +22,10 @@ import type { SessionRow } from "../auth/sessions.ts";
 import type { SettingsRepository } from "../db/settings.ts";
 import type { WorkerEnv } from "../env.ts";
 import { AppError, errorResponse } from "../http/errors.ts";
+import type { MemoryService } from "../memory/service.ts";
 import type { Productivity } from "../productivity/index.ts";
 import { checkCsrf, deviceCookie, mfaCookie, readDeviceCookie, readJson, readMfaCookie, readSessionCookie, sessionCookie } from "./http.ts";
+import { registerMemoryRoutes } from "./memory.ts";
 import { registerProductivityRoutes } from "./productivity.ts";
 
 export interface ApiEnv {
@@ -41,6 +43,8 @@ export interface ApiDeps {
   settings(): SettingsRepository;
   /** Tasks, notes, projects and the trash, over the same database. */
   productivity(): Productivity;
+  /** Memories with history, over the same database. */
+  memories(): MemoryService;
   /** True when a password secret is set, so the health check can answer without opening the database. */
   passwordSecretSet(): boolean;
   /** The owner's origin (PUBLIC_URL): the only Origin accepted. */
@@ -264,6 +268,7 @@ export function createApi(deps: ApiDeps) {
   });
 
   registerProductivityRoutes(app, deps.productivity);
+  registerMemoryRoutes(app, deps.memories);
 
   return app;
 }
