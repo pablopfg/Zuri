@@ -182,7 +182,7 @@ export const en: Messages = {
   "web.settings.later.notifications": "Push, e-mail, Telegram and notification categories arrive along with the notification center.",
   "web.settings.later.integrations": "MCP servers and Google Calendar arrive in a future version.",
   "web.settings.later.data": "Backup and storage use arrive in a future version.",
-  "web.account.preferences": "Language and time zone",
+  "web.account.preferences": "Name, language and time zone",
   "web.account.preferencesHint": "They apply to the interface, the server's messages and, later, the bot.",
   "web.account.language": "Language",
   "web.account.timeZone": "Time zone",

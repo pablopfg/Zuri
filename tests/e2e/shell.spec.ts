@@ -46,7 +46,7 @@ test("signing out ends the session on the server and in every tab @mobile", asyn
   await page.getByRole("button", { name: "Sair" }).first().click();
   // On a phone the top bar's "Sair" asks first; the sidebar's leaves at once.
   if (test.info().project.name === "mobile") {
-    await page.getByRole("dialog", { name: "Sair do Zuri?" }).getByRole("button", { name: "Sair" }).click();
+    await page.getByRole("dialog", { name: "Sair da Zuri?" }).getByRole("button", { name: "Sair" }).click();
   }
   expect((await logout).status()).toBe(204);
   await expect(page).toHaveURL(/\/entrar$/);
@@ -134,7 +134,7 @@ test("settings has the six sections, each with its address and content: tabs on 
     ["Avisos", "avisos", "central de avisos"],
     ["Integrações", "integracoes", "Google Agenda"],
     ["Dados", "dados", "Backup e uso do armazenamento"],
-    ["Conta", "conta", "Idioma e fuso horário"],
+    ["Conta", "conta", "Nome, idioma e fuso horário"],
   ] as const) {
     await openSettingsSection(page, name);
     await expect(page).toHaveURL(new RegExp(`/configuracoes/${path}$`));
@@ -148,7 +148,7 @@ test("settings has the six sections, each with its address and content: tabs on 
     }
   }
   // These texts arrive with the screen, not with the first download: they must still show, never as raw keys.
-  await expect(page.getByRole("main")).toContainText("Conta, segurança e o que o Zuri pode usar.");
+  await expect(page.getByRole("main")).toContainText("Conta, segurança e o que a Zuri pode usar.");
   await openSettingsSection(page, "Segurança");
   await expect(page.getByRole("main")).toContainText("Saída automática");
   await expect(page.getByRole("main")).toContainText("Em breve nesta aba");

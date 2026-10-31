@@ -15,7 +15,6 @@ o [SemVer](https://semver.org/lang/pt-BR/). Cada PR escreve a sua entrada em
   mesmo com a tela aberta, e de madrugada tem frases próprias.
 - Campo "Seu nome" em Configurações > Conta. Aceita apelido, até 40
   caracteres; em branco, o cumprimento sai sem nome.
-
 - Paleta de comandos com Ctrl/⌘ K, ou pelo botão Buscar na barra lateral e no
   topo do celular. Ela leva a qualquer página ou seção das configurações, cria
   uma tarefa ou nota e busca tarefas, notas e memórias (a partir de 2 letras,
@@ -136,6 +135,8 @@ o [SemVer](https://semver.org/lang/pt-BR/). Cada PR escreve a sua entrada em
 
 ### Alterado
 
+- A agente agora é "a Zuri": textos da interface, mensagens do servidor,
+  README, manifesto do app e banner passam a tratá-la no feminino.
 - Os textos que só o servidor diz (recusas e erros da API) saíram do pacote
   inicial da interface, que já recebe essas mensagens prontas na resposta. O
   JS inicial caiu de 139,9 para 139,4 KB, já com a paleta, e o teto da CI desceu

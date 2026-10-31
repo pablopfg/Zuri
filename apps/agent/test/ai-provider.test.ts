@@ -12,7 +12,7 @@ import { type AiWorld, delta, drain, fakeAi, sse, usageChunk, withAiWorld } from
 
 const GLM = "@cf/zai-org/glm-4.7-flash";
 const LIMITS: AiLimits = { requestsPerDay: 200, neuronsPerDay: 9_000, maxOutputTokens: 1_024 };
-const ask = (message = "Olá, Zuri", maxOutputTokens = 512) => ({ system: "Você é o Zuri.", messages: [{ role: "user" as const, content: message }], maxOutputTokens });
+const ask = (message = "Olá, Zuri", maxOutputTokens = 512) => ({ system: "Você é a Zuri.", messages: [{ role: "user" as const, content: message }], maxOutputTokens });
 
 function today(world: AiWorld, limits = LIMITS) {
   return world.meter.report(limits, "workers-ai", GLM).today;

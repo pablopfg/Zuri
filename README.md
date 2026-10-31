@@ -2,7 +2,7 @@
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/zuri-banner-escuro.svg">
-  <img src="docs/assets/zuri-banner-claro.svg" alt="Zuri: o símbolo, um i cujo pingo é uma luz verde, ao lado do nome e da frase 'Seu assistente pessoal de IA, na sua conta Cloudflare'" width="100%">
+  <img src="docs/assets/zuri-banner-claro.svg" alt="Zuri: o símbolo, um i cujo pingo é uma luz verde, ao lado do nome e da frase 'Sua assistente pessoal de IA, na sua conta Cloudflare'" width="100%">
 </picture>
 
 <br>
@@ -24,11 +24,11 @@ de um Durable Object e conversa com você pelo navegador e, em breve, pelo Teleg
 </div>
 
 > [!NOTE]
-> **Em construção.** O Zuri sai em 26 etapas, uma por PR, a partir da [especificação](docs/especificacao.md). As etapas 0 a 7 estão na `develop` e a 8 (provedor de IA e medição de uso) está em andamento. O [mapa das etapas](#️-mapa-das-etapas) mostra o que já existe e o que vem a seguir; o estado detalhado fica em [`progresso.md`](.claude/memoria/progresso.md).
+> **Em construção.** A Zuri sai em 26 etapas, uma por PR, a partir da [especificação](docs/especificacao.md). As etapas 0 a 7 estão na `develop` e a 8 (provedor de IA e medição de uso) está em andamento. O [mapa das etapas](#️-mapa-das-etapas) mostra o que já existe e o que vem a seguir; o estado detalhado fica em [`progresso.md`](.claude/memoria/progresso.md).
 
 ## Sumário
 
-- [Por que o Zuri](#-por-que-o-zuri)
+- [Por que a Zuri](#-por-que-a-zuri)
 - [Telas](#-telas)
 - [O que já funciona](#-o-que-já-funciona)
 - [O que vem a seguir](#-o-que-vem-a-seguir)
@@ -44,9 +44,9 @@ de um Durable Object e conversa com você pelo navegador e, em breve, pelo Teleg
 - [In English](#-in-english)
 - [Créditos e licença](#-créditos-e-licença)
 
-## 💡 Por que o Zuri
+## 💡 Por que a Zuri
 
-Cada pessoa publica o próprio Zuri na própria conta Cloudflare, e ele atende só ela. Conversas, memórias e tarefas não passam pelo servidor de outra empresa.
+Cada pessoa publica a própria Zuri na própria conta Cloudflare, e ela atende só essa pessoa. Conversas, memórias e tarefas não passam pelo servidor de outra empresa.
 
 - **Seus dados ficam com você.** Tudo mora no SQLite de um Durable Object da sua conta. Não há banco externo nem servidor de terceiros.
 - **Custo zero.** Foi desenhado para caber no plano Free da Cloudflare, com contadores e tetos para a IA não passar da cota.
@@ -62,7 +62,7 @@ As capturas abaixo acompanham o tema do seu GitHub (claro ou escuro) e saem da `
     <td width="50%" valign="top">
       <picture>
         <source media="(prefers-color-scheme: dark)" srcset="docs/capturas/inicio-computador-escuro.png">
-        <img src="docs/capturas/inicio-computador-claro.png" alt="Início do Zuri no computador: cumprimento pelo horário com o nome do dono, barra lateral com Início, Tarefas, Notas, Memória e Acessos, e cartões de Segurança e Sessão">
+        <img src="docs/capturas/inicio-computador-claro.png" alt="Início da Zuri no computador: cumprimento pelo horário com o nome do dono, barra lateral com Início, Tarefas, Notas, Memória e Acessos, e cartões de Segurança e Sessão">
       </picture>
       <p align="center"><b>Início</b>: cumprimento pelo horário, segurança da conta e sessão num relance</p>
     </td>
@@ -87,7 +87,7 @@ As capturas abaixo acompanham o tema do seu GitHub (claro ou escuro) e saem da `
         <source media="(prefers-color-scheme: dark)" srcset="docs/capturas/memoria-computador-escuro.png">
         <img src="docs/capturas/memoria-computador-claro.png" alt="Tela de memória com o formulário 'Guardar uma memória', as abas Todas, Atuais, Incertas e Passadas e a lista de fatos">
       </picture>
-      <p align="center"><b>Memória</b>: o que o Zuri sabe, com histórico</p>
+      <p align="center"><b>Memória</b>: o que a Zuri sabe, com histórico</p>
     </td>
   </tr>
   <tr>
@@ -200,7 +200,7 @@ Mais detalhes em [docs/arquitetura.md](docs/arquitetura.md).
 
 - **Dono único.** Não há cadastro nem contas de outras pessoas.
 - **Login forte.** Senha de 15 caracteres ou mais, Turnstile validado no Worker antes da senha, 2FA, passkeys, códigos de recuperação e defesa contra ataque lento ao segundo passo.
-- **Você vê quem tentou.** A página Acessos registra cada tentativa. O IP fica no banco do Zuri e não vai para os logs.
+- **Você vê quem tentou.** A página Acessos registra cada tentativa. O IP fica no banco da Zuri e não vai para os logs.
 - **Agente com limites.** Sem shell, execução de código, HTTP livre, credenciais ou deploy. Ação destrutiva vira proposta e só roda com a sua aprovação.
 - **Conteúdo é dado, nunca instrução.** Notas, memórias e mensagens entram no modelo em blocos `<data>` neutralizados, contra injeção de prompt.
 - **Segredos só no Worker.** Nada sensível no navegador, no repositório ou nos logs. A CSP da interface é testada na CI.
@@ -210,7 +210,7 @@ Detalhes em [docs/seguranca.md](docs/seguranca.md). Para relatar uma vulnerabili
 
 ## 💸 Plano Free, sem surpresa na fatura
 
-| Recurso | Plano Free | Como o Zuri usa |
+| Recurso | Plano Free | Como a Zuri usa |
 | --- | :---: | --- |
 | Workers, Durable Objects com SQLite | ✅ | Tudo roda aqui, com orçamento por rota medido nos testes |
 | Workers AI | ✅ | Teto único de 9.000 Neurons por dia (a cota é 10.000), zerado às 00:00 UTC |
@@ -330,7 +330,7 @@ Leia o [CONTRIBUTING.md](CONTRIBUTING.md) e o [AGENTS.md](AGENTS.md). Em resumo:
 
 ## 🙌 Créditos e licença
 
-O Zuri é inspirado no [Talorys](https://github.com/pablopfg/talorys), assistente pessoal de IA na Cloudflare, e acrescenta o bot de administração no Telegram. Trechos reaproveitados mantêm o aviso de copyright em [NOTICE.md](NOTICE.md).
+A Zuri é inspirada no [Talorys](https://github.com/pablopfg/talorys), assistente pessoal de IA na Cloudflare, e acrescenta o bot de administração no Telegram. Trechos reaproveitados mantêm o aviso de copyright em [NOTICE.md](NOTICE.md).
 
 Licença [MIT](LICENSE).
 
@@ -338,5 +338,5 @@ Licença [MIT](LICENSE).
 <br>
 <img src="docs/assets/zuri-logo.svg" alt="" width="40" height="40">
 <br>
-<sub>A luz verde quer dizer que o Zuri está trabalhando.</sub>
+<sub>A luz verde quer dizer que a Zuri está trabalhando.</sub>
 </div>
