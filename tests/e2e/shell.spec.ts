@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixtures.ts";
 import { CSRF, EMAIL, PASSWORD, signIn } from "./ui-helpers.ts";
 
 // The interface against the real Worker: sign-in, the session guard, sign-out

@@ -9,6 +9,11 @@ o [SemVer](https://semver.org/lang/pt-BR/). Cada PR escreve a sua entrada em
 
 ### Adicionado
 
+- Página **Acessos** na barra lateral: cada tentativa de entrar no Zuri, com
+  IP, cidade, país, rede (ASN), navegador e o resultado (login, senha ou código
+  errado, bloqueio, verificação contra robôs recusada). Filtros por período,
+  tipo e começo do IP, 50 por página. No celular, fica em Configurações >
+  Segurança > Ver todos os acessos.
 - Repositório preparado: monorepo com npm workspaces (`apps/agent`,
   `apps/web`, `packages/shared`), TypeScript estrito, Biome, Vitest,
   Playwright e o catálogo inicial de traduções em pt-BR e en.
@@ -107,6 +112,17 @@ o [SemVer](https://semver.org/lang/pt-BR/). Cada PR escreve a sua entrada em
   `new Function` (`jitless`), o que a política já recusava.
 - A interface pede aos buscadores que não a indexem (`noindex` e
   `robots.txt`).
+- O login pede a verificação contra robôs da Cloudflare (Turnstile) em toda
+  tentativa, com o quadro visível assim que a tela abre. Antes ela só aparecia
+  depois de um erro.
+- Fora do ambiente local, o login fica fechado sem as chaves do Turnstile ou
+  com as chaves de teste da Cloudflare (falha fechada).
+- Um endereço `?next=/..//outro-site` no login não deixa mais a tela em branco
+  depois de entrar.
+- O aviso de códigos de dois fatores errados se repete a cada 3 erros
+  seguidos, e não só no primeiro trio.
+- A pausa dos códigos de dois fatores só isenta o navegador do dono na rede do
+  dono: estar na mesma rede (Wi-Fi público, operadora móvel) não basta.
 - A interface só mostra dados depois de o servidor confirmar a sessão; sem
   ela, leva ao login com `?next=`, que só aceita caminhos do próprio Zuri.
 - O service worker não guarda nada em cache: páginas e respostas da API vêm
@@ -151,6 +167,10 @@ o [SemVer](https://semver.org/lang/pt-BR/). Cada PR escreve a sua entrada em
 
 ### Atualização
 
+- ⚠️ **Ação necessária antes do próximo deploy:** crie um widget do Turnstile
+  (gratuito) e grave `TURNSTILE_SITE_KEY` e `TURNSTILE_SECRET_KEY` como
+  segredos do Worker. Sem eles o login responde "falta configurar a
+  verificação contra robôs". Passo a passo em `docs/configuracao-cloudflare.md`.
 - Migration 5 cria o índice `zur_tasks_board`, com a ordem da lista de
   tarefas. Com 2.000 tarefas, "Todas" passa a ler 201 linhas do banco em vez
   de 4.001, e "Próximas", 711 em vez de 2.491. As migrations conferidas ao

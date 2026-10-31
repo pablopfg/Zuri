@@ -33,7 +33,10 @@ export default defineConfig({
       `--port ${port} --env-file ../../tests/e2e/worker.env --var PUBLIC_URL:http://127.0.0.1:${port} ` +
       // Optional secrets don't load from the env file (only those wrangler.jsonc
       // lists as required do): the hash of the e2e password goes as a variable.
-      `--var 'OWNER_PASSWORD_HASH:${E2E_PASSWORD_HASH}'`,
+      `--var 'OWNER_PASSWORD_HASH:${E2E_PASSWORD_HASH}' ` +
+      // Cloudflare's always-pass Turnstile test keys: accepted only over loopback,
+      // where the Worker answers their test token without the network (tests/e2e/fixtures.ts).
+      "--var TURNSTILE_SITE_KEY:1x00000000000000000000AA --var TURNSTILE_SECRET_KEY:1x0000000000000000000000000000000AA",
     url: `http://127.0.0.1:${port}/api/health`,
     reuseExistingServer: false,
     timeout: 120_000,

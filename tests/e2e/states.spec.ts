@@ -1,4 +1,4 @@
-import { expect, type Page, test } from "@playwright/test";
+import { expect, type Page, test } from "./fixtures.ts";
 import { expectAccessible, signIn } from "./ui-helpers.ts";
 
 // The states the server can't easily be put in: the maximum session time, a

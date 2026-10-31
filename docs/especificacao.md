@@ -61,7 +61,7 @@ Cada linha é um requisito. A coluna da direita aponta onde o agente estuda a re
 | Acesso remoto | Tokens pessoais com escopo `read` ou `write`, 90 dias, só hash; eventos de entrada do n8n | `remote/`, `docs/remote-access.md` |
 | Workflows | Monitor de sites com Cloudflare Workflows (passos duráveis e novas tentativas) | `workflows/` |
 | Modelos de IA | Workers AI por padrão; Anthropic e OpenAI opcionais, com teto diário em US$ e fallback | `ai/`, `docs/modelos-de-ia.md` |
-| Segurança de acesso | Senha forte (15+ caracteres, HIBP), e-mail do dono, 2FA TOTP, códigos de recuperação, passkeys, recuperação por e-mail, Turnstile adaptativo, atividade de acesso, sessão com expiração por inatividade | `auth/`, `docs/security.md` |
+| Segurança de acesso | Senha forte (15+ caracteres, HIBP), e-mail do dono, 2FA TOTP, códigos de recuperação, passkeys, recuperação por e-mail, Turnstile em todo login, atividade de acesso, sessão com expiração por inatividade | `auth/`, `docs/security.md` |
 | Dados | Backup e importação (importação nunca liga nada sozinha), limites de armazenamento, limpeza automática | `services/backup.ts`, `services/retention.ts` |
 | Operação | Deploy pelo GitHub Actions só do navegador, guia de instalação passo a passo, Cloudflare Access opcional, domínio próprio | `docs/instalacao-cloudflare.md`, `.github/workflows/` |
 
@@ -141,7 +141,7 @@ Tudo roda num **único Worker** que serve a interface e a API, com **um único D
 | `TELEGRAM_ADMIN_ID` | segredo | não | Id numérico da conta do dono no Telegram, trava extra além do vínculo por código |
 | `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` | segredo | não | Web Push |
 | `MCP_CREDENTIAL_KEY` | segredo | não | Cifra das credenciais MCP e Google |
-| `TURNSTILE_SITE_KEY`, `TURNSTILE_SECRET_KEY` | var / segredo | não | Turnstile adaptativo |
+| `TURNSTILE_SITE_KEY`, `TURNSTILE_SECRET_KEY` | segredo | sim (fora do local) | Turnstile em todo login (decisão de 31/10/2026); sem elas o login responde `NOT_CONFIGURED` |
 | `ANTHROPIC_API_KEY`, `OPENAI_API_KEY` | segredo | não | Modelos pagos (com teto) |
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | segredo | não | Google Agenda |
 | `PUBLIC_URL`, `DEFAULT_TIMEZONE`, `AGENT_NAME` | var | sim | Endereço público, fuso (`America/Sao_Paulo`), nome exibido |
@@ -203,7 +203,9 @@ Todas as rotas ficam sob `/api`, recebem e devolvem JSON validado por Zod (`pack
 | Etapa | Método e rota | Credencial | Corpo | Respostas |
 | --- | --- | --- | --- | --- |
 | 1 | GET `/api/health` | nenhuma | — | 200 `{ok:true}`; 503 `NOT_CONFIGURED` sem segredos obrigatórios |
-| 3 | POST `/api/auth/login` | CSRF + Turnstile quando exigido | `{email, password, turnstileToken?}` | 200 sessão; 200 `{mfaRequired:true}`; 401 `INVALID_CREDENTIALS`; 429 `RATE_LIMITED` + `Retry-After`; 400 `TURNSTILE_REQUIRED`; 503 `SERVICE_UNAVAILABLE` (Turnstile sem resposta) |
+| 3 | POST `/api/auth/login` | CSRF + Turnstile em toda tentativa | `{email, password, turnstileToken?}` | 200 sessão; 200 `{mfaRequired:true}`; 401 `INVALID_CREDENTIALS`; 429 `RATE_LIMITED` + `Retry-After`; 400 `TURNSTILE_REQUIRED`; 503 `SERVICE_UNAVAILABLE` (Turnstile sem resposta) |
+| 3 | GET `/api/auth/login-options` (respondido pelo Worker, sem o Durable Object) | CSRF | — | 200 `{turnstileSiteKey}`; `null` só no local sem chaves |
+| 3 | GET `/api/auth/activity?days=1\|7\|30\|90&group=success\|failure\|blocked\|robot\|account&ip=<começo>&before=<cursor>` | sessão + CSRF | — | 200 `{events, nextCursor}` (50 por página, IP, país, ASN, navegador); 400 `VALIDATION_FAILED` |
 | 3 | POST `/api/auth/logout`, POST `/api/auth/heartbeat` (`{active}`), GET `/api/auth/session` | sessão + CSRF | — | 204 ou 200 |
 | 3 | POST `/api/auth/confirm` (senha recente) | sessão + CSRF | `{password}` ou `{totp}` | 204; 401 |
 | 3 | POST `/api/auth/password` | sessão + CSRF + senha atual | `{currentPassword, newPassword}` | 200 sessão nova; 400 `VALIDATION_FAILED`; 401 `INVALID_CREDENTIALS`; 503 `SERVICE_UNAVAILABLE` (HIBP sem resposta) |
@@ -392,7 +394,7 @@ São 26 etapas em 5 fases, cada uma um PR para `develop`. As fases A e B entrega
 
 - Login com `OWNER_EMAIL` (comparado por HMAC) e senha (PBKDF2-SHA256 com 100.000 iterações, o máximo aceito pelo WebCrypto dos Workers, mais pepper; formato pbkdf2$100000$salt$hash para poder mudar). Instalação sem instalador: sem OWNER\_PASSWORD\_HASH, o Worker aceita o segredo OWNER\_PASSWORD (20+ caracteres) e, no primeiro login, exige a troca, grava o hash em settings e pede para apagar o segredo no painel. PASSWORD\_PEPPER e SESSION\_SECRET têm 48+ caracteres aleatórios; sem eles, o health check falha com mensagem clara. Política: 15+ caracteres, partes previsíveis não contam, HIBP por k-anonimato com falha fechada, senha fraca atual força troca.
 - Cookie `__Host-zuri_session` (HttpOnly, Secure, SameSite=Strict), CSRF por cabeçalho, sessão expira com 30 min de inatividade, 5 min sem aba aberta e 6 h no máximo.
-- Força bruta: 3 falhas por rede em 15 min; Turnstile adaptativo depois de 1 falha por rede ou 10 globais; verificação antes do PBKDF2; falha fechada.
+- Força bruta: 3 falhas por rede em 15 min; Turnstile em toda tentativa (decisão de 31/10/2026; antes era adaptativo); verificação antes do PBKDF2; falha fechada, inclusive sem as chaves fora do local.
 - Atividade de acesso (`auth_events`) com 90 dias detalhados e agregados de 1 ano; cookie de aparelho que nunca dispensa 2FA; os eventos que geram alerta (rede nova e outros) ficam gravados com a marca alert\_pending e são entregues quando a etapa 11 subir.
 - Aceite: testes para cada limite, cookie, expiração e recusa de CSRF.
 
