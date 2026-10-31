@@ -4,10 +4,20 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "typecheck": "tsc --noEmit -p .",
+    "dev": "wrangler dev --port 8787 --var PUBLIC_URL:http://localhost:8787",
+    "build": "wrangler deploy --dry-run --outdir dist",
+    "types": "wrangler types",
+    "typecheck": "wrangler types --check && tsc --noEmit -p .",
     "test": "vitest run"
   },
   "dependencies": {
-    "@zuri/shared": "*"
+    "@zuri/shared": "*",
+    "agents": "0.30.1",
+    "hono": "4.13.14",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-plugin": "1.4.8",
+    "wrangler": "4.153.0"
   }
 }
