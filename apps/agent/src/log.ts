@@ -93,11 +93,7 @@ function routeOf(request: Request | { method: string; path: string }): string | 
   let path: string;
   if (request instanceof Request) {
     method = request.method;
-    try {
-      path = new URL(request.url).pathname;
-    } catch {
-      return undefined;
-    }
+    path = new URL(request.url).pathname;
   } else {
     ({ method, path } = request);
   }

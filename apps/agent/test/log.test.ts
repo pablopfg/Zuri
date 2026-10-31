@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { log, logLine } from "../src/log.ts";
 
 // Every source file of the Worker, as text: the guard below reads them.
-const sources = import.meta.glob("../src/**/*.ts", { query: "?raw", import: "default", eager: true }) as Record<string, string>;
+const sources = import.meta.glob<string>("../src/**/*.ts", { query: "?raw", import: "default", eager: true });
 
 const RAY = "8f1a2b3c4d5e6f70-GRU";
 const request = (url: string, headers: Record<string, string> = {}, method = "POST") => new Request(url, { method, headers });
