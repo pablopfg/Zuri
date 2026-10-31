@@ -43,7 +43,7 @@ describe("t", () => {
   });
 
   it("falls back to pt-BR for an unknown locale", () => {
-    expect(t("fr", "app.tagline")).toBe(catalogs["pt-BR"]["app.tagline"]);
+    expect(t("fr", "web.login.submit")).toBe(catalogs["pt-BR"]["web.login.submit"]);
   });
 
   it("keeps a placeholder without value visible", () => {
@@ -66,7 +66,7 @@ describe("isLocale", () => {
     const parts = [ptBRCore, ptBRMemory, ptBRProductivity, ptBRSecurity, ptBRAi, ptBRChat, ptBRSettings].map((part) => Object.keys(part));
     // No key in two parts: one of them would silently win.
     expect(parts.flat().length).toBe(new Set(parts.flat()).size);
-    const lazy = /^(web\.(memory|tasks|notes|trash|projects|accessLog|activity|ai|chat|settings|passkeys|mfa|sessions|unit|security)\.|error\.ai|ai\.)/;
+    const lazy = /^(web\.(memory|tasks|notes|trash|projects|accessLog|activity|ai|chat|mfa|passkeys|sessions|unit|security)\.|error\.ai|ai\.|auth\.mfa\.)/;
     expect(Object.keys(ptBRCore).filter((key) => lazy.test(key))).toEqual([]);
   });
 

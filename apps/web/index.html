@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-    <meta name="description" content="Zuri: seu assistente pessoal de IA, na sua conta Cloudflare." />
+    <meta name="description" content="Zuri, seu assistente pessoal." />
     <meta name="theme-color" content="#f6f7f9" />
     <meta name="color-scheme" content="light dark" />
     <meta name="referrer" content="same-origin" />
@@ -15,7 +15,21 @@
     <link rel="manifest" href="/manifest.webmanifest" />
   </head>
   <body>
-    <div id="root"></div>
+    <!-- Painted before the JavaScript: the same mark, at the same place, as the
+         session check that replaces it (SessionChecking), so nothing jumps. -->
+    <div id="root">
+      <main id="boot" class="flex min-h-full flex-col items-center justify-center gap-6 p-6">
+        <svg viewBox="0 0 64 64" class="h-12 w-12 shrink-0" aria-hidden="true" focusable="false">
+          <rect width="64" height="64" rx="16" class="fill-brand-tile" />
+          <g class="fill-brand-signal motion-safe:animate-pulse">
+            <circle cx="32" cy="19" r="12" opacity="0.25" />
+            <circle cx="32" cy="19" r="7" />
+          </g>
+          <rect x="27" y="31" width="10" height="21" rx="5" class="fill-brand-mark" />
+        </svg>
+        <div class="h-17"></div>
+      </main>
+    </div>
     <noscript>O Zuri precisa de JavaScript. / Zuri needs JavaScript.</noscript>
     <script type="module" src="/src/main.tsx"></script>
   </body>

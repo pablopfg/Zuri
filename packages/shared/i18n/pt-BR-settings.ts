@@ -1,18 +1,7 @@
-// The pt-BR texts of the Settings screen (sessions, two-step sign-in, passkeys). Part of the pt-BR
-// catalog, kept apart so the interface downloads them with that screen (rule P11).
+// The pt-BR texts of the settings screen (two-step sign-in, passkeys, automatic sign-out, the
+// tabs still to come) and the second step's refusals, which only the server says. Part of the
+// pt-BR catalog, kept apart so the interface downloads them with that screen (rule P11).
 export const ptBRSettings = {
-  "web.settings.title": "Configurações",
-  "web.settings.description": "Conta, segurança e o que o Zuri pode usar.",
-  "web.settings.sections": "Seções das configurações",
-  "web.settings.tab.account": "Conta",
-  "web.settings.tab.security": "Segurança",
-  "web.settings.tab.ai": "IA",
-  "web.settings.tab.notifications": "Avisos",
-  "web.settings.tab.integrations": "Integrações",
-  "web.settings.tab.data": "Dados",
-  "web.settings.later.notifications": "Push, e-mail, Telegram e categorias de aviso chegam junto com a central de avisos.",
-  "web.settings.later.integrations": "Servidores MCP e Google Agenda chegam numa próxima versão.",
-  "web.settings.later.data": "Backup e uso do armazenamento chegam numa próxima versão.",
   "web.mfa.title": "Verificação em duas etapas",
   "web.mfa.description": "Depois da senha, o Zuri pede um código do aplicativo autenticador (ou uma passkey).",
   "web.mfa.off": "Desligada. Ligue para proteger a conta mesmo se a senha vazar.",
@@ -56,6 +45,12 @@ export const ptBRSettings = {
   "web.passkeys.removeConfirm": "Remover a passkey \"{name}\"? Ela deixa de entrar no Zuri.",
   "web.passkeys.cancelled": "A operação foi cancelada no navegador.",
   "web.passkeys.unsupported": "Este navegador não aceita passkeys.",
+  "auth.mfa.expired": "Este login venceu. Digite a sua senha de novo.",
+  "auth.mfa.tooMany": "Códigos errados demais. Digite a sua senha de novo.",
+  "auth.mfa.wrongCode": "Código incorreto.",
+  "auth.mfa.setupWrongCode": "Código incorreto ou configuração vencida. Confira se o relógio do celular está certo e tente de novo.",
+  "auth.mfa.alreadyOn": "A verificação em duas etapas já está ligada. Desligue antes para usar outro aplicativo.",
+  "auth.mfa.off": "A verificação em duas etapas está desligada.",
   "web.sessions.title": "Saída automática",
   "web.sessions.description": "Quando o Zuri encerra a sessão sozinho. Mudar pede a senha de novo.",
   "web.sessions.idle": "Sem uso",
@@ -67,4 +62,8 @@ export const ptBRSettings = {
   "web.unit.hours.other": "{count} horas",
   "web.security.laterTitle": "Em breve nesta aba",
   "web.security.laterBody": "Lista de sessões abertas, acesso remoto por token e modo de bloqueio.",
+  "web.settings.description": "Conta, segurança e o que o Zuri pode usar.",
+  "web.settings.later.notifications": "Push, e-mail, Telegram e categorias de aviso chegam junto com a central de avisos.",
+  "web.settings.later.integrations": "Servidores MCP e Google Agenda chegam numa próxima versão.",
+  "web.settings.later.data": "Backup e uso do armazenamento chegam numa próxima versão.",
 } as const;

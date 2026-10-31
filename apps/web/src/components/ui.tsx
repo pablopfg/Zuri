@@ -113,7 +113,19 @@ export function Card({ title, description, children, className, actions }: { tit
 export const fieldClass =
   "min-h-11 w-full rounded-xl border border-border-strong bg-surface px-3 text-[15px] text-fg placeholder:text-fg-muted focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/30 aria-[invalid=true]:border-danger";
 
-export function TextField({ label, hint, error, className, ...rest }: ComponentProps<"input"> & { label: string; hint?: string; error?: string | null }) {
+/** A decorative icon at the start of a field; the label still names it. */
+function FieldIcon({ children }: { children: ReactNode }) {
+  return <span className="pointer-events-none absolute inset-y-0 left-0 flex w-10 items-center justify-center text-fg-muted [&>svg]:h-4 [&>svg]:w-4">{children}</span>;
+}
+
+export function TextField({
+  label,
+  hint,
+  error,
+  icon,
+  className,
+  ...rest
+}: ComponentProps<"input"> & { label: string; hint?: string; error?: string | null; icon?: ReactNode }) {
   const id = useId();
   const hintId = `${id}-hint`;
   const errorId = `${id}-error`;
@@ -123,7 +135,10 @@ export function TextField({ label, hint, error, className, ...rest }: ComponentP
       <label htmlFor={id} className="block text-sm font-medium">
         {label}
       </label>
-      <input id={id} className={fieldClass} aria-invalid={error ? true : undefined} aria-describedby={described} {...rest} />
+      <div className="relative">
+        {icon && <FieldIcon>{icon}</FieldIcon>}
+        <input id={id} className={cn(fieldClass, icon ? "pl-10" : null)} aria-invalid={error ? true : undefined} aria-describedby={described} {...rest} />
+      </div>
       {hint && (
         <p id={hintId} className="text-xs leading-5 text-fg-muted">
           {hint}
@@ -175,7 +190,14 @@ export function SelectField({ label, hint, children, className, ...rest }: Selec
 }
 
 /** A password box with a button that shows what was typed: long passphrases are easy to mistype unseen. */
-export function PasswordField({ label, hint, error, className, ...rest }: Omit<ComponentProps<"input">, "type"> & { label: string; hint?: string; error?: string | null }) {
+export function PasswordField({
+  label,
+  hint,
+  error,
+  icon,
+  className,
+  ...rest
+}: Omit<ComponentProps<"input">, "type"> & { label: string; hint?: string; error?: string | null; icon?: ReactNode }) {
   const { t } = useI18n();
   const [shown, setShown] = useState(false);
   const id = useId();
@@ -200,6 +222,7 @@ export function PasswordField({ label, hint, error, className, ...rest }: Omit<C
         {label}
       </label>
       <div className="relative">
+        {icon && <FieldIcon>{icon}</FieldIcon>}
         <input
           {...rest}
           id={id}
@@ -207,7 +230,7 @@ export function PasswordField({ label, hint, error, className, ...rest }: Omit<C
           spellCheck={false}
           autoCapitalize="none"
           autoCorrect="off"
-          className={cn(fieldClass, "pr-12")}
+          className={cn(fieldClass, "pr-12", icon ? "pl-10" : null)}
           aria-invalid={error ? true : undefined}
           aria-describedby={described}
         />

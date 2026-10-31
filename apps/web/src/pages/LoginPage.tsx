@@ -1,12 +1,13 @@
 import type { startAuthentication as startAuthenticationFn } from "@simplewebauthn/browser";
 import { useQuery } from "@tanstack/react-query";
 import { LOGIN_OPTIONS_PATH, loginOptionsSchema, mfaRequiredSchema, type SessionState, sessionStateSchema } from "@zuri/shared";
-import { Fingerprint, RotateCw } from "lucide-react";
+import { Fingerprint, LockKeyhole, Mail, RotateCw, ShieldCheck, Zap } from "lucide-react";
 import { type FormEvent, useEffect, useRef, useState } from "react";
 import { Navigate, useNavigate, useSearchParams } from "react-router";
 import { Logo } from "../components/Logo.tsx";
+import { SessionChecking } from "../components/RequireSession.tsx";
 import { TurnstileWidget } from "../components/TurnstileWidget.tsx";
-import { Button, Notice, PasswordField, Spinner, TextField, useDocumentTitle } from "../components/ui.tsx";
+import { Button, Notice, PasswordField, TextField, useDocumentTitle } from "../components/ui.tsx";
 import { useSession } from "../hooks/session.tsx";
 import { ApiError, api, errorMessage } from "../lib/api.ts";
 import { useI18n } from "../lib/i18n.tsx";
@@ -34,6 +35,8 @@ export function LoginPage() {
   const [password, setPassword] = useState("");
   const [code, setCode] = useState("");
   const [error, setError] = useState<string | null>(null);
+  // The button never locks on an empty field: a try marks what is missing, right under it.
+  const [attempted, setAttempted] = useState(false);
   const [pending, setPending] = useState(false);
   const [retryAt, setRetryAt] = useState<number | null>(null);
   const [now, setNow] = useState(Date.now());
@@ -49,9 +52,14 @@ export function LoginPage() {
   const siteKey = refusedKey ?? options.data?.turnstileSiteKey ?? null;
   const [humanToken, setHumanToken] = useState<string | null>(null);
   const [humanBroken, setHumanBroken] = useState(false);
+  const [humanNudge, setHumanNudge] = useState(false);
+  const [spoken, setSpoken] = useState({ text: "", n: 0 });
+  // Only when Cloudflare asks for a click does the box appear, with a line saying why.
+  const [humanInteractive, setHumanInteractive] = useState(false);
   const [humanRound, setHumanRound] = useState(0);
   // Kept from when the screen opened, so the message doesn't vanish on the first keystroke.
   const [endedReason] = useState(ended);
+  const emailRef = useRef<HTMLInputElement>(null);
   const passwordRef = useRef<HTMLInputElement>(null);
   const codeRef = useRef<HTMLInputElement>(null);
   useDocumentTitle(t("web.login.submit"));
@@ -68,12 +76,16 @@ export function LoginPage() {
     if (offersPasskey) void import("@simplewebauthn/browser").catch(() => {});
   }, [offersPasskey]);
   const waitSeconds = retryAt ? Math.max(0, Math.ceil((retryAt - now) / 1000)) : 0;
-  // Without its token the server refuses the try anyway: the button waits for the widget.
+  // Without its token the server refuses the try anyway: a try without it is held back here.
   const humanMissing = siteKey !== null && !humanToken;
   // Until the options arrive the form can't know whether the check is on; if they fail, the server's refusal tells.
   const optionsPending = options.isPending && refusedKey === null;
 
-  if (loading) return <Spinner />;
+  const emailMissing = attempted && step.kind === "password" && !email.trim();
+  const passwordMissing = attempted && step.kind === "password" && !password;
+  const codeMissing = attempted && step.kind === "code" && !code.trim();
+
+  if (loading) return <SessionChecking />;
   if (session) return <Navigate to={next} replace />;
 
   const finish = (state: SessionState) => {
@@ -89,12 +101,34 @@ export function LoginPage() {
     if (typeof details.turnstileSiteKey === "string" && details.turnstileSiteKey && details.turnstileSiteKey !== siteKey) {
       setHumanRound((n) => n + 1);
       setSiteKey(details.turnstileSiteKey);
+      setHumanNudge(false);
     }
+  }
+
+  /** Says a blocked try out loud: a new node each time, so a screen reader repeats it. */
+  function announce(message: string) {
+    setSpoken((last) => ({ text: message, n: last.n + 1 }));
   }
 
   async function submitPassword(e: FormEvent) {
     e.preventDefault();
-    if (!email.trim() || !password || pending || waitSeconds > 0 || humanMissing || optionsPending) return;
+    if (pending || waitSeconds > 0) return;
+    if (!email.trim() || !password) {
+      setAttempted(true);
+      setError(null);
+      announce(t(email.trim() ? "web.login.passwordRequired" : "web.login.emailRequired"));
+      // After the render, so the field already carries its message when it takes the focus.
+      requestAnimationFrame(() => (email.trim() ? passwordRef : emailRef).current?.focus());
+      return;
+    }
+    // The robot check comes first: its own line, right above, turns into the alert.
+    if (optionsPending || humanMissing) {
+      setHumanNudge(true);
+      announce(t(optionsPending ? "web.login.humanLoading" : "web.login.humanHint"));
+      return;
+    }
+    setAttempted(false);
+    setSpoken((last) => ({ text: "", n: last.n }));
     setPending(true);
     setError(null);
     const token = humanToken;
@@ -129,6 +163,8 @@ export function LoginPage() {
   function secondStepFailed(err: unknown) {
     setError(errorMessage(err));
     if (err instanceof ApiError && (err.details as SignInDetails).mfa === "expired") {
+      setAttempted(false);
+      setSpoken((last) => ({ text: "", n: last.n }));
       setStep({ kind: "password" });
       requestAnimationFrame(() => passwordRef.current?.focus());
       return;
@@ -139,7 +175,15 @@ export function LoginPage() {
 
   async function submitCode(e: FormEvent) {
     e.preventDefault();
-    if (!code.trim() || pending) return;
+    if (pending) return;
+    if (!code.trim()) {
+      setAttempted(true);
+      announce(t("web.login.codeRequired"));
+      requestAnimationFrame(() => codeRef.current?.focus());
+      return;
+    }
+    setAttempted(false);
+    setSpoken((last) => ({ text: "", n: last.n }));
     setPending(true);
     setError(null);
     try {
@@ -180,24 +224,58 @@ export function LoginPage() {
   );
 
   return (
-    <main className="flex min-h-full items-center justify-center p-6">
-      <div className="w-full max-w-sm">
-        <div className="mb-8 flex flex-col items-center text-center">
-          <Logo className="h-14 w-14" />
-          <h1 className="mt-4 text-3xl font-bold tracking-tight">{t("app.name")}</h1>
-          <p className="mt-1.5 text-sm text-fg-muted">{t("app.tagline")}</p>
+    <main className="grid min-h-full grid-rows-[auto_1fr] bg-surface lg:grid-cols-2 lg:grid-rows-none lg:bg-bg">
+      {/* Always dark, whatever the theme: the brand side carries the mark's own colors. */}
+      <section className="login-brand flex flex-col gap-4 px-4 pt-10 pb-8 sm:px-8 lg:justify-between lg:gap-10 lg:p-14 xl:px-16">
+        <div className="flex items-center gap-3">
+          {/* The light pulses while the server checks: the logo is the sign of work. */}
+          <Logo className="h-9 w-9 lg:h-10 lg:w-10" working={pending} />
+          <h1 className="text-lg font-bold tracking-tight lg:text-xl">{t("app.name")}</h1>
         </div>
-
+        <div className="max-w-md space-y-5">
+          <p className="text-[1.75rem] leading-tight font-bold tracking-tight text-balance lg:text-[2.75rem] lg:leading-[1.1]">{t("web.login.headline")}</p>
+          <p className="hidden text-base leading-relaxed text-fg-muted lg:block">{t("web.login.lead")}</p>
+          <ul className="hidden flex-col gap-3.5 pt-2 text-[0.9375rem] lg:flex">
+            <li className="flex items-center gap-3">
+              <ShieldCheck className="h-[1.125rem] w-[1.125rem] shrink-0 text-accent" aria-hidden />
+              {t("web.login.pointTwoStep")}
+            </li>
+            <li className="flex items-center gap-3">
+              <LockKeyhole className="h-[1.125rem] w-[1.125rem] shrink-0 text-accent" aria-hidden />
+              {t("web.login.pointPrivate")}
+            </li>
+            <li className="flex items-center gap-3">
+              <Zap className="h-[1.125rem] w-[1.125rem] shrink-0 text-accent" aria-hidden />
+              {t("web.login.pointFast")}
+            </li>
+          </ul>
+        </div>
+        <p className="hidden items-center gap-1.5 text-xs text-fg-muted lg:flex">
+          <LockKeyhole className="h-3.5 w-3.5" aria-hidden />
+          {t("web.login.secure")}
+        </p>
+      </section>
+      <div className="flex flex-col px-4 pt-7 pb-6 sm:px-8 lg:items-center lg:justify-center lg:border-l lg:border-border lg:p-12">
+        <div className="flex w-full max-w-sm flex-1 flex-col motion-safe:animate-rise sm:max-w-md lg:max-w-[22.5rem] lg:flex-none">
+        {step.kind === "password" && (
+          <div className="mb-5 space-y-1.5 lg:mb-6">
+            <h2 className="text-[1.375rem] font-bold tracking-tight lg:text-[1.75rem]">{t("web.login.submit")}</h2>
+            <p className="hidden text-sm text-fg-muted lg:block">{t("web.login.welcome")}</p>
+          </div>
+        )}
         {step.kind === "password" ? (
           <form onSubmit={submitPassword} className="space-y-4" noValidate aria-describedby={error ? "login-error" : undefined}>
             {endedReason && !error && <Notice>{endedReason === "idle" ? t("web.login.endedIdle") : t("web.login.ended")}</Notice>}
             <TextField
               label={t("web.login.email")}
+              ref={emailRef}
               type="email"
               autoComplete="username"
               autoFocus
               required
               maxLength={254}
+              icon={<Mail aria-hidden />}
+              error={emailMissing ? t("web.login.emailRequired") : null}
               value={email}
               onChange={(e) => setEmail(e.target.value)}
             />
@@ -207,15 +285,27 @@ export function LoginPage() {
               autoComplete="current-password"
               required
               maxLength={1024}
+              icon={<LockKeyhole aria-hidden />}
+              error={passwordMissing ? t("web.login.passwordRequired") : null}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
             />
-            {optionsPending && <p className="min-h-[65px] text-sm leading-6 text-fg-muted">{t("web.login.humanLoading")}</p>}
+            {optionsPending && humanNudge && (
+              <p className="text-sm leading-6 text-danger" role="alert">
+                {t("web.login.humanLoading")}
+              </p>
+            )}
             {siteKey !== null && (
-              <div className="space-y-1.5">
-                <p className={humanBroken ? "text-sm leading-6 text-danger" : "text-sm leading-6 text-fg-muted"} role={humanBroken ? "alert" : undefined}>
-                  {humanBroken ? t("web.login.humanBroken") : t("web.login.humanHint")}
-                </p>
+              // Hidden while the check runs on its own: no gap where nothing shows.
+              <div className={humanBroken || humanNudge || humanInteractive ? "space-y-1.5" : "!mt-0"}>
+                {(humanBroken || humanNudge || humanInteractive) && (
+                  <p
+                    className={humanBroken || humanNudge ? "text-sm leading-6 text-danger" : "text-sm leading-6 text-fg-muted"}
+                    role={humanBroken || humanNudge ? "alert" : undefined}
+                  >
+                    {humanBroken ? t("web.login.humanBroken") : t("web.login.humanHint")}
+                  </p>
+                )}
                 {humanBroken && (
                   <Button
                     variant="secondary"
@@ -235,13 +325,19 @@ export function LoginPage() {
                   siteKey={siteKey}
                   onToken={(value) => {
                     setHumanToken(value);
-                    if (value) setHumanBroken(false);
+                    if (value) {
+                      setHumanBroken(false);
+                      setHumanNudge(false);
+                    }
                   }}
                   onError={() => setHumanBroken(true)}
+                  onInteractive={setHumanInteractive}
                 />
               </div>
             )}
-            <Button type="submit" className="w-full" loading={pending} disabled={!email.trim() || !password || waitSeconds > 0 || humanMissing || optionsPending}>
+            <Button type="submit" className="login-submit min-h-12 w-full" loading={pending} disabled={waitSeconds > 0}>
+              {/* The mark's green light, on the one button that matters here. */}
+              {!pending && waitSeconds === 0 && <span className="h-2 w-2 rounded-full bg-brand-signal" aria-hidden />}
               {waitSeconds > 0 ? t("web.login.waitSeconds", { seconds: waitSeconds }) : t("web.login.submit")}
             </Button>
             {errorLine}
@@ -260,10 +356,11 @@ export function LoginPage() {
               spellCheck={false}
               maxLength={step.recovery ? 40 : 8}
               autoFocus
+              error={codeMissing ? t("web.login.codeRequired") : null}
               value={code}
               onChange={(e) => setCode(e.target.value)}
             />
-            <Button type="submit" className="w-full" loading={pending} disabled={!code.trim()}>
+            <Button type="submit" className="w-full" loading={pending}>
               {t("web.login.verify")}
             </Button>
             {step.passkey && (
@@ -280,6 +377,8 @@ export function LoginPage() {
                 onClick={() => {
                   setStep({ kind: "password" });
                   setError(null);
+                  setAttempted(false);
+                  setSpoken((last) => ({ text: "", n: last.n }));
                 }}
               >
                 {t("web.login.back")}
@@ -291,6 +390,8 @@ export function LoginPage() {
                   setStep({ ...step, recovery: !step.recovery });
                   setCode("");
                   setError(null);
+                  setAttempted(false);
+                  setSpoken((last) => ({ text: "", n: last.n }));
                 }}
               >
                 {step.recovery ? t("web.login.useApp") : t("web.login.useRecovery")}
@@ -298,6 +399,16 @@ export function LoginPage() {
             </div>
           </form>
         )}
+        {spoken.text && (
+          <span key={spoken.n} role="alert" className="sr-only">
+            {spoken.text}
+          </span>
+        )}
+        <p className="mt-auto flex items-center justify-center gap-1.5 pt-8 text-xs text-fg-muted lg:hidden">
+          <LockKeyhole className="h-3.5 w-3.5" aria-hidden />
+          {t("web.login.secure")}
+        </p>
+        </div>
       </div>
     </main>
   );

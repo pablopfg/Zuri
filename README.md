@@ -94,9 +94,9 @@ As capturas abaixo acompanham o tema do seu GitHub (claro ou escuro) e saem da `
     <td width="50%" valign="top">
       <picture>
         <source media="(prefers-color-scheme: dark)" srcset="docs/capturas/entrar-computador-escuro.png">
-        <img src="docs/capturas/entrar-computador-claro.png" alt="Tela de entrar com o símbolo do Zuri, campos de e-mail e senha e a verificação contra robôs">
+        <img src="docs/capturas/entrar-computador-claro.png" alt="Tela de entrar: painel escuro da marca à esquerda e o formulário de e-mail e senha à direita">
       </picture>
-      <p align="center"><b>Entrar</b>: senha, Turnstile e segundo passo</p>
+      <p align="center"><b>Entrar</b>: senha, verificação discreta e segundo passo</p>
     </td>
     <td width="50%" valign="top">
       <picture>
@@ -114,7 +114,7 @@ As capturas abaixo acompanham o tema do seu GitHub (claro ou escuro) e saem da `
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="docs/capturas/entrar-celular-escuro.png">
-    <img src="docs/capturas/entrar-celular-claro.png" alt="Tela de entrar no celular" width="30%">
+    <img src="docs/capturas/entrar-celular-claro.png" alt="Tela de entrar no celular: a marca no topo e o formulário embaixo" width="30%">
   </picture>
   &nbsp;
   <picture>
