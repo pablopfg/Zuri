@@ -102,6 +102,23 @@ export function TextField({ label, hint, error, className, ...rest }: ComponentP
   );
 }
 
+export function TextAreaField({ label, hint, className, ...rest }: ComponentProps<"textarea"> & { label: string; hint?: string }) {
+  const id = useId();
+  return (
+    <div className={cn("space-y-1.5", className)}>
+      <label htmlFor={id} className="block text-sm font-medium">
+        {label}
+      </label>
+      <textarea id={id} className={cn(fieldClass, "min-h-28 py-2 leading-6")} aria-describedby={hint ? `${id}-hint` : undefined} {...rest} />
+      {hint && (
+        <p id={`${id}-hint`} className="text-xs leading-5 text-fg-muted">
+          {hint}
+        </p>
+      )}
+    </div>
+  );
+}
+
 export function SelectField({ label, hint, children, className, ...rest }: SelectHTMLAttributes<HTMLSelectElement> & { label: string; hint?: string }) {
   const id = useId();
   return (

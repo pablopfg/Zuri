@@ -73,3 +73,16 @@ export {
   totpCode,
   totpStep,
 } from "./totp.ts";
+export {
+  instantSchema,
+  isLeapYear,
+  isValidCalendarDate,
+  localDayBounds,
+  MAX_DATE_YEAR,
+  MIN_DATE_YEAR,
+  parseInstant,
+  type ZonedParts,
+  zonedParts,
+  zonedTimeToUtc,
+} from "./dates.ts";
+export * from "./productivity.ts";

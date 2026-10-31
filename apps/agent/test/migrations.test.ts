@@ -77,6 +77,7 @@ describe("the migration list", () => {
       1: "0314d64480376044fda39b0b67b8da58d9dd35beccd96ff96e2a3de45b5ca0b0",
       2: "fe263cac0a60df796e6d9a58e5907fbc44d5b5c891b846cf7f36df71e4181553",
       3: "42d9a6b3b30214125e809253e2f1d4472fdd885fdf77e3a5a017100a52ec63a2",
+      4: "590afd4bfb1854bd7757845d6de075c6496ee44dd419a8dfa20a16c3edefe63e",
     };
     for (const m of MIGRATIONS) {
       const digest = createHash("sha256").update(statementText(m).replace(/\r\n/g, "\n")).digest("hex");
@@ -92,8 +93,9 @@ describe("migrate", () => {
       expect(zurObjects(db)).toEqual([]);
 
       expect(migrate(db)).toBe(LATEST_SCHEMA_VERSION);
-      expect(schemaVersion(db)).toBe(3);
-      expect(zurObjects(db)).toEqual([
+      expect(schemaVersion(db)).toBe(4);
+      // FTS5 keeps shadow tables of its own (zur_notes_fts_data and others): only ours are listed.
+      expect(zurObjects(db).filter((name) => !/^table:zur_notes_fts_/.test(name))).toEqual([
         "table:zur_activity",
         "index:zur_activity_at",
         "table:zur_auth_events",
@@ -101,18 +103,41 @@ describe("migrate", () => {
         "index:zur_auth_events_at",
         "table:zur_auth_events_daily",
         "index:zur_auth_events_network",
+        "table:zur_counts",
+        "trigger:zur_counts_notes_delete",
+        "trigger:zur_counts_notes_insert",
+        "trigger:zur_counts_projects_delete",
+        "trigger:zur_counts_projects_insert",
+        "trigger:zur_counts_tasks_delete",
+        "trigger:zur_counts_tasks_insert",
+        "trigger:zur_counts_trash_delete",
+        "trigger:zur_counts_trash_insert",
         "table:zur_devices",
         "table:zur_login_attempts",
         "index:zur_login_attempts_at",
         "index:zur_login_attempts_network",
         "table:zur_mfa_challenges",
         "table:zur_mfa_secrets",
+        "table:zur_notes",
+        "table:zur_notes_fts",
+        "trigger:zur_notes_fts_delete",
+        "trigger:zur_notes_fts_insert",
+        "trigger:zur_notes_fts_update",
+        "index:zur_notes_project",
+        "index:zur_notes_updated",
         "table:zur_passkeys",
+        "table:zur_projects",
         "table:zur_recovery_codes",
         "table:zur_schema_version",
         "table:zur_sessions",
         "index:zur_sessions_last_seen",
         "table:zur_settings",
+        "table:zur_tasks",
+        "index:zur_tasks_project",
+        "index:zur_tasks_status_due",
+        "table:zur_trash",
+        "index:zur_trash_deleted",
+        "index:zur_trash_expires",
       ]);
     });
   });
@@ -157,12 +182,48 @@ describe("migrate", () => {
         `INSERT INTO zur_sessions (id, created_at, last_seen_at, last_presence_at, expires_at, confirmed_at) VALUES ('s', 1, 1, 1, 2, 1)`,
       );
       db.run(`INSERT INTO zur_auth_events (at, last_at, kind) VALUES (1, 1, 'login_success')`);
-      expect(migrate(db)).toBe(3);
+      expect(migrate(db, MIGRATIONS.slice(0, 3))).toBe(3);
       expect(db.one<{ n: number }>(`SELECT count(*) AS n FROM zur_sessions`)?.n).toBe(1);
       expect(db.one<{ n: number }>(`SELECT count(*) AS n FROM zur_auth_events`)?.n).toBe(1);
       expect(zurObjects(db)).toEqual(expect.arrayContaining(["table:zur_mfa_secrets", "table:zur_recovery_codes", "table:zur_passkeys"]));
       // Only one active secret and one pending one can ever exist.
       expect(() => db.run(`INSERT INTO zur_mfa_secrets (kind, secret, created_at) VALUES ('other', 'x', 1)`)).toThrow();
+    });
+  });
+
+  it("upgrades a database at version 3 to 4: tasks, notes with full-text search, projects, trash and counters", async () => {
+    await withEmptyDatabase("from-3", (db) => {
+      expect(migrate(db, MIGRATIONS.slice(0, 3))).toBe(3);
+      db.run(`INSERT INTO zur_passkeys (id, name, public_key, rp_id, created_at) VALUES ('p', 'Celular', 'k', 'exemplo.com.br', 1)`);
+      expect(migrate(db)).toBe(4);
+      expect(db.one<{ n: number }>(`SELECT count(*) AS n FROM zur_passkeys`)?.n).toBe(1);
+      expect(db.all(`SELECT kind, n FROM zur_counts ORDER BY kind`)).toEqual([
+        { kind: "notes", n: 0 },
+        { kind: "projects", n: 0 },
+        { kind: "tasks", n: 0 },
+        { kind: "trash", n: 0 },
+        { kind: "trash_bytes", n: 0 },
+      ]);
+
+      // The counters and the full-text index follow every insert, update and delete.
+      db.run(`INSERT INTO zur_notes (id, title, content, created_at, updated_at) VALUES ('n1', 'Reunião', 'pauta do cliente', 'x', 'x')`);
+      db.run(`INSERT INTO zur_tasks (id, title, created_at, updated_at) VALUES ('t1', 'Ligar', 'x', 'x')`);
+      db.run(`INSERT INTO zur_trash (id, kind, item_id, title, payload, bytes, deleted_at, expires_at) VALUES ('x', 'task', 't0', 'a', '{}', 2, 'x', 'y')`);
+      const count = (kind: string) => db.one<{ n: number }>(`SELECT n FROM zur_counts WHERE kind = ?`, kind)?.n;
+      expect([count("notes"), count("tasks"), count("trash"), count("trash_bytes")]).toEqual([1, 1, 1, 2]);
+      const found = (q: string) => db.all<{ id: string }>(`SELECT n.id FROM zur_notes_fts f JOIN zur_notes n ON n.rowid = f.rowid WHERE zur_notes_fts MATCH ?`, q);
+      expect(found('"reuniao"')).toEqual([{ id: "n1" }]);
+      db.run(`UPDATE zur_notes SET content = 'orçamento' WHERE id = 'n1'`);
+      expect(found('"cliente"')).toEqual([]);
+      expect(found('"orcamento"')).toEqual([{ id: "n1" }]);
+      db.run(`DELETE FROM zur_notes WHERE id = 'n1'`);
+      db.run(`DELETE FROM zur_trash WHERE id = 'x'`);
+      expect(found('"orcamento"')).toEqual([]);
+      expect([count("notes"), count("trash"), count("trash_bytes")]).toEqual([0, 0, 0]);
+
+      // Values outside the lists are refused by the table itself.
+      expect(() => db.run(`INSERT INTO zur_tasks (id, title, status, created_at, updated_at) VALUES ('t2', 'x', 'later', 'x', 'x')`)).toThrow();
+      expect(() => db.run(`INSERT INTO zur_trash (id, kind, item_id, title, payload, bytes, deleted_at, expires_at) VALUES ('y', 'memory', 'm', 'a', '{}', 2, 'x', 'y')`)).toThrow();
     });
   });
 

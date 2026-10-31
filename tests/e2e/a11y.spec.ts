@@ -32,6 +32,24 @@ for (const scheme of ["light", "dark"] as const) {
         await expectAccessible(page, tab);
       }
 
+      for (const [path, heading] of [
+        ["/tarefas", "Tarefas"],
+        ["/notas", "Notas"],
+      ] as const) {
+        await page.goto(path);
+        await expect(page.getByRole("heading", { level: 1, name: heading })).toBeVisible();
+        await expect(page.getByRole("status").filter({ hasText: "Carregando" })).toHaveCount(0);
+        await expectAccessible(page, path);
+      }
+      await page.goto("/tarefas");
+      await page.getByRole("button", { name: "Projetos" }).click();
+      await expect(page.getByRole("dialog", { name: "Projetos" })).toBeVisible();
+      await expectAccessible(page, "projetos");
+      await page.keyboard.press("Escape");
+      await page.goto("/notas/nova");
+      await expect(page.getByLabel("Texto da nota")).toBeVisible();
+      await expectAccessible(page, "nova nota");
+
       await page.goto("/nada-aqui");
       await expect(page.getByRole("heading", { name: "Página não encontrada" })).toBeVisible();
       await expectAccessible(page, "404");
@@ -70,4 +88,10 @@ test("every control is at least 44 px tall on a phone @mobile", async ({ page })
   await expect(page.getByRole("heading", { name: "Atividade de acesso" })).toBeVisible();
   await expect(page.getByRole("status").filter({ hasText: "Carregando" })).toHaveCount(0);
   expect(await tooSmall()).toEqual([]);
+  for (const path of ["/tarefas", "/notas", "/notas/nova", "/configuracoes/dados"]) {
+    await page.goto(path);
+    await expect(page.getByRole("main")).toBeVisible();
+    await expect(page.getByRole("status").filter({ hasText: "Carregando" })).toHaveCount(0);
+    expect(await tooSmall(), path).toEqual([]);
+  }
 });

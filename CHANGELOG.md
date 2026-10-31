@@ -56,6 +56,19 @@ o [SemVer](https://semver.org/lang/pt-BR/). Cada PR escreve a sua entrada em
 - Aviso dois minutos antes de a sessão terminar por falta de uso, com a opção
   de continuar; saída em todas as abas juntas.
 - `GET` e `PATCH /api/settings` e `GET /api/auth/activity`.
+- Tarefas: criar, editar, concluir e reabrir, com prazo no seu fuso (dia só,
+  ou dia e hora), prioridade, projeto e as visões Hoje, Próximas, Atrasadas,
+  Concluídas e Todas, além de filtro por projeto e busca.
+- Notas em Markdown, com editor e visualização (sem HTML, sem imagens de
+  fora e só links `http`, `https` e `mailto`), e busca em texto completo que
+  acha palavras com ou sem acento.
+- Projetos para agrupar tarefas e notas. Apagar um projeto não apaga o que
+  está nele.
+- Lixeira em Configurações › Dados: tarefas, notas e projetos apagados ficam
+  30 dias e podem ser restaurados (um projeto volta com as tarefas e notas
+  que tinha). Depois de apagar, a tela oferece "Desfazer".
+- Rotas `/api/tasks`, `/api/notes`, `/api/projects` e `/api/trash`
+  (detalhes em `docs/produtividade.md`).
 
 ### Segurança
 
@@ -66,6 +79,12 @@ o [SemVer](https://semver.org/lang/pt-BR/). Cada PR escreve a sua entrada em
 - Mudar os tempos de saída automática pede a senha digitada nos últimos 15
   minutos.
 - O script do Turnstile só é liberado na CSP quando o Turnstile está ligado.
+- Datas impossíveis (30/02, 29/02 fora de ano bissexto, 31/04, hora 24,
+  fuso acima de +14:00) são recusadas mesmo com fuso explícito; a busca trata
+  `%`, `_`, aspas e operadores do FTS5 como texto comum.
+- Limites por tipo (20.000 tarefas, 5.000 notas, 1.000 projetos) e teto de
+  900 MB do banco: passar deles responde `STORAGE_LIMIT_REACHED` (507) e nada
+  é apagado para abrir espaço.
 
 - Conexões WebSocket e caminhos de sub-agente são recusados, e os cabeçalhos
   internos do Agents SDK são removidos antes de chegar ao agente.
@@ -108,6 +127,9 @@ o [SemVer](https://semver.org/lang/pt-BR/). Cada PR escreve a sua entrada em
   `OWNER_PASSWORD_HASH` presente precisa estar no formato
   `pbkdf2$100000$<sal>$<hash>`. Opcionais novos: `TURNSTILE_SITE_KEY` e
   `TURNSTILE_SECRET_KEY` (grave os dois como segredo).
+- Migration 4 do banco (`zur_projects`, `zur_tasks`, `zur_notes` com índice
+  FTS5, `zur_trash` e `zur_counts`), aplicada sozinha na primeira requisição.
+  Nada a fazer.
 - Migration 2 do banco (`zur_sessions`, `zur_login_attempts`,
   `zur_auth_events`, `zur_auth_events_daily` e `zur_devices`), aplicada
   sozinha. Nada a fazer.

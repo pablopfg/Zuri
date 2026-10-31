@@ -21,7 +21,9 @@ import type { SessionRow } from "../auth/sessions.ts";
 import type { SettingsRepository } from "../db/settings.ts";
 import type { WorkerEnv } from "../env.ts";
 import { AppError, errorResponse } from "../http/errors.ts";
+import type { Productivity } from "../productivity/index.ts";
 import { checkCsrf, deviceCookie, mfaCookie, readDeviceCookie, readJson, readMfaCookie, readSessionCookie, sessionCookie } from "./http.ts";
+import { registerProductivityRoutes } from "./productivity.ts";
 
 export interface ApiEnv {
   Bindings: WorkerEnv;
@@ -36,6 +38,8 @@ export interface ApiDeps {
   auth(): AuthService;
   /** The owner's settings, over the same database. */
   settings(): SettingsRepository;
+  /** Tasks, notes, projects and the trash, over the same database. */
+  productivity(): Productivity;
   /** True when a password secret is set, so the health check can answer without opening the database. */
   passwordSecretSet(): boolean;
   /** The owner's origin (PUBLIC_URL): the only Origin accepted. */
@@ -249,6 +253,8 @@ export function createApi(deps: ApiDeps) {
     deps.auth().removePasskey(c.get("session"), passkeyId(c.req.param("id")), client(c));
     return new Response(null, { status: 204 });
   });
+
+  registerProductivityRoutes(app, deps.productivity);
 
   return app;
 }

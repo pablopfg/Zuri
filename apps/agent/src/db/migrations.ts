@@ -159,6 +159,104 @@ export const MIGRATIONS: readonly Migration[] = [
       )`,
     ],
   },
+  {
+    version: 4,
+    name: "productivity",
+    statements: [
+      // Projects group tasks and notes. Times are UTC ISO text. In the backup (step 23).
+      `CREATE TABLE IF NOT EXISTS zur_projects (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        description TEXT NOT NULL DEFAULT '',
+        status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'paused', 'completed', 'archived')),
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      )`,
+      // project_id has no REFERENCES on purpose: the code unlinks inside the same
+      // transaction that moves a project to the trash, and a restore re-links. In the backup.
+      `CREATE TABLE IF NOT EXISTS zur_tasks (
+        id TEXT PRIMARY KEY,
+        title TEXT NOT NULL,
+        description TEXT NOT NULL DEFAULT '',
+        status TEXT NOT NULL DEFAULT 'todo' CHECK (status IN ('todo', 'in_progress', 'done')),
+        priority TEXT NOT NULL DEFAULT 'medium' CHECK (priority IN ('low', 'medium', 'high', 'urgent')),
+        due_at TEXT,
+        project_id TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        completed_at TEXT
+      )`,
+      `CREATE INDEX IF NOT EXISTS zur_tasks_status_due ON zur_tasks (status, due_at)`,
+      `CREATE INDEX IF NOT EXISTS zur_tasks_project ON zur_tasks (project_id)`,
+      // Markdown written by the owner: data, never instructions (rule 2). In the backup.
+      `CREATE TABLE IF NOT EXISTS zur_notes (
+        id TEXT PRIMARY KEY,
+        title TEXT NOT NULL,
+        content TEXT NOT NULL DEFAULT '',
+        project_id TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      )`,
+      `CREATE INDEX IF NOT EXISTS zur_notes_updated ON zur_notes (updated_at)`,
+      `CREATE INDEX IF NOT EXISTS zur_notes_project ON zur_notes (project_id)`,
+      // Full-text index over the notes, kept by the triggers below. remove_diacritics 2
+      // lets "reuniao" find "reunião". External content: the text is stored once.
+      `CREATE VIRTUAL TABLE IF NOT EXISTS zur_notes_fts USING fts5(
+        title, content, content='zur_notes', content_rowid='rowid', tokenize='unicode61 remove_diacritics 2'
+      )`,
+      `CREATE TRIGGER IF NOT EXISTS zur_notes_fts_insert AFTER INSERT ON zur_notes BEGIN
+        INSERT INTO zur_notes_fts (rowid, title, content) VALUES (new.rowid, new.title, new.content);
+      END`,
+      `CREATE TRIGGER IF NOT EXISTS zur_notes_fts_delete AFTER DELETE ON zur_notes BEGIN
+        INSERT INTO zur_notes_fts (zur_notes_fts, rowid, title, content) VALUES ('delete', old.rowid, old.title, old.content);
+      END`,
+      `CREATE TRIGGER IF NOT EXISTS zur_notes_fts_update AFTER UPDATE OF title, content ON zur_notes BEGIN
+        INSERT INTO zur_notes_fts (zur_notes_fts, rowid, title, content) VALUES ('delete', old.rowid, old.title, old.content);
+        INSERT INTO zur_notes_fts (rowid, title, content) VALUES (new.rowid, new.title, new.content);
+      END`,
+      // Deleted tasks, notes and projects for 30 days: `payload` is the row as JSON,
+      // restored column by column (never by its keys). `actor` says who deleted it
+      // (the owner now; access tokens from step 20). Not in the backup.
+      `CREATE TABLE IF NOT EXISTS zur_trash (
+        id TEXT PRIMARY KEY,
+        kind TEXT NOT NULL CHECK (kind IN ('task', 'note', 'project')),
+        item_id TEXT NOT NULL,
+        title TEXT NOT NULL,
+        payload TEXT NOT NULL,
+        actor TEXT NOT NULL DEFAULT 'owner' CHECK (actor IN ('owner', 'remote', 'system')),
+        bytes INTEGER NOT NULL,
+        deleted_at TEXT NOT NULL,
+        expires_at TEXT NOT NULL
+      )`,
+      `CREATE INDEX IF NOT EXISTS zur_trash_expires ON zur_trash (expires_at)`,
+      `CREATE INDEX IF NOT EXISTS zur_trash_deleted ON zur_trash (deleted_at)`,
+      // Row counts kept by triggers: a limit check reads one row instead of counting
+      // the table (the Durable Object's SQLite bills every row a query reads).
+      `CREATE TABLE IF NOT EXISTS zur_counts (
+        kind TEXT PRIMARY KEY,
+        n INTEGER NOT NULL
+      )`,
+      `INSERT INTO zur_counts (kind, n) SELECT 'tasks', count(*) FROM zur_tasks WHERE 1 ON CONFLICT (kind) DO UPDATE SET n = excluded.n`,
+      `INSERT INTO zur_counts (kind, n) SELECT 'notes', count(*) FROM zur_notes WHERE 1 ON CONFLICT (kind) DO UPDATE SET n = excluded.n`,
+      `INSERT INTO zur_counts (kind, n) SELECT 'projects', count(*) FROM zur_projects WHERE 1 ON CONFLICT (kind) DO UPDATE SET n = excluded.n`,
+      `INSERT INTO zur_counts (kind, n) SELECT 'trash', count(*) FROM zur_trash WHERE 1 ON CONFLICT (kind) DO UPDATE SET n = excluded.n`,
+      `INSERT INTO zur_counts (kind, n) SELECT 'trash_bytes', coalesce(sum(bytes), 0) FROM zur_trash WHERE 1 ON CONFLICT (kind) DO UPDATE SET n = excluded.n`,
+      `CREATE TRIGGER IF NOT EXISTS zur_counts_tasks_insert AFTER INSERT ON zur_tasks BEGIN UPDATE zur_counts SET n = n + 1 WHERE kind = 'tasks'; END`,
+      `CREATE TRIGGER IF NOT EXISTS zur_counts_tasks_delete AFTER DELETE ON zur_tasks BEGIN UPDATE zur_counts SET n = n - 1 WHERE kind = 'tasks'; END`,
+      `CREATE TRIGGER IF NOT EXISTS zur_counts_notes_insert AFTER INSERT ON zur_notes BEGIN UPDATE zur_counts SET n = n + 1 WHERE kind = 'notes'; END`,
+      `CREATE TRIGGER IF NOT EXISTS zur_counts_notes_delete AFTER DELETE ON zur_notes BEGIN UPDATE zur_counts SET n = n - 1 WHERE kind = 'notes'; END`,
+      `CREATE TRIGGER IF NOT EXISTS zur_counts_projects_insert AFTER INSERT ON zur_projects BEGIN UPDATE zur_counts SET n = n + 1 WHERE kind = 'projects'; END`,
+      `CREATE TRIGGER IF NOT EXISTS zur_counts_projects_delete AFTER DELETE ON zur_projects BEGIN UPDATE zur_counts SET n = n - 1 WHERE kind = 'projects'; END`,
+      `CREATE TRIGGER IF NOT EXISTS zur_counts_trash_insert AFTER INSERT ON zur_trash BEGIN
+        UPDATE zur_counts SET n = n + 1 WHERE kind = 'trash';
+        UPDATE zur_counts SET n = n + new.bytes WHERE kind = 'trash_bytes';
+      END`,
+      `CREATE TRIGGER IF NOT EXISTS zur_counts_trash_delete AFTER DELETE ON zur_trash BEGIN
+        UPDATE zur_counts SET n = n - 1 WHERE kind = 'trash';
+        UPDATE zur_counts SET n = n - old.bytes WHERE kind = 'trash_bytes';
+      END`,
+    ],
+  },
 ];
 
 export const LATEST_SCHEMA_VERSION = MIGRATIONS.at(-1)?.version ?? 0;

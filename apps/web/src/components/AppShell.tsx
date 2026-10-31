@@ -1,4 +1,4 @@
-import { House, LogOut, Settings } from "lucide-react";
+import { House, ListTodo, LogOut, NotebookPen, Settings } from "lucide-react";
 import { NavLink, Outlet } from "react-router";
 import { useSession } from "../hooks/session.tsx";
 import { useI18n } from "../lib/i18n.tsx";
@@ -14,6 +14,8 @@ export function AppShell() {
   const { session, signOut } = useSession();
   const items = [
     { to: "/", label: t("web.nav.home"), icon: House, end: true },
+    { to: "/tarefas", label: t("web.nav.tasks"), icon: ListTodo, end: false },
+    { to: "/notas", label: t("web.nav.notes"), icon: NotebookPen, end: false },
     { to: "/configuracoes", label: t("web.nav.settings"), icon: Settings, end: false },
   ];
   const linkClass = ({ isActive }: { isActive: boolean }) =>
@@ -68,7 +70,7 @@ export function AppShell() {
         </main>
       </div>
       <nav aria-label={t("web.nav.main")} className="fixed inset-x-0 bottom-0 z-20 border-t border-border bg-surface md:hidden">
-        <ul className="mx-auto grid max-w-md grid-cols-2">
+        <ul className="mx-auto grid max-w-md grid-cols-4">
           {items.map(({ to, label, icon: Icon, end }) => (
             <li key={to}>
               <NavLink

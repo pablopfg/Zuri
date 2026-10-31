@@ -10,12 +10,14 @@ import { migrate } from "../db/migrations.ts";
 import { SettingsRepository } from "../db/settings.ts";
 import type { WorkerEnv } from "../env.ts";
 import { AppError, errorResponse } from "../http/errors.ts";
+import { Productivity } from "../productivity/index.ts";
 
 /** The object's own storage, opened and migrated on first use. */
 interface Store {
   db: Database;
   settings: SettingsRepository;
   auth: AuthService;
+  productivity: Productivity;
 }
 
 /**
@@ -29,6 +31,7 @@ export class ZuriAgent extends Agent<WorkerEnv> {
     locale: () => this.locale(),
     auth: () => this.store.auth,
     settings: () => this.store.settings,
+    productivity: () => this.store.productivity,
     passwordSecretSet: () =>
       isPasswordHash(this.env.OWNER_PASSWORD_HASH) || (this.env.OWNER_PASSWORD?.length ?? 0) >= MIN_OWNER_PASSWORD_LENGTH,
     origin: () => this.publicUrl().origin,
@@ -69,7 +72,10 @@ export class ZuriAgent extends Agent<WorkerEnv> {
         // Passkeys belong to the host they were made on: always PUBLIC_URL's, never the request's.
         relyingParty: { rpId: this.publicUrl().hostname, origin: this.publicUrl().origin },
       });
-      this.#store = { db, settings, auth };
+      const productivity = new Productivity(db, { timeZone: () => settings.get().timeZone });
+      // The trash's 30 days also end while nobody opens it: checked each time the object wakes.
+      productivity.trash.purgeExpired();
+      this.#store = { db, settings, auth, productivity };
     }
     return this.#store;
   }

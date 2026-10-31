@@ -11,7 +11,10 @@ portões da API e não guarda segredo nenhum: o bundle só conhece o caminho
 | --- | --- | --- |
 | `/entrar` | Login (senha, depois código ou passkey quando a verificação em duas etapas está ligada) | não |
 | `/` | Início (o chat chega na etapa 9) | sim |
-| `/configuracoes/:aba` | Configurações: `conta`, `seguranca`, `ia`, `avisos`, `integracoes`, `dados` | sim |
+| `/tarefas` | Tarefas: visões por prazo, filtro por projeto, busca, nova tarefa, edição, conclusão, projetos | sim |
+| `/notas` | Notas: lista com busca em texto completo | sim |
+| `/notas/nova`, `/notas/:id` | Editor de nota em Markdown, com visualização | sim |
+| `/configuracoes/:aba` | Configurações: `conta`, `seguranca`, `ia`, `avisos`, `integracoes`, `dados` (lixeira) | sim |
 | qualquer outro | Página não encontrada, dentro do app | sim |
 
 Sem sessão, toda página privada leva a `/entrar?next=<caminho>`. Depois do
