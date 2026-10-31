@@ -12,7 +12,7 @@ import {
 } from "@zuri/shared";
 import type { SqlValue } from "../db/database.ts";
 import { AppError } from "../http/errors.ts";
-import { asciiLower, ftsQuery } from "./search.ts";
+import { foldSearch, ftsQuery, searchColumn } from "./search.ts";
 import { assertProject, type RepositoryDeps } from "./tasks.ts";
 import { parse, type Untrusted } from "./validate.ts";
 
@@ -87,11 +87,12 @@ export class NoteRepository {
         );
         return rows.map(toSummary);
       }
+      const q = foldSearch(query.q);
       const rows = this.db.all<SummaryRow>(
         `SELECT ${SUMMARY} FROM zur_notes n
-         WHERE (instr(lower(n.title), ?) > 0 OR instr(lower(n.content), ?) > 0)${and(filters)} ORDER BY n.updated_at DESC LIMIT ?`,
-        asciiLower(query.q),
-        asciiLower(query.q),
+         WHERE (instr(${searchColumn("n.title", q)}, ?) > 0 OR instr(${searchColumn("n.content", q)}, ?) > 0)${and(filters)} ORDER BY n.updated_at DESC LIMIT ?`,
+        q,
+        q,
         ...params,
         query.limit,
       );

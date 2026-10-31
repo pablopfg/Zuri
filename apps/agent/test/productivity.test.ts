@@ -5,7 +5,7 @@ import { Database } from "../src/db/database.ts";
 import { migrate } from "../src/db/migrations.ts";
 import { AppError } from "../src/http/errors.ts";
 import { Productivity } from "../src/productivity/index.ts";
-import { asciiLower, ftsQuery, searchTerms } from "../src/productivity/search.ts";
+import { foldSearch, ftsQuery, needsLatinFold, searchColumn, searchTerms } from "../src/productivity/search.ts";
 import { testEnv } from "./helpers.ts";
 
 // The repositories over a database of their own, with a clock the test moves.
@@ -43,8 +43,18 @@ function refusal(fn: () => unknown): AppError {
 }
 
 describe("search helpers", () => {
-  it("fold only A-Z, like SQLite's lower(), and leave %, _ and \\ alone", () => {
-    expect(asciiLower("ÁGUA 50%_Off\\")).toBe("Água 50%_off\\");
+  it("fold A-Z and the accented Latin capitals, and leave %, _ and \\ alone", () => {
+    expect(foldSearch("ÁGUA 50%_Off\\")).toBe("água 50%_off\\");
+    expect(foldSearch("ÇÃO ÉÊ ÔÕ Ü Ñ")).toBe("ção éê ôõ ü ñ");
+    // Decomposed input (A + combining acute) folds like the composed letter.
+    expect(foldSearch("A\u0301GUA")).toBe("água");
+  });
+
+  it("fold the column only when the search has an accented letter (the 30 replace() calls cost CPU)", () => {
+    expect(needsLatinFold(foldSearch("AGUA 50%"))).toBe(false);
+    expect(needsLatinFold(foldSearch("ÁGUA"))).toBe(true);
+    expect(searchColumn("title", "agua")).toBe("lower(title)");
+    expect(searchColumn("title", "água")).toMatch(/^lower\(replace\(/);
   });
 
   it("turn any text into quoted FTS5 prefixes: no operator, quote or column filter survives", () => {
@@ -128,6 +138,27 @@ describe("tasks", () => {
     });
   });
 
+  it("search folds accented capitals both ways: 'água' finds 'Água', 'ÇÃO' finds 'ção'", async () => {
+    await withWorld(({ p }) => {
+      p.tasks.create({ title: "Água da casa" });
+      p.tasks.create({ title: "Revisar", description: "PROMOÇÃO DE ÉPOCA" });
+      p.tasks.create({ title: "Pagar a conta" });
+      const search = (q: string) => p.tasks.list({ q }).map((t) => t.title);
+      expect(search("água")).toEqual(["Água da casa"]);
+      expect(search("ÁGUA")).toEqual(["Água da casa"]);
+      expect(search("promoção de época")).toEqual(["Revisar"]);
+      expect(search("ção")).toEqual(["Revisar"]);
+      // Accents still count: "agua" is another word than "água" in a literal search.
+      expect(search("agua")).toEqual([]);
+      // Without an accent the cheap path runs and still ignores case.
+      expect(search("CASA")).toEqual(["Água da casa"]);
+      expect(search("da Casa")).toEqual(["Água da casa"]);
+      p.notes.create({ title: "Símbolos", content: "MEIA ÁGUA 100%" });
+      expect(p.notes.list({ q: "água 100%" }).map((n) => n.title)).toEqual(["Símbolos"]);
+      expect(p.notes.list({ q: "%" }).map((n) => n.title)).toEqual(["Símbolos"]);
+    });
+  });
+
   it("search with text longer than the platform's 50-byte LIKE cap, on a list that has rows", async () => {
     await withWorld(({ p }) => {
       const long = "comprar presentes de natal para toda a família ainda"; // 53 bytes in UTF-8
@@ -186,6 +217,10 @@ describe("notes", () => {
       const search = (q: string) => p.notes.list({ q }).map((n) => n.title);
       for (const q of ['"segredo', 'segredo"', '"" OR ""', "segredo OR", "title:senhas", "NOT segredo", "segr*", "NEAR(segredo simples)", "(segredo", "^senhas", "-segredo", "segredo AND"]) {
         expect(() => search(q), q).not.toThrow();
+      }
+      // Not only "no error": the words still find the note (a sanitizer that gave up would return nothing).
+      for (const q of ["segr*", "^senhas", "(segredo", "-segredo", '"segredo', "segredo AND"]) {
+        expect(search(q), q).toEqual(["Senhas do wifi"]);
       }
       expect(search('"segredo"')).toEqual(["Senhas do wifi"]);
       // A column filter is just two words here, and "title" is in no note.

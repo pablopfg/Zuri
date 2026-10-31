@@ -106,6 +106,24 @@ o [SemVer](https://semver.org/lang/pt-BR/). Cada PR escreve a sua entrada em
 - Na atividade de acesso, as recusas trazem um ícone de alerta, além da cor.
 - Revisão de design e UX registrada em `docs/qa/revisao-de-design.md`.
 
+### Alterado
+
+- A CI mede a cobertura dos testes e falha abaixo dos pisos por área (agente,
+  `packages/shared` e `apps/web/src/lib`). Os pisos só sobem.
+- Novo check `lighthouse` na CI: Entrar, Início, Tarefas, Notas e
+  Configurações precisam de acessibilidade e boas práticas ≥ 95.
+- Estratégia de testes mais exigente: portões obrigatórios por etapa e
+  exigências por área (`docs/qa/estrategia-de-testes.md`).
+
+### Corrigido
+
+- A busca de tarefas e a busca literal de notas não achavam "Água" ao digitar
+  "água" (o SQLite só ignora maiúsculas de A a Z). Agora as maiúsculas
+  acentuadas também são ignoradas, nos dois sentidos.
+- Um texto com um caractere Unicode quebrado (surrogate solto) era aceito e
+  guardado alterado, sem aviso. Agora é recusado. Textos passam a ser
+  guardados na forma NFC, então "é" digitado de dois jeitos é o mesmo texto.
+
 ### Segurança
 
 - A interface não provoca mais violação de CSP: o Zod deixa de testar
@@ -176,6 +194,9 @@ o [SemVer](https://semver.org/lang/pt-BR/). Cada PR escreve a sua entrada em
   de 4.001, e "Próximas", 711 em vez de 2.491. As migrations conferidas ao
   acordar o objeto leem 1 linha em vez de 91. Nada muda na tela. Ao rodar, a
   migration grava uma linha de índice por tarefa já guardada, uma vez só.
+- Rulesets da `develop` e da `main` mudaram: check novo `lighthouse` e branch
+  atualizada com a `develop` antes de mesclar. Importe os dois arquivos de
+  `.github/rulesets/` de novo (passo a passo em `docs/configuracao-github.md`).
 - Novos valores no painel da Cloudflare: a variável `PUBLIC_URL` e os segredos
   `SESSION_SECRET`, `PASSWORD_PEPPER`, `OWNER_PASSWORD_HASH` e `OWNER_EMAIL`.
   Opcionais: `ACCESS_TEAM_DOMAIN` e `ACCESS_AUD`. Detalhes em
