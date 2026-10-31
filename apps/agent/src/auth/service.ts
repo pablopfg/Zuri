@@ -699,7 +699,8 @@ export class AuthService {
   /** An owner exists: created at the first access, or by the password secrets of an older installation. */
   ownerExists(): boolean {
     const email = this.deps.state.get<string>("owner_email");
-    return (typeof email === "string" && email !== "") || this.passwordSource() !== null;
+    // An older installation's OWNER_EMAIL is an owner too, even after a new pepper dropped its password.
+    return (typeof email === "string" && email !== "") || Boolean(this.deps.secrets.ownerEmail) || this.passwordSource() !== null;
   }
 
   /** Created at the first access and still without two-step sign-in: nothing else opens yet. */
@@ -707,13 +708,14 @@ export class AuthService {
     return this.deps.state.get<boolean>("setup_second_step_required") === true && !this.twoStep.enabled();
   }
 
-  /** Whether the first access is still to be done. Starts the code's hour when a code is set. */
+  /**
+   * Whether the first access is still to be done. Writes nothing: the code's
+   * hour starts only at the first try that passes the robot check, so a visitor
+   * or crawler opening the page can't run it down.
+   */
   async setupStatus(): Promise<{ setup: boolean }> {
     await this.sync();
-    const setup = !this.ownerExists();
-    // The hour starts the first time the code is seen, and this is the first screen the owner opens.
-    if (setup) await this.setupCode.current();
-    return { setup };
+    return { setup: !this.ownerExists() };
   }
 
   /**
@@ -725,40 +727,49 @@ export class AuthService {
   async setupCheckCode(input: SetupCodeRequest, client: ClientInfo): Promise<{ token: string; expiresAt: number; mode: "setup" | "recovery" }> {
     await this.sync();
     if (!this.turnstile && this.deps.turnstileMandatory) throw new AppError("NOT_CONFIGURED", "error.turnstileNotConfigured");
-    const code = await this.setupCode.current();
-    if (code) {
-      const until = this.setupCode.pausedUntil(code.record);
-      if (until !== null) {
-        this.recordRefusal("login_rate_limited", client, "setup");
-        throw new AppError("RATE_LIMITED", undefined, { retryAfter: Math.max(1, Math.ceil((until - this.#clock()) / 1000)) });
-      }
-    }
+    // Counted before anything is awaited: tries sent together can't all slip past the pause.
+    const reserved = this.reserveSetupTry(client);
     await this.assertHuman(input.turnstileToken, client);
+    const code = await this.setupCode.current({ start: true });
     if (!code || code.problem !== null) {
-      // Nothing to guess against: no count, the same answer as a wrong code.
-      this.events.record("setup_failure", client, { reason: code?.problem ?? "missing" });
+      // Nothing to guess against; the same answer as a wrong code, and the try stays counted.
+      const blocked = this.setupCode.networkBlockedNow(client.network);
+      this.events.record(blocked ? "setup_locked" : "setup_failure", client, { reason: code?.problem ?? "missing", alert: blocked });
       throw this.codeRejected();
     }
     if (!(await this.setupCode.matches(code.record, input.code))) {
       this.wrongSetupTry(code, client, "code");
       throw this.codeRejected();
     }
+    this.setupCode.release(client.network, reserved);
     const ticket = await this.setupCode.issueTicket(code.record);
     return { ...ticket, mode: this.ownerExists() ? "recovery" : "setup" };
+  }
+
+  /** This network's place for one try, or RATE_LIMITED with the wait. */
+  private reserveSetupTry(client: ClientInfo): number {
+    const reserved = this.setupCode.reserve(client.network);
+    if ("retryAfter" in reserved) {
+      this.recordRefusal("login_rate_limited", client, "setup");
+      throw new AppError("RATE_LIMITED", undefined, { retryAfter: reserved.retryAfter });
+    }
+    return reserved.at;
   }
 
   private codeRejected(): AppError {
     return new AppError("INVALID_CREDENTIALS", "auth.setup.codeRejected", this.turnstile ? { turnstileSiteKey: this.turnstile.siteKey } : undefined);
   }
 
+  /** A wrong code or e-mail: counted for the code (an alert every 20 from anywhere) and, already, for the network. */
   private wrongSetupTry(code: CodeState, client: ClientInfo, reason: string): void {
-    const locked = this.setupCode.noteFailure(code.record);
-    this.events.record(locked ? "setup_locked" : "setup_failure", client, { reason, alert: locked });
+    const codeAlert = this.setupCode.noteFailure(code.record);
+    const blocked = this.setupCode.networkBlockedNow(client.network);
+    this.events.record(blocked ? "setup_locked" : "setup_failure", client, { reason, alert: blocked || codeAlert });
   }
 
   /** The form's ticket must belong to the configured code, still usable. */
   private async liveTicket(token: string | null): Promise<CodeState> {
-    const code = await this.setupCode.current();
+    const code = await this.setupCode.current({ start: false });
     if (!code || code.problem !== null || !(await this.setupCode.validTicket(code.record, token))) {
       throw new AppError("UNAUTHORIZED", "auth.setup.expired", { setup: "expired" });
     }
@@ -815,11 +826,13 @@ export class AuthService {
     await this.sync();
     if (!this.ownerExists()) throw new AppError("CONFLICT");
     const code = await this.liveTicket(token);
+    // A wrong e-mail is a try like a wrong code, under the same per-network limits.
+    const reserved = this.reserveSetupTry(client);
     if (!(await this.checkEmail(input.email))) {
-      // Counts against the code like a wrong code: twenty in all lock it.
       this.wrongSetupTry(code, client, "email");
       throw new AppError("INVALID_CREDENTIALS", "auth.setup.notOwnerEmail");
     }
+    this.setupCode.release(client.network, reserved);
     const hash = await this.acceptablePassword(input.password, this.personalWords());
     const recovered = this.deps.db.transaction(() => {
       if (this.setupCode.problemNow(code.record) !== null) return false;

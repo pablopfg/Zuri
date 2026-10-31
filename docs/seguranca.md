@@ -50,18 +50,25 @@ Decisão do Pablo de 31/10/2026; plano completo em
 - **Código de instalação.** O segredo `SETUP_CODE` (32 a 256 caracteres, com
   pelo menos 10 caracteres diferentes) é a prova de que quem abre o primeiro
   acesso controla a conta. Um código curto ou repetitivo falha fechado na
-  configuração (503 `NOT_CONFIGURED`). O servidor guarda só o HMAC dele com o
-  `SESSION_SECRET`, nunca o valor, e nunca o escreve em log.
-- **Uma hora, uma vez.** O código vale 1 hora contada da primeira vez que o
-  servidor o vê (`GET /api/setup`). Depois do cadastro, ou de uma recuperação,
-  ele fica gasto para sempre; um relógio que volta atrás não o reabre.
-- **Tentativas.** Toda tentativa passa primeiro pela pausa do próprio código
-  (5 erros em 15 minutos fazem esperar, 429 `RATE_LIMITED`), depois pelo
-  Turnstile (obrigatório fora do local, falha fechado) e só então pela
-  comparação em tempo constante. 20 erros travam o código de vez, com um evento
-  `setup_locked` marcado para alerta; só um código novo destrava. Errado,
-  vencido, gasto, travado ou ausente têm a mesma resposta: 401
-  `INVALID_CREDENTIALS`, "Código inválido ou vencido".
+  configuração (503 `NOT_CONFIGURED`). O servidor guarda só a impressão digital
+  dele (HMAC com um sal aleatório criado uma vez e guardado no banco), nunca o
+  valor, e nunca o escreve em log. Como o sal não muda, trocar o
+  `SESSION_SECRET` não faz um código gasto ou vencido valer de novo.
+- **Uma hora, uma vez.** O código vale 1 hora, contada da primeira tentativa
+  que passa pela verificação contra robôs. Abrir a página não conta: um robô que
+  só visita o endereço não gasta a hora do dono. Depois do cadastro, ou de uma
+  recuperação, ele fica gasto para sempre. Um código que volta a ser gravado
+  guarda a hora da primeira vez, e um relógio que volta atrás não o reabre.
+- **Tentativas, por rede.** Cada tentativa (código errado ou, na recuperação,
+  e-mail errado) conta para a rede de onde veio, antes de qualquer espera, para
+  que tentativas enviadas juntas não furem o limite. 5 em 15 minutos fazem a
+  rede esperar (429 `RATE_LIMITED` com `Retry-After`). 20 em 24 horas bloqueiam
+  a rede até o fim desse dia, com um evento `setup_locked` marcado para alerta.
+  Uma tentativa certa devolve a vaga. O palpite de outra pessoa nunca pausa a
+  rede do dono. Somando todas as redes, cada 20 erros geram outro alerta. Depois
+  vem o Turnstile (obrigatório fora do local, falha fechado) e só então a
+  comparação em tempo constante. Errado, vencido, gasto ou ausente têm a mesma
+  resposta: 401 `INVALID_CREDENTIALS`, "Código inválido ou vencido".
 - **Ficha do formulário.** O código certo devolve o cookie `__Host-zuri_setup`
   (`HttpOnly`, `SameSite=Strict`, 15 minutos, nunca além da hora do código).
   O servidor guarda só o HMAC da ficha; uma ficha nova substitui a anterior.
@@ -70,7 +77,9 @@ Decisão do Pablo de 31/10/2026; plano completo em
   novo, na mesma transação que gasta o código, que ainda não existe dono: dois
   envios juntos criam um dono só (o outro recebe 409 `CONFLICT`). O e-mail fica
   no banco do dono, normalizado. Um evento `owner_created` é marcado para alerta.
-- **2FA obrigatório.** O cadastro abre uma sessão, mas até a verificação em duas
+- **2FA obrigatório.** As passkeys exigem o 2FA ligado antes (etapa 4), então
+  o segundo passo obrigatório é o aplicativo autenticador; a passkey vem
+  depois. O cadastro abre uma sessão, mas até a verificação em duas
   etapas ser ligada só funcionam sessão, heartbeat, sair, confirmar a senha,
   ver e ligar o 2FA e ler as configurações. O resto responde 403 `FORBIDDEN`
   com `details.secondStepRequired`. Instalações antigas não ganham essa trava.
@@ -78,7 +87,7 @@ Decisão do Pablo de 31/10/2026; plano completo em
   só a recuperação: o e-mail cadastrado e uma senha nova. Os dados e as
   configurações ficam, todas as sessões e logins pela metade terminam, os
   navegadores conhecidos são esquecidos e o 2FA continua valendo no login
-  seguinte. E-mail errado conta como erro do código. Um evento
+  seguinte. E-mail errado conta como tentativa da rede. Um evento
   `access_recovered` é marcado para alerta. Depois de um `PASSWORD_PEPPER` novo,
   é por aqui que o dono volta a ter senha.
 - **Depois.** A sessão responde `removeSetupCodeSecret: true` enquanto o

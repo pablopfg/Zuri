@@ -13,8 +13,8 @@ o [SemVer](https://semver.org/lang/pt-BR/). Cada PR escreve a sua entrada em
   não existe dono, `GET /api/setup`, `POST /api/setup/code` e
   `POST /api/setup/owner` criam o dono uma vez só. O código é um segredo de 32
   caracteres ou mais, vale 1 hora e é gasto no cadastro. Cada tentativa passa
-  pela verificação contra robôs, 5 erros em 15 minutos pausam e 20 travam o
-  código. Logo depois do cadastro, a verificação em duas etapas é obrigatória
+  pela verificação contra robôs, e os limites valem por rede: 5 erros em 15
+  minutos pausam e 20 em 24 horas bloqueiam aquela rede pelo resto do dia. Logo depois do cadastro, a verificação em duas etapas é obrigatória
   antes de qualquer outra tela. Um código novo, depois, só recupera o acesso
   (`POST /api/setup/recover`), mantendo os dados e o 2FA. Os quatro eventos
   novos aparecem em Acessos. A tela vem no próximo PR.

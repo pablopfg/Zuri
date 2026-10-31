@@ -23,11 +23,17 @@ export const SETUP_CODE_MIN_DISTINCT = 10;
 export const SETUP_CODE_TTL_MS = 3600_000;
 /** The form after a right code: this long at most, and never past the code's own hour. */
 export const SETUP_TICKET_TTL_MS = 15 * 60_000;
-/** Wrong codes in SETUP_PAUSE_MS before the form waits until the window clears. */
+/** Tries per network in SETUP_PAUSE_MS before that network waits until the window clears. */
 export const SETUP_PAUSE_FAILURES = 5;
 export const SETUP_PAUSE_MS = 15 * 60_000;
-/** Wrong codes (and, in recovery, wrong e-mails) that lock a code for good: only a new code opens the form again. */
-export const SETUP_LOCK_FAILURES = 20;
+/**
+ * Tries per network in SETUP_NETWORK_BLOCK_MS that block it for the rest of the
+ * day (wrong codes and, in recovery, wrong e-mails). Across all networks, every
+ * this many wrong codes alert the owner. Per network, so nobody's guesses can
+ * lock the owner out.
+ */
+export const SETUP_NETWORK_BLOCK_FAILURES = 20;
+export const SETUP_NETWORK_BLOCK_MS = 24 * 3600_000;
 
 /** The form's cookie between the code and the owner's details. */
 export const SETUP_COOKIE = "__Host-zuri_setup";

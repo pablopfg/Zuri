@@ -85,6 +85,18 @@ beforeAll(async () => {
 });
 
 describe("the Free plan budget of each route", () => {
+  it("first access: the public status writes nothing, and a refused code writes a handful of rows", async () => {
+    const status = await cost("GET", "/setup");
+    expect(status.status).toBe(200);
+    expect(status.written).toBe(0);
+    expect(status.read).toBeLessThanOrEqual(10);
+    // No SETUP_CODE in the tests' owner: the try is counted for the network and recorded.
+    const refused = await cost("POST", "/setup/code", { code: "x".repeat(40), turnstileToken: HUMAN_TOKEN });
+    expect(refused.status).toBe(401);
+    expect(refused.written).toBeLessThanOrEqual(8);
+    expect(refused.read).toBeLessThanOrEqual(50);
+  });
+
   it("writes a handful of rows per sign-in try, and a refused robot check writes no more", async () => {
     // A wrong password: the try, its activity row, their indexes.
     const failure = await cost("POST", "/auth/login", { email: TEST_EMAIL, password: "senha errada de teste aqui", turnstileToken: HUMAN_TOKEN });

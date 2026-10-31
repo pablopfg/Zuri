@@ -1,6 +1,7 @@
 import {
   SETUP_CODE_TTL_MS,
-  SETUP_LOCK_FAILURES,
+  SETUP_NETWORK_BLOCK_FAILURES,
+  SETUP_NETWORK_BLOCK_MS,
   SETUP_PAUSE_FAILURES,
   SETUP_PAUSE_MS,
   SETUP_TICKET_TTL_MS,
@@ -118,9 +119,13 @@ describe("first access: the installation code", () => {
     }
   });
 
-  it("works for exactly one hour from the first time it is seen: 59:59 yes, 1:00:00 no", async () => {
+  it("works for exactly one hour from the first try that passes the robot check: 59:59 yes, 1:00:00 no", async () => {
     await withAuth("setup-code-hour", async (h) => {
+      // Opening the page starts nothing: a crawler can't run the hour down.
       expect(await h.service.setupStatus()).toEqual({ setup: true });
+      h.clock.advance(5 * HOUR);
+      expect(h.state.get("setup_code")).toBeUndefined();
+      await ticket(h);
       h.clock.advance(SETUP_CODE_TTL_MS - 1000);
       const t = await ticket(h);
       // The ticket never outlives the code's hour.
@@ -134,19 +139,20 @@ describe("first access: the installation code", () => {
 
   it("a clock that goes back before the first sighting doesn't reopen the code", async () => {
     await withAuth("setup-code-clock-back", async (h) => {
-      await h.service.setupStatus();
+      await ticket(h);
       h.clock.advance(-MINUTE);
       expect((await failure(ticket(h)))?.code).toBe("INVALID_CREDENTIALS");
     }, fresh());
   });
 
-  it("pauses after 5 wrong codes in 15 minutes: the 4th and 5th are still checked, the 6th waits", async () => {
+  it("pauses a network after 5 tries in 15 minutes (4th and 5th still checked, 6th waits); other networks go on", async () => {
     await withAuth("setup-code-pause", async (h) => {
       for (let i = 1; i <= SETUP_PAUSE_FAILURES; i++) expect(await outcome(ticket(h, OTHER_CODE))).toBe("INVALID_CREDENTIALS");
       const paused = await failure(ticket(h));
       expect(paused?.code).toBe("RATE_LIMITED");
       expect(paused?.details?.retryAfter).toBe(SETUP_PAUSE_MS / 1000);
-      // Even the right code waits, and the pause costs no check.
+      // Someone else's guesses never pause the owner's network.
+      expect(await outcome(ticket(h, CODE, "203.0.113.200"))).toBe("ok");
       h.clock.advance(SETUP_PAUSE_MS - 1000);
       expect(await outcome(ticket(h))).toBe("RATE_LIMITED");
       h.clock.advance(1000);
@@ -154,23 +160,40 @@ describe("first access: the installation code", () => {
     }, fresh());
   });
 
-  it("locks the code for good at 20 wrong tries (19 no, 20 yes), with an alert; only a new code opens again", async () => {
-    await withAuth("setup-code-lock", async (h) => {
-      for (let i = 1; i <= SETUP_LOCK_FAILURES; i++) {
-        if (i === SETUP_LOCK_FAILURES) expect(h.events().some((e) => e.kind === "setup_locked")).toBe(false);
+  it("a right code gives its place back: 4 wrong and a right one leave room for another try", async () => {
+    await withAuth("setup-code-release", async (h) => {
+      for (let i = 1; i < SETUP_PAUSE_FAILURES; i++) await outcome(ticket(h, OTHER_CODE));
+      expect(await outcome(ticket(h))).toBe("ok");
+      expect(await outcome(ticket(h))).toBe("ok");
+    }, fresh());
+  });
+
+  it("tries sent together can't slip past the pause: only 5 of 12 are checked", async () => {
+    await withAuth("setup-code-parallel", async (h) => {
+      const results = await Promise.all(Array.from({ length: 12 }, () => outcome(ticket(h, OTHER_CODE))));
+      expect(results.filter((r) => r === "INVALID_CREDENTIALS")).toHaveLength(SETUP_PAUSE_FAILURES);
+      expect(results.filter((r) => r === "RATE_LIMITED")).toHaveLength(12 - SETUP_PAUSE_FAILURES);
+    }, fresh());
+  });
+
+  it("blocks a network for the day at 20 tries (19 no, 20 yes), with one alert; other networks are not blocked", async () => {
+    await withAuth("setup-code-block", async (h) => {
+      for (let i = 1; i <= SETUP_NETWORK_BLOCK_FAILURES; i++) {
+        if (i === SETUP_NETWORK_BLOCK_FAILURES) expect(h.events().some((e) => e.kind === "setup_locked")).toBe(false);
         expect(await outcome(ticket(h, OTHER_CODE))).toBe("INVALID_CREDENTIALS");
-        // Stay under the pause: one try every 3 minutes.
-        h.clock.advance(3 * MINUTE + 1);
+        // Just under the pause: 5 tries in any 15 minutes. The code's hour runs out on the way; the tries still count.
+        h.clock.advance(181_000);
       }
       const locked = h.events().filter((e) => e.kind === "setup_locked");
       expect(locked).toHaveLength(1);
       expect(locked[0]?.alert_pending).toBe(1);
-      expect(await outcome(ticket(h))).toBe("INVALID_CREDENTIALS");
-      expect(h.events().at(-1)?.reason).toBe("locked");
-      // A new deploy with another code starts over.
-      const next = rawRebuild(h, fresh({ setupCode: OTHER_CODE }).secrets);
-      expect((await next.setupCheckCode({ code: OTHER_CODE }, client(NET))).mode).toBe("setup");
-    }, { ...fresh(), clock: undefined });
+      const blocked = await failure(ticket(h));
+      expect(blocked?.code).toBe("RATE_LIMITED");
+      // Until the day of the first try is over.
+      expect(blocked?.details?.retryAfter).toBe(SETUP_NETWORK_BLOCK_MS / 1000 - SETUP_NETWORK_BLOCK_FAILURES * 181);
+      // Another network is not blocked: it hears only that the code is no good (by now it expired).
+      expect(await outcome(ticket(h, CODE, "203.0.113.200"))).toBe("INVALID_CREDENTIALS");
+    }, fresh());
   });
 
   it("asks for the robot check first, and a failed or missing one counts no code try", async () => {
@@ -181,6 +204,8 @@ describe("first access: the installation code", () => {
       turnstile.answer = "unavailable";
       expect(await outcome(h.service.setupCheckCode({ code: CODE, turnstileToken: "t" }, client(NET)))).toBe("SERVICE_UNAVAILABLE");
       turnstile.answer = "ok";
+      // Refused robot checks count as the network's tries, but never touch the code or its hour.
+      expect(h.state.get("setup_code")).toBeUndefined();
       expect((await h.service.setupCheckCode({ code: CODE, turnstileToken: "t" }, client(NET))).mode).toBe("setup");
       expect(h.events().some((e) => e.kind === "setup_failure")).toBe(false);
     }, { ...fresh(), turnstile, turnstileMandatory: true });
@@ -188,6 +213,29 @@ describe("first access: the installation code", () => {
     await withAuth("setup-code-no-turnstile", async (h) => {
       expect((await failure(ticket(h)))?.code).toBe("NOT_CONFIGURED");
     }, { ...fresh(), turnstileMandatory: true });
+  });
+});
+
+describe("first access: a code seen before keeps its history", () => {
+  it("a new SESSION_SECRET never makes a spent code usable again", async () => {
+    await withAuth("setup-code-rotate-secret", async (h) => {
+      await createOwner(h);
+      const rotated = rawRebuild(h, { ...fresh().secrets, sessionSecret: `${"r".repeat(24)}${"s".repeat(30)}` });
+      expect(await outcome(rotated.setupCheckCode({ code: CODE }, client(NET)))).toBe("INVALID_CREDENTIALS");
+      expect(h.events().at(-1)?.reason).toBe("spent");
+    }, fresh());
+  });
+
+  it("going back to an older code keeps its first hour instead of starting a new one", async () => {
+    await withAuth("setup-code-go-back", async (h) => {
+      await ticket(h);
+      const other = rawRebuild(h, fresh({ setupCode: OTHER_CODE }).secrets);
+      await other.setupCheckCode({ code: OTHER_CODE }, client(NET));
+      h.clock.advance(SETUP_CODE_TTL_MS);
+      const back = rawRebuild(h, fresh().secrets);
+      expect(await outcome(back.setupCheckCode({ code: CODE }, client(NET)))).toBe("INVALID_CREDENTIALS");
+      expect(h.events().at(-1)?.reason).toBe("expired");
+    }, fresh());
   });
 });
 
@@ -312,13 +360,17 @@ describe("recovering the access with a new code", () => {
     }, fresh());
   });
 
-  it("a wrong e-mail is refused and counts toward the code's lock", async () => {
+  it("a wrong e-mail is refused and counts as the network's try: the 6th in 15 minutes waits", async () => {
     await withAuth("setup-recover-email", async (h) => {
       const { next, t } = await recoverable(h);
       const error = await failure(next.setupRecover(t.token, { email: "outra@exemplo.com.br", password: NEW_PASSWORD }, client(NET)));
       expect(error?.code).toBe("INVALID_CREDENTIALS");
       expect(error?.messageKey).toBe("auth.setup.notOwnerEmail");
       expect(h.events().at(-1)).toMatchObject({ kind: "setup_failure", reason: "email" });
+      for (let i = 2; i <= SETUP_PAUSE_FAILURES; i++) {
+        expect(await outcome(next.setupRecover(t.token, { email: "outra@exemplo.com.br", password: NEW_PASSWORD }, client(NET)))).toBe("INVALID_CREDENTIALS");
+      }
+      expect(await outcome(next.setupRecover(t.token, { email: OWNER_EMAIL, password: NEW_PASSWORD }, client(NET)))).toBe("RATE_LIMITED");
     }, fresh());
   });
 
@@ -347,6 +399,49 @@ describe("recovering the access with a new code", () => {
       expect(t.mode).toBe("recovery");
       await reset.setupRecover(t.token, { email: OWNER_EMAIL, password: NEW_PASSWORD }, client(NET));
       expect(await outcome(reset.login({ email: OWNER_EMAIL, password: NEW_PASSWORD }, client(NET), noCookies))).toBe("ok");
+    }, fresh());
+  });
+
+  it("an older installation (OWNER_EMAIL secret) whose password a new pepper dropped goes to recovery, never to a new owner", async () => {
+    await withAuth("setup-recover-legacy", async (h) => {
+      // Its password lived only in the database after a change; the secrets have only the e-mail.
+      const legacy = rawRebuild(h, { passwordHash: undefined, setupCode: CODE, pepper: `${"n".repeat(20)}${"m".repeat(30)}` });
+      expect(await legacy.setupStatus()).toEqual({ setup: false });
+      const t = await legacy.setupCheckCode({ code: CODE }, client(NET));
+      expect(t.mode).toBe("recovery");
+      expect(await outcome(legacy.setupOwner(t.token, owner(), client(NET), noCookies))).toBe("CONFLICT");
+      expect(await outcome(legacy.setupRecover(t.token, { email: "dono@exemplo.com.br", password: NEW_PASSWORD }, client(NET)))).toBe("ok");
+      expect(h.events().some((e) => e.kind === "access_recovered")).toBe(true);
+    });
+  });
+
+  it("recovery forgets known browsers, drops a sign-in waiting for its code, and keeps passkeys and the second step", async () => {
+    await withAuth("setup-recover-effects", async (h) => {
+      const signed = await createOwner(h);
+      const row = await live(h.service, signed.token);
+      const setup = await h.service.mfaSetup(row);
+      await h.service.mfaEnable(row, await totpCode(setup.secret, totpStep(h.clock.now())), client(NET));
+      const pending = await h.service.login({ email: OWNER_EMAIL, password: OWNER_PASSWORD }, client(NET), { session: null, device: signed.deviceToken });
+      expect("mfa" in pending).toBe(true);
+      h.state.set("auth_password_change_required", true);
+      const next = rawRebuild(h, fresh({ setupCode: OTHER_CODE }).secrets);
+      const t = await next.setupCheckCode({ code: OTHER_CODE }, client(NET));
+      await next.setupRecover(t.token, { email: OWNER_EMAIL, password: NEW_PASSWORD }, client(NET));
+      expect(h.db.all(`SELECT * FROM zur_mfa_challenges`)).toHaveLength(0);
+      expect(h.state.get("auth_password_change_required")).toBeUndefined();
+      expect(next.twoStep.enabled()).toBe(true);
+      // The browser that knew the old password is new again.
+      const after = await next.login({ email: OWNER_EMAIL, password: NEW_PASSWORD }, client(NET), { session: null, device: signed.deviceToken });
+      expect("mfa" in after).toBe(true);
+    }, fresh());
+  });
+
+  it("refuses when the breach check doesn't answer, and changes nothing", async () => {
+    await withAuth("setup-recover-breach", async (h) => {
+      const { next, t } = await recoverable(h);
+      h.breached.answer = null;
+      expect(await outcome(next.setupRecover(t.token, { email: OWNER_EMAIL, password: NEW_PASSWORD }, client(NET)))).toBe("SERVICE_UNAVAILABLE");
+      expect(await outcome(next.login({ email: OWNER_EMAIL, password: OWNER_PASSWORD }, client(NET), noCookies))).toBe("ok");
     }, fresh());
   });
 

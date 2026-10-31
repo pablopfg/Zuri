@@ -19,7 +19,9 @@ export type InternalKey =
   | "auth_passkey_user"
   | "owner_email"
   | "setup_code"
-  | "setup_spent"
+  | "setup_salt"
+  | "setup_seen"
+  | "setup_tries"
   | "setup_second_step_required";
 
 export class InternalState {
