@@ -16,7 +16,9 @@ O diff `git diff origin/develop...HEAD` e a etapa indicada de `docs/especificaca
 2. Procure casos faltando: limites exatos, entrada malformada, repetição e concorrência, fuso e horário de verão, IA indisponível, sessão expirada, token de outro escopo, conta estranha no Telegram, webhook repetido, textos em pt-BR e en, acessibilidade.
 3. Confira contratos: rotas, códigos de erro e payloads batem com a especificação.
 4. Rode a suíte da área e a completa se for rápido; relate testes instáveis.
-5. Procure testes enganosos: asserção fraca, mock que esconde o comportamento real, `.skip`, timeout inflado.
+5. Procure testes enganosos: asserção fraca (`not.toThrow`, `toBeDefined`, só o status), mock que esconde o comportamento real, relógio real onde o teste calcula "hoje", `.skip`, timeout inflado.
+6. Confira as "Exigências por área" da estratégia que a etapa toca (limites n−1/n/n+1, corpos e consultas hostis, concorrência, dia de 23 h e 25 h, fuso do aparelho, XSS, senha recente, rotas no teste de `app.routes`).
+7. Quando puder provar uma lacuna rodando, rode: uma sonda fora do repositório (scratchpad), nunca arquivo novo no repositório.
 
 ## Relatório (pt-BR)
 

@@ -285,6 +285,8 @@ test("moving a note with unsaved text to the trash does not ask about leaving", 
   await expect(page).toHaveURL(/\/notas$/);
   await expect(page.getByText("Nota movida para a lixeira.")).toBeVisible();
   await expect(page.getByRole("dialog", { name: "Sair sem salvar?" })).toHaveCount(0);
+});
+
 test.describe("a device in another zone than the owner's", () => {
   // The device says Tokyo (UTC+9); the owner's setting says São Paulo (UTC-3).
   // Deadlines are typed and read in the owner's zone, never the device's.

@@ -36,7 +36,7 @@ etapas ficam detalhadas; as mais antigas viram uma linha na tabela.
 - Entregou: `apps/web` em React (rotas `/entrar`, `/`, `/configuracoes/:tab` com 6 abas, 404), `lib/{api,activity,deadlines,next,i18n,theme}.ts`, `hooks/session.tsx`, `SessionGuard` (aviso 2 min antes, heartbeat único por Web Locks, saída em todas as abas), telas de 2FA, passkeys, limites de sessão e atividade. API: `GET`/`PATCH /api/settings`, `GET /api/auth/activity`. PWA sem cache no service worker. Docs: `docs/interface.md`.
 - Migrations: nenhuma.
 - Decisões técnicas: `x-zuri-activity` só em POST/PATCH/DELETE até 10 s após toque ou tecla; CSP do Turnstile em todas as páginas quando ligado (SPA; documentado em `seguranca.md`); identidade "Brisa" (opção A) aplicada enquanto o Pablo não escolhe; orçamento de duração do DO em `arquitetura.md` (6 h de uso ≈ 21% da cota diária).
-- Ficou para depois: Lighthouse na CI (medido à mão: 100); e2e da aba que volta do fundo (`SETTLE_MS`).
+- Ficou para depois: resolvido em 31/10/2026 pela revisão de QA (Lighthouse na CI e `session-background.spec.ts`).
 - Atenção para a próxima: todo texto pelo catálogo com chave literal (`lint-i18n`); e2e roda contra `wrangler dev` com estado novo por execução (`.wrangler/e2e`); login tem limite de 3 falhas por rede em 15 min, então e2e não deve errar senha à toa; telas novas entram no `a11y.spec.ts`.
 
 <!-- Modelo, até 10 linhas por etapa:
@@ -53,6 +53,10 @@ etapas ficam detalhadas; as mais antigas viram uma linha na tabela.
 - Entregou: Turnstile em todo login, obrigatório fora do local (`signInTurnstile` em `zuri-agent.ts`, chaves de teste só no local), `GET /api/auth/login-options` no Worker, `GET /api/auth/activity` com filtros e cursor (`AuthEvents.page`), página `/acessos` (`pages/security/AccessLogPage.tsx`). Relatório `docs/qa/revisao-de-login.md`; passo a passo `docs/configuracao-cloudflare.md`.
 - Migrations: nenhuma (o registro com IP já existia em `zur_auth_events`).
 - Atenção: testes de rota precisam de `turnstileToken: HUMAN_TOKEN` (vitest com chaves inventadas e `test/setup-turnstile.ts`); e2e importa `test` de `tests/e2e/fixtures.ts`. Antes do deploy o Pablo grava `TURNSTILE_SITE_KEY` e `TURNSTILE_SECRET_KEY`.
+
+## Exigências de QA (desde 31/10/2026)
+
+- Toda etapa cumpre os "Portões obrigatórios" e as "Exigências por área" de `docs/qa/estrategia-de-testes.md`. A CI tem pisos de cobertura (`npm run test:coverage`) e o check `lighthouse`.
 
 ## Esperando o Pablo
 
