@@ -7,9 +7,10 @@ import { gzipSync } from "node:zlib";
 
 // Ratchet: lowered with each PR that shrinks the bundle (175 kB when the check
 // came in; 158 kB after the design review left English and the QR and passkey
-// code out of the first load). Never raise it without the owner's OK; the
-// ceiling of P11 is 160 kB and its goal 150 kB.
-const BUDGET_KB = 158;
+// code out of the first load; 140 kB once the interface parsed with Zod Mini).
+// Never raise it without the owner's OK; the ceiling of P11 is 160 kB and its
+// goal 150 kB.
+const BUDGET_KB = 140;
 
 const dist = join(import.meta.dirname, "..", "apps", "web", "dist");
 const html = readFileSync(join(dist, "index.html"), "utf8");
@@ -24,13 +25,26 @@ if (files.length === 0) {
 }
 
 let total = 0;
+const classicZod: string[] = [];
 for (const file of new Set(files)) {
+  const code = readFileSync(join(dist, file));
+  // Classic Zod costs about 18 kB here. It comes back when a schema the first
+  // load reaches is built with `zod` instead of `zod/mini`, or when a schema
+  // in packages/shared lacks its `/* @__PURE__ */` mark and can't be dropped.
+  // The minifier may quote its constructor name with any of the three quotes.
+  if (/["'`]ZodType["'`]/.test(code.toString("utf8"))) classicZod.push(file);
   // Same unit and level as the size Vite prints after the build (kB = 1,000 bytes).
-  const kb = gzipSync(readFileSync(join(dist, file)), { level: 9 }).byteLength / 1000;
+  const kb = gzipSync(code, { level: 9 }).byteLength / 1000;
   total += kb;
   console.log(`${file}: ${kb.toFixed(1)} kB gzip`);
 }
 console.log(`initial JavaScript: ${total.toFixed(1)} kB gzip (budget ${BUDGET_KB} kB)`);
+if (classicZod.length > 0) {
+  console.error(
+    `check-bundle-size: classic Zod is in the first load (${classicZod.join(", ")}). Build what the interface parses with zod/mini and mark every schema in packages/shared with /* @__PURE__ */.`,
+  );
+  process.exit(1);
+}
 if (total > BUDGET_KB) {
   console.error(`check-bundle-size: over the budget by ${(total - BUDGET_KB).toFixed(1)} kB (rule P11)`);
   process.exit(1);

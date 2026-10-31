@@ -56,7 +56,7 @@ export function parseInstant(value: string): string | null {
 }
 
 /** An instant in the API: ISO 8601 with an offset, on a real calendar day. It arrives normalized to UTC. */
-export const instantSchema = z
+export const instantSchema = /* @__PURE__ */ z
   .string()
   .max(40)
   .transform((value, ctx) => {

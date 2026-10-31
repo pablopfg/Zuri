@@ -17,17 +17,17 @@ export const PASSKEY_TIMEOUT_MS = 2 * 60_000;
 const b64url = (max: number) => z.string().max(max).regex(/^[A-Za-z0-9_-]*$/);
 
 const credentialBase = {
-  id: b64url(1400).min(1),
-  rawId: b64url(1400).min(1),
-  type: z.literal("public-key"),
-  clientExtensionResults: z.record(z.string(), z.unknown()).default({}),
-  authenticatorAttachment: z.enum(["platform", "cross-platform"]).optional(),
+  id: /* @__PURE__ */ b64url(1400).min(1),
+  rawId: /* @__PURE__ */ b64url(1400).min(1),
+  type: /* @__PURE__ */ z.literal("public-key"),
+  clientExtensionResults: /* @__PURE__ */ z.record(z.string(), z.unknown()).default({}),
+  authenticatorAttachment: /* @__PURE__ */ z.enum(["platform", "cross-platform"]).optional(),
 };
 
-const name = z.string().trim().min(1).max(PASSKEY_NAME_MAX);
+const name = /* @__PURE__ */ z.string().trim().min(1).max(PASSKEY_NAME_MAX);
 
 /** What navigator.credentials.create returns, as JSON. The server checks every field again. */
-export const passkeyRegistrationSchema = z
+export const passkeyRegistrationSchema = /* @__PURE__ */ z
   .object({
     name,
     response: z.object({
@@ -45,7 +45,7 @@ export const passkeyRegistrationSchema = z
   .strict();
 
 /** What navigator.credentials.get returns, as JSON. */
-export const passkeyAssertionSchema = z
+export const passkeyAssertionSchema = /* @__PURE__ */ z
   .object({
     response: z.object({
       ...credentialBase,
@@ -59,10 +59,10 @@ export const passkeyAssertionSchema = z
   })
   .strict();
 
-export const passkeyRenameSchema = z.object({ name }).strict();
+export const passkeyRenameSchema = /* @__PURE__ */ z.object({ name }).strict();
 
 /** A passkey as the owner's list shows it. Never the public key or the counter. */
-export const passkeyInfoSchema = z
+export const passkeyInfoSchema = /* @__PURE__ */ z
   .object({
     id: z.string(),
     name: z.string(),

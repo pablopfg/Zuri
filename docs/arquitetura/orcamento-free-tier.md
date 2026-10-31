@@ -159,7 +159,12 @@ Numeradas para o PR poder citar ("segue P2 e P4").
   `staleTime` abaixo de 15 s. Cada refetch é uma requisição ao objeto.
   A CI confere com `npm run size`: o teto em `scripts/check-bundle-size.ts`
   começou em 175 kB (a develop estava em 172,8 kB depois do menu recolhível) e
-  só desce, até chegar a 160.
+  só desce; está em 140 kB. Os schemas que a interface usa em tempo de execução
+  (sessão, segundo passo, opções de login, atividade de acesso e erro da API)
+  são escritos com `zod/mini`, e todo schema de `packages/shared` leva
+  `/* @__PURE__ */` para o bundler descartar o que a interface não usa. Assim o
+  zod clássico, que custa cerca de 18 KB, fica só no Worker. A mesma checagem
+  falha se ele voltar ao primeiro carregamento.
 - **P12. Cache certo.** Arquivos com hash: `immutable` por um ano. HTML e
   service worker: `no-cache`. API: `no-store`. O service worker não guarda
   respostas da API.

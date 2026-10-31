@@ -2,8 +2,12 @@
 import "./zod-config.ts";
 
 import { z } from "zod";
+// What the interface parses at runtime is built with Zod Mini: the classic API
+// then stays out of its first bundle (rule P11). Same core, same checks, same answers.
+import { z as mini } from "zod/mini";
 
-const isoDate = z.iso.datetime();
+const isoDate = /* @__PURE__ */ z.iso.datetime();
+const isoInstant = /* @__PURE__ */ mini.iso.datetime();
 
 /** Sign-in and session limits of step 3 (docs/especificacao.md, "Constantes padrão"). */
 export const LOGIN_WINDOW_MS = 15 * 60_000;
@@ -56,19 +60,17 @@ export const MAX_EMAIL_LENGTH = 254;
 export const MAX_PASSWORD_INPUT_LENGTH = 1024;
 export const MAX_TURNSTILE_TOKEN_LENGTH = 2048;
 
-const password = z.string().min(1).max(MAX_PASSWORD_INPUT_LENGTH);
+const password = /* @__PURE__ */ z.string().min(1).max(MAX_PASSWORD_INPUT_LENGTH);
 
 /** Public settings of the sign-in form, answered by the Worker itself (no session, no Durable Object). */
 export const LOGIN_OPTIONS_PATH = "/api/auth/login-options";
-export const loginOptionsSchema = z
-  .object({
-    /** Cloudflare Turnstile's public site key; null only where the check is off (local development without keys). */
-    turnstileSiteKey: z.string().min(1).nullable(),
-  })
-  .strict();
+export const loginOptionsSchema = /* @__PURE__ */ mini.strictObject({
+  /** Cloudflare Turnstile's public site key; null only where the check is off (local development without keys). */
+  turnstileSiteKey: mini.nullable(mini.string().check(mini.minLength(1))),
+});
 export type LoginOptions = z.infer<typeof loginOptionsSchema>;
 
-export const loginRequestSchema = z
+export const loginRequestSchema = /* @__PURE__ */ z
   .object({
     email: z.string().max(MAX_EMAIL_LENGTH),
     password,
@@ -77,9 +79,9 @@ export const loginRequestSchema = z
   .strict();
 
 /** The password again, or (with two-step sign-in on) a current code from the authenticator app. */
-export const confirmRequestSchema = z.union([
-  z.object({ password }).strict(),
-  z.object({ totp: z.string().regex(/^\d{6}$/) }).strict(),
+export const confirmRequestSchema = /* @__PURE__ */ z.union([
+  /* @__PURE__ */ z.object({ password }).strict(),
+  /* @__PURE__ */ z.object({ totp: z.string().regex(/^\d{6}$/) }).strict(),
 ]);
 
 // ---------- Two-step sign-in (step 4) ----------
@@ -109,58 +111,52 @@ export const DEV_MFA_COOKIE = "zuri_mfa";
 export const MAX_MFA_CODE_LENGTH = 40;
 
 /** An authenticator code (6 digits) or, where allowed, a recovery code. */
-export const mfaCodeRequestSchema = z.object({ code: z.string().min(1).max(MAX_MFA_CODE_LENGTH) }).strict();
+export const mfaCodeRequestSchema = /* @__PURE__ */ z.object({ code: z.string().min(1).max(MAX_MFA_CODE_LENGTH) }).strict();
 
 /** The answer to a right password when the second step is on. No session yet. */
-export const mfaRequiredSchema = z
-  .object({
-    mfaRequired: z.literal(true),
-    /** A passkey made for this address exists, so the browser may offer it. */
-    passkey: z.boolean(),
-    expiresAt: isoDate,
-  })
-  .strict();
+export const mfaRequiredSchema = /* @__PURE__ */ mini.strictObject({
+  mfaRequired: mini.literal(true),
+  /** A passkey made for this address exists, so the browser may offer it. */
+  passkey: mini.boolean(),
+  expiresAt: isoInstant,
+});
 
-export const mfaStatusSchema = z
+export const mfaStatusSchema = /* @__PURE__ */ z
   .object({ enabled: z.boolean(), enabledAt: isoDate.nullable(), recoveryCodesLeft: z.number().int().min(0) })
   .strict();
 
 /** A new secret to scan. Nothing changes until it is confirmed with a code. */
-export const mfaSetupSchema = z.object({ secret: z.string(), otpauthUri: z.string(), expiresAt: isoDate }).strict();
+export const mfaSetupSchema = /* @__PURE__ */ z.object({ secret: z.string(), otpauthUri: z.string(), expiresAt: isoDate }).strict();
 
 /** Recovery codes come back once, right here, and never again. */
-export const recoveryCodesSchema = z.object({ recoveryCodes: z.array(z.string()) }).strict();
+export const recoveryCodesSchema = /* @__PURE__ */ z.object({ recoveryCodes: z.array(z.string()) }).strict();
 
-export const heartbeatRequestSchema = z.object({ active: z.boolean() }).strict();
+export const heartbeatRequestSchema = /* @__PURE__ */ z.object({ active: z.boolean() }).strict();
 
-export const changePasswordRequestSchema = z.object({ currentPassword: password, newPassword: password }).strict();
+export const changePasswordRequestSchema = /* @__PURE__ */ z.object({ currentPassword: password, newPassword: password }).strict();
 
 
 /** When each of the three limits ends the session, by the server's clock. */
-export const sessionDeadlinesSchema = z
-  .object({
-    now: isoDate,
-    idleAt: isoDate,
-    presenceAt: isoDate,
-    maxAt: isoDate,
-    /** The inactivity limit, so an open tab can count it from the last use it reported. */
-    idleMinutes: z.number().int().positive(),
-  })
-  .strict();
+export const sessionDeadlinesSchema = /* @__PURE__ */ mini.strictObject({
+  now: isoInstant,
+  idleAt: isoInstant,
+  presenceAt: isoInstant,
+  maxAt: isoInstant,
+  /** The inactivity limit, so an open tab can count it from the last use it reported. */
+  idleMinutes: mini.int().check(mini.positive()),
+});
 
 /** What a signed-in browser learns about its session. Never the e-mail address, never a secret. */
-export const sessionStateSchema = z
-  .object({
-    authenticated: z.literal(true),
-    /** The password in use fails the current rules (or is the plain OWNER_PASSWORD): only changing it works. */
-    passwordChangeRequired: z.boolean(),
-    /** The password is already stored by the app: the owner should delete the OWNER_PASSWORD secret. */
-    removePlainPasswordSecret: z.boolean(),
-    /** Until when sensitive actions work without typing the password again. */
-    recentAuthUntil: isoDate.nullable(),
-    deadlines: sessionDeadlinesSchema,
-  })
-  .strict();
+export const sessionStateSchema = /* @__PURE__ */ mini.strictObject({
+  authenticated: mini.literal(true),
+  /** The password in use fails the current rules (or is the plain OWNER_PASSWORD): only changing it works. */
+  passwordChangeRequired: mini.boolean(),
+  /** The password is already stored by the app: the owner should delete the OWNER_PASSWORD secret. */
+  removePlainPasswordSecret: mini.boolean(),
+  /** Until when sensitive actions work without typing the password again. */
+  recentAuthUntil: mini.nullable(isoInstant),
+  deadlines: sessionDeadlinesSchema,
+});
 
 // ---------- Access activity (shown in Settings > Security) ----------
 
@@ -228,7 +224,7 @@ const activityCursor = /^\d{1,15}:\d{1,15}$/;
  * newest page of everything. `ip` matches the start of the address (digits,
  * letters a to f, dots and colons only), so a whole /24 or /64 can be searched.
  */
-export const authActivityQuerySchema = z
+export const authActivityQuerySchema = /* @__PURE__ */ z
   .object({
     days: z.enum(AUTH_ACTIVITY_PERIODS.map(String) as [string, ...string[]]).transform(Number).optional(),
     group: z.enum(AUTH_ACTIVITY_GROUP_NAMES as [AuthActivityGroup, ...AuthActivityGroup[]]).optional(),
@@ -243,33 +239,29 @@ export const authActivityQuerySchema = z
   .strict();
 export type AuthActivityQuery = z.infer<typeof authActivityQuerySchema>;
 
-export const authActivityEventSchema = z
-  .object({
-    id: z.number().int(),
-    at: isoDate,
-    /** The last of the folded refusals (count > 1). */
-    lastAt: isoDate,
-    kind: z.enum(AUTH_EVENT_KINDS),
-    reason: z.string(),
-    ip: z.string(),
-    country: z.string(),
-    region: z.string(),
-    city: z.string(),
-    /** The visitor's network operator (autonomous system number), as the edge saw it. */
-    asn: z.number().int().nonnegative().nullable(),
-    userAgent: z.string(),
-    knownDevice: z.boolean(),
-    count: z.number().int().min(1),
-  })
-  .strict();
+export const authActivityEventSchema = /* @__PURE__ */ mini.strictObject({
+  id: mini.int(),
+  at: isoInstant,
+  /** The last of the folded refusals (count > 1). */
+  lastAt: isoInstant,
+  kind: mini.enum(AUTH_EVENT_KINDS),
+  reason: mini.string(),
+  ip: mini.string(),
+  country: mini.string(),
+  region: mini.string(),
+  city: mini.string(),
+  /** The visitor's network operator (autonomous system number), as the edge saw it. */
+  asn: mini.nullable(mini.int().check(mini.nonnegative())),
+  userAgent: mini.string(),
+  knownDevice: mini.boolean(),
+  count: mini.int().check(mini.minimum(1)),
+});
 
-export const authActivitySchema = z
-  .object({
-    events: z.array(authActivityEventSchema),
-    /** Pass as `before` for the next page; null on the last one. */
-    nextCursor: z.string().regex(activityCursor).nullable(),
-  })
-  .strict();
+export const authActivitySchema = /* @__PURE__ */ mini.strictObject({
+  events: mini.array(authActivityEventSchema),
+  /** Pass as `before` for the next page; null on the last one. */
+  nextCursor: mini.nullable(mini.string().check(mini.regex(activityCursor))),
+});
 
 export type AuthActivityEvent = z.infer<typeof authActivityEventSchema>;
 export type AuthActivity = z.infer<typeof authActivitySchema>;
