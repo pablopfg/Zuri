@@ -215,6 +215,8 @@ export class Passkeys {
   async authenticationOptions(
     rp: RelyingParty,
     userVerification: UserVerification,
+    /** A request already stored and still live, to send again instead of a new one (base64url). */
+    challenge?: string,
   ): Promise<{ options: PublicKeyCredentialRequestOptionsJSON; challenge: string; expiresAt: number } | null> {
     const rows = this.rows().filter((r) => r.rp_id === rp.rpId);
     if (rows.length === 0) return null;
@@ -223,6 +225,7 @@ export class Passkeys {
       allowCredentials: rows.map((r) => ({ id: r.id, transports: transportsOf(r) })),
       timeout: PASSKEY_TIMEOUT_MS,
       userVerification,
+      ...(challenge === undefined ? {} : { challenge: fromBase64Url(challenge) as Uint8Array<ArrayBuffer> }),
     });
     return { options, challenge: options.challenge, expiresAt: this.clock() + PASSKEY_TIMEOUT_MS };
   }

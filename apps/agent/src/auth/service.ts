@@ -339,14 +339,20 @@ export class AuthService {
     });
   }
 
-  /** The passkey request for the sign-in waiting for its second step. NOT_FOUND when no passkey fits this host. */
-  async passkeyOptions(token: string | null) {
+  /**
+   * The passkey request for the sign-in waiting for its second step. NOT_FOUND
+   * when no passkey fits this host. A request still live is sent again rather
+   * than replaced, so asking over and over costs no writes.
+   */
+  async passkeyOptions(token: string | null, client: ClientInfo) {
     await this.sync();
     this.requireConfigured();
     const row = await this.liveChallenge(token, null);
-    const request = await this.passkeys.authenticationOptions(this.relyingParty, "preferred");
+    this.assertCodesAllowed(client, "passkey");
+    const live = row.webauthn_challenge !== null && (row.webauthn_expires_at ?? 0) > this.#clock() ? row.webauthn_challenge : undefined;
+    const request = await this.passkeys.authenticationOptions(this.relyingParty, "preferred", live);
     if (!request) throw new AppError("NOT_FOUND", "auth.passkey.noneHere");
-    this.twoStep.saveWebauthnChallenge(row.id, request.challenge, request.expiresAt);
+    if (live === undefined) this.twoStep.saveWebauthnChallenge(row.id, request.challenge, request.expiresAt);
     return request.options;
   }
 
@@ -368,7 +374,8 @@ export class AuthService {
   private assertCodesAllowed(client: ClientInfo, reason: string): void {
     const until = this.twoStep.pausedUntil();
     if (until === null || this.limiter.isTrusted(client.network)) return;
-    this.events.record("mfa_failure", client, { reason: `${reason}_paused` });
+    // A refusal like a blocked sign-in: folded per network, so hammering a pause costs no writes.
+    this.recordRefusal("login_rate_limited", client, `mfa_${reason}`);
     throw new AppError("RATE_LIMITED", undefined, { retryAfter: Math.max(1, Math.ceil((until - this.#clock()) / 1000)) });
   }
 

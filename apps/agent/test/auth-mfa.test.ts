@@ -274,6 +274,35 @@ describe("signing in with the second step on", () => {
   });
 });
 
+describe("hammering a pause", () => {
+  it("SEC-4-01: paused tries on one challenge cost one row of activity, then no writes at all", async () => {
+    await withAuth("mfa-pause-writes", async (h) => {
+      const { secret } = await turnOn(h);
+      for (let i = 0; i < 10; i++) {
+        const net = `203.0.113.${140 + i}`;
+        await outcome(h.service.completeMfa(await challenge(h, net), await wrongCode(h, secret), client(net), noCookies));
+      }
+      const net = "203.0.113.160";
+      const token = await challenge(h, net);
+      const right = await code(h, secret);
+      expect(await outcome(h.service.completeMfa(token, right, client(net), noCookies))).toBe("RATE_LIMITED");
+
+      const run = h.db.run.bind(h.db);
+      let written = 0;
+      h.db.run = (query, ...params) => {
+        const result = run(query, ...params);
+        written += result.rowsWritten;
+        return result;
+      };
+      for (let i = 0; i < 50; i++) {
+        expect(await outcome(h.service.completeMfa(token, right, client(net), noCookies))).toBe("RATE_LIMITED");
+      }
+      expect(written).toBe(0);
+      expect(h.events().filter((e) => e.kind === "login_rate_limited" && e.reason === "mfa_code")).toHaveLength(1);
+    });
+  });
+});
+
 describe("second steps sent together", () => {
   it("QA-4-01: a burst of wrong codes from unknown networks can't slip under the pause while the codes are checked", async () => {
     await withAuth("mfa-burst", async (h) => {

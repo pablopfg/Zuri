@@ -134,6 +134,9 @@ chega na etapa 5). Recomendado ligar logo depois do primeiro login.
   somando todos os desafios e redes, pausam as redes desconhecidas (sem login
   nos últimos 30 dias) com 429 `RATE_LIMITED` até a janela passar. Quem tem a
   senha não compra mais chutes espalhando pedidos. As redes do dono seguem.
+  Os pedidos recusados pela pausa viram uma linha só na atividade por rede e
+  janela, e pedir de novo as opções de passkey devolve o mesmo pedido ainda
+  válido: insistir não gasta a cota de gravações do plano gratuito.
 - **Alertas.** 3 segundos passos errados seguidos, ligar ou desligar a
   verificação, gerar códigos novos, usar um código de recuperação, adicionar ou
   remover uma passkey: eventos com alerta (entregues na etapa 11). Ligar ou

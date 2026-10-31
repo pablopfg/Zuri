@@ -35,7 +35,7 @@ async function challenge(h: Harness): Promise<MfaPending["mfa"]> {
 
 async function signInWith(h: Harness, key: SoftPasskey, tweak: Parameters<SoftPasskey["assert"]>[2] = {}) {
   const pending = await challenge(h);
-  const options = await h.service.passkeyOptions(pending.token);
+  const options = await h.service.passkeyOptions(pending.token, client(NET));
   const response = await key.assert(options, TEST_RP.origin, tweak);
   return { pending, options, response, result: h.service.completePasskey(pending.token, response, client(NET), noCookies) };
 }
@@ -151,10 +151,10 @@ describe("signing in with a passkey", () => {
 
       // Same answer on a new challenge: its WebAuthn challenge is another one.
       const pending = await challenge(h);
-      await h.service.passkeyOptions(pending.token);
+      await h.service.passkeyOptions(pending.token, client(NET));
       expect(await outcome(h.service.completePasskey(pending.token, first.response, client(NET), noCookies))).toBe("INVALID_CREDENTIALS");
       // A right answer after a wrong one needs a new request: the old one went with the wrong answer.
-      const options = await h.service.passkeyOptions(pending.token);
+      const options = await h.service.passkeyOptions(pending.token, client(NET));
       const response = await key.assert(options, TEST_RP.origin);
       expect(await outcome(h.service.completePasskey(pending.token, response, client(NET), noCookies))).toBe("ok");
     });
@@ -165,7 +165,7 @@ describe("signing in with a passkey", () => {
       const { row } = await turnOn(h);
       const { key } = await addPasskey(h.service, row);
       const pending = await challenge(h);
-      const options = await h.service.passkeyOptions(pending.token);
+      const options = await h.service.passkeyOptions(pending.token, client(NET));
       const bad = await key.assert(options, TEST_RP.origin, { wrongKey: true });
       expect(await outcome(h.service.completePasskey(pending.token, bad, client(NET), noCookies))).toBe("INVALID_CREDENTIALS");
       const good = await key.assert(options, TEST_RP.origin);
@@ -194,12 +194,39 @@ describe("signing in with a passkey", () => {
     });
   });
 
+  it("SEC-4-01: asking again while a request is live sends the same one and writes nothing", async () => {
+    await withAuth("pk-options-again", async (h) => {
+      const { row } = await turnOn(h);
+      const { key } = await addPasskey(h.service, row);
+      const pending = await challenge(h);
+      const first = await h.service.passkeyOptions(pending.token, client(NET));
+      const run = h.db.run.bind(h.db);
+      let written = 0;
+      h.db.run = (query, ...params) => {
+        const result = run(query, ...params);
+        written += result.rowsWritten;
+        return result;
+      };
+      for (let i = 0; i < 20; i++) expect((await h.service.passkeyOptions(pending.token, client(NET))).challenge).toBe(first.challenge);
+      expect(written).toBe(0);
+      h.db.run = run;
+      // Still the one request, used once.
+      const response = await key.assert(first, TEST_RP.origin);
+      expect(await outcome(h.service.completePasskey(pending.token, response, client(NET), noCookies))).toBe("ok");
+      // Once it expires, a new one.
+      const next = await challenge(h);
+      const old = await h.service.passkeyOptions(next.token, client(NET));
+      h.clock.advance(PASSKEY_TIMEOUT_MS);
+      expect((await h.service.passkeyOptions(next.token, client(NET))).challenge).not.toBe(old.challenge);
+    });
+  });
+
   it("a request is good for 2 minutes (expired challenge)", async () => {
     await withAuth("pk-expired", async (h) => {
       const { row } = await turnOn(h);
       const { key } = await addPasskey(h.service, row);
       const pending = await challenge(h);
-      const options = await h.service.passkeyOptions(pending.token);
+      const options = await h.service.passkeyOptions(pending.token, client(NET));
       h.clock.advance(PASSKEY_TIMEOUT_MS);
       const response = await key.assert(options, TEST_RP.origin);
       expect(await outcome(h.service.completePasskey(pending.token, response, client(NET), noCookies))).toBe("INVALID_CREDENTIALS");
@@ -224,11 +251,11 @@ describe("signing in with a passkey", () => {
       const { key } = await addPasskey(h.service, row);
       const pending = await challenge(h);
       for (let i = 0; i < 4; i++) {
-        const options = await h.service.passkeyOptions(pending.token);
+        const options = await h.service.passkeyOptions(pending.token, client(NET));
         const response = await key.assert(options, TEST_RP.origin, { wrongKey: true });
         expect(await outcome(h.service.completePasskey(pending.token, response, client(NET), noCookies))).toBe("INVALID_CREDENTIALS");
       }
-      const options = await h.service.passkeyOptions(pending.token);
+      const options = await h.service.passkeyOptions(pending.token, client(NET));
       const response = await key.assert(options, TEST_RP.origin, { wrongKey: true });
       expect(await failure(h.service.completePasskey(pending.token, response, client(NET), noCookies))).toMatchObject({
         code: "UNAUTHORIZED",
@@ -260,7 +287,7 @@ describe("passkeys of another host", () => {
       // An answer signed for the other host, or naming a passkey of the other host, is refused.
       expect(await outcome((await signInWith(h, here, { rpId: OTHER_RP.rpId })).result)).toBe("INVALID_CREDENTIALS");
       const pending = await challenge(h);
-      const request = await h.service.passkeyOptions(pending.token);
+      const request = await h.service.passkeyOptions(pending.token, client(NET));
       const foreign = await there.assert(request, OTHER_RP.origin, { rpId: OTHER_RP.rpId });
       expect(await outcome(h.service.completePasskey(pending.token, foreign, client(NET), noCookies))).toBe("INVALID_CREDENTIALS");
     });
@@ -272,7 +299,7 @@ describe("passkeys of another host", () => {
       h.db.run(`INSERT INTO zur_passkeys (id, name, public_key, rp_id, created_at) VALUES ('antigo', 'Antigo', 'x', ?, 1)`, OTHER_RP.rpId);
       const pending = await challenge(h);
       expect(pending.passkey).toBe(false);
-      expect(await failure(h.service.passkeyOptions(pending.token))).toMatchObject({ code: "NOT_FOUND", messageKey: "auth.passkey.noneHere" });
+      expect(await failure(h.service.passkeyOptions(pending.token, client(NET)))).toMatchObject({ code: "NOT_FOUND", messageKey: "auth.passkey.noneHere" });
     });
   });
 });
