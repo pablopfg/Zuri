@@ -10,6 +10,7 @@ export const ptBRAi = {
   "error.aiQuotaExhausted":
     "A cota grátis de Workers AI da sua conta Cloudflare acabou por hoje. Tarefas, notas e memórias continuam funcionando; a IA volta quando a cota renovar.",
   "error.aiAborted": "A resposta foi interrompida.",
+  "error.aiTimeout": "O modelo demorou demais para responder. Tente de novo.",
   "error.aiBusy": "A IA da Cloudflare está ocupada agora. Tente de novo em instantes.",
   "error.aiModelUnavailable": "O modelo de IA escolhido não está disponível. Escolha outro em Configurações > IA.",
   "error.aiUnavailable": "A IA não conseguiu responder. Tente de novo.",

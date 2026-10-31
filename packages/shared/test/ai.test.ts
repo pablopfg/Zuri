@@ -6,9 +6,12 @@ import {
   chatNeurons,
   DEFAULT_CHAT_MODEL,
   EMBEDDING_NEURONS_PER_MILLION,
+  EMBEDDING_MODEL,
   isChatModel,
+  modelLabel,
   neuronsToUsd,
   settingsSchema,
+  TRANSCRIPTION_MODEL,
   TRANSCRIPTION_NEURONS_PER_MINUTE,
   TYPICAL_TURN_TOKENS,
   usageReportSchema,
@@ -59,6 +62,16 @@ describe("the dated Workers AI price table", () => {
     // The owner's decision of 31/10/2026: one cap of 9,000, between 1,000 and 9,000.
     expect(AI_LIMIT_RANGES.aiNeuronsPerDay).toEqual({ min: 1_000, max: 9_000, default: 9_000 });
     expect(settingsSchema.shape.aiModel.safeParse("@cf/openai/gpt-oss-20b").success).toBe(false);
+  });
+});
+
+describe("modelLabel", () => {
+  it("names each chat model, the transcription and embedding models, and shows an unknown id as it is", () => {
+    for (const id of CHAT_MODEL_IDS) expect(modelLabel(id)).toBe(CHAT_MODELS[id].label);
+    expect(modelLabel(TRANSCRIPTION_MODEL)).toBe("Whisper Large v3 Turbo");
+    expect(modelLabel(EMBEDDING_MODEL)).toBe("BGE-M3");
+    expect(modelLabel("@cf/meta/llama-2-7b-chat-fp16")).toBe("@cf/meta/llama-2-7b-chat-fp16");
+    expect(modelLabel("__proto__")).toBe("__proto__");
   });
 });
 

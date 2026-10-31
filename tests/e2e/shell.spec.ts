@@ -121,7 +121,7 @@ test("settings has the six tabs, each with its address and content @mobile", asy
   const tabs = page.getByRole("navigation", { name: "Seções das configurações" });
   for (const [name, path, text] of [
     ["Segurança", "seguranca", "Atividade de acesso"],
-    ["IA", "ia", "provedor de IA"],
+    ["IA", "ia", "Uso de hoje"],
     ["Avisos", "avisos", "central de avisos"],
     ["Integrações", "integracoes", "Google Agenda"],
     ["Dados", "dados", "Backup e uso do armazenamento"],

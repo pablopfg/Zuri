@@ -1,12 +1,19 @@
 import { generateText, streamText, type ToolSet } from "ai";
 import { createWorkersAI } from "workers-ai-provider";
 import type { AgentEvent, AIProvider, GenerateRequest, ToolRequest } from "./provider.ts";
-import { classifyAiError } from "./provider.ts";
+import { classifyAiError, estimateTokens } from "./provider.ts";
 import { meteredBinding, type StepMeter, stepUsage } from "./workers-ai-usage.ts";
 
 // The SDK would log every provider warning (an unsupported setting, say) with
 // console.warn on the common path: each line is a billed log event (rule P10).
 (globalThis as { AI_SDK_LOG_WARNINGS?: boolean }).AI_SDK_LOG_WARNINGS = false;
+
+/**
+ * The models whose chat template has a "thinking" switch (their model pages
+ * list `chat_template_kwargs`). The Llama models do not take the field, and an
+ * unknown input could make Cloudflare refuse every call to them.
+ */
+const THINKING_MODELS: ReadonlySet<string> = new Set(["@cf/zai-org/glm-4.7-flash", "@cf/qwen/qwen3-30b-a3b-fp8"]);
 
 /**
  * Cloudflare Workers AI through the AI SDK and Cloudflare's own provider for it.
@@ -22,14 +29,19 @@ export class WorkersAIProvider implements AIProvider {
     readonly model: string,
   ) {}
 
-  private createModel(steps: StepMeter[]) {
-    const workersai = createWorkersAI({ binding: meteredBinding(this.binding, steps) });
-    return workersai(this.model as Parameters<typeof workersai>[0], {
-      chat_template_kwargs: { enable_thinking: false },
-    });
+  private createModel(steps: StepMeter[], closed: () => boolean) {
+    const workersai = createWorkersAI({ binding: meteredBinding(this.binding, steps, closed) });
+    return workersai(
+      this.model as Parameters<typeof workersai>[0],
+      THINKING_MODELS.has(this.model) ? { chat_template_kwargs: { enable_thinking: false } } : {},
+    );
   }
 
-  /** Hands every started call that was not reported yet to `onStepUsage`. */
+  /**
+   * Hands every started call that was not reported yet to `onStepUsage`. After
+   * it, the turn is closed: a call the SDK would still start (a step after the
+   * Stop button) is refused, so none runs without being counted.
+   */
   private flush(req: GenerateRequest, steps: StepMeter[], lastOutputChars: number): void {
     for (const [index, meter] of steps.entries()) {
       if (meter.reported) continue;
@@ -40,10 +52,11 @@ export class WorkersAIProvider implements AIProvider {
 
   async generate(req: GenerateRequest): Promise<{ text: string }> {
     const steps: StepMeter[] = [];
+    let closed = false;
     let outputChars = 0;
     try {
       const result = await generateText({
-        model: this.createModel(steps),
+        model: this.createModel(steps, () => closed),
         instructions: req.system,
         messages: req.messages,
         maxOutputTokens: req.maxOutputTokens,
@@ -57,6 +70,7 @@ export class WorkersAIProvider implements AIProvider {
       throw classifyAiError(error);
     } finally {
       // A call that reached the binding is metered, whether it answered, failed or was aborted.
+      closed = true;
       this.flush(req, steps, outputChars);
     }
   }
@@ -76,11 +90,12 @@ export class WorkersAIProvider implements AIProvider {
     }
     const hasTools = req.tools.length > 0;
     const steps: StepMeter[] = [];
+    let closed = false;
     let stepIndex = 0;
     let stepOutputChars = 0;
     let streamError: unknown = null;
     const result = streamText({
-      model: this.createModel(steps),
+      model: this.createModel(steps, () => closed),
       instructions: req.system,
       messages: req.messages,
       maxOutputTokens: req.maxOutputTokens,
@@ -91,8 +106,8 @@ export class WorkersAIProvider implements AIProvider {
         ? {
             tools,
             // Each further step is another model call: stop at the cap or when the daily limits say so.
-            stopWhen: ({ steps: done }: { steps: unknown[] }) =>
-              done.length >= req.maxIterations || (req.reserveNextStep ? !req.reserveNextStep() : false),
+            stopWhen: ({ steps: done }: { steps: { toolResults?: unknown }[] }) =>
+              done.length >= req.maxIterations || (req.reserveNextStep ? !req.reserveNextStep(nextPrompt(steps, done)) : false),
             // On the last allowed step, or with the tool budget spent, the model must answer in text.
             prepareStep: ({ stepNumber }: { stepNumber: number }) =>
               stepNumber >= req.maxIterations - 1 || req.toolBudgetExhausted() ? { toolChoice: "none" as const } : {},
@@ -151,11 +166,22 @@ export class WorkersAIProvider implements AIProvider {
     } finally {
       // Runs also when the caller stops reading (the Stop button, a closed tab):
       // every call that started is metered before anything else happens.
+      closed = true;
       this.flush(req, steps, stepOutputChars);
     }
     failure ??= streamError;
     if (failure) throw classifyAiError(failure);
   }
+}
+
+/**
+ * The next step's prompt, in tokens: the last prompt, plus what the model
+ * answered in it, plus the tool results it gets back.
+ */
+function nextPrompt(steps: StepMeter[], done: { toolResults?: unknown }[]): number {
+  const last = steps.at(-1);
+  const previous = last ? (last.input ?? last.inputEstimate) + (last.output ?? estimateTokens(last.outputChars)) : 0;
+  return previous + estimateTokens(JSON.stringify(done.at(-1)?.toolResults ?? []));
 }
 
 /** Optional call settings, left out rather than passed as undefined. */

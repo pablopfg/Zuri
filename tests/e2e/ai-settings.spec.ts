@@ -96,3 +96,55 @@ test("the model and the limits: out-of-range values are refused on the spot, the
   });
   expect(reset.status()).toBe(200);
 });
+
+test("the usage card warns near and at the limit, and a failed report shows an error with a retry", async ({ page }) => {
+  // The report as the server would send it on a busy day of Workers AI, with no real calls made.
+  let mode: "near" | "at" | "fail" = "near";
+  const report = (requests: number, neurons: number) => ({
+    day: "2026-10-31",
+    resetsAt: "2026-11-01T00:00:00.000Z",
+    provider: "workers-ai",
+    model: "@cf/zai-org/glm-4.7-flash",
+    today: {
+      requests,
+      errors: 2,
+      aborted: 1,
+      neurons,
+      costUsd: (neurons * 0.011) / 1_000,
+      audioSeconds: 90,
+      models: [
+        { model: "@cf/zai-org/glm-4.7-flash", kind: "chat", billable: true, calls: requests, inputTokens: 900_000, outputTokens: 40_000, estimatedTokens: 0, audioSeconds: 0, neurons, costUsd: (neurons * 0.011) / 1_000 },
+      ],
+    },
+    limits: { requestsPerDay: 200, neuronsPerDay: 9_000, audioSecondsPerDay: 3_600, maxOutputTokens: 1_024 },
+    lastDays: [{ day: "2026-10-31", requests, neurons }],
+    pricing: { asOf: "2026-10-31", sourceUrl: "https://developers.cloudflare.com/workers-ai/platform/pricing/", usdPer1000Neurons: 0.011, freeNeuronsPerDay: 10_000 },
+  });
+  await page.route("**/api/usage", (route) =>
+    mode === "fail"
+      ? route.fulfill({ status: 503, contentType: "application/json", body: JSON.stringify({ code: "SERVICE_UNAVAILABLE", message: "Serviço indisponível." }) })
+      : route.fulfill({ status: 200, contentType: "application/json", headers: { "cache-control": "no-store" }, body: JSON.stringify(mode === "near" ? report(170, 6_000) : report(200, 7_400)) }),
+  );
+  await openAiTab(page);
+  const usage = page.getByRole("region", { name: "Uso de hoje" });
+  await expect(usage.getByText("Provedor: Workers AI")).toBeVisible();
+  await expect(usage.getByText(/Perto do limite/)).toBeVisible();
+  await expect(usage.getByText(/Limite do dia atingido/)).toHaveCount(0);
+  await expect(usage.getByRole("meter", { name: "Pedidos à IA" })).toHaveAttribute("aria-valuetext", "170 de 200 · 85% usado");
+  await expect(usage.getByText("2 com erro · 1 interrompidas")).toBeVisible();
+
+  mode = "at";
+  await page.reload();
+  await expect(usage.getByText("Limite do dia atingido. A IA volta às 21:00.")).toBeVisible();
+  await expect(usage.getByText(/Perto do limite/)).toHaveCount(0);
+  await expectAccessible(page, "ia-no-limite");
+
+  mode = "fail";
+  await page.reload();
+  const retry = usage.getByRole("button", { name: "Tentar de novo" });
+  await expect(retry).toBeVisible({ timeout: 15_000 });
+  mode = "near";
+  await retry.focus();
+  await page.keyboard.press("Enter");
+  await expect(usage.getByText(/Perto do limite/)).toBeVisible();
+});

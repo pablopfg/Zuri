@@ -517,6 +517,7 @@ export const en: Messages = {
   "error.aiQuotaExhausted":
     "Your Cloudflare account has used its free Workers AI allocation for today. Tasks, notes and memories keep working; the AI comes back when the allocation resets.",
   "error.aiAborted": "The answer was stopped.",
+  "error.aiTimeout": "The model took too long to answer. Try again.",
   "error.aiBusy": "Cloudflare's AI is busy right now. Try again in a moment.",
   "error.aiModelUnavailable": "The chosen AI model is not available. Pick another one in Settings > AI.",
   "error.aiUnavailable": "The AI could not answer. Try again.",

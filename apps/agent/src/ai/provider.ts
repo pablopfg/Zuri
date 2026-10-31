@@ -36,8 +36,10 @@ export interface GenerateRequest {
    * Asked before every model call after the first one (another tool step). It
    * counts the call against the daily limits and returns false when they are
    * spent, which ends the turn with the text the model has given so far.
+   * `inputTokens` is the provider's estimate of the next prompt, which carries
+   * the earlier steps and the tool results: larger than the first one.
    */
-  reserveNextStep?: () => boolean;
+  reserveNextStep?: (inputTokens?: number) => boolean;
 }
 
 /** A tool as a provider sees it. Permissions and limits are enforced by `execute` (step 9). */
@@ -99,11 +101,12 @@ export function tokens(reported: number | undefined, estimate: number): TokenCou
 export function classifyAiError(error: unknown): AppError {
   if (error instanceof AppError) return error;
   const text = errorText(error).toLowerCase();
-  if (text.includes("4006") || text.includes("free allocation") || text.includes("neurons")) {
+  // Cloudflare's own wording only: any error that merely mentions Neurons is not a spent allocation.
+  if (text.includes("4006") || text.includes("daily free allocation")) {
     return new AppError("AI_LIMIT_REACHED", "error.aiQuotaExhausted", { limit: "account" });
   }
   if (isAbort(error) || text.includes("abort")) return new AppError("SERVICE_UNAVAILABLE", "error.aiAborted");
-  if (text.includes("3040") || text.includes("capacity") || text.includes("429") || text.includes("rate limit") || text.includes("too many")) {
+  if (text.includes("3040") || text.includes("capacity") || httpStatus(error) === 429 || text.includes("rate limit") || text.includes("too many requests")) {
     return new AppError("SERVICE_UNAVAILABLE", "error.aiBusy");
   }
   if (text.includes("5007") || text.includes("no such model") || text.includes("model not found")) {
@@ -116,6 +119,14 @@ export function classifyAiError(error: unknown): AppError {
 
 export function isAbort(error: unknown): boolean {
   return error instanceof Error && (error.name === "AbortError" || error.name === "TimeoutError");
+}
+
+/** The HTTP status an error carries (`status` or `statusCode`), on it or on its cause. */
+function httpStatus(error: unknown, depth = 0): number | undefined {
+  if (!(error instanceof Error) || depth > 3) return undefined;
+  const { status, statusCode, cause } = error as { status?: unknown; statusCode?: unknown; cause?: unknown };
+  for (const value of [status, statusCode]) if (typeof value === "number") return value;
+  return httpStatus(cause, depth + 1);
 }
 
 function errorText(error: unknown, depth = 0): string {

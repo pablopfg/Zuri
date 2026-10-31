@@ -14,8 +14,10 @@ ferramentas chega na etapa 9 e usa o que está aqui.
   `generateWithTools`.
 - O Workers AI usa o AI SDK (`ai` 7.0.137) com o provedor oficial da
   Cloudflare (`workers-ai-provider` 4.0.0). O raciocínio do modelo fica
-  desligado (`enable_thinking: false`), as novas tentativas do SDK também
-  (`maxRetries: 0`) e a telemetria do SDK também.
+  desligado (`enable_thinking: false`) nos modelos cujo template tem essa
+  chave (GLM 4.7 Flash e Qwen3); os Llama não recebem o campo. As novas
+  tentativas do SDK ficam desligadas (`maxRetries: 0`), e a telemetria do SDK
+  também.
 - Sem o binding `AI` fora do ambiente local, a IA responde `NOT_CONFIGURED`.
 - `npm run dev` e os testes e2e rodam o `wrangler dev --local`: o binding de IA
   fica desligado e nada sai para a conta da Cloudflare.
@@ -59,6 +61,10 @@ não muda.
 
 - O teto de 9.000 é decisão do Pablo (31/10/2026): fica 1.000 abaixo da cota
   grátis, para sobrar folga a outro uso da conta.
+- O teto vale para o Zuri; a cota de 10.000 é da **conta** inteira. Outro
+  Worker que use Workers AI na mesma conta gasta da mesma cota sem o Zuri ver.
+  No plano Free, a cota esgotada só faz a Cloudflare recusar (4006); numa
+  conta Workers Paid, esse outro uso pode ser cobrado.
 - Os dias são dias **UTC**, porque a cota da Cloudflare renova às 00:00 UTC
   (21:00 em Brasília). A tela mostra a hora da renovação no fuso do dono.
 
@@ -76,11 +82,22 @@ não muda.
 3. **Depois** (`settle`): a reserva vira o gasto de verdade (tokens informados
    pela Cloudflare ou, sem eles, estimados), por passo. Uma chamada com
    ferramentas conta um pedido por passo; o passo seguinte só acontece se a
-   reserva dele couber.
+   reserva dele couber, e essa reserva já inclui o prompt anterior, a resposta
+   do passo e os resultados das ferramentas. Se a Cloudflare informar mais do
+   que o reservado, o gasto entra inteiro e a próxima chamada que não couber é
+   recusada; o excesso fica limitado às chamadas já em andamento, dentro da
+   folga de 1.000 Neurons.
 4. **Falha ou parada**: a chamada que chegou ao modelo é contada mesmo assim,
    com o que se viu dela. Parar a leitura no meio (botão Parar, aba fechada) ou
-   abortar pelo sinal conta como interrompida. Uma reserva cuja chamada nunca
-   começou é devolvida.
+   abortar pelo sinal conta como interrompida. Quando a vez termina, de
+   qualquer jeito, o sinal da chamada é cancelado e o medidor fecha: nenhuma
+   chamada nova ao modelo começa depois. Uma reserva cuja chamada nunca começou
+   é devolvida.
+5. **Prazo**: cada vez tem até 120 s (`AI_TURN_DEADLINE_MS`). Passou disso, a
+   chamada é cancelada, conta como falha e a resposta é
+   `503 SERVICE_UNAVAILABLE` com "O modelo demorou demais para responder". O
+   relógio é desligado no fim da vez, então nada segura o Durable Object
+   (regra P5).
 
 Concorrência: a conferência e a reserva acontecem num único passo síncrono do
 Durable Object, que roda um pedaço de JavaScript por vez. N pedidos ao mesmo

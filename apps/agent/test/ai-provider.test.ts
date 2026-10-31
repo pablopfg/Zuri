@@ -18,6 +18,12 @@ function today(world: AiWorld, limits = LIMITS) {
   return world.meter.report(limits, "workers-ai", GLM).today;
 }
 
+function signalOf(call: { options: Record<string, unknown> | undefined }): AbortSignal {
+  const signal = call.options?.signal;
+  if (!(signal instanceof AbortSignal)) throw new Error("the call has no signal");
+  return signal;
+}
+
 async function rejection(promise: Promise<unknown>): Promise<AppError> {
   try {
     await promise;
@@ -261,6 +267,7 @@ describe("Workers AI: every call that started is metered", () => {
         stream: async function* () {},
         generateWithTools: async function* (req: ToolRequest) {
           req.onStepUsage?.(usage);
+          yield { type: "text", delta: "partial" };
           expect(req.reserveNextStep?.()).toBe(true);
           throw new Error("network went away");
         },
@@ -348,5 +355,137 @@ describe("errors and the choice of provider", () => {
     const real = chooseProvider({ development: false, binding, model: GLM, locale: () => "pt-BR" });
     expect([real.id, real.model, real.billable]).toEqual(["workers-ai", GLM, true]);
     expect(() => chooseProvider({ development: false, binding: undefined, model: GLM, locale: () => "pt-BR" })).toThrow(AppError);
+  });
+});
+
+describe("review fixes: what each model takes, the end of a turn, its deadline and its next steps", () => {
+  const toolCall = { response: null, tool_calls: [{ id: "c1", type: "function", function: { name: "read_note", arguments: "{}" } }], usage: { prompt_tokens: 400, completion_tokens: 20 } };
+
+  it("sends the thinking switch only to the models whose template has it", async () => {
+    await withAiWorld(async (world) => {
+      for (const [model, takesIt] of [
+        [GLM, true],
+        ["@cf/qwen/qwen3-30b-a3b-fp8", true],
+        ["@cf/meta/llama-3.3-70b-instruct-fp8-fast", false],
+        ["@cf/meta/llama-4-scout-17b-16e-instruct", false],
+      ] as const) {
+        const { binding, calls } = fakeAi(() => sse([delta("ok"), usageChunk(10, 1)]));
+        await drain(new MeteredAI(new WorkersAIProvider(binding, model), world.meter, () => LIMITS).stream(ask()));
+        expect("chat_template_kwargs" in (calls[0]?.inputs ?? {}), model).toBe(takesIt);
+      }
+    });
+  });
+
+  it("meters reasoning under either name the provider reads, and refuses any call after the turn ended", async () => {
+    const { meteredBinding } = await import("../src/ai/workers-ai-usage.ts");
+    const { binding, calls } = fakeAi(() => sse([{ choices: [{ delta: { reasoning: "r".repeat(400) } }] }, { choices: [{ delta: { reasoning_content: "s".repeat(40) } }] }]));
+    const steps: import("../src/ai/workers-ai-usage.ts").StepMeter[] = [];
+    let closed = false;
+    const metered = meteredBinding(binding, steps, () => closed);
+    const stream = (await metered.run(GLM as never, { messages: [] } as never)) as unknown as ReadableStream<Uint8Array>;
+    await new Response(stream).text();
+    expect(steps[0]?.outputChars).toBe(440);
+    closed = true;
+    await expect(metered.run(GLM as never, { messages: [] } as never)).rejects.toMatchObject({ name: "AbortError" });
+    expect(calls).toHaveLength(1);
+    expect(steps).toHaveLength(1);
+  });
+
+  it("starts no model call after the caller stops reading a turn with tools", async () => {
+    await withAiWorld(async (world) => {
+      const { binding, calls } = fakeAi((_call, index) => (index === 0 ? toolCall : { response: "nunca" }));
+      const tool: ProviderTool = { name: "read_note", description: "Reads a note", inputSchema: z.object({}), execute: async () => ({ text: "nota" }) };
+      const ai = new MeteredAI(new WorkersAIProvider(binding, GLM), world.meter, () => LIMITS);
+      for await (const event of ai.generateWithTools({ ...ask(), tools: [tool], maxIterations: 4, toolBudgetExhausted: () => false })) {
+        if (event.type === "tool-start") break;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 30));
+      expect(calls).toHaveLength(1);
+      expect(today(world)).toMatchObject({ requests: 1, aborted: 1 });
+      expect(today(world).models[0]).toMatchObject({ calls: 1 });
+    });
+  });
+
+  it("ends a stuck answer at the deadline, counted as a failure, for a stream and for generate()", async () => {
+    await withAiWorld(async (world) => {
+      const { binding } = fakeAi((call) =>
+        call.inputs.stream
+          ? sse([delta("Começ")], { open: true, signal: call.options?.signal as AbortSignal })
+          : new Promise((_resolve, reject) => signalOf(call).addEventListener("abort", () => reject(signalOf(call).reason))),
+      );
+      const ai = new MeteredAI(new WorkersAIProvider(binding, GLM), world.meter, () => LIMITS, 30);
+      expect(await rejection(drain(ai.stream(ask())))).toMatchObject({ code: "SERVICE_UNAVAILABLE", messageKey: "error.aiTimeout" });
+      expect(await rejection(ai.generate(ask()))).toMatchObject({ code: "SERVICE_UNAVAILABLE", messageKey: "error.aiTimeout" });
+      expect(today(world)).toMatchObject({ requests: 2, errors: 2, aborted: 0 });
+      expect(today(world).neurons).toBeGreaterThan(0);
+    });
+  });
+
+  it("counts a generate() call the owner stops halfway as aborted", async () => {
+    await withAiWorld(async (world) => {
+      const controller = new AbortController();
+      const { binding } = fakeAi((call) => {
+        queueMicrotask(() => controller.abort());
+        return new Promise((_resolve, reject) => signalOf(call).addEventListener("abort", () => reject(new DOMException("stopped", "AbortError"))));
+      });
+      const ai = new MeteredAI(new WorkersAIProvider(binding, GLM), world.meter, () => LIMITS);
+      expect(await rejection(ai.generate({ ...ask(), signal: controller.signal }))).toMatchObject({ messageKey: "error.aiAborted" });
+      expect(today(world)).toMatchObject({ requests: 1, aborted: 1, errors: 0 });
+    });
+  });
+
+  it("lets exactly the requests left through when many streams start at once", async () => {
+    await withAiWorld(async (world) => {
+      const { binding, calls } = fakeAi(() => sse([delta("ok"), usageChunk(10, 1)]));
+      const ai = new MeteredAI(new WorkersAIProvider(binding, GLM), world.meter, () => ({ ...LIMITS, requestsPerDay: 3 }));
+      const results = await Promise.all(Array.from({ length: 12 }, () => drain(ai.stream(ask())).then(() => "ok", (e: unknown) => (e instanceof AppError ? e.code : e))));
+      expect(results.filter((r) => r === "ok")).toHaveLength(3);
+      expect(results.filter((r) => r === "AI_LIMIT_REACHED")).toHaveLength(9);
+      expect(calls).toHaveLength(3);
+      expect(today(world).requests).toBe(3);
+    });
+  });
+
+  it("reserves the next tool step with the tool results it carries, so a large result cannot slip past the cap", async () => {
+    await withAiWorld(async (world) => {
+      const { binding, calls } = fakeAi((_call, index) => (index === 0 ? toolCall : { response: "nunca", usage: { prompt_tokens: 10_500, completion_tokens: 5 } }));
+      const ran: unknown[] = [];
+      const tool: ProviderTool = {
+        name: "read_note",
+        description: "Reads a note",
+        inputSchema: z.object({ id: z.string().describe("The note's id") }).partial(),
+        execute: async (input) => {
+          ran.push(input);
+          return { text: "x".repeat(40_000) };
+        },
+      };
+      // The first step fits (about 19 Neurons reserved); the next one carries ~10,000 more tokens of input.
+      const ai = new MeteredAI(new WorkersAIProvider(binding, GLM), world.meter, () => ({ ...LIMITS, neuronsPerDay: 60 }));
+      await drain(ai.generateWithTools({ ...ask(), tools: [tool], maxIterations: 4, toolBudgetExhausted: () => false }));
+      expect(ran).toHaveLength(1);
+      expect(calls).toHaveLength(1);
+      expect(today(world).neurons).toBeLessThanOrEqual(60);
+    });
+  });
+
+  it("counts a call that used more than it reserved in full, and refuses the next one", async () => {
+    await withAiWorld(async (world) => {
+      // Cloudflare reports 20,000 prompt tokens for a short message: 110 Neurons, far over the reservation.
+      const { binding } = fakeAi(() => ({ response: "ok", usage: { prompt_tokens: 20_000, completion_tokens: 10 } }));
+      const ai = new MeteredAI(new WorkersAIProvider(binding, GLM), world.meter, () => ({ ...LIMITS, neuronsPerDay: 100 }));
+      await ai.generate(ask());
+      expect(today(world).neurons).toBeCloseTo((20_000 * 5_500 + 10 * 36_400) / 1_000_000, 6);
+      expect((await rejection(ai.generate(ask()))).code).toBe("AI_LIMIT_REACHED");
+      expect(today(world).requests).toBe(1);
+    });
+  });
+
+  it("does not take an error that merely mentions Neurons or 429 for a spent allocation or a busy model", () => {
+    expect(classifyAiError(new Error("invalid neurons field"))).toMatchObject({ messageKey: "error.aiUnavailable" });
+    expect(classifyAiError(new Error("bad input at offset 429"))).toMatchObject({ messageKey: "error.aiUnavailable" });
+    expect(classifyAiError(Object.assign(new Error("slow down"), { status: 429 }))).toMatchObject({ messageKey: "error.aiBusy" });
+    expect(classifyAiError(new Error("x", { cause: Object.assign(new Error("y"), { statusCode: 429 }) }))).toMatchObject({ messageKey: "error.aiBusy" });
+    expect(classifyAiError(new Error("Too Many Requests"))).toMatchObject({ messageKey: "error.aiBusy" });
+    expect(classifyAiError(new Error("you have used up your daily free allocation"))).toMatchObject({ code: "AI_LIMIT_REACHED" });
   });
 });

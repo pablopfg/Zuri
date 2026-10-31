@@ -14,7 +14,7 @@ export interface StepMeter {
 
 interface RawChunk {
   response?: unknown;
-  choices?: { delta?: { content?: unknown; reasoning_content?: unknown; tool_calls?: unknown } }[];
+  choices?: { delta?: { content?: unknown; reasoning_content?: unknown; reasoning?: unknown; tool_calls?: unknown } }[];
   tool_calls?: unknown;
   usage?: { prompt_tokens?: unknown; completion_tokens?: unknown };
 }
@@ -22,7 +22,8 @@ interface RawChunk {
 function capture(meter: StepMeter, value: unknown): void {
   const chunk = value as RawChunk | null;
   const delta = chunk?.choices?.[0]?.delta;
-  for (const text of [chunk?.response, delta?.content, delta?.reasoning_content]) {
+  // Both names the provider reads for reasoning: either way it is billed output.
+  for (const text of [chunk?.response, delta?.content, delta?.reasoning_content, delta?.reasoning]) {
     if (typeof text === "string") meter.outputChars += text.length;
   }
   for (const calls of [chunk?.tool_calls, delta?.tool_calls]) {
@@ -43,7 +44,7 @@ const MAX_EVENT_BYTES = 1024 * 1024;
  * still metered. It reads Cloudflare's own token counts before the SDK turns a
  * missing one into a reported zero. The answer itself passes through untouched.
  */
-export function meteredBinding(binding: Ai, steps: StepMeter[]): Ai {
+export function meteredBinding(binding: Ai, steps: StepMeter[], closed: () => boolean = () => false): Ai {
   return new Proxy(binding, {
     get(target, key) {
       if (key !== "run") {
@@ -51,6 +52,8 @@ export function meteredBinding(binding: Ai, steps: StepMeter[]): Ai {
         return typeof value === "function" ? value.bind(target) : value;
       }
       return async (...args: Parameters<Ai["run"]>) => {
+        // The turn already ended and was metered: no call may start after that.
+        if (closed()) throw new DOMException("The turn has ended", "AbortError");
         const inputs = (args[1] ?? {}) as { messages?: unknown; tools?: unknown };
         // The prompt the SDK built: earlier tool calls and results, and the tool schemas, all count.
         const meter: StepMeter = {
