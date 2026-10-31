@@ -29,6 +29,10 @@ export const KIND_LABEL: Record<AuthEventKind, MessageKey> = {
   recovery_code_used: "web.activity.kind.recovery_code_used",
   passkey_added: "web.activity.kind.passkey_added",
   passkey_removed: "web.activity.kind.passkey_removed",
+  setup_failure: "web.activity.kind.setup_failure",
+  setup_locked: "web.activity.kind.setup_locked",
+  owner_created: "web.activity.kind.owner_created",
+  access_recovered: "web.activity.kind.access_recovered",
 };
 
 /** The filter groups, as the access log's select names them. */

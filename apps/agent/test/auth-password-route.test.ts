@@ -81,7 +81,17 @@ function registeredRoutes(): string[] {
 }
 
 /** Routes that never need a session: health and the steps of signing in. */
-const PUBLIC = new Set(["GET /api/health", "POST /api/auth/login", "POST /api/auth/mfa", "POST /api/auth/mfa/passkey/options", "POST /api/auth/mfa/passkey"]);
+const PUBLIC = new Set([
+  "GET /api/health",
+  "POST /api/auth/login",
+  "POST /api/auth/mfa",
+  "POST /api/auth/mfa/passkey/options",
+  "POST /api/auth/mfa/passkey",
+  "GET /api/setup",
+  "POST /api/setup/code",
+  "POST /api/setup/owner",
+  "POST /api/setup/recover",
+]);
 /** The four the owner can still use while the password must change. */
 const ALLOWED = new Set(["GET /api/auth/session", "POST /api/auth/heartbeat", "POST /api/auth/logout", "POST /api/auth/password"]);
 

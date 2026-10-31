@@ -7,7 +7,8 @@ documento cresce a cada etapa. Os portões de toda requisição estão em
 
 ## Login
 
-- **E-mail e senha.** O login pede o `OWNER_EMAIL` e a senha. O e-mail é
+- **E-mail e senha.** O login pede o e-mail do dono (o do primeiro acesso ou,
+  em instalações antigas, o segredo `OWNER_EMAIL`) e a senha. O e-mail é
   comparado por HMAC com o `SESSION_SECRET` (sem diferença de maiúsculas nem de
   espaços nas pontas), em tempo constante. O PBKDF2 da senha roda mesmo quando o
   e-mail está errado, e a recusa nunca diz qual dos dois errou: 401
@@ -40,7 +41,59 @@ documento cresce a cada etapa. Os portões de toda requisição estão em
   redefinição completa (perdeu a senha **e** o celular) e desliga a verificação
   em duas etapas e as passkeys, com um evento `mfa_disabled` marcado para alerta.
   A recuperação por e-mail chega na etapa 11.
-- Não existe rota de cadastro, de configuração inicial nem de "assumir o dono".
+
+## Primeiro acesso e recuperação com o código de instalação
+
+Decisão do Pablo de 31/10/2026; plano completo em
+[planos/cadastro-inicial-do-dono.md](planos/cadastro-inicial-do-dono.md).
+
+- **Código de instalação.** O segredo `SETUP_CODE` (32 a 256 caracteres, com
+  pelo menos 10 caracteres diferentes) é a prova de que quem abre o primeiro
+  acesso controla a conta. Um código curto ou repetitivo falha fechado na
+  configuração (503 `NOT_CONFIGURED`). O servidor guarda só a impressão digital
+  dele (HMAC com um sal aleatório criado uma vez e guardado no banco), nunca o
+  valor, e nunca o escreve em log. Como o sal não muda, trocar o
+  `SESSION_SECRET` não faz um código gasto ou vencido valer de novo.
+- **Uma hora, uma vez.** O código vale 1 hora, contada da primeira vez que
+  alguém digita o código certo. Abrir a página ou errar o código não conta: um
+  robô que visita o endereço ou chuta códigos não gasta a hora do dono. Depois do cadastro, ou de uma
+  recuperação, ele fica gasto para sempre. Um código que volta a ser gravado
+  guarda a hora da primeira vez, e um relógio que volta atrás não o reabre.
+- **Tentativas, por rede.** Cada tentativa (código errado ou, na recuperação,
+  e-mail errado) conta para a rede de onde veio, antes de qualquer espera, para
+  que tentativas enviadas juntas não furem o limite. 5 em 15 minutos fazem a
+  rede esperar (429 `RATE_LIMITED` com `Retry-After`). 20 em 24 horas bloqueiam
+  a rede até o fim desse dia, com um evento `setup_locked` marcado para alerta.
+  Uma tentativa certa devolve a vaga. O palpite de outra pessoa nunca pausa a
+  rede do dono. Depois que a hora começou, cada 20 erros somando todas as
+  redes também geram alerta. Os alertas do primeiro acesso saem no máximo um a
+  cada 6 horas, para um ataque espalhado em muitas redes não lotar o Telegram. Depois
+  vem o Turnstile (obrigatório fora do local, falha fechado) e só então a
+  comparação em tempo constante. Errado, vencido, gasto ou ausente têm a mesma
+  resposta: 401 `INVALID_CREDENTIALS`, "Código inválido ou vencido".
+- **Ficha do formulário.** O código certo devolve o cookie `__Host-zuri_setup`
+  (`HttpOnly`, `SameSite=Strict`, 15 minutos, nunca além da hora do código).
+  O servidor guarda só o HMAC da ficha; uma ficha nova substitui a anterior.
+- **Cadastro.** `POST /api/setup/owner` pede e-mail, senha (mesma política e
+  conferência de vazamentos da troca de senha), idioma e fuso. Ele confere de
+  novo, na mesma transação que gasta o código, que ainda não existe dono: dois
+  envios juntos criam um dono só (o outro recebe 409 `CONFLICT`). O e-mail fica
+  no banco do dono, normalizado. Um evento `owner_created` é marcado para alerta.
+- **2FA obrigatório.** As passkeys exigem o 2FA ligado antes (etapa 4), então
+  o segundo passo obrigatório é o aplicativo autenticador; a passkey vem
+  depois. O cadastro abre uma sessão, mas até a verificação em duas
+  etapas ser ligada só funcionam sessão, heartbeat, sair, confirmar a senha,
+  ver e ligar o 2FA e ler as configurações. O resto responde 403 `FORBIDDEN`
+  com `details.secondStepRequired`. Instalações antigas não ganham essa trava.
+- **Recuperar o acesso.** Com o dono já criado, um `SETUP_CODE` **novo** abre
+  só a recuperação: o e-mail cadastrado e uma senha nova. Os dados e as
+  configurações ficam, todas as sessões e logins pela metade terminam, os
+  navegadores conhecidos são esquecidos e o 2FA continua valendo no login
+  seguinte. E-mail errado conta como tentativa da rede. Um evento
+  `access_recovered` é marcado para alerta. Depois de um `PASSWORD_PEPPER` novo,
+  é por aqui que o dono volta a ter senha.
+- **Depois.** A sessão responde `removeSetupCodeSecret: true` enquanto o
+  segredo continuar gravado, para a interface lembrar de apagá-lo.
 
 ## Política de senha
 

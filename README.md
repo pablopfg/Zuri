@@ -151,6 +151,7 @@ O que está na `develop` hoje, etapa por etapa. "extra" marca melhorias feitas f
 | 🛡️ | **Portões de segurança** | Um Worker só, que serve a interface e a API. Toda requisição passa por host permitido, HTTPS, Cloudflare Access opcional, cabeçalhos de segurança e autenticação. | 1 |
 | 🌐 | **Idiomas e fuso** | pt-BR por padrão e inglês, datas no padrão brasileiro e fuso `America/Sao_Paulo`. Os erros da API saem no idioma do dono. | 2 |
 | 🔑 | **Login e sessões** | Senha forte, sessão que termina por inatividade, proteção contra força bruta e Cloudflare Turnstile em toda tentativa de entrar. | 3 |
+| 🗝️ | **Primeiro acesso seguro** | O dono se cadastra uma vez só, com um código de instalação gravado como segredo (vale 1 hora; erros pausam e bloqueiam só a rede de quem tenta), e liga o 2FA antes de tudo. Um código novo só recupera o acesso. Servidor pronto; a tela vem a seguir. | extra |
 | 📱 | **2FA e passkeys** | Aplicativo autenticador (TOTP), 10 códigos de recuperação e passkeys no segundo passo. Alerta a cada 3 códigos errados seguidos; com 30 erros em 24 h, o segundo passo fica suspenso para redes desconhecidas. | 4 |
 | 🧭 | **Interface web (PWA)** | Barra lateral recolhível, navegação inferior no celular, tema claro, escuro ou do sistema, instalável no celular e no computador. | 5 |
 | ⌨️ | **Paleta de comandos** | Ctrl/⌘ K (ou o botão Buscar) abre a busca de tarefas, notas e memórias e o caminho para qualquer página ou seção das configurações, tudo pelo teclado. | extra |

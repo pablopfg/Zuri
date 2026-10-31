@@ -66,9 +66,9 @@ const METHOD = /^[A-Z]{3,7}$/;
  * every route registered under `src/api/` is in this list.
  */
 export const ROUTE_WORDS: ReadonlySet<string> = new Set([
-  "api", "activity", "actions", "ai", "approve", "auth", "cancel", "chat", "confirm", "conversations", "correct", "disable",
+  "api", "activity", "actions", "ai", "approve", "auth", "cancel", "chat", "code", "confirm", "conversations", "correct", "disable",
   "empty", "enable", "health", "heartbeat", "history", "login", "login-options", "logout", "memories", "mfa",
-  "notes", "options", "passkey", "passkeys", "password", "plans", "projects", "recovery-codes", "restore", "reviews",
+  "notes", "options", "owner", "passkey", "passkeys", "password", "plans", "projects", "recover", "recovery-codes", "restore", "reviews",
   "session", "settings", "setup", "status", "tasks", "telegram", "transcribe", "trash", "usage", "webhook",
 ]);
 const MAX_SEGMENTS = 8;
