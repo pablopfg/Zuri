@@ -250,27 +250,36 @@ describe("adding a way in asks for the password typed right now", () => {
   const raw = (path: string, ip: string, cookie: string, body: string) => call(`${ORIGIN}${path}`, { method: "POST", headers: json(ip, { cookie }), body });
   const code = async (res: Response) => apiErrorSchema.parse(await res.json()).code;
 
-  it("POST /api/auth/mfa/setup refuses no body, a code, extra fields and broken JSON with 400, and writes nothing", async () => {
-    const ip = "192.0.2.80";
-    const session = await signIn(ip);
-    const bad: [string, () => Promise<Response>][] = [
-      ["no body", () => post("/api/auth/mfa/setup", ip, session)],
-      ["empty object", () => post("/api/auth/mfa/setup", ip, session, {})],
-      ["empty password", () => post("/api/auth/mfa/setup", ip, session, { password: "" })],
-      ["a code instead", () => post("/api/auth/mfa/setup", ip, session, { totp: "123456" })],
-      ["extra field", () => post("/api/auth/mfa/setup", ip, session, { password: TEST_PASSWORD, totp: "123456" })],
-      ["not a string", () => post("/api/auth/mfa/setup", ip, session, { password: ["x"] })],
-      ["too long", () => post("/api/auth/mfa/setup", ip, session, { password: "x".repeat(1025) })],
-      ["broken JSON", () => raw("/api/auth/mfa/setup", ip, session, '{"password":')],
-    ];
-    for (const [name, attempt] of bad) {
-      const res = await attempt();
-      expect(res.status, name).toBe(400);
-      expect(await code(res), name).toBe("VALIDATION_FAILED");
-    }
-    expect((await raw("/api/auth/mfa/setup", ip, session, JSON.stringify({ password: "x".repeat(5000) }))).status).toBe(400);
-    expect(await runOwner((db) => db.all(`SELECT kind FROM zur_mfa_secrets`))).toEqual([]);
-  });
+  for (const path of ["/api/auth/mfa/setup", "/api/auth/passkeys/options"]) {
+    it(`POST ${path} refuses no body, a code, extra fields and broken JSON with 400, and writes nothing`, async () => {
+      const ip = path.includes("mfa") ? "192.0.2.80" : "192.0.2.85";
+      const session = path.includes("mfa") ? await signIn(ip) : (await turnOn(ip)).session;
+      const bad: [string, () => Promise<Response>][] = [
+        ["no body", () => post(path, ip, session)],
+        ["null", () => post(path, ip, session, null)],
+        ["a list", () => post(path, ip, session, [TEST_PASSWORD])],
+        ["empty object", () => post(path, ip, session, {})],
+        ["empty password", () => post(path, ip, session, { password: "" })],
+        ["a code instead", () => post(path, ip, session, { totp: "123456" })],
+        ["extra field", () => post(path, ip, session, { password: TEST_PASSWORD, totp: "123456" })],
+        ["not a string", () => post(path, ip, session, { password: ["x"] })],
+        ["too long (1025)", () => post(path, ip, session, { password: "x".repeat(1025) })],
+        ["broken JSON", () => raw(path, ip, session, '{"password":')],
+      ];
+      for (const [name, attempt] of bad) {
+        const res = await attempt();
+        expect(res.status, name).toBe(400);
+        expect(await code(res), name).toBe("VALIDATION_FAILED");
+      }
+      const large = await raw(path, ip, session, JSON.stringify({ password: "x".repeat(5000) }));
+      expect(large.status).toBe(400);
+      expect(apiErrorSchema.parse(await large.json()).details).toMatchObject({ fields: ["_body"] });
+      // 1024 characters is still a password: it is checked (and wrong), not refused as malformed.
+      expect((await post(path, ip, session, { password: "x".repeat(1024) })).status).toBe(401);
+      expect(await runOwner((db) => db.all(`SELECT kind FROM zur_mfa_secrets WHERE kind = 'pending'`))).toEqual([]);
+      expect(await runOwner((db) => db.all(`SELECT value FROM zur_settings WHERE key = 'auth_passkey_pending'`))).toEqual([]);
+    });
+  }
 
   it("a wrong password answers 401 with the plain message and keeps the session; the right one answers 200 and opens the window", async () => {
     const ip = "192.0.2.81";

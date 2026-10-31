@@ -1,6 +1,6 @@
 import { useQueryClient } from "@tanstack/react-query";
 import type { MfaSetup } from "@zuri/shared";
-import { type FormEvent, type ReactNode, useState } from "react";
+import { type FormEvent, type ReactNode, useEffect, useRef, useState } from "react";
 import { MFA_KEY, useMfaStatus } from "../../hooks/mfa.ts";
 import { api, errorMessage } from "../../lib/api.ts";
 import { useI18n } from "../../lib/i18n.tsx";
@@ -21,6 +21,14 @@ export function TwoStepCard() {
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
   const [askPassword, setAskPassword] = useState(false);
+  const codeField = useRef<HTMLInputElement>(null);
+  // The dialog gives focus back to the button that opened it, which the QR code
+  // replaced: this runs after it closes (a parent's effects run after its
+  // children's) and takes focus to the code the next step asks for.
+  const setupShown = mode.kind === "setup" && !askPassword;
+  useEffect(() => {
+    if (setupShown) codeField.current?.focus();
+  }, [setupShown]);
 
   const reset = (next: Mode = { kind: "idle" }) => {
     setMode(next);
@@ -71,6 +79,7 @@ export function TwoStepCard() {
   const codeForm = (label: string, submitLabel: string, danger = false, hint?: string) => (
     <form onSubmit={submit} className="space-y-3" noValidate>
       <TextField
+        ref={codeField}
         label={label}
         autoComplete="one-time-code"
         inputMode={mode.kind === "setup" ? "numeric" : "text"}

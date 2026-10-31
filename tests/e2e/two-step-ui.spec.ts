@@ -61,6 +61,8 @@ test("turns two-step sign-in on in Settings and asks for the code at the next si
   await dialog.getByRole("button", { name: "Continuar" }).click();
   expect((await sent).postDataJSON()).toEqual({ password: PASSWORD });
   await expect(dialog).toBeHidden();
+  // Focus goes to the code the next step asks for, not lost on the page.
+  await expect(page.getByLabel("Código de 6 dígitos")).toBeFocused();
   const key = ((await page.locator("p.font-mono").textContent()) ?? "").replace(/\s/g, "");
   expect(key).toMatch(/^[A-Z2-7]{32}$/);
   const step = totpStep(Date.now());
@@ -78,6 +80,21 @@ test("turns two-step sign-in on in Settings and asks for the code at the next si
   await page.getByLabel("Nome da passkey").fill("Notebook");
   await page.getByRole("button", { name: "Criar passkey" }).click();
   const passkeyDialog = page.getByRole("dialog", { name: "Antes de criar a passkey, confirme que é você" });
+  await expect(passkeyDialog).toBeVisible();
+  await expect(passkeyDialog.getByRole("button", { name: /código do aplicativo/ })).toHaveCount(0);
+  // A refusal (mocked: the network's real tries stay for the other tests) stays in the dialog.
+  await page.route("**/api/auth/passkeys/options", (route) =>
+    route.fulfill({ status: 401, contentType: "application/json", body: JSON.stringify({ code: "INVALID_CREDENTIALS", message: "Senha incorreta." }) }),
+  );
+  await passkeyDialog.getByLabel("Senha", { exact: true }).fill("senha errada de teste");
+  await passkeyDialog.getByRole("button", { name: "Continuar" }).click();
+  await expect(passkeyDialog.getByLabel("Senha", { exact: true })).toHaveAccessibleDescription("Senha incorreta.");
+  await expect(page).toHaveURL(/\/configuracoes\/seguranca$/);
+  await page.unroute("**/api/auth/passkeys/options");
+  // Esc closes it with nothing started; the form waits to try again.
+  await page.keyboard.press("Escape");
+  await expect(passkeyDialog).toBeHidden();
+  await page.getByRole("button", { name: "Criar passkey" }).click();
   await expect(passkeyDialog).toBeVisible();
   await passkeyDialog.getByLabel("Senha", { exact: true }).fill(PASSWORD);
   const options = page.waitForRequest("**/api/auth/passkeys/options");

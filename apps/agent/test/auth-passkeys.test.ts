@@ -62,8 +62,10 @@ describe("adding passkeys", () => {
       expect(h.state.get("auth_passkey_pending")).toBeUndefined();
       expect(h.events().at(-1)).toMatchObject({ kind: "confirm_failure", reason: "password" });
       await addPasskey(h.service, row);
-      expect(h.events().map((e) => e.kind)).toEqual(expect.arrayContaining(["confirm_success", "passkey_added"]));
-      expect(h.events().find((e) => e.kind === "confirm_success" && e.reason === "passkey")).toBeDefined();
+      expect(h.events().slice(-2)).toMatchObject([
+        { kind: "confirm_success", reason: "passkey" },
+        { kind: "passkey_added", alert_pending: 1 },
+      ]);
     });
   });
 
@@ -93,6 +95,29 @@ describe("adding passkeys", () => {
     });
   });
 
+  it(`with ${MAX_PASSKEYS} already, the limit answers before the password and spends no try`, async () => {
+    await withAuth("pk-limit-first", async (h) => {
+      const { row } = await turnOn(h);
+      for (let i = 0; i < MAX_PASSKEYS; i++) await addPasskey(h.service, row, `Chave ${i}`);
+      for (let i = 0; i < 4; i++) {
+        expect(await failure(h.service.passkeyRegistrationOptions(row, { password: "errada errada errada" }, client(NET)))).toMatchObject({
+          messageKey: "auth.passkey.limit",
+        });
+      }
+      expect(h.events().filter((e) => e.kind === "confirm_failure")).toHaveLength(0);
+    });
+  });
+
+  it("a session ended while the password was being checked gets no request", async () => {
+    await withAuth("pk-ended", async (h) => {
+      const { row } = await turnOn(h);
+      const pending = h.service.passkeyRegistrationOptions(row, { password: TEST_PASSWORD }, client(NET));
+      h.db.run(`DELETE FROM zur_sessions WHERE id = ?`, row.id);
+      expect(await outcome(pending)).toBe("UNAUTHORIZED");
+      expect(h.state.get("auth_passkey_pending")).toBeUndefined();
+    });
+  });
+
   it("only the session that typed the password can finish, and another one doesn't spend its request", async () => {
     await withAuth("pk-own-session", async (h) => {
       const { row, secret } = await turnOn(h);
@@ -108,6 +133,25 @@ describe("adding passkeys", () => {
       expect(h.service.passkeys.count()).toBe(0);
       // The owner's request is still there for the owner.
       expect((await h.service.addPasskey(row, { name: "Celular", response }, client(NET))).name).toBe("Celular");
+    });
+  });
+
+  it("a stored request that is broken or names no session is refused and dropped", async () => {
+    await withAuth("pk-pending-broken", async (h) => {
+      const { row } = await turnOn(h);
+      const key = await softPasskey();
+      const options = await h.service.passkeyRegistrationOptions(row, { password: TEST_PASSWORD }, client(NET));
+      const response = await key.register(options, TEST_RP.origin);
+      const stored = JSON.parse(h.state.get<string>("auth_passkey_pending") ?? "{}") as Record<string, unknown>;
+      expect(stored.session).toBe(row.id);
+      // From before requests named their session: no session can finish it.
+      const { session: _session, ...legacy } = stored;
+      for (const value of [JSON.stringify(legacy), "{not json", "null", "42", JSON.stringify({ ...stored, session: 7 })]) {
+        h.state.set("auth_passkey_pending", value);
+        expect(await outcome(h.service.addPasskey(row, { name: "X", response }, client(NET))), value).toBe("VALIDATION_FAILED");
+        expect(h.state.get("auth_passkey_pending"), value).toBeUndefined();
+      }
+      expect(h.service.passkeys.count()).toBe(0);
     });
   });
 

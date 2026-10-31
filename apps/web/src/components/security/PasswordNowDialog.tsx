@@ -77,7 +77,7 @@ export function PasswordNowDialog({
           error={error}
         />
         {/* The field already shows the refusal; this reads it out where focus stays put. */}
-        <p className="sr-only" aria-live="assertive">
+        <p className="sr-only" aria-live="polite">
           {error}
         </p>
         <div className="flex justify-end gap-2">
