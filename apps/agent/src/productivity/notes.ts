@@ -12,9 +12,13 @@ import {
 } from "@zuri/shared";
 import type { SqlValue } from "../db/database.ts";
 import { AppError } from "../http/errors.ts";
-import { asciiLower, ftsQuery } from "./search.ts";
+import { foldedColumn, foldSearch, ftsQuery } from "./search.ts";
 import { assertProject, type RepositoryDeps } from "./tasks.ts";
 import { parse, type Untrusted } from "./validate.ts";
+
+/** The literal search compares these to foldSearch(q) (search.ts). */
+const FOLDED_TITLE = foldedColumn("n.title");
+const FOLDED_CONTENT = foldedColumn("n.content");
 
 interface NoteRow {
   id: string;
@@ -89,9 +93,9 @@ export class NoteRepository {
       }
       const rows = this.db.all<SummaryRow>(
         `SELECT ${SUMMARY} FROM zur_notes n
-         WHERE (instr(lower(n.title), ?) > 0 OR instr(lower(n.content), ?) > 0)${and(filters)} ORDER BY n.updated_at DESC LIMIT ?`,
-        asciiLower(query.q),
-        asciiLower(query.q),
+         WHERE (instr(${FOLDED_TITLE}, ?) > 0 OR instr(${FOLDED_CONTENT}, ?) > 0)${and(filters)} ORDER BY n.updated_at DESC LIMIT ?`,
+        foldSearch(query.q),
+        foldSearch(query.q),
         ...params,
         query.limit,
       );

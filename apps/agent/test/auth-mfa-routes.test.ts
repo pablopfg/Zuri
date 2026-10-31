@@ -188,6 +188,64 @@ describe("managing the second step", () => {
   });
 });
 
+describe("rules every second-step change follows", () => {
+  it("every passkey and recovery-code change needs the password typed in the last 15 minutes, and writes nothing without it", async () => {
+    const ip = "192.0.2.68";
+    const { session, secret, recoveryCodes } = await turnOn(ip);
+    const key = await softPasskey();
+    const { options } = (await (await post("/api/auth/passkeys/options", ip, session)).json()) as { options: { challenge: string } };
+    expect((await post("/api/auth/passkeys", ip, session, { name: "Celular", response: await key.register(options, ORIGIN) })).status).toBe(201);
+    const id = encodeURIComponent(key.id);
+    const stored = () =>
+      runOwner((db) => ({
+        passkeys: db.all<{ name: string }>(`SELECT name FROM zur_passkeys`).map((r) => r.name),
+        codes: db.all<{ n: number }>(`SELECT count(*) AS n FROM zur_recovery_codes`)[0]?.n,
+      }));
+    const before = await stored();
+
+    // Exactly 15 minutes is already too late (the same edge as the session tests).
+    await runOwner((db) => db.run(`UPDATE zur_sessions SET confirmed_at = ?`, Date.now() - 15 * 60_000));
+    const key2 = await softPasskey();
+    const attempts: [string, () => Promise<Response>][] = [
+      ["POST recovery-codes", async () => post("/api/auth/mfa/recovery-codes", ip, session, { code: await totpCode(secret, now()) })],
+      ["POST passkeys/options", () => post("/api/auth/passkeys/options", ip, session)],
+      ["POST passkeys", async () => post("/api/auth/passkeys", ip, session, { name: "Outro", response: await key2.register(options, ORIGIN) })],
+      ["PATCH passkeys/:id", () => call(`${ORIGIN}/api/auth/passkeys/${id}`, { method: "PATCH", headers: json(ip, { cookie: session }), body: JSON.stringify({ name: "Trocado" }) })],
+      ["DELETE passkeys/:id", () => call(`${ORIGIN}/api/auth/passkeys/${id}`, { method: "DELETE", headers: json(ip, { cookie: session }) })],
+    ];
+    for (const [name, attempt] of attempts) {
+      const res = await attempt();
+      expect(res.status, name).toBe(403);
+      expect(apiErrorSchema.parse(await res.json()).code, name).toBe("RECENT_AUTH_REQUIRED");
+    }
+    expect(await stored()).toEqual(before);
+    expect(recoveryCodes).toHaveLength(10);
+
+    // Ten seconds inside the window, the same change goes through.
+    await runOwner((db) => db.run(`UPDATE zur_sessions SET confirmed_at = ?`, Date.now() - 15 * 60_000 + 10_000));
+    const renamed = await call(`${ORIGIN}/api/auth/passkeys/${id}`, { method: "PATCH", headers: json(ip, { cookie: session }), body: JSON.stringify({ name: "Trocado" }) });
+    expect(renamed.status).toBe(204);
+  });
+
+  it("a known device cookie never skips the second step", async () => {
+    const ip = "192.0.2.69";
+    const { secret } = await turnOn(ip);
+    // A full sign-in (password and code) leaves this browser's device cookie.
+    const first = await login(ip);
+    const mfa = `__Host-zuri_mfa=${cookieValue(first, "__Host-zuri_mfa")}`;
+    const done = await post("/api/auth/mfa", ip, mfa, { code: await totpCode(secret, now() + 1) });
+    expect(done.status).toBe(200);
+    const device = cookieValue(done, "__Host-zuri_device");
+    expect(device).toMatch(/^[A-Za-z0-9_-]+$/);
+
+    const again = await login(ip, `__Host-zuri_device=${device}`);
+    expect(again.status).toBe(200);
+    expect(mfaRequiredSchema.parse(await again.json()).mfaRequired).toBe(true);
+    expect(cookieValue(again, "__Host-zuri_session")).toBeUndefined();
+    expect(cookieValue(again, "__Host-zuri_mfa")).toMatch(/^[A-Za-z0-9_-]+$/);
+  });
+});
+
 describe("passkeys over the API", () => {
   it("adds a passkey for PUBLIC_URL's host, lists it, and signs in with it as the second step", async () => {
     const ip = "192.0.2.67";

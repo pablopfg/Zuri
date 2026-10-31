@@ -5,7 +5,7 @@ import { Database } from "../src/db/database.ts";
 import { migrate } from "../src/db/migrations.ts";
 import { AppError } from "../src/http/errors.ts";
 import { Productivity } from "../src/productivity/index.ts";
-import { asciiLower, ftsQuery, searchTerms } from "../src/productivity/search.ts";
+import { foldSearch, ftsQuery, searchTerms } from "../src/productivity/search.ts";
 import { testEnv } from "./helpers.ts";
 
 // The repositories over a database of their own, with a clock the test moves.
@@ -43,8 +43,11 @@ function refusal(fn: () => unknown): AppError {
 }
 
 describe("search helpers", () => {
-  it("fold only A-Z, like SQLite's lower(), and leave %, _ and \\ alone", () => {
-    expect(asciiLower("ÁGUA 50%_Off\\")).toBe("Água 50%_off\\");
+  it("fold A-Z and the accented Latin capitals, and leave %, _ and \\ alone", () => {
+    expect(foldSearch("ÁGUA 50%_Off\\")).toBe("água 50%_off\\");
+    expect(foldSearch("ÇÃO ÉÊ ÔÕ Ü Ñ")).toBe("ção éê ôõ ü ñ");
+    // Decomposed input (A + combining acute) folds like the composed letter.
+    expect(foldSearch("A\u0301GUA")).toBe("água");
   });
 
   it("turn any text into quoted FTS5 prefixes: no operator, quote or column filter survives", () => {
@@ -125,6 +128,24 @@ describe("tasks", () => {
       expect(search("_")).toEqual(["arquivo_final"]);
       expect(search("\\")).toEqual(["barra \\ invertida"]);
       expect(search("SUBLINHADO")).toEqual(["arquivoXfinal"]);
+    });
+  });
+
+  it("search folds accented capitals both ways: 'água' finds 'Água', 'ÇÃO' finds 'ção'", async () => {
+    await withWorld(({ p }) => {
+      p.tasks.create({ title: "Água da casa" });
+      p.tasks.create({ title: "Revisar", description: "PROMOÇÃO DE ÉPOCA" });
+      p.tasks.create({ title: "Pagar a conta" });
+      const search = (q: string) => p.tasks.list({ q }).map((t) => t.title);
+      expect(search("água")).toEqual(["Água da casa"]);
+      expect(search("ÁGUA")).toEqual(["Água da casa"]);
+      expect(search("promoção de época")).toEqual(["Revisar"]);
+      expect(search("ção")).toEqual(["Revisar"]);
+      // Accents still count: "agua" is another word than "água" in a literal search.
+      expect(search("agua")).toEqual([]);
+      p.notes.create({ title: "Símbolos", content: "MEIA ÁGUA 100%" });
+      expect(p.notes.list({ q: "água 100%" }).map((n) => n.title)).toEqual(["Símbolos"]);
+      expect(p.notes.list({ q: "%" }).map((n) => n.title)).toEqual(["Símbolos"]);
     });
   });
 

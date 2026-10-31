@@ -71,6 +71,15 @@ export function hasControlCharacter(value: string, singleLine: boolean): boolean
   return false;
 }
 
+/**
+ * Stored as typed, in one form: an unpaired surrogate can't be stored (SQLite
+ * keeps UTF-8 and would turn it into U+FFFD, silently changing the text), so it
+ * is refused; and the text is kept in NFC, so "é" typed as e + accent and as
+ * one letter is the same text for search and comparison.
+ */
+const wellFormed = (value: string) => value.isWellFormed();
+const nfc = (value: string) => value.normalize("NFC");
+
 /** One line: no control character at all (a title may end up in a Telegram message or an e-mail subject). */
 const line = (max: number) =>
   z
@@ -78,13 +87,17 @@ const line = (max: number) =>
     .trim()
     .min(1)
     .max(max)
-    .refine((value) => !hasControlCharacter(value, true));
+    .refine((value) => !hasControlCharacter(value, true))
+    .refine(wellFormed)
+    .transform(nfc);
 /** Free text: line breaks and tabs are fine, other control characters are not. */
 const text = (max: number) =>
   z
     .string()
     .max(max)
-    .refine((value) => !hasControlCharacter(value, false));
+    .refine((value) => !hasControlCharacter(value, false))
+    .refine(wellFormed)
+    .transform(nfc);
 
 const atLeastOne = (value: object) => Object.keys(value).length > 0;
 
@@ -138,7 +151,7 @@ export const taskListQuerySchema = z
     view: z.enum(TASK_VIEWS).default("all"),
     /** A project's id, or "none" for tasks outside any project. */
     projectId: z.union([recordId, z.literal("none")]).optional(),
-    q: z.string().trim().max(SEARCH_MAX).optional(),
+    q: z.string().trim().max(SEARCH_MAX).refine(wellFormed).optional(),
     limit,
   })
   .strict();
@@ -179,7 +192,7 @@ export type NoteUpdate = z.input<typeof noteUpdateSchema>;
 
 export const noteListQuerySchema = z
   .object({
-    q: z.string().trim().max(SEARCH_MAX).optional(),
+    q: z.string().trim().max(SEARCH_MAX).refine(wellFormed).optional(),
     projectId: z.union([recordId, z.literal("none")]).optional(),
     limit,
   })
