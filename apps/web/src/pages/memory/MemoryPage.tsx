@@ -1,4 +1,4 @@
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   MEMORY_CATEGORIES,
   MEMORY_CONTENT_MAX,
@@ -10,12 +10,13 @@ import {
   type MemoryReviewAction,
   type MemoryWriteResult,
   ptBRMemory,
+  type Settings,
 } from "@zuri/shared";
 import { Archive, ArchiveRestore, BadgeCheck, Brain, CircleHelp, GitCompareArrows, History, Pencil, RefreshCw, Search, Trash2 } from "lucide-react";
 import { type FormEvent, useId, useState } from "react";
 import { Button, Card, cn, Dialog, EmptyState, ErrorNotice, fieldClass, Notice, PageHeader, SelectField, Spinner, TextAreaField } from "../../components/ui.tsx";
 import { MEMORIES_KEY, useMemories, useMemoryHistory, useMemoryReviews } from "../../hooks/memory.ts";
-import { useSettings, useSettingsMutation } from "../../hooks/settings.ts";
+import { SETTINGS_KEY } from "../../hooks/session.tsx";
 import { api, errorMessage } from "../../lib/api.ts";
 import { useDebounced } from "../../lib/debounce.ts";
 import { addMessages, useI18n } from "../../lib/i18n.tsx";
@@ -593,12 +594,31 @@ function DeleteDialog({ memory, onClose, onDeleted }: { memory: Memory; onClose:
   );
 }
 
+/**
+ * The switch reads the settings the session already holds and saves with a plain
+ * request. Through hooks/settings.ts, shared with the settings screen, the
+ * bundler would split the first load into extra chunks (rule P11).
+ */
 function ConflictReviewSetting() {
   const { t } = useI18n();
-  const settings = useSettings();
-  const save = useSettingsMutation();
+  const qc = useQueryClient();
+  const settings = useQuery({ queryKey: SETTINGS_KEY, queryFn: () => api<Settings>("/settings"), staleTime: 5 * 60_000 });
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<unknown>(null);
   const id = useId();
   const on = settings.data?.memoryConflictReview ?? true;
+
+  async function save(memoryConflictReview: boolean) {
+    setSaving(true);
+    setError(null);
+    try {
+      qc.setQueryData(SETTINGS_KEY, await api<Settings>("/settings", { method: "PATCH", body: { memoryConflictReview } }));
+    } catch (failure) {
+      setError(failure);
+    } finally {
+      setSaving(false);
+    }
+  }
   return (
     <Card title={t("web.memory.settings.title")}>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
@@ -616,10 +636,10 @@ function ConflictReviewSetting() {
               aria-checked={on}
               // Never disabled while saving: a disabled control drops the keyboard focus.
               disabled={settings.isPending}
-              aria-busy={save.isPending || undefined}
+              aria-busy={saving || undefined}
               aria-describedby={`${id}-hint`}
               onChange={(e) => {
-                if (!save.isPending) save.mutate({ memoryConflictReview: e.target.checked });
+                if (!saving) void save(e.target.checked);
               }}
               className="peer absolute inset-0 h-11 w-14 cursor-pointer appearance-none rounded-full focus-visible:outline-none disabled:cursor-wait"
             />
@@ -634,9 +654,9 @@ function ConflictReviewSetting() {
           </span>
         </label>
       </div>
-      {save.isError && (
+      {error !== null && (
         <p role="alert" className="mt-2 text-sm text-danger">
-          {errorMessage(save.error)}
+          {errorMessage(error)}
         </p>
       )}
     </Card>

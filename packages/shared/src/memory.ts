@@ -107,7 +107,7 @@ export interface MemoryWriteResult {
  * characters are not. Like every stored text, a lone surrogate is refused and
  * the text is kept in NFC (see productivity.ts).
  */
-const content = z
+const content = /* @__PURE__ */ z
   .string()
   .trim()
   .min(1)
@@ -116,13 +116,13 @@ const content = z
   .refine(wellFormed)
   .transform(nfc);
 
-export const memoryCreateSchema = z
+export const memoryCreateSchema = /* @__PURE__ */ z
   .object({ content, category: z.enum(MEMORY_CATEGORIES).default("other") })
   .strict();
 export type MemoryCreate = z.input<typeof memoryCreateSchema>;
 
 /** Fixes a typo in place (no history). A real change goes through "correct". */
-export const memoryUpdateSchema = z
+export const memoryUpdateSchema = /* @__PURE__ */ z
   .object({ content, category: z.enum(MEMORY_CATEGORIES) })
   .partial()
   .strict()
@@ -130,13 +130,13 @@ export const memoryUpdateSchema = z
 export type MemoryUpdate = z.input<typeof memoryUpdateSchema>;
 
 /** Records a newer version of a fact; the old one is kept as a past fact linked to it. */
-export const memoryCorrectSchema = z.object({ content, category: z.enum(MEMORY_CATEGORIES).optional() }).strict();
+export const memoryCorrectSchema = /* @__PURE__ */ z.object({ content, category: z.enum(MEMORY_CATEGORIES).optional() }).strict();
 export type MemoryCorrect = z.input<typeof memoryCorrectSchema>;
 
-export const memoryStatusSchema = z.object({ status: z.enum(MEMORY_STATUSES) }).strict();
-export const memoryReviewResolveSchema = z.object({ action: z.enum(MEMORY_REVIEW_ACTIONS) }).strict();
+export const memoryStatusSchema = /* @__PURE__ */ z.object({ status: z.enum(MEMORY_STATUSES) }).strict();
+export const memoryReviewResolveSchema = /* @__PURE__ */ z.object({ action: z.enum(MEMORY_REVIEW_ACTIONS) }).strict();
 
-export const memoryListQuerySchema = z
+export const memoryListQuerySchema = /* @__PURE__ */ z
   .object({
     q: z.string().trim().max(SEARCH_MAX).refine(wellFormed).optional(),
     status: z.enum(MEMORY_FILTERS).default("all"),
