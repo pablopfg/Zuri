@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { type BrowserContext, chromium, expect, test } from "@playwright/test";
 import lighthouse from "lighthouse";
 import { routeFakeTurnstile } from "../e2e/fixtures.ts";
-import { signIn } from "../e2e/ui-helpers.ts";
+import { CSRF, signIn } from "../e2e/ui-helpers.ts";
 
 // The scores the specification asks for (stage 5: accessibility ≥ 90), checked
 // on every PR instead of by hand. Floors are above the spec's: the interface
@@ -48,9 +48,11 @@ test.describe.configure({ mode: "serial" });
 for (const page of PAGES) {
   test(`${page.name} keeps its Lighthouse scores`, async ({ baseURL }) => {
     if (page.signedIn) {
-      const tab = context.pages()[0] ?? (await context.newPage());
-      await tab.goto(`${baseURL}/entrar`);
-      if (await tab.getByRole("button", { name: "Entrar" }).isVisible()) {
+      // Ask the server, not the screen (the sign-in may still be loading): sign in only once.
+      const session = await context.request.get(`${baseURL}/api/auth/session`, { headers: CSRF });
+      if (session.status() !== 200) {
+        const tab = context.pages()[0] ?? (await context.newPage());
+        await tab.goto(`${baseURL}/entrar`);
         await signIn(tab);
         await expect(tab.getByRole("heading", { level: 1, name: "Olá!" })).toBeVisible();
       }
