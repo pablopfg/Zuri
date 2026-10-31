@@ -456,6 +456,7 @@ São 26 etapas em 5 fases, cada uma um PR para `develop`. As fases A e B entrega
 - Web Push com VAPID e criptografia ECE, máximo de 3 aparelhos, remoção após 7 dias sem acesso, novo aparelho pede passo extra.
 - E-mail pelo binding `SEND_EMAIL` (só destinatário verificado), 10 por dia com 4 reservados para segurança.
 - A interface `AlertChannel` já nasce pronta para o Telegram plugar na etapa 13. A etapa também entrega a recuperação de senha por e-mail (link no fragmento da URL, 30 min, 3 por rede em 15 min, exige 2FA quando ligado) e os alertas pendentes gravados desde a etapa 3. O binding SEND\_EMAIL é gerado no deploy com destination\_address igual à variável ZURI\_ALERT\_EMAIL\_TO do ambiente, e o código chama send() sem destinatário.
+- Diagnóstico (decisão de 31/10/2026, `docs/planos/observabilidade.md`): tabela `zur_diagnostics` com uma linha por tipo de falha (`UPSERT`, até 200 tipos, 30 dias), erros da interface por `POST /api/diagnostics/client` (sessão + CSRF, 20 por hora, só nome do erro, rota e versão), aba Diagnóstico em Configurações e alertas de falha repetida (5 em 15 min ou 20 no dia), falha nova na versão, IA em 80% e 100% do teto e `/api/health` falhando na vigia, no máximo 1 por tipo por dia.
 - Aceite: alertas de segurança saem por todos os canais mesmo com categoria desligada.
 
 ### Fase C — Bot do administrador no Telegram
@@ -499,7 +500,7 @@ O comportamento completo está na seção "Bot do Telegram do administrador"; aq
 
 **Etapa 17 · Busca semântica** (`feat: adiciona busca semântica opcional`) — desligada por padrão; ligar cria as tabelas; embeddings do Workers AI em lotes de 50 com teto diário; vetores no SQLite do Durable Object; busca híbrida palavra-chave + significado em memórias, tarefas, notas e automações; reindexar. Aceite: desligada, o comportamento é idêntico ao sem o módulo.
 
-**Etapa 18 · Servidores MCP remotos** (`feat: adiciona servidores MCP remotos`) — Streamable HTTP com o cliente MCP oficial, sem auth / bearer / OAuth, credenciais cifradas com `MCP_CREDENTIAL_KEY`, `fetch` protegido (trava de origem, DNS conferido, sem redirecionamento, limites de tamanho, 35 s), ferramentas desligadas por padrão com prefixo `mcp_`, troca de URL zera confiança e credencial. Aceite: os testes de `docs/mcp.md` do Talorys.
+**Etapa 18 · Servidores MCP remotos** (`feat: adiciona servidores MCP remotos`) — Streamable HTTP com o cliente MCP oficial, sem auth / bearer / OAuth, credenciais cifradas com `MCP_CREDENTIAL_KEY`, `fetch` protegido (trava de origem, DNS conferido, sem redirecionamento, limites de tamanho, 35 s), ferramentas desligadas por padrão com prefixo `mcp_`, troca de URL zera confiança e credencial. Diferente do Talorys, as ferramentas MCP passam por triagem por turno (dica "Quando usar" do dono, no máximo 10 ligadas e 6 oferecidas, ferramenta `find_tools`) e a sessão fecha no fim do turno; detalhes em `docs/planos/mcp.md`. Pode ser entregue em duas partes: 18a (sem auth e Bearer) e 18b (OAuth). Aceite: os testes de `docs/mcp.md` do Talorys e os de `docs/planos/mcp.md`.
 
 **Etapa 19 · Google Agenda** (`feat: integra o Google Agenda`) — OAuth com cliente do próprio dono, agendas só leitura ou leitura e escrita, ferramentas `list_calendar_events`, `create_calendar_event`, `update_calendar_event`, `delete_calendar_event` (esta como proposta), rotinas de briefing às 07:00 e fechamento às 19:00. No bot, `/hoje` passa a incluir a agenda.
 
@@ -513,7 +514,7 @@ O comportamento completo está na seção "Bot do Telegram do administrador"; aq
 
 **Etapa 23 · Backup, importação e retenção** (`feat: adiciona backup, importação e limites de armazenamento`) — exportação JSON versionada, importação com as regras de entrada não confiável, limites por tipo, lixeira e limpeza automática. O bot avisa quando o último backup tem mais de 30 dias e responde `/backup` com o link para a tela (nunca envia o arquivo pelo Telegram).
 
-**Etapa 24 · Deploy e guia de instalação** (`ci: adiciona o deploy pelo GitHub Actions`) — workflow de deploy em push para `main`, ambiente `production` só para `main`, token e conta da Cloudflare como segredos do ambiente, conferência via API de que `workers.dev` e previews estão desligados com domínio próprio, `npm audit` bloqueando `high`. `docs/instalacao-cloudflare.md` com o passo a passo só pelo navegador, incluindo criar o bot no @BotFather e a regra de Bypass do Access para o webhook. Release por tag com changelog em pt-BR.
+**Etapa 24 · Deploy e guia de instalação** (`ci: adiciona o deploy pelo GitHub Actions`) — workflow de deploy em push para `main`, ambiente `production` só para `main`, token e conta da Cloudflare como segredos do ambiente, conferência via API de que `workers.dev` e previews estão desligados com domínio próprio, `npm audit` bloqueando `high`. `docs/instalacao-cloudflare.md` com o passo a passo só pelo navegador, incluindo criar o bot no @BotFather e a regra de Bypass do Access para o webhook. Release por tag com changelog em pt-BR. `docs/solucao-de-problemas.md` explica como achar no Workers Logs a linha de um erro pelo código que a aba Diagnóstico mostra.
 
 **Etapa 25 · Auditoria final e testes de ponta a ponta** (`test: cobre o sistema de ponta a ponta e fecha a auditoria`) — auditoria completa com as duas skills, e2e de todas as telas e um teste do webhook do Telegram com atualizações reais gravadas (sem token real), relatório de achados no PR.
 
@@ -567,7 +568,7 @@ Todos os textos em pt-BR, do catálogo de i18n. Comandos não gastam pedido de I
 | `/rotinas` | Automações ativas e próximas execuções; botão Pausar | sim (pausar) | nenhuma | sim |
 | `/avisos` | Últimos 10 avisos e os pendentes de reconhecimento | não | nenhuma | sim, para o texto completo |
 | `/uso` | Pedidos de IA, áudio, embeddings e US$ de hoje contra os limites | não | nenhuma | não |
-| `/status` | Versão, saúde do Worker, IA disponível, monitores de sites, MCP sem login, idade do backup | não | nenhuma | não |
+| `/status` | Versão, saúde do Worker, resumo do Diagnóstico (falhas em 24 h), IA disponível, monitores de sites, MCP sem login, idade do backup | não | nenhuma | não |
 | `/backup` | Idade do último backup e botão **Abrir no app** (o arquivo nunca vai pelo Telegram) | não | nenhuma | não |
 | `/nova_conversa` | Começa outra conversa com o agente | sim | nenhuma | sim |
 | `/aprovar` | Propostas pendentes com o botão Aprovar | depois da confirmação | passkey ou e-mail | sim |
