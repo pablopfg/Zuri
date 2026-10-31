@@ -76,6 +76,7 @@ describe("the migration list", () => {
     const PINNED: Record<number, string> = {
       1: "0314d64480376044fda39b0b67b8da58d9dd35beccd96ff96e2a3de45b5ca0b0",
       2: "fe263cac0a60df796e6d9a58e5907fbc44d5b5c891b846cf7f36df71e4181553",
+      3: "42d9a6b3b30214125e809253e2f1d4472fdd885fdf77e3a5a017100a52ec63a2",
     };
     for (const m of MIGRATIONS) {
       const digest = createHash("sha256").update(statementText(m).replace(/\r\n/g, "\n")).digest("hex");
@@ -91,7 +92,7 @@ describe("migrate", () => {
       expect(zurObjects(db)).toEqual([]);
 
       expect(migrate(db)).toBe(LATEST_SCHEMA_VERSION);
-      expect(schemaVersion(db)).toBe(2);
+      expect(schemaVersion(db)).toBe(3);
       expect(zurObjects(db)).toEqual([
         "table:zur_activity",
         "index:zur_activity_at",
@@ -104,6 +105,10 @@ describe("migrate", () => {
         "table:zur_login_attempts",
         "index:zur_login_attempts_at",
         "index:zur_login_attempts_network",
+        "table:zur_mfa_challenges",
+        "table:zur_mfa_secrets",
+        "table:zur_passkeys",
+        "table:zur_recovery_codes",
         "table:zur_schema_version",
         "table:zur_sessions",
         "index:zur_sessions_last_seen",
@@ -138,10 +143,26 @@ describe("migrate", () => {
       expect(migrate(db, MIGRATIONS.slice(0, 1))).toBe(1);
       db.run(`INSERT INTO zur_settings (key, value, updated_at) VALUES ('language', '"en"', 'x')`);
       db.run(`INSERT INTO zur_activity (at, kind) VALUES ('2026-10-31T00:00:00Z', 'settings.updated')`);
-      expect(migrate(db)).toBe(2);
+      expect(migrate(db, MIGRATIONS.slice(0, 2))).toBe(2);
       expect(db.all(`SELECT key, value FROM zur_settings`)).toEqual([{ key: "language", value: '"en"' }]);
       expect(db.one<{ n: number }>(`SELECT count(*) AS n FROM zur_activity`)?.n).toBe(1);
       expect(zurObjects(db)).toContain("table:zur_sessions");
+    });
+  });
+
+  it("upgrades a database at version 2 to 3 and keeps the sessions and the access activity", async () => {
+    await withEmptyDatabase("from-2", (db) => {
+      expect(migrate(db, MIGRATIONS.slice(0, 2))).toBe(2);
+      db.run(
+        `INSERT INTO zur_sessions (id, created_at, last_seen_at, last_presence_at, expires_at, confirmed_at) VALUES ('s', 1, 1, 1, 2, 1)`,
+      );
+      db.run(`INSERT INTO zur_auth_events (at, last_at, kind) VALUES (1, 1, 'login_success')`);
+      expect(migrate(db)).toBe(3);
+      expect(db.one<{ n: number }>(`SELECT count(*) AS n FROM zur_sessions`)?.n).toBe(1);
+      expect(db.one<{ n: number }>(`SELECT count(*) AS n FROM zur_auth_events`)?.n).toBe(1);
+      expect(zurObjects(db)).toEqual(expect.arrayContaining(["table:zur_mfa_secrets", "table:zur_recovery_codes", "table:zur_passkeys"]));
+      // Only one active secret and one pending one can ever exist.
+      expect(() => db.run(`INSERT INTO zur_mfa_secrets (kind, secret, created_at) VALUES ('other', 'x', 1)`)).toThrow();
     });
   });
 

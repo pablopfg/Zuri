@@ -23,10 +23,31 @@ export type AuthEventKind =
   | "confirm_failure"
   | "password_changed"
   | "password_change_failure"
-  | "credentials_reset";
+  | "credentials_reset"
+  | "mfa_challenge"
+  | "mfa_failure"
+  | "mfa_enabled"
+  | "mfa_disabled"
+  | "mfa_codes_regenerated"
+  | "recovery_code_used"
+  | "passkey_added"
+  | "passkey_removed";
 
 /** The owner's own events: a flood of refusals never pushes these out (RESERVED_OWNER_AUTH_EVENTS). */
-const OWNER_KINDS: readonly AuthEventKind[] = ["login_success", "logout", "session_ended", "confirm_success", "password_changed", "credentials_reset"];
+const OWNER_KINDS: readonly AuthEventKind[] = [
+  "login_success",
+  "logout",
+  "session_ended",
+  "confirm_success",
+  "password_changed",
+  "credentials_reset",
+  "mfa_enabled",
+  "mfa_disabled",
+  "mfa_codes_regenerated",
+  "recovery_code_used",
+  "passkey_added",
+  "passkey_removed",
+];
 /** Repeated refusals from one network in the window fold into one row with a count. */
 const FOLDED_KINDS: readonly AuthEventKind[] = ["login_rate_limited", "login_turnstile"];
 /** A folded row's count reaches storage at most this often, so hammering a blocked sign-in costs no extra writes. */

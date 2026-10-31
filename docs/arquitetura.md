@@ -117,6 +117,10 @@ fixa o hash de cada migration já mesclada, para ninguém editar uma antiga.
 | 2 | `zur_auth_events` | Atividade de acesso por 90 dias, com `alert_pending` para a etapa 11 | não |
 | 2 | `zur_auth_events_daily` | Contagens diárias por tipo e país, sem IP, por 1 ano | não |
 | 2 | `zur_devices` | `HMAC` do cookie de aparelho (até 50), para reconhecer um navegador já visto | não |
+| 3 | `zur_mfa_secrets` | Segredo TOTP cifrado (AES-GCM), um ativo e um pendente, último passo aceito | não |
+| 3 | `zur_recovery_codes` | SHA-256 dos códigos de recuperação ainda não usados | não |
+| 3 | `zur_passkeys` | Chave pública, contador e host (`rp_id`) de cada passkey | não |
+| 3 | `zur_mfa_challenges` | Logins à espera do segundo passo; id é `HMAC(SESSION_SECRET, cookie)` | não |
 
 Valores internos do servidor também ficam em `zur_settings`, com chaves
 `auth_*` (o hash da senha trocada no app, a impressão digital dos segredos,

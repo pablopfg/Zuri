@@ -108,6 +108,57 @@ export const MIGRATIONS: readonly Migration[] = [
       )`,
     ],
   },
+  {
+    version: 3,
+    name: "two_step",
+    statements: [
+      // The authenticator app's secret: 'active' once confirmed, 'pending' while
+      // the owner scans it. Only AES-GCM ciphertext under a key derived from
+      // PASSWORD_PEPPER, so a copy of the database alone makes no codes.
+      // last_step: the newest time step accepted; it and earlier ones never count again.
+      // failures: wrong second steps in a row, for the alert. Not in the backup.
+      `CREATE TABLE IF NOT EXISTS zur_mfa_secrets (
+        kind TEXT PRIMARY KEY CHECK (kind IN ('active', 'pending')),
+        secret TEXT NOT NULL,
+        created_at INTEGER NOT NULL,
+        expires_at INTEGER,
+        last_step INTEGER,
+        failures INTEGER NOT NULL DEFAULT 0
+      )`,
+      // Unused recovery codes, only their SHA-256: a used code is deleted. Not in the backup.
+      `CREATE TABLE IF NOT EXISTS zur_recovery_codes (
+        hash TEXT PRIMARY KEY,
+        created_at INTEGER NOT NULL
+      )`,
+      // A passkey's public key and signature counter (nothing here signs in on
+      // its own), and the host (rp_id) it was made for. Not in the backup.
+      `CREATE TABLE IF NOT EXISTS zur_passkeys (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        public_key TEXT NOT NULL,
+        counter INTEGER NOT NULL DEFAULT 0,
+        transports TEXT NOT NULL DEFAULT '[]',
+        rp_id TEXT NOT NULL,
+        backed_up INTEGER NOT NULL DEFAULT 0,
+        created_at INTEGER NOT NULL,
+        last_used_at INTEGER
+      )`,
+      // Sign-ins whose password was right, waiting for the second step. `id` is
+      // HMAC(SESSION_SECRET, cookie value): the cookie alone opens nothing, the row
+      // alone is useless. webauthn_challenge is used once. Not in the backup.
+      `CREATE TABLE IF NOT EXISTS zur_mfa_challenges (
+        id TEXT PRIMARY KEY,
+        created_at INTEGER NOT NULL,
+        expires_at INTEGER NOT NULL,
+        attempts INTEGER NOT NULL DEFAULT 0,
+        login_attempt INTEGER,
+        weak_password INTEGER NOT NULL DEFAULT 0,
+        network TEXT NOT NULL DEFAULT '',
+        webauthn_challenge TEXT,
+        webauthn_expires_at INTEGER
+      )`,
+    ],
+  },
 ];
 
 export const LATEST_SCHEMA_VERSION = MIGRATIONS.at(-1)?.version ?? 0;

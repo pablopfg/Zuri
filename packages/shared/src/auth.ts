@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+const isoDate = z.iso.datetime();
+
 /** Sign-in and session limits of step 3 (docs/especificacao.md, "Constantes padrão"). */
 export const LOGIN_WINDOW_MS = 15 * 60_000;
 /** Wrong passwords per network in the window before it must wait. */
@@ -63,17 +65,65 @@ export const loginRequestSchema = z
   })
   .strict();
 
-/** The password again, or (with two-step sign-in, step 4) a current code from the app. */
+/** The password again, or (with two-step sign-in on) a current code from the authenticator app. */
 export const confirmRequestSchema = z.union([
   z.object({ password }).strict(),
   z.object({ totp: z.string().regex(/^\d{6}$/) }).strict(),
 ]);
 
+// ---------- Two-step sign-in (step 4) ----------
+
+/** A started two-step sign-in lasts this long (its cookie too) and allows this many wrong answers. */
+export const MFA_CHALLENGE_TTL_MS = 5 * 60_000;
+export const MFA_MAX_ATTEMPTS = 5;
+/** Browsers half-way through signing in kept at once; the oldest go first. */
+export const MAX_MFA_CHALLENGES = 5;
+/**
+ * Wrong codes (and refused passkeys) across every challenge and network in the
+ * window. Past it, only the owner's own networks may try codes until the window
+ * clears: whoever has the password can't buy more guesses from many addresses.
+ */
+export const MFA_WRONG_CODES_GLOBAL = 10;
+export const MFA_WRONG_CODES_WINDOW_MS = 15 * 60_000;
+/** Wrong second steps in a row that tell the owner. */
+export const MFA_FAILURES_ALERT = 3;
+/** A secret shown for setup must be confirmed with a code within this time. */
+export const MFA_SETUP_TTL_MS = 10 * 60_000;
+
+/** The second-step cookie: a sign-in whose password was right, waiting for its code. */
+export const MFA_COOKIE = "__Host-zuri_mfa";
+export const DEV_MFA_COOKIE = "zuri_mfa";
+
+/** Longest code accepted before anything is checked: a recovery code typed with spaces fits. */
+export const MAX_MFA_CODE_LENGTH = 40;
+
+/** An authenticator code (6 digits) or, where allowed, a recovery code. */
+export const mfaCodeRequestSchema = z.object({ code: z.string().min(1).max(MAX_MFA_CODE_LENGTH) }).strict();
+
+/** The answer to a right password when the second step is on. No session yet. */
+export const mfaRequiredSchema = z
+  .object({
+    mfaRequired: z.literal(true),
+    /** A passkey made for this address exists, so the browser may offer it. */
+    passkey: z.boolean(),
+    expiresAt: isoDate,
+  })
+  .strict();
+
+export const mfaStatusSchema = z
+  .object({ enabled: z.boolean(), enabledAt: isoDate.nullable(), recoveryCodesLeft: z.number().int().min(0) })
+  .strict();
+
+/** A new secret to scan. Nothing changes until it is confirmed with a code. */
+export const mfaSetupSchema = z.object({ secret: z.string(), otpauthUri: z.string(), expiresAt: isoDate }).strict();
+
+/** Recovery codes come back once, right here, and never again. */
+export const recoveryCodesSchema = z.object({ recoveryCodes: z.array(z.string()) }).strict();
+
 export const heartbeatRequestSchema = z.object({ active: z.boolean() }).strict();
 
 export const changePasswordRequestSchema = z.object({ currentPassword: password, newPassword: password }).strict();
 
-const isoDate = z.iso.datetime();
 
 /** When each of the three limits ends the session, by the server's clock. */
 export const sessionDeadlinesSchema = z
@@ -99,3 +149,6 @@ export type ConfirmRequest = z.infer<typeof confirmRequestSchema>;
 export type ChangePasswordRequest = z.infer<typeof changePasswordRequestSchema>;
 export type SessionDeadlines = z.infer<typeof sessionDeadlinesSchema>;
 export type SessionState = z.infer<typeof sessionStateSchema>;
+export type MfaRequired = z.infer<typeof mfaRequiredSchema>;
+export type MfaStatus = z.infer<typeof mfaStatusSchema>;
+export type MfaSetup = z.infer<typeof mfaSetupSchema>;
