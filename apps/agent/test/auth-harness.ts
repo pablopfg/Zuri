@@ -90,6 +90,8 @@ export interface HarnessOptions {
   relyingParty?: RelyingParty;
   secrets?: Partial<AuthSecrets>;
   turnstile?: Turnstile | null;
+  /** As outside local development: no Turnstile means no sign-in. */
+  turnstileMandatory?: boolean;
   clock?: FakeClock;
 }
 
@@ -123,6 +125,7 @@ export function withAuth<T>(name: string, fn: (h: Harness) => Promise<T> | T, op
         secrets: { ...baseSecrets(), ...secrets },
         clock: clock.now,
         turnstile: options.turnstile ?? null,
+        turnstileMandatory: options.turnstileMandatory ?? false,
         breached: async () => {
           breached.calls++;
           return breached.answer;

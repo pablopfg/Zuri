@@ -1,4 +1,4 @@
-import { expect, type Page, test } from "@playwright/test";
+import { expect, type Page, test } from "./fixtures.ts";
 import { expectAccessible, signIn } from "./ui-helpers.ts";
 
 // The sidebar collapses to an icon rail on wide screens. The choice lasts on

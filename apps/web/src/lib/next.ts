@@ -19,7 +19,8 @@ export function safeNext(value: string | null | undefined): string {
   } catch {
     return HOME_PATH;
   }
-  if (url.origin !== "https://zuri.invalid" || url.pathname === LOGIN_PATH) return HOME_PATH;
+  // Dot segments resolve only now: "/..//host" becomes the path "//host", which a router reads as another site.
+  if (url.origin !== "https://zuri.invalid" || url.pathname === LOGIN_PATH || url.pathname.startsWith("//")) return HOME_PATH;
   return `${url.pathname}${url.search}${url.hash}`;
 }
 

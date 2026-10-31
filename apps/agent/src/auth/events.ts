@@ -1,7 +1,9 @@
 import {
+  AUTH_ACTIVITY_GROUPS,
   AUTH_EVENT_DETAIL_DAYS,
+  type AuthActivity,
+  type AuthActivityQuery,
   AUTH_EVENT_SUMMARY_DAYS,
-  type AuthActivityEvent,
   type AuthEventKind,
   LOGIN_WINDOW_MS,
   MAX_AUTH_EVENTS,
@@ -187,8 +189,33 @@ export class AuthEvents {
     this.state.set("auth_events_cap_mark", `${high}|${count}`);
   }
 
-  /** The newest detailed rows, for the activity screen. Never the session id or the network key. */
-  recent(limit: number): AuthActivityEvent[] {
+  /**
+   * One page of the access log, newest first, never the session id or the
+   * network key. The rows are read through the (at) index from the newest back:
+   * a period bounds how far a filter that matches little may scan.
+   */
+  page(query: AuthActivityQuery, limit: number): AuthActivity {
+    const where: string[] = [];
+    const params: (string | number)[] = [];
+    if (query.days !== undefined) {
+      where.push("at >= ?");
+      params.push(this.clock() - query.days * DAY_MS);
+    }
+    if (query.group !== undefined) {
+      const kinds = AUTH_ACTIVITY_GROUPS[query.group];
+      where.push(`kind IN (${kinds.map(() => "?").join(", ")})`);
+      params.push(...kinds);
+    }
+    if (query.ip !== undefined) {
+      // A prefix compared as text: no LIKE, so "%" or "_" in the input mean nothing (CF-6-01 also caps LIKE patterns).
+      where.push("substr(lower(ip), 1, ?) = ?");
+      params.push(query.ip.length, query.ip);
+    }
+    if (query.before !== undefined) {
+      const [at = 0, id = 0] = query.before.split(":").map(Number);
+      where.push("(at < ? OR (at = ? AND id < ?))");
+      params.push(at, at, id);
+    }
     const rows = this.db.all<{
       id: number;
       at: number;
@@ -199,28 +226,39 @@ export class AuthEvents {
       country: string;
       region: string;
       city: string;
+      asn: number | null;
       user_agent: string;
       known_device: number;
       count: number;
     }>(
-      `SELECT id, at, last_at, kind, reason, ip, country, region, city, user_agent, known_device, count
-       FROM zur_auth_events ORDER BY at DESC, id DESC LIMIT ?`,
-      limit,
+      `SELECT id, at, last_at, kind, reason, ip, country, region, city, asn, user_agent, known_device, count
+       FROM zur_auth_events ${where.length ? `WHERE ${where.join(" AND ")}` : ""}
+       ORDER BY at DESC, id DESC LIMIT ?`,
+      ...params,
+      // One more than the page: whether a next page exists, without a count.
+      limit + 1,
     );
-    return rows.map((row) => ({
-      id: row.id,
-      at: new Date(row.at).toISOString(),
-      lastAt: new Date(row.last_at).toISOString(),
-      kind: row.kind,
-      reason: row.reason,
-      ip: row.ip,
-      country: row.country,
-      region: row.region,
-      city: row.city,
-      userAgent: row.user_agent,
-      knownDevice: row.known_device === 1,
-      count: row.count,
-    }));
+    const more = rows.length > limit;
+    const page = more ? rows.slice(0, limit) : rows;
+    const last = page.at(-1);
+    return {
+      events: page.map((row) => ({
+        id: row.id,
+        at: new Date(row.at).toISOString(),
+        lastAt: new Date(row.last_at).toISOString(),
+        kind: row.kind,
+        reason: row.reason,
+        ip: row.ip,
+        country: row.country,
+        region: row.region,
+        city: row.city,
+        asn: row.asn,
+        userAgent: row.user_agent,
+        knownDevice: row.known_device === 1,
+        count: row.count,
+      })),
+      nextCursor: more && last ? `${last.at}:${last.id}` : null,
+    };
   }
 
   /** Rows waiting for step 11 to tell the owner about them. */

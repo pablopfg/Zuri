@@ -36,3 +36,6 @@ export async function errorBody(response: Response): Promise<{ code: string; mes
 /** The owner's password in the tests: OWNER_PASSWORD_HASH in vitest.config.ts is its hash. */
 export const TEST_PASSWORD = "girafa trombone neblina caderno";
 export const TEST_EMAIL = "dono@exemplo.com.br";
+
+/** The Turnstile token test/setup-turnstile.ts accepts: what the widget hands a person on the sign-in form. */
+export const HUMAN_TOKEN = "token-de-humano";

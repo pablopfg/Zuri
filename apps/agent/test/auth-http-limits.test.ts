@@ -5,8 +5,8 @@ import { fakeTurnstile, type Harness, withAuth } from "./auth-harness.ts";
 import { CSRF, errorBody, ORIGIN, TEST_EMAIL, TEST_PASSWORD, testEnv } from "./helpers.ts";
 
 // The answers of the robot check and the shared limit as HTTP: status, body and
-// headers. The API runs over a service with a fake Turnstile (the object's own
-// environment has none), in the test's own database.
+// headers. The API runs over a service with a fake Turnstile, in the test's own
+// database.
 
 function api(auth: AuthService) {
   return createApi({
@@ -42,7 +42,7 @@ describe("robot check over HTTP", () => {
     await withAuth(
       "http-turnstile",
       async (h) => {
-        const failed = await post(h, "/auth/login", "192.0.2.60", wrongBody);
+        const failed = await post(h, "/auth/login", "192.0.2.60", { ...wrongBody, turnstileToken: "token-bom" });
         expect(failed.status).toBe(401);
         expect(await failed.json()).toMatchObject({ code: "INVALID_CREDENTIALS", details: { turnstileSiteKey: turnstile.siteKey } });
         const missing = await post(h, "/auth/login", "192.0.2.60", rightBody);
@@ -64,7 +64,6 @@ describe("robot check over HTTP", () => {
     await withAuth(
       "http-turnstile-down",
       async (h) => {
-        await post(h, "/auth/login", "192.0.2.61", wrongBody);
         const res = await post(h, "/auth/login", "192.0.2.61", { ...rightBody, turnstileToken: "token" });
         expect(res.status).toBe(503);
         expect((await errorBody(res)).code).toBe("SERVICE_UNAVAILABLE");

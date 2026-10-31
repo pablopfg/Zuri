@@ -1,4 +1,7 @@
-import { z } from "./zod-config.ts";
+// Before any schema here: the package is marked side-effect free, so index.ts alone can't order it.
+import "./zod-config.ts";
+
+import { z } from "zod";
 
 /**
  * Passkeys (WebAuthn) as a second sign-in step, next to the authenticator app,

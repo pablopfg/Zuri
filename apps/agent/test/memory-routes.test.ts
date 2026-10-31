@@ -1,6 +1,6 @@
 import { apiErrorSchema, type Memory, type MemoryCounts, type MemoryHistory, type MemoryReview, type MemoryWriteResult } from "@zuri/shared";
 import { beforeAll, describe, expect, it } from "vitest";
-import { call, CSRF, ORIGIN, TEST_EMAIL, TEST_PASSWORD } from "./helpers.ts";
+import { call, CSRF, HUMAN_TOKEN, ORIGIN, TEST_EMAIL, TEST_PASSWORD } from "./helpers.ts";
 
 // Memories through the Worker, as the interface calls them.
 
@@ -36,7 +36,7 @@ beforeAll(async () => {
   const res = await call(`${ORIGIN}/api/auth/login`, {
     method: "POST",
     headers: headers(false),
-    body: JSON.stringify({ email: TEST_EMAIL, password: TEST_PASSWORD }),
+    body: JSON.stringify({ email: TEST_EMAIL, password: TEST_PASSWORD, turnstileToken: HUMAN_TOKEN }),
   });
   expect(res.status).toBe(200);
   cookie = res.headers.getSetCookie().find((c) => c.startsWith("__Host-zuri_session="))?.split(";")[0] ?? "";

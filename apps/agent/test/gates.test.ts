@@ -1,7 +1,10 @@
-import { apiErrorSchema } from "@zuri/shared";
+import { apiErrorSchema, LOGIN_OPTIONS_PATH, loginOptionsSchema } from "@zuri/shared";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { API_HEADERS, WEB_HEADERS } from "../src/gates/headers.ts";
-import { call, errorBody, fakeAssets, ORIGIN } from "./helpers.ts";
+import { CSRF, call, errorBody, fakeAssets, ORIGIN, testEnv } from "./helpers.ts";
+
+/** Turnstile off (vitest.config.ts turns it on for every other test). */
+const NO_TURNSTILE = { TURNSTILE_SITE_KEY: undefined, TURNSTILE_SECRET_KEY: undefined };
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -111,7 +114,7 @@ describe("WebSocket upgrades", () => {
 describe("gate 4: security headers", () => {
   it("puts the interface's headers on pages and the cache rules of _headers", async () => {
     const assets = fakeAssets();
-    const page = await call(`${ORIGIN}/chat`, {}, { ASSETS: assets.binding });
+    const page = await call(`${ORIGIN}/chat`, {}, { ASSETS: assets.binding, ...NO_TURNSTILE });
     expect(page.status).toBe(200);
     for (const [name, value] of Object.entries(WEB_HEADERS)) expect(page.headers.get(name), name).toBe(value);
     expect(page.headers.get("cache-control")).toBe("no-cache");
@@ -129,7 +132,13 @@ describe("gate 4: security headers", () => {
     expect(on.replace(" https://challenges.cloudflare.com", "").replace("frame-src https://challenges.cloudflare.com; ", "")).toBe(
       WEB_HEADERS["content-security-policy"],
     );
-    for (const half of [{ TURNSTILE_SITE_KEY: keys.TURNSTILE_SITE_KEY }, { TURNSTILE_SECRET_KEY: keys.TURNSTILE_SECRET_KEY }, {}]) {
+    for (const half of [
+      { ...NO_TURNSTILE, TURNSTILE_SITE_KEY: keys.TURNSTILE_SITE_KEY },
+      { ...NO_TURNSTILE, TURNSTILE_SECRET_KEY: keys.TURNSTILE_SECRET_KEY },
+      NO_TURNSTILE,
+      // Cloudflare's test keys never count outside local development.
+      { TURNSTILE_SITE_KEY: "1x00000000000000000000AA", TURNSTILE_SECRET_KEY: "1x0000000000000000000000000000000AA" },
+    ]) {
       const csp = (await call(`${ORIGIN}/login`, {}, { ASSETS: assets.binding, ...half })).headers.get("content-security-policy");
       expect(csp).toBe(WEB_HEADERS["content-security-policy"]);
     }
@@ -146,6 +155,55 @@ describe("gate 4: security headers", () => {
     ]) {
       for (const [name, value] of Object.entries(API_HEADERS)) expect(res.headers.get(name), name).toBe(value);
     }
+  });
+});
+
+describe("sign-in options", () => {
+  const options = (overrides: Parameters<typeof call>[2] = {}, headers: Record<string, string> = CSRF) =>
+    call(`${ORIGIN}${LOGIN_OPTIONS_PATH}`, { headers }, overrides);
+
+  it("answers the public Turnstile site key from the Worker itself, never the secret", async () => {
+    const res = await options();
+    expect(res.status).toBe(200);
+    const body = loginOptionsSchema.parse(await res.json());
+    expect(body).toEqual({ turnstileSiteKey: testEnv.TURNSTILE_SITE_KEY });
+    expect(JSON.stringify(body)).not.toContain(testEnv.TURNSTILE_SECRET_KEY ?? "secret");
+    for (const [name, value] of Object.entries(API_HEADERS)) expect(res.headers.get(name), name).toBe(value);
+  });
+
+  it("answers null while Turnstile is off or holds Cloudflare's test keys (the sign-in is then closed)", async () => {
+    for (const overrides of [
+      NO_TURNSTILE,
+      { TURNSTILE_SITE_KEY: "1x00000000000000000000AA", TURNSTILE_SECRET_KEY: "1x0000000000000000000000000000000AA" },
+      { TURNSTILE_SITE_KEY: "0x4AAAAAAAexemplo", TURNSTILE_SECRET_KEY: "2x0000000000000000000000000000000AA" },
+    ]) {
+      expect(loginOptionsSchema.parse(await (await options(overrides)).json())).toEqual({ turnstileSiteKey: null });
+    }
+  });
+
+  it("needs CSRF like every other API route, and only answers GET", async () => {
+    expect((await options({}, {})).status).toBe(403);
+    expect((await options({}, { ...CSRF, origin: "https://outro.exemplo.com.br" })).status).toBe(403);
+    const post = await call(`${ORIGIN}${LOGIN_OPTIONS_PATH}`, { method: "POST", headers: CSRF });
+    expect(post.status).toBe(401);
+    expect((await errorBody(post)).code).toBe("UNAUTHORIZED");
+  });
+
+  it("says in the health check, outside development, that the sign-in is closed without usable keys", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    for (const keys of [NO_TURNSTILE, { TURNSTILE_SITE_KEY: "1x00000000000000000000AA", TURNSTILE_SECRET_KEY: "1x0000000000000000000000000000000AA" }]) {
+      const health = await call(`${ORIGIN}/api/health`, {}, keys);
+      expect(health.status).toBe(503);
+      expect((await errorBody(health)).code).toBe("NOT_CONFIGURED");
+    }
+    expect(JSON.stringify(warn.mock.calls)).toContain("TURNSTILE_SECRET_KEY");
+    expect(JSON.stringify(warn.mock.calls)).not.toContain("1x0000");
+    // Local development may run without them.
+    expect((await call("http://127.0.0.1:8787/api/health", {}, { PUBLIC_URL: "http://127.0.0.1:8787", ...NO_TURNSTILE })).status).toBe(200);
+  });
+
+  it("passes the host gate first", async () => {
+    expect((await call(`https://outro.exemplo.com.br${LOGIN_OPTIONS_PATH}`, { headers: CSRF })).status).toBe(403);
   });
 });
 

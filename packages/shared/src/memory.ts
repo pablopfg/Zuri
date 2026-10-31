@@ -1,4 +1,7 @@
-import { z } from "./zod-config.ts";
+// Before any schema here: the package is marked side-effect free, so index.ts alone can't order it.
+import "./zod-config.ts";
+
+import { z } from "zod";
 import { hasControlCharacter, LIST_LIMIT_MAX, RECORD_ID, SEARCH_MAX } from "./productivity.ts";
 
 /**

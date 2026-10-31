@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { signInTurnstile } from "../src/agent/zuri-agent.ts";
 import { AppError } from "../src/http/errors.ts";
 import { client, fakeTurnstile, live, MINUTE, noCookies, outcome, rebuild, right, TEST_PASSWORD, withAuth, wrong } from "./auth-harness.ts";
 
@@ -62,6 +63,26 @@ describe("brute force: 3 failures per network in 15 minutes", () => {
       expect(results.filter((r) => r === "INVALID_CREDENTIALS")).toHaveLength(3);
       expect(results.filter((r) => r === "RATE_LIMITED")).toHaveLength(7);
     });
+  });
+
+  it("still gives 10 at once only 3 guesses while each one waits for siteverify first", async () => {
+    const turnstile = fakeTurnstile();
+    // A slow siteverify: every try is past the first limit check before any is counted.
+    const verify = turnstile.verify.bind(turnstile);
+    turnstile.verify = async (token, ip) => {
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      return verify(token, ip);
+    };
+    await withAuth(
+      "limit-race-turnstile",
+      async ({ auth }) => {
+        const results = await Promise.all(Array.from({ length: 10 }, () => outcome(auth.login(wrong({ turnstileToken: "t" }), client(NET), noCookies))));
+        expect(results.filter((r) => r === "INVALID_CREDENTIALS")).toHaveLength(3);
+        expect(results.filter((r) => r === "RATE_LIMITED")).toHaveLength(7);
+        expect(turnstile.calls).toHaveLength(10);
+      },
+      { turnstile },
+    );
   });
 
   it("refuses a wrong e-mail like a wrong password, and still runs PBKDF2 for it", async () => {
@@ -283,22 +304,19 @@ describe("brute force: 3 failures per network in 15 minutes", () => {
   });
 });
 
-describe("adaptive Turnstile", () => {
-  it("is not asked for on a clean network, and is asked for after 1 failure (n−1, n)", async () => {
+describe("Turnstile on every sign-in", () => {
+  it("is asked for on the very first try of a clean network, and lets a good token through", async () => {
     const turnstile = fakeTurnstile();
     await withAuth(
-      "turnstile-1",
-      async ({ auth }) => {
-        // 0 failures: password alone.
-        expect(await outcome(auth.login(right(), client(NET), noCookies))).toBe("ok");
-        expect(turnstile.calls).toHaveLength(0);
-        // 1 failure (the threshold): the next try needs the check.
-        const failure = await auth.login(wrong(), client(NET), noCookies).catch((e: AppError) => e);
-        expect((failure as AppError).details).toEqual({ turnstileSiteKey: turnstile.siteKey });
+      "turnstile-always",
+      async ({ auth, db }) => {
         const missing = await auth.login(right(), client(NET), noCookies).catch((e: AppError) => e);
         expect((missing as AppError).code).toBe("TURNSTILE_REQUIRED");
+        expect((missing as AppError).messageKey).toBe("error.turnstileRequired");
         expect((missing as AppError).details).toEqual({ turnstileSiteKey: turnstile.siteKey });
-        // With a good token it goes through.
+        // No token: no siteverify call, no try counted.
+        expect(turnstile.calls).toHaveLength(0);
+        expect(db.one<{ n: number }>(`SELECT count(*) AS n FROM zur_login_attempts`)?.n).toBe(0);
         expect(await outcome(auth.login(right({ turnstileToken: "token-bom" }), client(NET), noCookies))).toBe("ok");
         expect(turnstile.calls).toEqual([{ token: "token-bom", ip: NET }]);
       },
@@ -306,22 +324,36 @@ describe("adaptive Turnstile", () => {
     );
   });
 
-  it("is asked for on every network once 10 failures pile up globally (9 is not enough)", async () => {
+  it("is asked for again on every try, a wrong password included (a token works once)", async () => {
     const turnstile = fakeTurnstile();
     await withAuth(
-      "turnstile-10",
-      async (h) => {
-        const add = (n: number) => {
-          for (let i = 0; i < n; i++) h.db.run(`INSERT INTO zur_login_attempts (network, outcome, at) VALUES (?, 0, ?)`, `10.1.${i}.${n}`, h.clock.now());
-        };
-        add(9);
-        expect(await outcome(h.auth.login(right(), client("192.0.2.1"), noCookies))).toBe("ok");
-        add(1);
-        // Rows written behind the limiter's back: a new object reads them again.
-        const fresh = rebuild(h, {}, turnstile);
-        expect(await outcome(fresh.login(right(), client("192.0.2.2"), noCookies))).toBe("TURNSTILE_REQUIRED");
+      "turnstile-every",
+      async ({ auth }) => {
+        const failure = await auth.login(wrong({ turnstileToken: "a" }), client(NET), noCookies).catch((e: AppError) => e);
+        expect((failure as AppError).code).toBe("INVALID_CREDENTIALS");
+        expect((failure as AppError).details).toEqual({ turnstileSiteKey: turnstile.siteKey });
+        expect(await outcome(auth.login(right(), client(NET), noCookies))).toBe("TURNSTILE_REQUIRED");
+        expect(await outcome(auth.login(right({ turnstileToken: "b" }), client(NET), noCookies))).toBe("ok");
+        expect(turnstile.calls.map((c) => c.token)).toEqual(["a", "b"]);
       },
       { turnstile },
+    );
+  });
+
+  it("closes the sign-in where it is mandatory and off: NOT_CONFIGURED before any limit, check or PBKDF2", async () => {
+    await withAuth(
+      "turnstile-mandatory",
+      async ({ auth, db, events }) => {
+        const derive = vi.spyOn(crypto.subtle, "deriveBits");
+        const error = await auth.login(right(), client(NET), noCookies).catch((e: AppError) => e);
+        expect((error as AppError).code).toBe("NOT_CONFIGURED");
+        expect((error as AppError).messageKey).toBe("error.turnstileNotConfigured");
+        expect(derive).not.toHaveBeenCalled();
+        derive.mockRestore();
+        expect(db.one<{ n: number }>(`SELECT count(*) AS n FROM zur_login_attempts`)?.n).toBe(0);
+        expect(events()).toEqual([]);
+      },
+      { turnstile: null, turnstileMandatory: true },
     );
   });
 
@@ -330,32 +362,31 @@ describe("adaptive Turnstile", () => {
     await withAuth(
       "turnstile-before",
       async ({ auth, db }) => {
-        await outcome(auth.login(wrong(), client(NET), noCookies));
         const derive = vi.spyOn(crypto.subtle, "deriveBits");
         const refusal = await auth.login(right({ turnstileToken: "token-ruim" }), client(NET), noCookies).catch((e: AppError) => e);
         expect((refusal as AppError).code).toBe("TURNSTILE_REQUIRED");
         expect((refusal as AppError).messageKey).toBe("error.turnstileFailed");
         expect(derive).not.toHaveBeenCalled();
         derive.mockRestore();
-        // Not a password guess: still 1 failure; one refused check.
-        expect(db.all(`SELECT outcome, count(*) AS n FROM zur_login_attempts GROUP BY outcome ORDER BY outcome`)).toEqual([
-          { outcome: 0, n: 1 },
-          { outcome: 2, n: 1 },
-        ]);
+        // Not a password guess: no failure, one refused check.
+        expect(db.all(`SELECT outcome, count(*) AS n FROM zur_login_attempts GROUP BY outcome ORDER BY outcome`)).toEqual([{ outcome: 2, n: 1 }]);
       },
       { turnstile },
     );
   });
 
-  it("fails closed when siteverify does not answer", async () => {
+  it("fails closed when siteverify does not answer, and counts nothing against the network", async () => {
     const turnstile = fakeTurnstile("unavailable");
     await withAuth(
       "turnstile-down",
-      async ({ auth }) => {
-        await outcome(auth.login(wrong(), client(NET), noCookies));
+      async ({ auth, db }) => {
+        const derive = vi.spyOn(crypto.subtle, "deriveBits");
         const error = await auth.login(right({ turnstileToken: "token" }), client(NET), noCookies).catch((e: AppError) => e);
         expect((error as AppError).code).toBe("SERVICE_UNAVAILABLE");
         expect((error as AppError).messageKey).toBe("error.turnstileUnavailable");
+        expect(derive).not.toHaveBeenCalled();
+        derive.mockRestore();
+        expect(db.one<{ n: number }>(`SELECT count(*) AS n FROM zur_login_attempts`)?.n).toBe(0);
       },
       { turnstile },
     );
@@ -366,7 +397,6 @@ describe("adaptive Turnstile", () => {
     await withAuth(
       "turnstile-flood",
       async ({ auth }) => {
-        await outcome(auth.login(wrong(), client(NET), noCookies));
         for (let i = 0; i < 9; i++) expect(await outcome(auth.login(right({ turnstileToken: "x" }), client(NET), noCookies))).toBe("TURNSTILE_REQUIRED");
         expect(await outcome(auth.login(right({ turnstileToken: "x" }), client(NET), noCookies))).toBe("TURNSTILE_REQUIRED");
         const calls = turnstile.calls.length;
@@ -378,43 +408,32 @@ describe("adaptive Turnstile", () => {
     );
   });
 
-  it("is still asked for with 2 failures (n+1)", async () => {
-    const turnstile = fakeTurnstile();
+  it("a burst that passed the check together writes no more than the network's 10 refused checks", async () => {
+    const turnstile = fakeTurnstile("failed");
+    const verify = turnstile.verify.bind(turnstile);
+    turnstile.verify = async (token, ip) => {
+      await new Promise((resolve) => setTimeout(resolve, 5));
+      return verify(token, ip);
+    };
     await withAuth(
-      "turnstile-2",
-      async ({ auth }) => {
-        await outcome(auth.login(wrong(), client(NET), noCookies));
-        await outcome(auth.login(wrong({ turnstileToken: "t" }), client(NET), noCookies));
-        expect(await outcome(auth.login(right(), client(NET), noCookies))).toBe("TURNSTILE_REQUIRED");
-      },
-      { turnstile },
-    );
-  });
-
-  it("applies a check that became needed while the request waited (checked again before counting)", async () => {
-    const turnstile = fakeTurnstile();
-    await withAuth(
-      "turnstile-race",
+      "turnstile-burst",
       async ({ auth, db }) => {
-        // Not needed when the request arrived; needed by the time it would be counted.
-        const required = vi.spyOn(auth.limiter, "turnstileRequired").mockReturnValueOnce(false).mockReturnValueOnce(true);
-        const derive = vi.spyOn(crypto.subtle, "deriveBits");
-        expect(await outcome(auth.login(right(), client(NET), noCookies))).toBe("TURNSTILE_REQUIRED");
-        expect(derive).not.toHaveBeenCalled();
-        expect(db.one<{ n: number }>(`SELECT count(*) AS n FROM zur_login_attempts`)?.n).toBe(0);
-        required.mockRestore();
-        derive.mockRestore();
+        for (let i = 0; i < 9; i++) await outcome(auth.login(right({ turnstileToken: "x" }), client(NET), noCookies));
+        const results = await Promise.all(Array.from({ length: 50 }, () => outcome(auth.login(right({ turnstileToken: "x" }), client(NET), noCookies))));
+        expect(results.every((r) => r === "TURNSTILE_REQUIRED")).toBe(true);
+        expect(db.one<{ n: number }>(`SELECT count(*) AS n FROM zur_login_attempts WHERE outcome = 2`)?.n).toBe(10);
+        expect(await outcome(auth.login(right({ turnstileToken: "x" }), client(NET), noCookies))).toBe("RATE_LIMITED");
       },
       { turnstile },
     );
   });
 
-  it("SEC-3-N1: while every network must pass the check, refusals from thousands of networks fold into one row", async () => {
+  it("SEC-3-N1: while 10 failures pile up, refusals from thousands of networks fold into one row", async () => {
     const turnstile = fakeTurnstile();
     await withAuth(
       "turnstile-flood-networks",
       async ({ auth, events }) => {
-        for (let i = 0; i < 10; i++) await outcome(auth.login(wrong(), client(`192.0.2.${i}`), noCookies));
+        for (let i = 0; i < 10; i++) await outcome(auth.login(wrong({ turnstileToken: "t" }), client(`192.0.2.${i}`), noCookies));
         for (let i = 0; i < 300; i++) {
           expect(await outcome(auth.login(right(), client(`2001:db8:${i.toString(16)}::`), noCookies))).toBe("TURNSTILE_REQUIRED");
         }
@@ -431,7 +450,6 @@ describe("adaptive Turnstile", () => {
     await withAuth(
       "turnstile-reasons",
       async ({ auth, events }) => {
-        await outcome(auth.login(wrong(), client(NET), noCookies));
         await outcome(auth.login(right(), client(NET), noCookies));
         await outcome(auth.login(right({ turnstileToken: "t" }), client(NET), noCookies));
         await outcome(auth.login(right(), client(NET), noCookies));
@@ -448,9 +466,55 @@ describe("adaptive Turnstile", () => {
       "turnstile-blocked",
       async ({ auth }) => {
         for (let i = 0; i < 3; i++) await outcome(auth.login(wrong({ turnstileToken: "t" }), client(NET), noCookies));
-        expect(await outcome(auth.login(right({ turnstileToken: "t" }), client(NET), noCookies))).toBe("RATE_LIMITED");
+        expect(await outcome(auth.login(right(), client(NET), noCookies))).toBe("RATE_LIMITED");
+        expect(turnstile.calls).toHaveLength(3);
       },
       { turnstile },
     );
+  });
+});
+
+describe("the deploy's robot check (signInTurnstile)", () => {
+  const prod = "https://zuri.exemplo.com.br";
+  const real = { TURNSTILE_SITE_KEY: "0x4AAAAAAAsite", TURNSTILE_SECRET_KEY: "0x4AAAAAAAsecret" };
+  const test = { TURNSTILE_SITE_KEY: "1x00000000000000000000AA", TURNSTILE_SECRET_KEY: "1x0000000000000000000000000000000AA" };
+
+  it.each([
+    ["production without keys", { PUBLIC_URL: prod }, false, true],
+    ["production with Cloudflare's test keys", { PUBLIC_URL: prod, ...test }, false, true],
+    ["production with real keys", { PUBLIC_URL: prod, ...real }, true, true],
+    ["development without keys", { PUBLIC_URL: "http://127.0.0.1:8787" }, false, false],
+    ["development with test keys", { PUBLIC_URL: "http://localhost:8787", ...test }, true, false],
+  ])("%s", (_label, env, on, mandatory) => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    const setup = signInTurnstile(env);
+    expect(setup.turnstile !== null).toBe(on);
+    expect(setup.turnstileMandatory).toBe(mandatory);
+  });
+
+  it("closes the sign-in of a production deploy without usable keys, before any limit or PBKDF2", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    for (const [name, env] of [
+      ["none", { PUBLIC_URL: prod }],
+      ["test", { PUBLIC_URL: prod, ...test }],
+    ] as const) {
+      const setup = signInTurnstile(env);
+      await withAuth(
+        `deploy-closed-${name}`,
+        async ({ auth }) => {
+          const error = await auth.login(right({ turnstileToken: "XXXX.DUMMY.TOKEN.XXXX" }), client(NET), noCookies).catch((e: AppError) => e);
+          expect((error as AppError).code).toBe("NOT_CONFIGURED");
+          expect((error as AppError).messageKey).toBe("error.turnstileNotConfigured");
+        },
+        { turnstile: setup.turnstile, turnstileMandatory: setup.turnstileMandatory },
+      );
+    }
+  });
+
+  it("verifies the token on PUBLIC_URL's host with real keys", async () => {
+    const fetcher = vi.fn(async () => Response.json({ success: true, action: "login", hostname: "zuri.exemplo.com.br" }));
+    const setup = signInTurnstile({ PUBLIC_URL: prod, ...real }, fetcher as unknown as typeof fetch);
+    expect(await setup.turnstile?.verify("t", "203.0.113.7")).toBe("ok");
+    expect(fetcher).toHaveBeenCalledTimes(1);
   });
 });

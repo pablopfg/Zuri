@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import type { ZuriAgent } from "../src/agent/zuri-agent.ts";
 import { sessionCookie } from "../src/api/http.ts";
 import { Database } from "../src/db/database.ts";
-import { CSRF, call, errorBody, ORIGIN, TEST_EMAIL, TEST_PASSWORD, testEnv } from "./helpers.ts";
+import { call, CSRF, errorBody, HUMAN_TOKEN, ORIGIN, TEST_EMAIL, TEST_PASSWORD, testEnv } from "./helpers.ts";
 
 // Through the Worker, into the owner's object, as a browser would. Each test
 // uses its own network address, so the rate limit of one never touches another.
@@ -14,7 +14,7 @@ function runOwner<T>(fn: (db: Database) => T): Promise<T> {
   return runInDurableObject(stub, (_agent: ZuriAgent, state) => fn(new Database(state.storage)));
 }
 
-function login(ip: string, body: unknown = { email: TEST_EMAIL, password: TEST_PASSWORD }, headers: Record<string, string> = {}) {
+function login(ip: string, body: unknown = { email: TEST_EMAIL, password: TEST_PASSWORD, turnstileToken: HUMAN_TOKEN }, headers: Record<string, string> = {}) {
   return call(`${ORIGIN}/api/auth/login`, {
     method: "POST",
     headers: { ...CSRF, "content-type": "application/json", "cf-connecting-ip": ip, ...headers },
@@ -58,9 +58,13 @@ describe("POST /api/auth/login", () => {
   it("refuses a wrong password with 401 INVALID_CREDENTIALS, then 429 with Retry-After from the 4th try", async () => {
     const ip = "192.0.2.11";
     for (let i = 0; i < 3; i++) {
-      const res = await login(ip, { email: TEST_EMAIL, password: "senha errada de teste aqui" });
+      const res = await login(ip, { email: TEST_EMAIL, password: "senha errada de teste aqui", turnstileToken: HUMAN_TOKEN });
       expect(res.status).toBe(401);
-      expect(await errorBody(res)).toEqual({ code: "INVALID_CREDENTIALS", message: "E-mail ou senha incorretos." });
+      expect(await res.json()).toEqual({
+        code: "INVALID_CREDENTIALS",
+        message: "E-mail ou senha incorretos.",
+        details: { turnstileSiteKey: testEnv.TURNSTILE_SITE_KEY },
+      });
       expect(res.headers.getSetCookie()).toEqual([]);
     }
     const blocked = await login(ip);

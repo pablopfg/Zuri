@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, HUMAN_TOKEN, test } from "./fixtures.ts";
 import { totpCode, totpStep } from "@zuri/shared";
 import { CSRF, EMAIL, PASSWORD, signIn } from "./ui-helpers.ts";
 
@@ -42,7 +42,7 @@ test("turns two-step sign-in on in Settings and asks for the code at the next si
     // Back to the password alone, signed in or not: a recovery code also finishes a sign-in.
     const api = page.request;
     if ((await api.get("/api/auth/session", { headers: CSRF })).status() !== 200) {
-      expect((await api.post("/api/auth/login", { headers: CSRF, data: { email: EMAIL, password: PASSWORD } })).status()).toBe(200);
+      expect((await api.post("/api/auth/login", { headers: CSRF, data: { email: EMAIL, password: PASSWORD, turnstileToken: HUMAN_TOKEN } })).status()).toBe(200);
       expect((await api.post("/api/auth/mfa", { headers: CSRF, data: { code: recovery[1] } })).status()).toBe(200);
     }
     const off = await api.post("/api/auth/mfa/disable", { headers: CSRF, data: { code: recovery[0] } });

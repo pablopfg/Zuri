@@ -194,26 +194,44 @@ chega na etapa 5). Recomendado ligar logo depois do primeiro login.
   janela, somando todas as redes, e ela deixa de valer até a janela passar
   (um cookie roubado não ganha 3 chutes por rede de uma botnet). O dono recebe um evento com alerta, no máximo a cada 6 horas.
 - **A ordem importa.** O limite vem antes de tudo (uma rede bloqueada ouve
-  "espere", e não custa PBKDF2 nem Turnstile). Depois vem o Turnstile, quando
-  exigido. Só então a tentativa é contada como falha e a senha é conferida; um
+  "espere", e não custa PBKDF2 nem Turnstile). Depois vem o Turnstile, em
+  toda tentativa. Só então a tentativa é contada como falha e a senha é conferida; um
   acerto vira sucesso. Contar antes da conta lenta, no mesmo passo síncrono da
   checagem, impede que pedidos simultâneos passem juntos pelo limite.
 
-### Turnstile adaptativo
+### Turnstile em todo login
 
-Com `TURNSTILE_SITE_KEY` e `TURNSTILE_SECRET_KEY` (os dois, ou fica desligado),
-o login só pede a verificação quando parece arriscado:
+Decisão do Pablo (31/10/2026): o login pede a verificação contra robôs do
+Cloudflare Turnstile em **toda** tentativa, e não só quando parecia arriscado.
+O Turnstile é gratuito. As chaves são `TURNSTILE_SITE_KEY` (pública) e
+`TURNSTILE_SECRET_KEY` (segredo), os dois ou nenhum.
 
-- a rede errou a senha nos últimos 15 minutos (1 falha basta), ou
-- 10 falhas se acumularam somando todas as redes na janela.
-
-Sem token, 400 `TURNSTILE_REQUIRED` com `details.turnstileSiteKey` para a
-interface desenhar o widget. O token é conferido no `siteverify` da Cloudflare
-(5 s, sem seguir redirecionamento) **antes** de a tentativa contar e antes de
-qualquer PBKDF2. Precisa vir da ação `login` e do host do `PUBLIC_URL`. Sem
-resposta do `siteverify`, o login é recusado com 503 `SERVICE_UNAVAILABLE`
-(falha fechada). Cada verificação recusada conta por rede; com 10 na janela, a
-rede espera como uma bloqueada, sem nova chamada ao `siteverify`.
+- **Obrigatório fora do ambiente local.** Sem as duas chaves, ou com as chaves
+  de teste da Cloudflare, o login responde 503 `NOT_CONFIGURED`
+  (`error.turnstileNotConfigured`) antes de qualquer limite, verificação ou
+  PBKDF2: falha fechada, sem senha aceita. Só o `PUBLIC_URL` em http de
+  loopback (desenvolvimento) aceita ficar sem chaves ou usar as de teste.
+- **Chaves de teste** (`1x00000000000000000000AA` e
+  `1x0000000000000000000000000000000AA`, com o token público
+  `XXXX.DUMMY.TOKEN.XXXX`): só no `npm run dev` e nos e2e. Lá o Worker responde
+  como a Cloudflare responderia, sem rede. Em produção elas valem como chave
+  ausente, porque qualquer pessoa conhece o token de teste.
+- **A interface** busca a chave pública em `GET /api/auth/login-options`
+  (respondido pelo próprio Worker, com CSRF e sem acordar o Durable Object) e
+  desenha o widget assim que a tela abre. O botão Entrar espera o token. Cada
+  token vale uma vez: o widget recomeça depois de cada tentativa. Se o widget
+  não carregar, a tela diz que sem ele não dá para entrar e oferece carregar
+  de novo.
+- **No Worker**, a ordem é: limite da rede (uma rede bloqueada ouve "espere",
+  sem custar `siteverify`), Turnstile, a tentativa contada como falha e só
+  então a senha. Sem token, 400 `TURNSTILE_REQUIRED` com
+  `details.turnstileSiteKey`. O token é conferido no `siteverify` (5 s, sem
+  seguir redirecionamento, chave de idempotência) e precisa vir da ação
+  `login` e do host do `PUBLIC_URL`. Sem resposta do `siteverify`, 503
+  `SERVICE_UNAVAILABLE` (falha fechada). Cada verificação recusada conta por
+  rede; com 10 na janela, a rede espera como uma bloqueada.
+- **Custo:** uma subrequisição por tentativa (limite de 50 por invocação) e
+  nenhuma linha a mais no banco quando o token passa.
 
 Com o Turnstile ligado, a CSP de **todas** as páginas da interface acrescenta
 `https://challenges.cloudflare.com` em `script-src` e `frame-src`, e não só a
@@ -240,9 +258,21 @@ limite de tamanho lido em fluxo.
 
 ## Atividade de acesso
 
-A aba Segurança mostra os 50 eventos mais recentes (`GET /api/auth/activity`,
-sessão e CSRF): tipo, hora, cidade, região, país, IP e navegador. A resposta
-nunca leva o id da sessão, a chave de rede nem a marca de alerta.
+A página **Acessos** (`/acessos`, na barra lateral; no celular, por
+Configurações > Segurança > Ver todos os acessos) lista cada tentativa de
+entrar, a mais nova primeiro, 50 por página: hora, o que aconteceu (login,
+senha ou código errado, bloqueio, verificação contra robôs recusada, eventos da
+conta), IP, cidade, região, país, rede (ASN) e navegador. Filtros: período (24
+h, 7, 30 ou 90 dias), tipo e o começo do IP (só dígitos, `a` a `f`, pontos e
+dois-pontos; comparado como texto, sem `LIKE`). Os filtros ficam na URL. A aba
+Segurança mostra os 8 mais recentes e leva à página. A API é
+`GET /api/auth/activity` (sessão e CSRF), com cursor `at:id` para não repetir
+nem pular linhas quando chegam acessos novos. A resposta nunca leva o id da
+sessão, a chave de rede nem a marca de alerta.
+
+**IP é dado pessoal.** Fica só nessa tabela do Durable Object, nunca em
+`console.*` nem nos logs do Worker (um teste confere), e some com o detalhe
+depois de 90 dias.
 
 `zur_auth_events` guarda logins, falhas, bloqueios, verificações recusadas,
 saídas, fins de sessão, confirmações e trocas de senha, com a hora, a rede, o
@@ -260,8 +290,8 @@ IP, o país, a região, a cidade, o ASN e o data center da borda, o user agent
   dono: uma enxurrada de recusas nunca empurra para fora o registro de quem
   entrou. Passou do teto, a limpeza corta até 45.000, para não contar todas as
   linhas de novo a cada hora. Cada motivo de recusa tem a sua linha.
-- **Enquanto toda rede precisa do Turnstile (10 falhas no total) ou durante um
-  ataque distribuído**, as recusas repetidas de todas as redes viram uma linha
+- **Com 10 senhas erradas somando todas as redes, ou durante um ataque
+  distribuído**, as recusas repetidas de todas as redes viram uma linha
   só por janela, sem IP nem localização: milhares de redes não
   custam uma gravação cada.
 - **Retenção (LGPD).** Os detalhes ficam 90 dias e viram contagens diárias por

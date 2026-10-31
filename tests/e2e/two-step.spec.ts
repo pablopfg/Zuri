@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, HUMAN_TOKEN, test } from "./fixtures.ts";
 import { totpCode, totpStep } from "@zuri/shared";
 
 // Two-step sign-in against the real Worker (wrangler dev, loopback http: the
@@ -14,7 +14,7 @@ const setCookies = (headers: { name: string; value: string }[]) =>
   headers.filter((h) => h.name.toLowerCase() === "set-cookie").map((h) => h.value);
 
 test("turns two-step sign-in on, asks for the code after the password, and refuses the same code twice", async ({ request }) => {
-  const login = () => request.post("/api/auth/login", { headers: CSRF, data: { email: EMAIL, password: PASSWORD } });
+  const login = () => request.post("/api/auth/login", { headers: CSRF, data: { email: EMAIL, password: PASSWORD, turnstileToken: HUMAN_TOKEN } });
   expect((await login()).status()).toBe(200);
 
   const setup = await request.post("/api/auth/mfa/setup", { headers: CSRF });

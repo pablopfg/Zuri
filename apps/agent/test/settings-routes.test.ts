@@ -3,7 +3,7 @@ import { runInDurableObject } from "cloudflare:test";
 import { afterEach, describe, expect, it } from "vitest";
 import type { ZuriAgent } from "../src/agent/zuri-agent.ts";
 import { Database } from "../src/db/database.ts";
-import { CSRF, call, errorBody, ORIGIN, TEST_EMAIL, TEST_PASSWORD, testEnv } from "./helpers.ts";
+import { call, CSRF, errorBody, HUMAN_TOKEN, ORIGIN, TEST_EMAIL, TEST_PASSWORD, testEnv } from "./helpers.ts";
 
 // Settings and access activity, through the Worker as the interface calls them.
 // The owner's object is shared by the tests of this file: settings go back to
@@ -32,7 +32,7 @@ async function signIn(ip: string): Promise<string> {
   const res = await call(`${ORIGIN}/api/auth/login`, {
     method: "POST",
     headers: headers(ip),
-    body: JSON.stringify({ email: TEST_EMAIL, password: TEST_PASSWORD }),
+    body: JSON.stringify({ email: TEST_EMAIL, password: TEST_PASSWORD, turnstileToken: HUMAN_TOKEN }),
   });
   expect(res.status).toBe(200);
   const value = res.headers.getSetCookie().find((c) => c.startsWith("__Host-zuri_session="))?.split(";")[0];

@@ -141,3 +141,8 @@ acrescente aqui cada armadilha nova que encontrar (sem dados pessoais).
 - Sem `ANALYZE`, o planejador prefere um índice `(status, due_at)` a um índice
   parcial e ordena tudo. Confira `EXPLAIN QUERY PLAN` e `rowsRead` com algumas
   mil linhas antes de confiar num índice novo (CF-6-03).
+- `packages/shared` é marcado `sideEffects` (só `zod-config.ts` fica) para o
+  bundler cortar schemas que a interface não usa. Com isso, a ordem dos
+  imports do `index.ts` deixa de valer: todo arquivo que cria schema Zod
+  importa `./zod-config.ts` primeiro, senão o Zod testa `new Function` e a
+  CSP registra uma violação (`polish.spec.ts`).

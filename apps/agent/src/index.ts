@@ -1,6 +1,7 @@
-import { AGENT_INSTANCE_NAME } from "@zuri/shared";
+import { AGENT_INSTANCE_NAME, LOGIN_OPTIONS_PATH, type LoginOptions } from "@zuri/shared";
+import { checkCsrf } from "./api/http.ts";
 import { CLIENT_GEO_HEADER, geoFromCf } from "./auth/client.ts";
-import { TURNSTILE_ORIGIN, turnstileConfigured } from "./auth/turnstile.ts";
+import { TURNSTILE_ORIGIN, turnstileSiteKey } from "./auth/turnstile.ts";
 import { type Config, readConfig, secretProblems } from "./config.ts";
 import type { WorkerEnv } from "./env.ts";
 import { type AccessConfig, verifyAccessToken } from "./gates/access.ts";
@@ -58,14 +59,27 @@ async function handle(request: Request, env: WorkerEnv): Promise<Response> {
 
   // Gate 4 for the interface: the asset, with the interface's headers.
   if (!isApiPath(url.pathname)) {
-    const turnstile = turnstileConfigured(env.TURNSTILE_SITE_KEY, env.TURNSTILE_SECRET_KEY) ? TURNSTILE_ORIGIN : null;
+    const turnstile = turnstileSiteKey(env.TURNSTILE_SITE_KEY, env.TURNSTILE_SECRET_KEY, config.allowPlainHttp) ? TURNSTILE_ORIGIN : null;
     return withWebHeaders(await env.ASSETS.fetch(request), url.pathname, turnstile);
   }
 
+  // The sign-in is closed without its robot check (outside development): the
+  // health check says so, and the owner's log names the settings (never values).
+  if (url.pathname === "/api/health" && !config.allowPlainHttp && !turnstileSiteKey(env.TURNSTILE_SITE_KEY, env.TURNSTILE_SECRET_KEY, false)) {
+    console.warn(JSON.stringify({ message: "not configured: sign-in closed", secrets: ["TURNSTILE_SITE_KEY", "TURNSTILE_SECRET_KEY"] }));
+    return refuse(new AppError("NOT_CONFIGURED"));
+  }
   if (!config.secretsReady) {
     // The answer never says what is missing; the owner's log does, by name only.
     if (url.pathname === "/api/health") console.warn(JSON.stringify({ message: "not configured", secrets: secretProblems(env) }));
     return refuse(new AppError("NOT_CONFIGURED"));
+  }
+  // What the sign-in form draws, answered here: public settings need no Durable
+  // Object request (they count on the Free plan, and anyone can ask for them).
+  if (url.pathname === LOGIN_OPTIONS_PATH && (request.method === "GET" || request.method === "HEAD")) {
+    checkCsrf(request, config.publicUrl.origin);
+    const options: LoginOptions = { turnstileSiteKey: turnstileSiteKey(env.TURNSTILE_SITE_KEY, env.TURNSTILE_SECRET_KEY, config.allowPlainHttp) };
+    return withApiHeaders(Response.json(options));
   }
   // Zuri has no sub-agents; the object refuses these too (onBeforeSubAgent).
   if (url.pathname.split("/").includes("sub")) return refuse(new AppError("NOT_FOUND"));

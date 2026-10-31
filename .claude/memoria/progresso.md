@@ -50,6 +50,11 @@ etapas ficam detalhadas; as mais antigas viram uma linha na tabela.
 - Atenção para a próxima: ...
 -->
 
+### Trabalho paralelo · Login seguro, Turnstile e Acessos (31/10/2026)
+- Entregou: Turnstile em todo login, obrigatório fora do local (`signInTurnstile` em `zuri-agent.ts`, chaves de teste só no local), `GET /api/auth/login-options` no Worker, `GET /api/auth/activity` com filtros e cursor (`AuthEvents.page`), página `/acessos` (`pages/security/AccessLogPage.tsx`). Relatório `docs/qa/revisao-de-login.md`; passo a passo `docs/configuracao-cloudflare.md`.
+- Migrations: nenhuma (o registro com IP já existia em `zur_auth_events`).
+- Atenção: testes de rota precisam de `turnstileToken: HUMAN_TOKEN` (vitest com chaves inventadas e `test/setup-turnstile.ts`); e2e importa `test` de `tests/e2e/fixtures.ts`. Antes do deploy o Pablo grava `TURNSTILE_SITE_KEY` e `TURNSTILE_SECRET_KEY`.
+
 ## Esperando o Pablo
 
 <!-- Itens "▶ Antes, você fornece" das próximas etapas e perguntas abertas. -->
@@ -57,6 +62,7 @@ etapas ficam detalhadas; as mais antigas viram uma linha na tabela.
 - Não travam: teto diário único de Neurons (os padrões de IA e áudio passam da cota de 10.000; afeta a etapa 8) e busca de tarefas por FTS5. Ver `docs/arquitetura/orcamento-free-tier.md`, "Para o Pablo".
 - Toda etapa segue `.claude/rules/performance.md` (P1 a P14) e preenche "Custo no plano Free" no PR.
 
+- ⚠️ Antes do próximo deploy: criar o widget do Turnstile e gravar `TURNSTILE_SITE_KEY` e `TURNSTILE_SECRET_KEY` (docs/configuracao-cloudflare.md); sem eles o login fica fechado.
 - Não travam: perguntas abertas da etapa 4 (senha digitada de novo para ligar 2FA/passkey; repetir alerta de ataque lento ao TOTP), da etapa 3 (acerto não zera falhas).
 - Rulesets da `develop` e da `main` conferidos ativos pela API em 31/10/2026.
 
