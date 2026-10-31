@@ -1,0 +1,31 @@
+name: Branch policy
+
+on:
+  pull_request:
+    branches: [main]
+
+# Reads nothing from the repository: the check uses only the event's branch names.
+permissions: {}
+
+jobs:
+  # main only receives releases, which come from develop of this repository.
+  source-branch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check source branch
+        env:
+          HEAD_REF: ${{ github.head_ref }}
+          HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+          BASE_REPO: ${{ github.repository }}
+        run: |
+          # A fork can name a branch "develop" too: only this repository's branch counts.
+          if [ "$HEAD_REPO" != "$BASE_REPO" ]; then
+            echo "::error::Pull requests into main must come from this repository, not from a fork."
+            exit 1
+          fi
+          if [ "$HEAD_REF" != "develop" ]; then
+            echo "::error::Pull requests into main must come from develop, not '$HEAD_REF'."
+            exit 1
+          fi
+          echo "OK: develop -> main"
