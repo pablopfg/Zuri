@@ -1,7 +1,8 @@
 import { Check, X } from "lucide-react";
 import { type FocusEvent, useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { createRoot } from "react-dom/client";
-import { useI18n } from "./i18n.tsx";
+import { useI18n } from "../lib/i18n.tsx";
+import { createToastStore, type Toast, type ToastOptions } from "../lib/toasts.ts";
 
 /**
  * Toasts: short confirmations ("Salvo", "Senha trocada") that show for a few
@@ -12,64 +13,19 @@ import { useI18n } from "./i18n.tsx";
  */
 
 const SHOW_MS = 5000;
-/** More than this and the oldest leaves: confirmations, not a log. */
-const MAX_TOASTS = 3;
 
-export interface ToastOptions {
-  /** Something left to do ("2 conflicts wait for review"): it stays until closed. */
-  persistent?: boolean;
-}
-
-interface Toast {
-  id: number;
-  message: string;
-  closeLabel: string;
-  persistent: boolean;
-}
-
-let toasts: readonly Toast[] = [];
-let nextId = 1;
-/** Toasts asked for before the stack first painted, in order. */
-let waiting: Toast[] | null = null;
-const listeners = new Set<() => void>();
-
-function publish(list: readonly Toast[]) {
-  toasts = list.slice(-MAX_TOASTS);
-  for (const listener of listeners) listener();
-}
-
-function subscribe(listener: () => void) {
-  listeners.add(listener);
-  return () => listeners.delete(listener);
-}
-
-function dismiss(id: number) {
-  publish(toasts.filter((toast) => toast.id !== id));
-}
+const store = createToastStore();
+let mounted = false;
 
 /** Shows a confirmation. A screen reader reads its text once (a polite status). */
-export function showToast(message: string, closeLabel: string, options: ToastOptions = {}) {
-  const toast = { id: nextId++, message, closeLabel, persistent: options.persistent === true };
-  if (waiting) {
-    waiting.push(toast);
-    return;
+export function showToast(message: string, closeLabel: string, options?: ToastOptions) {
+  if (!mounted) {
+    mounted = true;
+    const host = document.createElement("div");
+    document.body.append(host);
+    createRoot(host).render(<Toaster />);
   }
-  if (listeners.size > 0) {
-    publish([...toasts, toast]);
-    return;
-  }
-  waiting = [toast];
-  const host = document.createElement("div");
-  document.body.append(host);
-  createRoot(host).render(<Toaster />);
-  // Two frames later: a screen reader announces what changes in a live region, not the region's birth.
-  requestAnimationFrame(() =>
-    requestAnimationFrame(() => {
-      const queued = waiting ?? [];
-      waiting = null;
-      publish([...toasts, ...queued]);
-    }),
-  );
+  store.show(message, closeLabel, options);
 }
 
 /** The toast function of a screen: it knows the close button's label in the current language. */
@@ -79,7 +35,7 @@ export function useToast() {
 }
 
 function Toaster() {
-  const list = useSyncExternalStore(subscribe, () => toasts);
+  const list = useSyncExternalStore(store.subscribe, store.snapshot);
   const latest = list.at(-1);
   return (
     <>
@@ -105,7 +61,7 @@ function ToastItem({ toast }: { toast: Toast }) {
   const cameFrom = useRef<HTMLElement | null>(null);
   useEffect(() => {
     if (toast.persistent || hovered || focused) return;
-    const timer = setTimeout(() => dismiss(toast.id), SHOW_MS);
+    const timer = setTimeout(() => store.dismiss(toast.id), SHOW_MS);
     return () => clearTimeout(timer);
   }, [toast.persistent, hovered, focused, toast.id]);
 
@@ -116,7 +72,7 @@ function ToastItem({ toast }: { toast: Toast }) {
 
   function close() {
     const back = cameFrom.current;
-    dismiss(toast.id);
+    store.dismiss(toast.id);
     if (focused) (back?.isConnected ? back : document.getElementById("conteudo"))?.focus();
   }
 

@@ -6,7 +6,7 @@ import { Button, Card, Dialog, EmptyState, ErrorNotice, Notice, Spinner } from "
 import { useTrash } from "../../hooks/productivity.ts";
 import { api, errorMessage } from "../../lib/api.ts";
 import { useI18n } from "../../lib/i18n.tsx";
-import { useToast } from "../../lib/toast.tsx";
+import { useToast } from "../../components/Toaster.tsx";
 import { refreshAfterTrash, TRASH_KIND_LABEL } from "../productivity/shared.tsx";
 import { LaterTab } from "./LaterTab.tsx";
 

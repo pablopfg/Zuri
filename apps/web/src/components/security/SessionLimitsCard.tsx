@@ -2,7 +2,7 @@ import { SESSION_TIMEOUT_RANGES } from "@zuri/shared";
 import { useSettings, useSettingsMutation } from "../../hooks/settings.ts";
 import { errorMessage } from "../../lib/api.ts";
 import { useI18n } from "../../lib/i18n.tsx";
-import { useToast } from "../../lib/toast.tsx";
+import { useToast } from "../Toaster.tsx";
 import { Card, ErrorNotice, SelectField, Spinner } from "../ui.tsx";
 
 const range = (r: { min: number; max: number }) => Array.from({ length: r.max - r.min + 1 }, (_, i) => r.min + i);

@@ -22,7 +22,7 @@ import { useSettings, useSettingsMutation } from "../../hooks/settings.ts";
 import { USAGE_KEY, useUsage } from "../../hooks/usage.ts";
 import { errorMessage } from "../../lib/api.ts";
 import { addMessages, useI18n } from "../../lib/i18n.tsx";
-import { useToast } from "../../lib/toast.tsx";
+import { useToast } from "../../components/Toaster.tsx";
 import { useQueryClient } from "@tanstack/react-query";
 
 // This tab's pt-BR texts arrive with it, not in the first bundle (rule P11).

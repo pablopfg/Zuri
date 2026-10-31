@@ -7,7 +7,7 @@ import { useSession } from "../../hooks/session.tsx";
 import { useSettings, useSettingsMutation } from "../../hooks/settings.ts";
 import { errorMessage } from "../../lib/api.ts";
 import { useI18n } from "../../lib/i18n.tsx";
-import { useToast } from "../../lib/toast.tsx";
+import { useToast } from "../../components/Toaster.tsx";
 
 /** Each language by its own name, as people look for it. */
 const LANGUAGE_NAMES: Record<Locale, string> = { "pt-BR": "Português (Brasil)", en: "English" };
