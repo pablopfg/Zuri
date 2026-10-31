@@ -141,7 +141,7 @@ describe("configuration", () => {
       "zuri.exemplo.com.br",
       "http://zuri.exemplo.com.br",
       "https://zuri.exemplo.com.br/app",
-      "https://user:pass@zuri.exemplo.com.br",
+      "https://dono:senha@exemplo.com.br",
       "https://zuri.exemplo.com.br/?x=1",
       "ftp://zuri.exemplo.com.br",
     ]) {
@@ -169,8 +169,11 @@ describe("configuration", () => {
     for (const overrides of [
       { SESSION_SECRET: undefined },
       { SESSION_SECRET: "curto" },
-      { PASSWORD_PEPPER: "x".repeat(31) },
+      { SESSION_SECRET: "s".repeat(47) },
+      { PASSWORD_PEPPER: "p".repeat(47) },
       { OWNER_PASSWORD_HASH: "" },
+      { OWNER_PASSWORD_HASH: undefined },
+      { OWNER_PASSWORD_HASH: undefined, OWNER_PASSWORD: "x".repeat(19) },
       { OWNER_EMAIL: undefined },
       { OWNER_EMAIL: "nao-e-email" },
     ]) {
@@ -182,6 +185,16 @@ describe("configuration", () => {
       expect(JSON.stringify(body)).not.toMatch(/SESSION|PEPPER|OWNER|EMAIL/);
       const page = await call(`${ORIGIN}/`, {}, { ...overrides, ASSETS: fakeAssets().binding });
       expect(page.status).toBe(200);
+    }
+  });
+
+  it("accepts secrets of exactly 48 characters and a plain OWNER_PASSWORD of 20 in place of the hash", async () => {
+    for (const overrides of [
+      { SESSION_SECRET: "s".repeat(48), PASSWORD_PEPPER: "p".repeat(48) },
+      { OWNER_PASSWORD_HASH: undefined, OWNER_PASSWORD: "x".repeat(20) },
+    ]) {
+      const res = await call(`${ORIGIN}/api/health`, {}, overrides);
+      expect(res.status, JSON.stringify(overrides)).toBe(200);
     }
   });
 });

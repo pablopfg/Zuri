@@ -99,7 +99,38 @@ describe("verifyAccessToken", () => {
   });
 });
 
+describe("key rotation", () => {
+  it("fetches the keys again for an unknown key id, at most once a minute", async () => {
+    vi.useFakeTimers();
+    try {
+      const certs = fakeCerts();
+      expect(await verifyAccessToken(await sign(valid()), CONFIG, certs)).toBe(true);
+      const rotated = await sign(valid(), { kid: "chave-2" }, otherPair.privateKey);
+      // Unknown key right after a fetch: refused without hammering the endpoint.
+      expect(await verifyAccessToken(rotated, CONFIG, certs)).toBe(false);
+      expect(certs).toHaveBeenCalledTimes(1);
+      const jwk = (await crypto.subtle.exportKey("jwk", otherPair.publicKey)) as JsonWebKey;
+      jwks = { keys: [...jwks.keys, { ...jwk, kid: "chave-2" } as JsonWebKey] };
+      vi.advanceTimersByTime(61_000);
+      expect(await verifyAccessToken(await sign(valid(), { kid: "chave-2" }, otherPair.privateKey), CONFIG, certs)).toBe(true);
+      expect(certs).toHaveBeenCalledTimes(2);
+    } finally {
+      jwks = { keys: jwks.keys.slice(0, 1) };
+      vi.useRealTimers();
+    }
+  });
+});
+
 describe("gate 3: Cloudflare Access in the Worker", () => {
+  it("runs after the host and HTTPS gates", async () => {
+    const certs = vi.spyOn(globalThis, "fetch").mockImplementation(fakeCerts());
+    const host = await call("https://outro.exemplo.com.br/api/health", {}, ACCESS_ENV);
+    expect((await errorBody(host)).code).toBe("HOST_NOT_ALLOWED");
+    const http = await call("http://zuri.exemplo.com.br/api/health", {}, ACCESS_ENV);
+    expect(http.status).toBe(301);
+    expect(certs).not.toHaveBeenCalled();
+  });
+
   it("refuses pages and the API without a valid token, and lets a valid one through", async () => {
     vi.spyOn(globalThis, "fetch").mockImplementation(fakeCerts());
     const assets = fakeAssets();
@@ -133,6 +164,8 @@ describe("gate 3: Cloudflare Access in the Worker", () => {
       ["with authorization", await post({ "x-telegram-bot-api-secret-token": secret, authorization: "Bearer x" })],
       ["other path", await post({ "x-telegram-bot-api-secret-token": secret }, env, `${ORIGIN}/api/health`)],
       ["bot off", await post({ "x-telegram-bot-api-secret-token": secret }, ACCESS_ENV)],
+      // Without the required secrets there is no trusted key to derive the header from.
+      ["secrets missing", await post({ "x-telegram-bot-api-secret-token": secret }, { ...env, PASSWORD_PEPPER: "curto" })],
     ] as const) {
       expect(res.status, label).toBe(403);
       expect((await errorBody(res)).code, label).toBe("FORBIDDEN");

@@ -41,7 +41,8 @@
   },
   // Workers Logs only, without request or response bodies (the Worker never
   // logs them) and without query strings, which may carry one-time tokens.
-  // Traces stay off: they count toward billed usage from 1/12/2026.
+  // Traces stay off: from 1/12/2026 they would spend the daily free ingestion
+  // quota shared with the logs.
   "observability": {
     "enabled": true,
     "redact_query_string": true,

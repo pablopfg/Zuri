@@ -4,9 +4,9 @@ import { defineProject } from "vitest/config";
 /** Test-only values: none of them is a real secret, domain or address. */
 export const TEST_ENV = {
   PUBLIC_URL: "https://zuri.exemplo.com.br",
-  SESSION_SECRET: "test-session-secret-0123456789abcdefghijklmnop",
-  PASSWORD_PEPPER: "test-password-pepper-0123456789abcdefghijklmn",
-  OWNER_PASSWORD_HASH: "pbkdf2-sha256$600000$dGVzdA$dGVzdA",
+  SESSION_SECRET: "test-session-secret-0123456789abcdefghijklmnopqrstu",
+  PASSWORD_PEPPER: "test-password-pepper-0123456789abcdefghijklmnopqrs",
+  OWNER_PASSWORD_HASH: "pbkdf2$100000$dGVzdA$dGVzdA",
   OWNER_EMAIL: "dono@exemplo.com.br",
 };
 

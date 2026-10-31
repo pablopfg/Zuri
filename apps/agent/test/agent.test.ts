@@ -50,12 +50,18 @@ describe("gate 6: the single, fixed agent instance", () => {
       [`${ORIGIN}/api/health`, { headers: { "x-partykit-room": "outra", "x-agents-lifecycle-props": "e30", "x-agent-name": "outra" } }],
       [`${ORIGIN}/api/agents/zuri-agent/outra`],
       [`${ORIGIN}/api/sub/zuri-agent/outra/health`],
-      [`${ORIGIN}/agents/zuri-agent/outra`],
+      [`${ORIGIN}/api/sub/ZuriAgent/outra/health`],
     ];
     for (const [url, init] of attempts) await call(url, init);
 
     const ids = await listDurableObjectIds(testEnv.AGENT);
     expect(ids.map((id) => id.toString())).toEqual([testEnv.AGENT.idFromName(AGENT_INSTANCE_NAME).toString()]);
+  });
+
+  it("gives the object its fixed name without an extra RPC from the Worker", async () => {
+    await call(`${ORIGIN}/api/health`);
+    const stub = testEnv.AGENT.get(testEnv.AGENT.idFromName(AGENT_INSTANCE_NAME));
+    expect(await runInDurableObject(stub, (agent: ZuriAgent) => agent.name)).toBe(AGENT_INSTANCE_NAME);
   });
 
   it("refuses sub-agent paths in the Worker and in the object", async () => {
@@ -90,6 +96,8 @@ describe("request and response hygiene", () => {
         "x-partykit-room": "outra",
         "x-channels-identity": "x",
         "x-cf-harness-token": "x",
+        "cf-access-authenticated-user-email": "dono@exemplo.com.br",
+        "cf-access-jwt-assertion": "x.y.z",
         accept: "application/json",
       },
     });

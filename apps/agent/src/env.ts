@@ -10,6 +10,8 @@ export type WorkerEnv = Env & {
   /** Cloudflare Access in front of the app: team domain and the application's AUD tag. Both or neither. */
   ACCESS_TEAM_DOMAIN?: string;
   ACCESS_AUD?: string;
+  /** Plain owner password, only while OWNER_PASSWORD_HASH is unset (step 3 replaces it on first sign-in). */
+  OWNER_PASSWORD?: string;
   /** The Telegram bot (step 12). Its webhook secret is derived from SESSION_SECRET. */
   TELEGRAM_BOT_TOKEN?: string;
 };

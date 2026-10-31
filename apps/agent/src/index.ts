@@ -1,5 +1,4 @@
 import { AGENT_INSTANCE_NAME } from "@zuri/shared";
-import { getAgentByName } from "agents";
 import { type Config, readConfig } from "./config.ts";
 import type { WorkerEnv } from "./env.ts";
 import { type AccessConfig, verifyAccessToken } from "./gates/access.ts";
@@ -62,8 +61,10 @@ async function handle(request: Request, env: WorkerEnv): Promise<Response> {
   // Zuri has no sub-agents; the object refuses these too (onBeforeSubAgent).
   if (url.pathname.split("/").includes("sub")) return refuse(new AppError("NOT_FOUND"));
 
-  // Gate 6: the one instance, by a name no client can change.
-  const agent = await getAgentByName(env.AGENT, AGENT_INSTANCE_NAME);
+  // Gate 6: the one instance, by a name no client can change. A plain stub, not
+  // getAgentByName: that adds an RPC per request, and each one counts toward the
+  // Free plan's Durable Object requests; the object initializes itself on fetch.
+  const agent = env.AGENT.getByName(AGENT_INSTANCE_NAME);
   return withApiHeaders(withoutRawErrors(await agent.fetch(withoutInternalHeaders(request))));
 }
 
@@ -125,8 +126,12 @@ async function passesAccess(
   return verifyAccessToken(request.headers.get("cf-access-jwt-assertion"), access);
 }
 
-/** Headers the Agents SDK reads for its own routing and identity; only the Worker may set them, and it never does. */
-const INTERNAL_HEADER_PREFIXES = ["x-agents-", "x-agent-", "x-cf-agents-", "x-cf-harness-", "x-channels-", "x-partykit-"];
+/**
+ * Headers the Agents SDK reads for its own routing and identity (only the Worker
+ * may set them, and it never does), and Cloudflare Access's identity headers:
+ * gate 3 already checked the token, and without Access a client could forge them.
+ */
+const INTERNAL_HEADER_PREFIXES = ["x-agents-", "x-agent-", "x-cf-agents-", "x-cf-harness-", "x-channels-", "x-partykit-", "cf-access-"];
 
 export function withoutInternalHeaders(request: Request): Request {
   const internal = [...request.headers.keys()].filter((name) => INTERNAL_HEADER_PREFIXES.some((p) => name.startsWith(p)));

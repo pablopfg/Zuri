@@ -29,10 +29,12 @@ test("health answers { ok: true } with the API's headers", async ({ request }) =
   expect(response.headers()["cache-control"]).toBe("no-store");
 });
 
-test("another host is refused with 403 HOST_NOT_ALLOWED", async ({ request }) => {
-  const response = await request.get("/api/health", { headers: { host: "outro.exemplo.com.br" } });
-  expect(response.status()).toBe(403);
-  expect((await response.json()).code).toBe("HOST_NOT_ALLOWED");
+test("another host is refused with 403 HOST_NOT_ALLOWED, for pages and the API", async ({ request }) => {
+  for (const path of ["/", "/index.html", "/api/health"]) {
+    const response = await request.get(path, { headers: { host: "outro.exemplo.com.br" } });
+    expect(response.status(), path).toBe(403);
+    expect((await response.json()).code, path).toBe("HOST_NOT_ALLOWED");
+  }
 });
 
 test("a WebSocket connection is refused", async ({ page }) => {

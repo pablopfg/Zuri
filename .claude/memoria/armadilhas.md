@@ -79,3 +79,21 @@ acrescente aqui cada armadilha nova que encontrar (sem dados pessoais).
 - Fixe o relógio e o fuso (`America/Sao_Paulo`) em testes de agenda e
   recorrência; cubra a virada de dia e o horário de verão histórico.
 - Dependências com versão exata; confira o `package-lock.json` no diff.
+
+## Agents SDK
+
+- A capability `mcp` do Agents SDK responde ao callback OAuth em
+  `capabilityRunner.request`, **antes** do `onRequest` e do portão 5 (Hono).
+  Na etapa do MCP, confira que o callback não escapa da autenticação e que
+  `successRedirect`/`errorRedirect` nunca vêm de entrada do usuário.
+- Use `env.AGENT.getByName(...)` para repassar requisições: `getAgentByName`
+  faz uma RPC extra por chamada, e cada uma conta nas requisições de Durable
+  Object do plano Free.
+- Nenhum código fora de `gates/access.ts` lê cabeçalhos `cf-access-*`; o Worker
+  os remove antes do repasse ao Durable Object.
+
+## Logs
+
+- Os invocation logs estão ligados. Antes da etapa 12, confira num log real do
+  painel se cabeçalhos como `x-telegram-bot-api-secret-token` aparecem; se
+  aparecerem, desligue `invocation_logs` ou torne o segredo rotacionável.

@@ -17,16 +17,22 @@ export type Config =
   | { usable: false };
 
 const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
-/** Shortest accepted SESSION_SECRET and PASSWORD_PEPPER: 32 characters, as the installer generates 256-bit values. */
-export const MIN_SECRET_LENGTH = 32;
+/** Shortest accepted SESSION_SECRET and PASSWORD_PEPPER (48+ random characters, step 3 of the specification). */
+export const MIN_SECRET_LENGTH = 48;
+/** Shortest OWNER_PASSWORD accepted in place of OWNER_PASSWORD_HASH (installation without the installer). */
+export const MIN_OWNER_PASSWORD_LENGTH = 20;
 
 const secret = z.string().trim().min(MIN_SECRET_LENGTH);
-const requiredSecrets = z.object({
-  SESSION_SECRET: secret,
-  PASSWORD_PEPPER: secret,
-  OWNER_PASSWORD_HASH: z.string().trim().min(1),
-  OWNER_EMAIL: z.email(),
-});
+const requiredSecrets = z
+  .object({
+    SESSION_SECRET: secret,
+    PASSWORD_PEPPER: secret,
+    OWNER_EMAIL: z.email(),
+    OWNER_PASSWORD_HASH: z.string().trim().min(1).optional(),
+    // Without the hash, the plain password is accepted until the first sign-in replaces it (step 3).
+    OWNER_PASSWORD: z.string().min(MIN_OWNER_PASSWORD_LENGTH).optional(),
+  })
+  .refine((env) => env.OWNER_PASSWORD_HASH !== undefined || env.OWNER_PASSWORD !== undefined);
 
 /**
  * PUBLIC_URL must be a bare origin: https, or http on a loopback host for local

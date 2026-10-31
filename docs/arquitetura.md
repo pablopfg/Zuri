@@ -55,17 +55,23 @@ stack trace na resposta, e o log registra só o nome do erro.
 ## Configuração
 
 Nada pessoal fica no repositório. Os valores abaixo são definidos no painel da
-Cloudflare (ou pelo deploy, na etapa 24).
+Cloudflare (ou pelo deploy, na etapa 24). Grave `PUBLIC_URL` e os dois do Access
+como **segredo** (texto cifrado), mesmo sem serem secretos: o `wrangler deploy`
+apaga as variáveis comuns do painel que não estão no `wrangler.jsonc`, e o
+Worker ficaria fora do ar com `NOT_CONFIGURED`. Segredos sobrevivem ao deploy.
 
 | Nome | Tipo | Obrigatório | Regra |
 | --- | --- | --- | --- |
-| `PUBLIC_URL` | variável | sim | Só a origem, em HTTPS, como `https://zuri.exemplo.com.br`, sem caminho nem parâmetros |
-| `SESSION_SECRET` | segredo | sim | 32 caracteres ou mais |
-| `PASSWORD_PEPPER` | segredo | sim | 32 caracteres ou mais |
-| `OWNER_PASSWORD_HASH` | segredo | sim | Não vazio (o formato é conferido na etapa 3) |
+| `PUBLIC_URL` | segredo | sim | Só a origem, em HTTPS, como `https://zuri.exemplo.com.br`, sem caminho nem parâmetros |
+| `SESSION_SECRET` | segredo | sim | 48 caracteres ou mais |
+| `PASSWORD_PEPPER` | segredo | sim | 48 caracteres ou mais |
+| `OWNER_PASSWORD_HASH` | segredo | sim* | Não vazio (o formato é conferido na etapa 3) |
+| `OWNER_PASSWORD` | segredo | sim* | 20 caracteres ou mais; só quando não há `OWNER_PASSWORD_HASH` |
 | `OWNER_EMAIL` | segredo | sim | Um e-mail válido |
-| `ACCESS_TEAM_DOMAIN`, `ACCESS_AUD` | variável | não | Os dois ou nenhum |
+| `ACCESS_TEAM_DOMAIN`, `ACCESS_AUD` | segredo | não | Os dois ou nenhum |
 | `DEFAULT_TIMEZONE`, `AGENT_NAME` | variável | sim | Já vêm no `wrangler.jsonc` |
+
+\* Um dos dois: o hash, ou a senha em texto até o primeiro login trocá-la (etapa 3).
 
 O que acontece quando falta algo:
 
@@ -78,8 +84,9 @@ O que acontece quando falta algo:
 ## Observabilidade
 
 Os Workers Logs ficam ligados, sem corpo de requisição e com a query string
-removida (ela pode levar tokens de uso único). Os traces ficam desligados,
-porque passam a contar como uso cobrado a partir de 1/12/2026. O `wrangler`
+removida (ela pode levar tokens de uso único). Os traces ficam desligados: a
+partir de 1/12/2026 eles gastariam a cota diária gratuita de ingestão, a mesma
+dos logs. O `wrangler`
 não envia métricas de uso (`send_metrics: false`).
 
 ## Desenvolvimento local
@@ -89,8 +96,8 @@ O `npm run dev` monta a interface e sobe o Worker com `wrangler dev` em
 `apps/agent/.dev.vars` (ignorado pelo Git) com os segredos de teste:
 
 ```ini
-SESSION_SECRET=um-valor-local-com-pelo-menos-32-caracteres
-PASSWORD_PEPPER=outro-valor-local-com-pelo-menos-32-caracteres
+SESSION_SECRET=um-valor-local-qualquer-com-pelo-menos-48-caracteres-aqui
+PASSWORD_PEPPER=outro-valor-local-com-pelo-menos-48-caracteres-tambem
 OWNER_PASSWORD_HASH=provisorio
 OWNER_EMAIL=dono@exemplo.com.br
 ```
