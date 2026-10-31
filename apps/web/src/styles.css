@@ -13,6 +13,8 @@
   --color-bg: #f6f7f9;
   --color-surface: #ffffff;
   --color-raised: #eef0f4;
+  /* The sidebar: a shade between the page and the cards. */
+  --color-subtle: #fbfcfd;
   --color-fg: #0b0f19;
   --color-fg-muted: #4b5563;
   --color-border: #dde1e8;
@@ -38,6 +40,7 @@
   --color-bg: #0b0f19;
   --color-surface: #121826;
   --color-raised: #1a2233;
+  --color-subtle: #0f1420;
   --color-fg: #e8ecf3;
   --color-fg-muted: #a3acbd;
   --color-border: #263043;
