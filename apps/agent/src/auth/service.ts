@@ -730,15 +730,16 @@ export class AuthService {
     // Counted before anything is awaited: tries sent together can't all slip past the pause.
     const reserved = this.reserveSetupTry(client);
     await this.assertHuman(input.turnstileToken, client);
-    const code = await this.setupCode.current({ start: true });
-    if (!code || code.problem !== null) {
-      // Nothing to guess against; the same answer as a wrong code, and the try stays counted.
-      const blocked = this.setupCode.networkBlockedNow(client.network);
-      this.events.record(blocked ? "setup_locked" : "setup_failure", client, { reason: code?.problem ?? "missing", alert: blocked });
+    const right = await this.setupCode.matchesConfigured(input.code);
+    // The hour starts only with the right code: a wrong guess, even past the robot check, can't run it down.
+    const code = await this.setupCode.current({ start: right });
+    if (code?.problem) {
+      this.events.record("setup_failure", client, { reason: code.problem });
       throw this.codeRejected();
     }
-    if (!(await this.setupCode.matches(code.record, input.code))) {
-      this.wrongSetupTry(code, client, "code");
+    if (!right || !code) {
+      if (!this.setupCode.configured()) this.events.record("setup_failure", client, { reason: "missing" });
+      else this.wrongSetupTry(code, client, "code");
       throw this.codeRejected();
     }
     this.setupCode.release(client.network, reserved);
@@ -760,11 +761,23 @@ export class AuthService {
     return new AppError("INVALID_CREDENTIALS", "auth.setup.codeRejected", this.turnstile ? { turnstileSiteKey: this.turnstile.siteKey } : undefined);
   }
 
-  /** A wrong code or e-mail: counted for the code (an alert every 20 from anywhere) and, already, for the network. */
-  private wrongSetupTry(code: CodeState, client: ClientInfo, reason: string): void {
-    const codeAlert = this.setupCode.noteFailure(code.record);
+  /**
+   * A wrong code or e-mail: counted for the code once it is in use (every 20
+   * from anywhere are worth an alert) and, already, for the network. Alerts come
+   * at most every few hours, so a flood from many networks can't bury real ones.
+   */
+  private wrongSetupTry(code: CodeState | null, client: ClientInfo, reason: string): void {
+    const codeAlert = code ? this.setupCode.noteFailure(code.record) : false;
     const blocked = this.setupCode.networkBlockedNow(client.network);
-    this.events.record(blocked ? "setup_locked" : "setup_failure", client, { reason, alert: blocked || codeAlert });
+    this.events.record(blocked ? "setup_locked" : "setup_failure", client, { reason, alert: (blocked || codeAlert) && this.setupAlertDue() });
+  }
+
+  private setupAlertDue(): boolean {
+    const now = this.#clock();
+    const last = this.deps.state.get<number>("setup_alerted_at");
+    if (typeof last === "number" && last <= now && now - last < ATTACK_ALERT_INTERVAL_MS) return false;
+    this.deps.state.set("setup_alerted_at", now);
+    return true;
   }
 
   /** The form's ticket must belong to the configured code, still usable. */

@@ -54,9 +54,9 @@ Decisão do Pablo de 31/10/2026; plano completo em
   dele (HMAC com um sal aleatório criado uma vez e guardado no banco), nunca o
   valor, e nunca o escreve em log. Como o sal não muda, trocar o
   `SESSION_SECRET` não faz um código gasto ou vencido valer de novo.
-- **Uma hora, uma vez.** O código vale 1 hora, contada da primeira tentativa
-  que passa pela verificação contra robôs. Abrir a página não conta: um robô que
-  só visita o endereço não gasta a hora do dono. Depois do cadastro, ou de uma
+- **Uma hora, uma vez.** O código vale 1 hora, contada da primeira vez que
+  alguém digita o código certo. Abrir a página ou errar o código não conta: um
+  robô que visita o endereço ou chuta códigos não gasta a hora do dono. Depois do cadastro, ou de uma
   recuperação, ele fica gasto para sempre. Um código que volta a ser gravado
   guarda a hora da primeira vez, e um relógio que volta atrás não o reabre.
 - **Tentativas, por rede.** Cada tentativa (código errado ou, na recuperação,
@@ -65,7 +65,9 @@ Decisão do Pablo de 31/10/2026; plano completo em
   rede esperar (429 `RATE_LIMITED` com `Retry-After`). 20 em 24 horas bloqueiam
   a rede até o fim desse dia, com um evento `setup_locked` marcado para alerta.
   Uma tentativa certa devolve a vaga. O palpite de outra pessoa nunca pausa a
-  rede do dono. Somando todas as redes, cada 20 erros geram outro alerta. Depois
+  rede do dono. Depois que a hora começou, cada 20 erros somando todas as
+  redes também geram alerta. Os alertas do primeiro acesso saem no máximo um a
+  cada 6 horas, para um ataque espalhado em muitas redes não lotar o Telegram. Depois
   vem o Turnstile (obrigatório fora do local, falha fechado) e só então a
   comparação em tempo constante. Errado, vencido, gasto ou ausente têm a mesma
   resposta: 401 `INVALID_CREDENTIALS`, "Código inválido ou vencido".

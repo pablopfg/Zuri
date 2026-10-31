@@ -14,8 +14,8 @@ import type { InternalState } from "../db/internal-state.ts";
 
 /** Codes remembered (when first seen, whether spent). Older ones fall off; a code that old expired long ago. */
 const MAX_REMEMBERED = 100;
-/** Networks whose tries are remembered; the least recent fall off. */
-const MAX_NETWORKS = 500;
+/** Networks whose tries are remembered; past this, the ones not blocked fall off first (the least recent of them). */
+const MAX_NETWORKS = 200;
 
 /**
  * The code in use: never the code, only its fingerprint, when it was first
@@ -180,12 +180,13 @@ export class SetupCode {
       return { retryAfter: Math.max(1, Math.ceil((oldest + SETUP_PAUSE_MS - now) / 1000)) };
     }
     all[network] = [...mine, now];
-    const kept = Object.entries(all)
-      .map(([key, list]) => [key, (list ?? []).filter((at) => now - at < SETUP_NETWORK_BLOCK_MS)] as const)
-      .filter(([, list]) => list.length > 0)
-      .sort(([, a], [, b]) => Math.max(...b) - Math.max(...a))
-      .slice(0, MAX_NETWORKS);
-    this.state.set("setup_tries", JSON.stringify(Object.fromEntries(kept)));
+    const live = Object.entries(all)
+      .map(([key, list]) => [key, (Array.isArray(list) ? list : []).filter((at) => now - at < SETUP_NETWORK_BLOCK_MS)] as const)
+      .filter(([, list]) => list.length > 0);
+    // A blocked network must not fall off and come back with a clean slate: the others go first.
+    const blocked = (list: readonly number[]) => list.length >= SETUP_NETWORK_BLOCK_FAILURES;
+    live.sort(([, a], [, b]) => Number(blocked(b)) - Number(blocked(a)) || Math.max(...b) - Math.max(...a));
+    this.state.set("setup_tries", JSON.stringify(Object.fromEntries(live.slice(0, MAX_NETWORKS))));
     return { at: now };
   }
 
@@ -218,9 +219,10 @@ export class SetupCode {
     return record.failures % SETUP_NETWORK_BLOCK_FAILURES === 0;
   }
 
-  /** Compares a typed code with the configured one, by their keyed hashes, in constant time. */
-  async matches(record: CodeRecord, given: string): Promise<boolean> {
-    return timingSafeEqualText(await this.fingerprintOf(given), record.fp);
+  /** Compares a typed code with the configured one, by their keyed hashes, in constant time. False when none is set. */
+  async matchesConfigured(given: string): Promise<boolean> {
+    const [expected, typed] = await Promise.all([this.configuredFingerprint(), this.fingerprintOf(given)]);
+    return expected !== null && timingSafeEqualText(typed, expected);
   }
 
   // ---------- The form's ticket ----------

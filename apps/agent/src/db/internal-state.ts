@@ -22,6 +22,7 @@ export type InternalKey =
   | "setup_salt"
   | "setup_seen"
   | "setup_tries"
+  | "setup_alerted_at"
   | "setup_second_step_required";
 
 export class InternalState {

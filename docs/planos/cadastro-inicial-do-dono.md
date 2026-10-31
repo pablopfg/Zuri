@@ -11,8 +11,10 @@ dois divergem, vale esta lista e a seção de primeiro acesso de
 [seguranca.md](../seguranca.md#primeiro-acesso-e-recuperação-com-o-código-de-instalação).
 
 - `GET /api/setup` responde `{ setup }` e não grava nada. A hora do código
-  começa na primeira tentativa que passa pela verificação contra robôs, não na
-  primeira visita, para um robô não gastar a hora do dono.
+  começa só quando alguém digita o código certo, nem na primeira visita nem num
+  chute errado, para um robô não gastar a hora do dono. Alertas do primeiro
+  acesso saem no máximo um a cada 6 horas, e um código repetitivo (bloco curto
+  repetido) é recusado na configuração.
 - `POST /api/setup/code` responde 200 `{ mode, expiresAt }` com o cookie. Depois
   do cadastro, `/api/setup/owner` responde 409 `CONFLICT` (não 404), e o mesmo
   código responde como código inválido.

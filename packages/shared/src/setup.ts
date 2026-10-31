@@ -43,7 +43,15 @@ export const DEV_SETUP_COOKIE = "zuri_setup";
 export function isUsableSetupCode(value: unknown): value is string {
   if (typeof value !== "string") return false;
   const code = value.trim();
-  return code.length >= SETUP_CODE_MIN_LENGTH && code.length <= SETUP_CODE_MAX_LENGTH && new Set(code).size >= SETUP_CODE_MIN_DISTINCT;
+  if (code.length < SETUP_CODE_MIN_LENGTH || code.length > SETUP_CODE_MAX_LENGTH) return false;
+  if (new Set(code).size < SETUP_CODE_MIN_DISTINCT) return false;
+  // A short block repeated (abcdefghij abcdefghij…) is guessable however long it gets.
+  for (let period = 1; period <= code.length / 2; period++) {
+    let repeats = true;
+    for (let i = period; i < code.length && repeats; i++) repeats = code[i] === code[i - period];
+    if (repeats) return false;
+  }
+  return true;
 }
 
 /** GET /api/setup: only whether the first access is still to be done. Never whether a code is set. */

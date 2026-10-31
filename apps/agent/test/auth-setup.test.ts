@@ -111,6 +111,8 @@ describe("first access: the installation code", () => {
     for (const [name, setupCode] of [
       ["short", CODE.slice(0, 31)],
       ["repetitive", "ab".repeat(20)],
+      ["periodic", "abcdefghij".repeat(4)],
+      ["periodic-uneven", "q8Zr-T4mW-x2".repeat(3)],
     ] as const) {
       await withAuth(`setup-code-weak-${name}`, async (h) => {
         expect(h.service.setupCode.configured()).toBe(false);
@@ -119,7 +121,7 @@ describe("first access: the installation code", () => {
     }
   });
 
-  it("works for exactly one hour from the first try that passes the robot check: 59:59 yes, 1:00:00 no", async () => {
+  it("works for exactly one hour from the first right try: 59:59 yes, 1:00:00 no", async () => {
     await withAuth("setup-code-hour", async (h) => {
       // Opening the page starts nothing: a crawler can't run the hour down.
       expect(await h.service.setupStatus()).toEqual({ setup: true });
@@ -191,8 +193,37 @@ describe("first access: the installation code", () => {
       expect(blocked?.code).toBe("RATE_LIMITED");
       // Until the day of the first try is over.
       expect(blocked?.details?.retryAfter).toBe(SETUP_NETWORK_BLOCK_MS / 1000 - SETUP_NETWORK_BLOCK_FAILURES * 181);
-      // Another network is not blocked: it hears only that the code is no good (by now it expired).
-      expect(await outcome(ticket(h, CODE, "203.0.113.200"))).toBe("INVALID_CREDENTIALS");
+      // Another network is not blocked, and wrong guesses never started the code's hour.
+      expect(await outcome(ticket(h, CODE, "203.0.113.200"))).toBe("ok");
+    }, fresh());
+  });
+
+  it("wrong guesses past the robot check start no hour: the owner's code still works a day later", async () => {
+    await withAuth("setup-code-guess-no-hour", async (h) => {
+      for (let i = 1; i <= SETUP_PAUSE_FAILURES; i++) expect(await outcome(ticket(h, OTHER_CODE, `203.0.113.${i}`))).toBe("INVALID_CREDENTIALS");
+      expect(h.state.get("setup_code")).toBeUndefined();
+      expect(h.state.get("setup_seen")).toBeUndefined();
+      h.clock.advance(SETUP_NETWORK_BLOCK_MS);
+      expect(await outcome(ticket(h))).toBe("ok");
+    }, fresh());
+  });
+
+  it("alerts at most once every 6 hours, however many networks get blocked", async () => {
+    await withAuth("setup-code-alert-rate", async (h) => {
+      for (const network of ["203.0.113.10", "203.0.113.11"]) {
+        for (let i = 1; i <= SETUP_NETWORK_BLOCK_FAILURES; i++) {
+          await outcome(ticket(h, OTHER_CODE, network));
+          h.clock.advance(181_000);
+        }
+      }
+      const locked = h.events().filter((e) => e.kind === "setup_locked");
+      expect(locked.map((e) => e.alert_pending)).toEqual([1, 0]);
+      h.clock.advance(6 * HOUR);
+      for (let i = 1; i <= SETUP_NETWORK_BLOCK_FAILURES; i++) {
+        await outcome(ticket(h, OTHER_CODE, "203.0.113.12"));
+        h.clock.advance(181_000);
+      }
+      expect(h.events().filter((e) => e.kind === "setup_locked").map((e) => e.alert_pending)).toEqual([1, 0, 1]);
     }, fresh());
   });
 
