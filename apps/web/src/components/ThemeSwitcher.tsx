@@ -14,7 +14,8 @@ export function ThemeSwitcher() {
   return (
     <fieldset className="space-y-2">
       <legend className="text-sm font-medium">{t("web.theme.label")}</legend>
-      <div className="flex flex-wrap gap-2">
+      {/* Three equal columns on a phone, so no option drops to a line of its own. */}
+      <div className="grid grid-cols-3 gap-2 sm:flex sm:flex-wrap">
         {THEMES.map((option) => {
           const Icon = ICONS[option];
           const checked = theme === option;
@@ -22,7 +23,7 @@ export function ThemeSwitcher() {
             <label
               key={option}
               className={cn(
-                "inline-flex min-h-11 cursor-pointer items-center gap-2 rounded-xl border px-3 text-sm has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-accent",
+                "flex min-h-11 cursor-pointer flex-col items-center justify-center gap-1 rounded-xl border px-2 py-2 text-center text-sm sm:inline-flex sm:flex-row sm:gap-2 sm:px-3 sm:py-0 has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-accent",
                 checked ? "border-accent bg-accent-soft font-semibold text-accent-text" : "border-border-strong hover:bg-raised",
               )}
             >

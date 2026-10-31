@@ -4,7 +4,7 @@ import { type FormEvent, useState } from "react";
 import { SESSION_KEY } from "../hooks/session.tsx";
 import { api, errorMessage } from "../lib/api.ts";
 import { useI18n } from "../lib/i18n.tsx";
-import { Button, Notice, TextField } from "./ui.tsx";
+import { Button, Notice, PasswordField } from "./ui.tsx";
 
 /** Changes the password. The server checks the rules (length, predictable parts, leaks) and answers with a new session. */
 export function ChangePasswordForm({ onChanged }: { onChanged?: () => void }) {
@@ -41,18 +41,16 @@ export function ChangePasswordForm({ onChanged }: { onChanged?: () => void }) {
 
   return (
     <form onSubmit={submit} className="space-y-4" noValidate>
-      <TextField label={t("web.password.current")} type="password" autoComplete="current-password" value={current} onChange={(e) => setCurrent(e.target.value)} />
-      <TextField
+      <PasswordField label={t("web.password.current")} autoComplete="current-password" value={current} onChange={(e) => setCurrent(e.target.value)} />
+      <PasswordField
         label={t("web.password.new")}
-        type="password"
         autoComplete="new-password"
         hint={t("web.password.rules", { min: PASSWORD_MIN_LENGTH })}
         value={next}
         onChange={(e) => setNext(e.target.value)}
       />
-      <TextField
+      <PasswordField
         label={t("web.password.repeat")}
-        type="password"
         autoComplete="new-password"
         value={repeat}
         onChange={(e) => setRepeat(e.target.value)}

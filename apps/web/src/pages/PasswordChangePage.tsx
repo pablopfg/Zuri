@@ -1,7 +1,7 @@
 import { ChangePasswordForm } from "../components/ChangePasswordForm.tsx";
 import { Logo } from "../components/Logo.tsx";
 import { FullScreen } from "../components/RequireSession.tsx";
-import { Button, Card } from "../components/ui.tsx";
+import { Button, Card, useDocumentTitle } from "../components/ui.tsx";
 import { useSession } from "../hooks/session.tsx";
 import { useI18n } from "../lib/i18n.tsx";
 
@@ -9,6 +9,7 @@ import { useI18n } from "../lib/i18n.tsx";
 export function PasswordChangePage() {
   const { t } = useI18n();
   const { signOut } = useSession();
+  useDocumentTitle(t("web.passwordRequired.title"));
   return (
     <FullScreen>
       <Logo className="h-12 w-12" />

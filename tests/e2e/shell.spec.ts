@@ -44,6 +44,10 @@ test("signing out ends the session on the server and in every tab @mobile", asyn
 
   const logout = page.waitForResponse((r) => r.url().endsWith("/api/auth/logout"));
   await page.getByRole("button", { name: "Sair" }).first().click();
+  // On a phone the top bar's "Sair" asks first; the sidebar's leaves at once.
+  if (test.info().project.name === "mobile") {
+    await page.getByRole("dialog", { name: "Sair do Zuri?" }).getByRole("button", { name: "Sair" }).click();
+  }
   expect((await logout).status()).toBe(204);
   await expect(page).toHaveURL(/\/entrar$/);
   await expect(other).toHaveURL(/\/entrar\?next=%2Fconfiguracoes%2Fconta$/);
@@ -117,10 +121,10 @@ test("settings has the six tabs, each with its address and content @mobile", asy
   const tabs = page.getByRole("navigation", { name: "Seções das configurações" });
   for (const [name, path, text] of [
     ["Segurança", "seguranca", "Atividade de acesso"],
-    ["IA", "ia", "etapa 8"],
-    ["Avisos", "avisos", "etapa 11"],
-    ["Integrações", "integracoes", "etapas 18 e 19"],
-    ["Dados", "dados", "etapa 23"],
+    ["IA", "ia", "provedor de IA"],
+    ["Avisos", "avisos", "central de avisos"],
+    ["Integrações", "integracoes", "Google Agenda"],
+    ["Dados", "dados", "Backup e uso do armazenamento"],
     ["Conta", "conta", "Idioma e fuso horário"],
   ] as const) {
     await tabs.getByRole("link", { name }).click();

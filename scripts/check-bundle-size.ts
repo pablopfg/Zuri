@@ -5,9 +5,11 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { gzipSync } from "node:zlib";
 
-// Ratchet: the size of develop when the check came in. Lower it as the bundle
-// shrinks, never raise it without the owner's OK; the target of P11 is 160 kB.
-const BUDGET_KB = 175;
+// Ratchet: lowered with each PR that shrinks the bundle (175 kB when the check
+// came in; 158 kB after the design review left English and the QR and passkey
+// code out of the first load). Never raise it without the owner's OK; the
+// ceiling of P11 is 160 kB and its goal 150 kB.
+const BUDGET_KB = 158;
 
 const dist = join(import.meta.dirname, "..", "apps", "web", "dist");
 const html = readFileSync(join(dist, "index.html"), "utf8");

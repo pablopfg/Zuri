@@ -1,12 +1,18 @@
+// First: settles Zod's configuration before any schema below is built.
+import "./zod-config.ts";
+
 export {
   createTranslator,
   DEFAULT_LOCALE,
   isLocale,
   LOCALES,
   type Locale,
+  loadCatalog,
   type MessageKey,
+  type Messages,
   type PluralBase,
   plural,
+  ptBR,
   t,
 } from "../i18n/index.ts";
 export { AGENT_INSTANCE_NAME } from "./constants.ts";
@@ -19,7 +25,7 @@ export {
   DEFAULT_ERROR_MESSAGE,
   healthSchema,
 } from "./errors.ts";
-export { formatDateTime, formatUsd } from "./format.ts";
+export { formatDateTime, formatDateTimeParts, formatUsd } from "./format.ts";
 export {
   DEFAULT_SETTINGS,
   DEFAULT_TIME_ZONE,

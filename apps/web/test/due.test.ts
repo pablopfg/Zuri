@@ -1,3 +1,4 @@
+import { formatDateTime } from "@zuri/shared";
 import { describe, expect, it } from "vitest";
 import { dueFromInputs, dueInputs, formatDue, quickAddDue } from "../src/lib/due.ts";
 
@@ -26,8 +27,8 @@ describe("task deadlines in the owner's zone", () => {
   });
 
   it("shows the day alone or the day and the time", () => {
-    expect(formatDue("2026-11-06T02:59:00.000Z", "pt-BR", SP)).toBe("05/11/2026");
-    expect(formatDue("2026-11-05T12:30:00.000Z", "pt-BR", SP)).toBe("05/11/2026 às 09:30");
+    expect(formatDue("2026-11-06T02:59:00.000Z", "pt-BR", SP, (iso) => formatDateTime(iso, "pt-BR", SP))).toBe("05/11/2026");
+    expect(formatDue("2026-11-05T12:30:00.000Z", "pt-BR", SP, (iso) => formatDateTime(iso, "pt-BR", SP))).toBe("05/11/2026 às 09:30");
   });
 });
 

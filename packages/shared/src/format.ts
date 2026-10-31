@@ -5,10 +5,16 @@ import { type Locale, t } from "../i18n/index.ts";
  * The joining word comes from the catalog; Intl formats each half.
  */
 export function formatDateTime(value: Date | string | number, locale: Locale, timeZone: string): string {
+  return t(locale, "format.dateTime", formatDateTimeParts(value, locale, timeZone));
+}
+
+/** The two halves of formatDateTime, for a caller that joins them with its own catalog (the web app). */
+export function formatDateTimeParts(value: Date | string | number, locale: Locale, timeZone: string): { date: string; time: string } {
   const date = new Date(value);
-  const day = new Intl.DateTimeFormat(locale, { timeZone, day: "2-digit", month: "2-digit", year: "numeric" }).format(date);
-  const time = new Intl.DateTimeFormat(locale, { timeZone, hour: "2-digit", minute: "2-digit" }).format(date);
-  return t(locale, "format.dateTime", { date: day, time });
+  return {
+    date: new Intl.DateTimeFormat(locale, { timeZone, day: "2-digit", month: "2-digit", year: "numeric" }).format(date),
+    time: new Intl.DateTimeFormat(locale, { timeZone, hour: "2-digit", minute: "2-digit" }).format(date),
+  };
 }
 
 /** Money in US dollars, the currency of AI prices: "US$ 1,25" in pt-BR, "$1.25" in en. */

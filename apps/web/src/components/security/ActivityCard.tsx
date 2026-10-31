@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { type AuthEventKind, authActivitySchema, type MessageKey } from "@zuri/shared";
-import { History } from "lucide-react";
+import { History, TriangleAlert } from "lucide-react";
 import { api } from "../../lib/api.ts";
 import { useI18n } from "../../lib/i18n.tsx";
 import { describeUserAgent } from "../../lib/user-agent.ts";
@@ -66,6 +66,8 @@ export function ActivityCard() {
               <li key={event.id} className="flex flex-col gap-1 p-3 sm:flex-row sm:items-start sm:justify-between">
                 <div className="min-w-0">
                   <p className={cn("font-medium", WARNING_KINDS.has(event.kind) && "text-danger")}>
+                    {/* Not by color alone: refusals also carry the warning sign. */}
+                    {WARNING_KINDS.has(event.kind) && <TriangleAlert className="mr-1.5 inline h-4 w-4 align-[-2px]" aria-hidden />}
                     {t(KIND_LABEL[event.kind])}
                     {event.count > 1 && <span className="font-normal text-fg-muted"> · {plural("web.activity.times", event.count)}</span>}
                   </p>

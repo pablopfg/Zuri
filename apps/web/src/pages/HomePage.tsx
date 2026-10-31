@@ -1,12 +1,9 @@
-import type { MfaStatus } from "@zuri/shared";
-import { useQuery } from "@tanstack/react-query";
 import { ChevronRight, Clock, MessageCircle, ShieldAlert, ShieldCheck } from "lucide-react";
 import { type ReactNode, useId } from "react";
 import { Link } from "react-router";
-import { MFA_KEY } from "../components/security/TwoStepCard.tsx";
 import { EmptyState, ErrorNotice, PageHeader, Spinner } from "../components/ui.tsx";
+import { useMfaStatus } from "../hooks/mfa.ts";
 import { useSession } from "../hooks/session.tsx";
-import { api } from "../lib/api.ts";
 import { useI18n } from "../lib/i18n.tsx";
 
 /** A small status card of the home page. */
@@ -27,11 +24,11 @@ function StatusCard({ icon, title, children }: { icon: ReactNode; title: string;
 export function HomePage() {
   const { t, dateTime } = useI18n();
   const { session } = useSession();
-  const mfa = useQuery({ queryKey: MFA_KEY, queryFn: () => api<MfaStatus>("/auth/mfa") });
+  const mfa = useMfaStatus();
 
   return (
     <>
-      <PageHeader title={t("web.home.title")} description={t("web.home.subtitle")} />
+      <PageHeader title={t("web.home.title")} description={t("web.home.subtitle")} documentTitle={t("web.nav.home")} />
       <div className="grid gap-4 md:grid-cols-2">
         <StatusCard
           icon={mfa.data && !mfa.data.enabled ? <ShieldAlert className="h-4 w-4 text-warning" aria-hidden /> : <ShieldCheck className="h-4 w-4 text-accent-text" aria-hidden />}
