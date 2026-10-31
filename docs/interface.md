@@ -37,6 +37,13 @@ para o início (`apps/web/src/lib/next.ts`).
   saem juntas (BroadcastChannel) e o login explica o motivo. O prazo conta
   pelo relógio do servidor convertido para o do aparelho, então um relógio
   errado no celular não encerra nem prolonga a sessão.
+- **Aba que volta do segundo plano.** Se a contagem da própria aba acabou
+  enquanto ela estava escondida (ou há menos de 5 s na frente), ela trava só a
+  si mesma e pergunta ao servidor, sem encerrar a sessão das outras abas. Se o
+  servidor diz que a sessão segue aberta, a última atividade que ele conhece
+  passa a ser o ponto de partida da contagem da aba, que volta para a página.
+  Um sinal de presença que já estava a caminho não reabre uma aba travada nem
+  uma sessão encerrada.
 - **401 em qualquer pedido** (sessão encerrada pelo servidor, cookie apagado)
   limpa os dados da memória e leva ao login com `?next=`.
 - **Senha recente.** Quando a API responde `RECENT_AUTH_REQUIRED`, um diálogo

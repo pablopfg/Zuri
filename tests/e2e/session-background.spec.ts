@@ -31,18 +31,30 @@ test("a background tab whose own count ran out locks itself without signing out 
   await setVisibility(page, "hidden");
   // The page's clock jumps past the 30-minute idle limit; the server's real clock
   // does not, so the session is still open there (as if used in another tab).
-  const asked = page.waitForResponse((r) => r.url().endsWith("/api/auth/session"));
+  const isSession = (r: { url(): string }) => r.url().endsWith("/api/auth/session");
+  const asked = page.waitForResponse(isSession);
   await page.clock.fastForward("31:00");
   expect((await asked).status()).toBe(200);
+
+  // From the server's "still open" on, the tab must stay where it was: before the
+  // fix its own stale count locked it again on every answer, bouncing between
+  // the sign-in screen and the page dozens of times a second, for good.
+  const signInVisits: string[] = [];
+  page.on("framenavigated", (frame) => {
+    if (frame === page.mainFrame() && new URL(frame.url()).pathname === "/entrar") signInVisits.push(frame.url());
+  });
 
   expect(logouts).toEqual([]);
   const server = await page.request.get("/api/auth/session", { headers: CSRF });
   expect(server.status()).toBe(200);
 
-  // Back in front: the server's answer reopens the page where it was.
+  // Back in front: the tab asks the server once more and stays on the page.
+  const checked = page.waitForResponse(isSession);
   await setVisibility(page, "visible");
+  expect((await checked).status()).toBe(200);
   await expect(page.getByRole("heading", { level: 1, name: "Configurações" })).toBeVisible();
   await expect(page).toHaveURL(/\/configuracoes\/conta$/);
+  expect(signInVisits).toEqual([]);
   expect(logouts).toEqual([]);
 });
 
