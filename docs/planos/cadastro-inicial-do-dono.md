@@ -102,7 +102,9 @@ sistema responde que ainda não há dono.
    `SameSite=Strict`. Campos:
    - Como prefere ser chamado (até 40 caracteres). É o mesmo campo que a
      área logada vai ter em Configurações > Conta para os cumprimentos;
-     o cadastro só preenche esse campo, sem criar outro.
+     o cadastro só preenche esse campo, sem criar outro (`ownerName`, chave
+     `owner_name`, com `normalizeOwnerName` e `OWNER_NAME_MAX` de
+     `packages/shared/src/settings.ts`).
    - E-mail (vira o login e o endereço de recuperação).
    - Senha e confirmação, com as regras de hoje: 15+ caracteres, partes
      previsíveis não contam (nome e e-mail entram na lista), conferência de
