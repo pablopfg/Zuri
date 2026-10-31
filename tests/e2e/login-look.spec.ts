@@ -103,7 +103,16 @@ test("the brand side stays dark in the light theme, beside the form on a compute
   } else {
     // On a phone the brand is a short block on top; the list waits for a wider screen.
     expect(formBox.y).toBeGreaterThanOrEqual(brandBox.y + brandBox.height);
-    expect(brandBox.height).toBeLessThan(260);
+    expect(formBox.y).toBeLessThan((page.viewportSize()?.height ?? 0) / 2);
     await expect(points).toBeHidden();
   }
+});
+
+test("in the dark theme the brand side keeps its color and the button turns light", async ({ page }) => {
+  await page.emulateMedia({ colorScheme: "dark" });
+  await page.goto("/entrar");
+  const headline = page.getByText("Tudo o que importa, num só lugar.");
+  const brand = page.locator("section").filter({ has: headline });
+  expect(await brand.evaluate((el) => getComputedStyle(el).backgroundColor)).toBe("rgb(11, 15, 25)");
+  expect(await page.getByRole("button", { name: "Entrar" }).evaluate((el) => getComputedStyle(el).backgroundColor)).toBe("rgb(232, 236, 243)");
 });

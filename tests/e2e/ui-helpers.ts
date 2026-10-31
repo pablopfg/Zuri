@@ -17,6 +17,16 @@ export async function signIn(page: Page, password = PASSWORD) {
 
 /** No serious or critical axe violation on the page as it is now. */
 export async function expectAccessible(page: Page, label: string) {
+  // Mid-entrance a fading element reads as low contrast: check the state the owner ends up seeing.
+  // Only finite animations: an endless one (a spinner, the busy logo) never settles.
+  await page.evaluate(() =>
+    Promise.all(
+      document
+        .getAnimations()
+        .filter((animation) => animation.effect?.getComputedTiming().iterations !== Number.POSITIVE_INFINITY)
+        .map((animation) => animation.finished.catch(() => undefined)),
+    ),
+  );
   const results = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"]).analyze();
   const serious = results.violations
     .filter((v) => v.impact === "serious" || v.impact === "critical")

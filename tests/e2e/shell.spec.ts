@@ -132,6 +132,12 @@ test("settings has the six tabs, each with its address and content @mobile", asy
     await expect(tabs.getByRole("link", { name })).toHaveAttribute("aria-current", "page");
     await expect(page.getByRole("main")).toContainText(text);
   }
+  // These texts arrive with the screen, not with the first download: they must still show, never as raw keys.
+  await expect(page.getByRole("main")).toContainText("Conta, segurança e o que o Zuri pode usar.");
+  await tabs.getByRole("link", { name: "Segurança" }).click();
+  await expect(page.getByRole("main")).toContainText("Saída automática");
+  await expect(page.getByRole("main")).toContainText("Em breve nesta aba");
+  await expect(page.getByRole("main")).not.toContainText("web.");
 });
 
 test("changing the language to English changes the interface and the API's errors", async ({ page }) => {
