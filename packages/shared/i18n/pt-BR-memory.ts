@@ -2,9 +2,9 @@
 // the interface downloads them with the screen and not in its first bundle (rule P11).
 export const ptBRMemory = {
   "web.memory.title": "Memória",
-  "web.memory.description": "O que o Zuri sabe sobre você. Fatos que mudam guardam o histórico, e nada é trocado ou apagado sem você saber.",
+  "web.memory.description": "O que a Zuri sabe sobre você. Fatos que mudam guardam o histórico, e nada é trocado ou apagado sem você saber.",
   "web.memory.new": "Guardar uma memória",
-  "web.memory.newHint": "Um fato por vez, nas suas palavras. Se ele muda algo que já está guardado, o Zuri pergunta antes de mexer.",
+  "web.memory.newHint": "Um fato por vez, nas suas palavras. Se ele muda algo que já está guardado, a Zuri pergunta antes de mexer.",
   "web.memory.content": "Memória",
   "web.memory.placeholder": "Ex.: Moro em Curitiba desde 2024",
   "web.memory.counter": "{used} de {max} caracteres",
@@ -33,7 +33,7 @@ export const ptBRMemory = {
   "web.memory.filterCategory": "Filtrar por tipo",
   "web.memory.allCategories": "Todos os tipos",
   "web.memory.empty.title": "Nenhuma memória ainda",
-  "web.memory.empty.body": "Guarde aqui o que o Zuri deve lembrar sobre você: onde mora, do que gosta, no que trabalha. Você vê, corrige e apaga tudo.",
+  "web.memory.empty.body": "Guarde aqui o que a Zuri deve lembrar sobre você: onde mora, do que gosta, no que trabalha. Você vê, corrige e apaga tudo.",
   "web.memory.empty.filter": "Nenhuma memória neste filtro.",
   "web.memory.empty.search": "Nenhuma memória com essas palavras.",
   "web.memory.status.active": "Atual",
@@ -95,5 +95,5 @@ export const ptBRMemory = {
   "web.memory.topic.relationship": "o seu relacionamento",
   "web.memory.settings.title": "Como a memória funciona",
   "web.memory.settings.conflict": "Revisão de conflitos",
-  "web.memory.settings.conflictHint": "Ao guardar uma memória, o Zuri procura as antigas que ela pode mudar e pergunta aqui. Usa só regras de texto, sem IA. Desligada, as memórias são guardadas sem essa conferência.",
+  "web.memory.settings.conflictHint": "Ao guardar uma memória, a Zuri procura as antigas que ela pode mudar e pergunta aqui. Usa só regras de texto, sem IA. Desligada, as memórias são guardadas sem essa conferência.",
 } as const;

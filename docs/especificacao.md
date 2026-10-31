@@ -285,7 +285,7 @@ Chat: `@cf/zai-org/glm-4.7-flash`. Transcrição: `@cf/openai/whisper-large-v3-t
 
 ### Prompt de sistema
 
-Ordem: nome do agente (uma linha) → instruções fixas → instruções do dono → memórias → resumo → histórico. Todo conteúdo guardado entra como `<data source="memory|note|task|tool|mcp|telegram_forward|calendar|remote_event" id="...">…</data>`, um item por linha; dentro do bloco, `<` e `>` viram `‹` e `›`. Referência: `apps/agent/src/agent/{runner.ts,prompt.ts}`. Cada cenário da seção "Prompt injection e segurança das ferramentas" de `docs/security.md` vira um teste com o mock.
+Ordem: nome do agente (uma linha) → instruções fixas → instruções do dono → memórias → resumo → histórico. Todo conteúdo guardado entra como `<data source="memory|note|task|tool|mcp|telegram_forward|calendar|remote_event|settings" id="...">…</data>`, um item por linha; dentro do bloco, `<` e `>` viram `‹` e `›`. O nome do dono (`ownerName`) é conteúdo guardado: entra como `<data source="settings" id="ownerName">`, nunca interpolado nas instruções fixas (`docs/seguranca.md`, "Conteúdo guardado no prompt"). As instruções fixas descrevem a personalidade da agente: feminina, simpática e natural, sem tom robótico (decisão do Pablo, 31/10/2026). Referência: `apps/agent/src/agent/{runner.ts,prompt.ts}`. Cada cenário da seção "Prompt injection e segurança das ferramentas" de `docs/security.md` vira um teste com o mock.
 
 ### Classes de ferramentas
 

@@ -15,6 +15,9 @@ export async function seed(page: Page, base: string) {
     if (!res.ok()) throw new Error(`${path}: ${res.status()} ${await res.text()}`);
     return (await res.json()) as Record<string, { id: string } | undefined> & { id?: string };
   };
+  // A sample name for the greeting on the home page (never the owner's real one).
+  const named = await page.request.patch(`${base}/api/settings`, { headers: CSRF, data: { ownerName: "Ana" } });
+  if (!named.ok()) throw new Error(`/api/settings: ${named.status()} ${await named.text()}`);
   const created = await post("/api/projects", { name: "Mudança de apartamento", description: "Tudo o que falta até a entrega das chaves." });
   const projectId = created.project?.id ?? created.id;
   await post("/api/projects", { name: "Curso de fotografia" });

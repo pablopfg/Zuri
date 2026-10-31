@@ -279,7 +279,7 @@ describe("errors", () => {
   it("answers in the { code, message } format with the catalog's pt-BR text", async () => {
     const res = await call("https://outro.exemplo.com.br/api/health");
     const body = apiErrorSchema.parse(await res.json());
-    expect(body).toEqual({ code: "HOST_NOT_ALLOWED", message: "Este endereço não atende o Zuri." });
+    expect(body).toEqual({ code: "HOST_NOT_ALLOWED", message: "Este endereço não atende a Zuri." });
     expect(res.headers.get("content-type")).toContain("application/json");
   });
 

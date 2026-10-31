@@ -16,7 +16,7 @@ function runOwner<T>(fn: (db: Database) => T): Promise<T> {
 
 afterEach(async () => {
   await runOwner((db) =>
-    db.run(`DELETE FROM zur_settings WHERE key IN ('language', 'time_zone', 'session_idle_minutes', 'session_presence_minutes', 'session_max_hours')`),
+    db.run(`DELETE FROM zur_settings WHERE key IN ('language', 'time_zone', 'session_idle_minutes', 'session_presence_minutes', 'session_max_hours', 'owner_name')`),
   );
 });
 
@@ -102,6 +102,44 @@ describe("GET and PATCH /api/settings", () => {
     const after = await patchSettings(ip, cookie, { sessionIdleMinutes: 60, sessionPresenceMinutes: 3, sessionMaxHours: 1 });
     expect(after.status).toBe(200);
     expect(await after.json()).toMatchObject({ sessionIdleMinutes: 60, sessionPresenceMinutes: 3, sessionMaxHours: 1 });
+  });
+
+  it("saves the owner's name tidied, without the password typed recently, and logs only that the field changed", async () => {
+    const ip = "192.0.2.88";
+    const cookie = await signIn(ip);
+    await runOwner((db) => db.run(`UPDATE zur_sessions SET confirmed_at = ?`, Date.now() - 16 * 60_000));
+
+    const saved = await patchSettings(ip, cookie, { ownerName: "  Ana \n Clara " });
+    expect(saved.status).toBe(200);
+    expect(settingsSchema.parse(await saved.json()).ownerName).toBe("Ana Clara");
+    expect(settingsSchema.parse(await (await getSettings(ip, cookie)).json()).ownerName).toBe("Ana Clara");
+
+    const logged = await runOwner((db) =>
+      db.all<{ detail: string }>(`SELECT detail FROM zur_activity WHERE kind = 'settings.updated' ORDER BY rowid DESC LIMIT 1`),
+    );
+    expect(logged[0]?.detail).toContain("ownerName");
+    expect(logged[0]?.detail).not.toContain("Ana");
+
+    const cleared = await patchSettings(ip, cookie, { ownerName: "" });
+    expect(settingsSchema.parse(await cleared.json()).ownerName).toBe("");
+  });
+
+  it.each([
+    ["a tag", "<img src=x onerror=alert(1)>"],
+    ["a right-to-left override", "Pablo\u202Eoilbap"],
+    ["a zero-width space", "Pa\u200Bblo"],
+    ["41 characters", "a".repeat(41)],
+    ["a number", 42],
+  ])("refuses an owner name with %s and keeps the one stored", async (_name, ownerName) => {
+    const ip = "192.0.2.89";
+    const cookie = await signIn(ip);
+    expect((await patchSettings(ip, cookie, { ownerName: "Pablo" })).status).toBe(200);
+    const res = await patchSettings(ip, cookie, { ownerName });
+    expect(res.status).toBe(400);
+    const error = apiErrorSchema.parse(await res.json());
+    expect(error).toMatchObject({ code: "VALIDATION_FAILED", details: { fields: ["ownerName"] } });
+    expect(JSON.stringify(error)).not.toContain("onerror");
+    expect(settingsSchema.parse(await (await getSettings(ip, cookie)).json()).ownerName).toBe("Pablo");
   });
 
   it("refuses a body over 4 KB", async () => {

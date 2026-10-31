@@ -5,7 +5,7 @@ export const ptBRAi = {
   "error.aiLimit.requests":
     "Você chegou ao limite diário de pedidos à IA. Ele renova à meia-noite UTC (21h em Brasília). Tarefas, notas e memórias continuam funcionando; o limite muda em Configurações > IA.",
   "error.aiLimit.neurons":
-    "A IA chegou ao teto diário de Neurons, que mantém o Zuri dentro da cota grátis da Cloudflare. Ele renova à meia-noite UTC (21h em Brasília). Tarefas, notas e memórias continuam funcionando.",
+    "A IA chegou ao teto diário de Neurons, que mantém a Zuri dentro da cota grátis da Cloudflare. Ele renova à meia-noite UTC (21h em Brasília). Tarefas, notas e memórias continuam funcionando.",
   "error.aiLimit.audio": "Você chegou a 1 hora de áudio transcrito hoje. O limite renova à meia-noite UTC (21h em Brasília).",
   "error.aiQuotaExhausted":
     "A cota grátis de Workers AI da sua conta Cloudflare acabou por hoje. Tarefas, notas e memórias continuam funcionando; a IA volta quando a cota renovar.",
@@ -49,10 +49,10 @@ export const ptBRAi = {
   "web.ai.estimated": "{count} estimados",
   "web.ai.week": "Neurons nos últimos 7 dias",
   "web.ai.weekDay": "{day}: {neurons} Neurons, {requests} pedidos",
-  "web.ai.pricing": "Preços da Cloudflare conferidos em {date}. São estimativas do Zuri, não uma fatura.",
+  "web.ai.pricing": "Preços da Cloudflare conferidos em {date}. São estimativas da Zuri, não uma fatura.",
   "web.ai.pricingLink": "Tabela de preços do Workers AI",
   "web.ai.settings.title": "Modelo e limites",
-  "web.ai.settings.description": "Quando um limite chega, o Zuri recusa o pedido com um aviso antes de chamar a IA. Nada pago é ligado.",
+  "web.ai.settings.description": "Quando um limite chega, a Zuri recusa o pedido com um aviso antes de chamar a IA. Nada pago é ligado.",
   "web.ai.model": "Modelo de conversa",
   "web.ai.modelHint": "Cerca de {neurons} Neurons por resposta típica; {turns} respostas cabem no teto do dia.",
   "web.ai.modelDefault": "{label} (padrão)",

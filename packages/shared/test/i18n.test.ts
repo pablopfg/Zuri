@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { catalogs, createTranslator, DEFAULT_LOCALE, isLocale, LOCALES, loadCatalog, ptBR, ptBRAi, ptBRCore, ptBRMemory, ptBRPalette, ptBRProductivity, ptBRSecurity, ptBRServer, ptBRSettings, t } from "../i18n/index.ts";
+import { catalogs, createTranslator, DEFAULT_LOCALE, isLocale, LOCALES, loadCatalog, ptBR, ptBRAi, ptBRCore, ptBRGreeting, ptBRMemory, ptBRPalette, ptBRProductivity, ptBRSecurity, ptBRServer, ptBRSettings, t } from "../i18n/index.ts";
 
 const placeholders = (text: string) => [...text.matchAll(/\{(\w+)\}/g)].map((m) => m[1]).sort();
 
@@ -62,12 +62,19 @@ describe("isLocale", () => {
     // pt-BR is never fetched: it is in every bundle already.
     await expect(loadCatalog("pt-BR" as "en")).rejects.toThrow("no catalog for pt-BR");
     // The whole pt-BR catalog is its core plus each screen's part, nothing more and nothing less.
-    expect({ ...ptBRCore, ...ptBRMemory, ...ptBRProductivity, ...ptBRSecurity, ...ptBRAi, ...ptBRSettings, ...ptBRServer, ...ptBRPalette }).toEqual(ptBR);
-    const parts = [ptBRCore, ptBRMemory, ptBRProductivity, ptBRSecurity, ptBRAi, ptBRSettings, ptBRServer, ptBRPalette].map((part) => Object.keys(part));
+    expect({ ...ptBRCore, ...ptBRMemory, ...ptBRProductivity, ...ptBRSecurity, ...ptBRAi, ...ptBRSettings, ...ptBRServer, ...ptBRPalette, ...ptBRGreeting }).toEqual(ptBR);
+    const parts = [ptBRCore, ptBRMemory, ptBRProductivity, ptBRSecurity, ptBRAi, ptBRSettings, ptBRServer, ptBRPalette, ptBRGreeting].map((part) => Object.keys(part));
     // No key in two parts: one of them would silently win.
     expect(parts.flat().length).toBe(new Set(parts.flat()).size);
-    const lazy = /^(web\.(memory|tasks|notes|trash|projects|accessLog|activity|ai|mfa|passkeys|sessions|unit|security|palette)\.|error\.ai|ai\.|auth\.mfa\.|auth\.password\.)/;
+    const lazy = /^(web\.(memory|tasks|notes|trash|projects|accessLog|activity|ai|mfa|passkeys|sessions|unit|security|palette|greeting)\.|error\.ai|ai\.|auth\.mfa\.|auth\.password\.)/;
     expect(Object.keys(ptBRCore).filter((key) => lazy.test(key))).toEqual([]);
+  });
+
+  it("speaks of the agent in the feminine: \"a Zuri\", never \"o Zuri\" (Pablo, 31/10/2026)", () => {
+    const masculine = Object.entries(ptBR).filter(
+      ([, text]) => /\b(o|O|do|Do|no|No|ao|Ao|pelo|Pelo|um|seu|Seu)\s+Zuri\b/.test(text) || /Zuri\b[^.?!]*\b(sozinho|configurado|pronto|inspirado|ele)\b/.test(text),
+    );
+    expect(masculine).toEqual([]);
   });
 
   it("knows only the shipped locales", () => {

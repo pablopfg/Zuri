@@ -72,12 +72,12 @@ for (const [device, options] of [
       await seed(page, BASE);
       seeded = true;
     }
-    const visit = async (path: string, name: string, ready: string) => {
+    const visit = async (path: string, name: string, ready: string | RegExp) => {
       await page.goto(BASE + path);
       await page.getByText(ready).first().waitFor();
       await shot(name);
     };
-    await visit("/", "inicio", "Olá!");
+    await visit("/", "inicio", /^(Bom dia|Boa tarde|Boa noite)/);
     await visit("/tarefas", "tarefas", "Pagar a conta de luz");
     await visit("/notas", "notas", "Ideias para a sala nova");
     await page.getByText("Ideias para a sala nova").first().click();

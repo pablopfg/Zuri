@@ -12,7 +12,7 @@ const sidebar = (page: Page) => page.locator("aside");
 async function openHome(page: Page) {
   await page.goto("/");
   await signIn(page);
-  await expect(page.getByRole("heading", { level: 1, name: "Olá!" })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: /^(Bom dia|Boa tarde|Boa noite)/ })).toBeVisible();
 }
 
 test("collapsing keeps every control named, remembers the choice and expands again", async ({ page }) => {
@@ -37,7 +37,7 @@ test("collapsing keeps every control named, remembers the choice and expands aga
 
   // Still collapsed after a reload: a look remembered on this device.
   await page.reload();
-  await expect(page.getByRole("heading", { level: 1, name: "Olá!" })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: /^(Bom dia|Boa tarde|Boa noite)/ })).toBeVisible();
   await expect(aside).toHaveAttribute("data-collapsed", "true");
   expect(await page.evaluate(() => localStorage.getItem("zuri.sidebar"))).toBe("collapsed");
 
@@ -86,7 +86,7 @@ test("another tab follows the change", async ({ page, context }) => {
   await openHome(page);
   const other = await context.newPage();
   await other.goto("/");
-  await expect(other.getByRole("heading", { level: 1, name: "Olá!" })).toBeVisible();
+  await expect(other.getByRole("heading", { level: 1, name: /^(Bom dia|Boa tarde|Boa noite)/ })).toBeVisible();
   await sidebar(page).getByRole("button", { name: "Recolher menu" }).click();
   await expect(sidebar(other)).toHaveAttribute("data-collapsed", "true");
 });

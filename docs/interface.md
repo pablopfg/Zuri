@@ -1,6 +1,6 @@
 # Interface web
 
-A interface do Zuri é um app React servido pelo próprio Worker (binding
+A interface da Zuri é um app React servido pelo próprio Worker (binding
 `ASSETS`), com React Router, TanStack Query e Tailwind. Ela passa pelos mesmos
 portões da API e não guarda segredo nenhum: o bundle só conhece o caminho
 `/api`.
@@ -75,6 +75,16 @@ Segue a UI do Talorys (decisão do Pablo, 31/10/2026):
 - **Lembrete de 2FA:** enquanto a verificação em duas etapas estiver
   desligada, uma faixa acima do conteúdo chama para ligar. "Lembrar depois"
   esconde por 3 dias, só neste navegador; nas Configurações ela não aparece.
+- **Cumprimento no Início:** no lugar do `PageHeader`, a Zuri cumprimenta pelo
+  horário do fuso das configurações (nunca o do aparelho): bom dia das 5h às
+  12h, boa tarde até 18h e boa noite depois, com frases próprias de madrugada.
+  Usa o nome de Configurações > Conta (`ownerName`, até 40 caracteres) quando
+  existe. A frase de baixo, na voz dela, fica fixa durante o período e muda a
+  cada dia sem repetir a do dia anterior (`apps/web/src/lib/greeting.ts`). O
+  componente e as frases (`pt-BR-greeting.ts`) carregam sob demanda; um
+  espaço do mesmo tamanho segura o lugar para a página não pular. O
+  cumprimento vira sozinho na troca de período (relógio que olha de novo a
+  cada hora, no máximo) e ao voltar para a aba.
 
 ## Identidade visual
 

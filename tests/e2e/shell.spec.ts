@@ -22,7 +22,7 @@ test("an unsafe ?next= opens the home page instead of another site", async ({ pa
   await page.goto("/entrar?next=%2F%2Fatacante.exemplo.com.br");
   await signIn(page);
   await expect(page).toHaveURL(/\/$/);
-  await expect(page.getByRole("heading", { level: 1, name: "Olá!" })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: /^(Bom dia|Boa tarde|Boa noite)/ })).toBeVisible();
 });
 
 test("a wrong password shows the server's message and keeps the e-mail", async ({ page }) => {
@@ -37,7 +37,7 @@ test("a wrong password shows the server's message and keeps the e-mail", async (
 test("signing out ends the session on the server and in every tab @mobile", async ({ page, context }) => {
   await page.goto("/");
   await signIn(page);
-  await expect(page.getByRole("heading", { level: 1, name: "Olá!" })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: /^(Bom dia|Boa tarde|Boa noite)/ })).toBeVisible();
   const other = await context.newPage();
   await other.goto("/configuracoes/conta");
   await expect(other.getByRole("heading", { level: 1, name: "Configurações" })).toBeVisible();
@@ -46,7 +46,7 @@ test("signing out ends the session on the server and in every tab @mobile", asyn
   await page.getByRole("button", { name: "Sair" }).first().click();
   // On a phone the top bar's "Sair" asks first; the sidebar's leaves at once.
   if (test.info().project.name === "mobile") {
-    await page.getByRole("dialog", { name: "Sair do Zuri?" }).getByRole("button", { name: "Sair" }).click();
+    await page.getByRole("dialog", { name: "Sair da Zuri?" }).getByRole("button", { name: "Sair" }).click();
   }
   expect((await logout).status()).toBe(204);
   await expect(page).toHaveURL(/\/entrar$/);
@@ -80,21 +80,21 @@ test("the warning's button keeps the session open", async ({ page }) => {
   await page.clock.install();
   await page.goto("/");
   await signIn(page);
-  await expect(page.getByRole("heading", { level: 1, name: "Olá!" })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: /^(Bom dia|Boa tarde|Boa noite)/ })).toBeVisible();
   await page.clock.fastForward("28:30");
   const beat = page.waitForRequest((r) => r.url().endsWith("/api/auth/heartbeat") && r.postDataJSON()?.active === true);
   await page.getByRole("button", { name: "Continuar conectado" }).click();
   await beat;
   await expect(page.getByRole("dialog")).toHaveCount(0);
   await page.clock.fastForward("05:00");
-  await expect(page.getByRole("heading", { level: 1, name: "Olá!" })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: /^(Bom dia|Boa tarde|Boa noite)/ })).toBeVisible();
   await expect(page).toHaveURL(/\/$/);
 });
 
 test("a session the server ended sends to the sign-in at the next request, with ?next=", async ({ page, context }) => {
   await page.goto("/");
   await signIn(page);
-  await expect(page.getByRole("heading", { level: 1, name: "Olá!" })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: /^(Bom dia|Boa tarde|Boa noite)/ })).toBeVisible();
   await context.clearCookies();
   // The security tab asks the server for fresh data on opening; the answer is 401.
   await page.getByRole("link", { name: "Revisar a segurança da conta" }).click();
@@ -134,7 +134,7 @@ test("settings has the six sections, each with its address and content: tabs on 
     ["Avisos", "avisos", "central de avisos"],
     ["Integrações", "integracoes", "Google Agenda"],
     ["Dados", "dados", "Backup e uso do armazenamento"],
-    ["Conta", "conta", "Idioma e fuso horário"],
+    ["Conta", "conta", "Nome, idioma e fuso horário"],
   ] as const) {
     await openSettingsSection(page, name);
     await expect(page).toHaveURL(new RegExp(`/configuracoes/${path}$`));
@@ -148,7 +148,7 @@ test("settings has the six sections, each with its address and content: tabs on 
     }
   }
   // These texts arrive with the screen, not with the first download: they must still show, never as raw keys.
-  await expect(page.getByRole("main")).toContainText("Conta, segurança e o que o Zuri pode usar.");
+  await expect(page.getByRole("main")).toContainText("Conta, segurança e o que a Zuri pode usar.");
   await openSettingsSection(page, "Segurança");
   await expect(page.getByRole("main")).toContainText("Saída automática");
   await expect(page.getByRole("main")).toContainText("Em breve nesta aba");
@@ -177,7 +177,7 @@ test("changing the language to English changes the interface and the API's error
 test("the keyboard reaches the skip link first and it moves focus to the content", async ({ page }) => {
   await page.goto("/");
   await signIn(page);
-  await expect(page.getByRole("heading", { level: 1, name: "Olá!" })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: /^(Bom dia|Boa tarde|Boa noite)/ })).toBeVisible();
   await page.keyboard.press("Tab");
   const skip = page.getByRole("link", { name: "Pular para o conteúdo" });
   await expect(skip).toBeFocused();
@@ -195,7 +195,7 @@ test("an unknown address inside the app shows the not-found page", async ({ page
 test("the password typed at sign-in is never kept in the page's storage", async ({ page }) => {
   await page.goto("/");
   await signIn(page);
-  await expect(page.getByRole("heading", { level: 1, name: "Olá!" })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: /^(Bom dia|Boa tarde|Boa noite)/ })).toBeVisible();
   const stored = await page.evaluate(() => JSON.stringify({ ...localStorage }) + JSON.stringify({ ...sessionStorage }) + document.cookie);
   expect(stored).not.toContain(PASSWORD);
   expect(stored).not.toContain(EMAIL);
@@ -219,6 +219,6 @@ test("the two-step reminder shows until put off, and never on the settings @mobi
   await reminder.getByRole("button", { name: "Lembrar depois" }).click();
   await expect(reminder).toHaveCount(0);
   await page.reload();
-  await expect(page.getByRole("heading", { level: 1, name: "Olá!" })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: /^(Bom dia|Boa tarde|Boa noite)/ })).toBeVisible();
   await expect(reminder).toHaveCount(0);
 });

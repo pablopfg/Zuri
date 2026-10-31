@@ -19,6 +19,35 @@ export const SESSION_TIMEOUT_RANGES = {
   sessionMaxHours: { min: 1, max: 24, default: 6 },
 } as const;
 
+/** The longest name the owner may give, in characters (code points) after tidying. */
+export const OWNER_NAME_MAX = 40;
+
+/** One form for accents (NFC) and one plain space for any run of spaces or line breaks. */
+export function normalizeOwnerName(value: string): string {
+  return value.normalize("NFC").replace(/\s+/g, " ").trim();
+}
+
+/**
+ * Characters a name never needs: control, format (bidi overrides, zero-width),
+ * private-use, unassigned and lone surrogates; the blank "letters" (Hangul
+ * fillers, blank braille) that make a name look empty; and every angle bracket
+ * a model could read as a tag, ‹ › included (they stand for < > inside <data>).
+ */
+const NOT_IN_NAMES = /[\p{Cc}\p{Cf}\p{Co}\p{Cn}\p{Cs}\u115F\u1160\u3164\uFFA0\u2800<>‹›＜＞﹤﹥〈〉⟨⟩]/u;
+
+/** Empty, or plain text with at least one letter or digit and no pile of combining marks. */
+export function isOwnerName(name: string): boolean {
+  if (name === "") return true;
+  return [...name].length <= OWNER_NAME_MAX && !NOT_IN_NAMES.test(name) && /[\p{L}\p{N}]/u.test(name) && !/\p{M}{4,}/u.test(name);
+}
+
+/**
+ * How the owner likes to be called (the greeting, and later the agent). Empty
+ * means no name. The name is shown on screen and will reach the agent's
+ * prompt (always inside a <data> line), so it must read as plain text.
+ */
+const ownerName = /* @__PURE__ */ z.string().max(OWNER_NAME_MAX * 10).transform(normalizeOwnerName).refine(isOwnerName);
+
 const range = (r: { min: number; max: number }) => z.number().int().min(r.min).max(r.max);
 
 /** The settings of steps 2 and 3. Later steps add fields here, each with its default. */
@@ -36,6 +65,8 @@ export const settingsSchema = /* @__PURE__ */ z
     aiRequestsPerDay: range(AI_LIMIT_RANGES.aiRequestsPerDay),
     aiNeuronsPerDay: range(AI_LIMIT_RANGES.aiNeuronsPerDay),
     aiMaxOutputTokens: range(AI_LIMIT_RANGES.aiMaxOutputTokens),
+    /** How the owner likes to be called; "" until they say. */
+    ownerName,
   })
   .strict();
 
@@ -60,4 +91,5 @@ export const DEFAULT_SETTINGS: Settings = /* @__PURE__ */ Object.freeze({
   aiRequestsPerDay: AI_LIMIT_RANGES.aiRequestsPerDay.default,
   aiNeuronsPerDay: AI_LIMIT_RANGES.aiNeuronsPerDay.default,
   aiMaxOutputTokens: AI_LIMIT_RANGES.aiMaxOutputTokens.default,
+  ownerName: "",
 });
