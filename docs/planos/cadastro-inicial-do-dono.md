@@ -33,7 +33,7 @@ Um sistema que nasce "sem dono" e aceita o primeiro cadastro que chegar pode
 ser tomado por quem chegar antes. Isso acontece de verdade: todo certificado
 HTTPS novo aparece em minutos nos registros públicos de transparência de
 certificados, e há robôs que leem esses registros atrás de instalações recém
-publicadas (o caso clássico é o instalador do WordPress). O repositório do Zuri
+publicadas (o caso clássico é o instalador do WordPress). O repositório da Zuri
 é público, então qualquer um sabe como a tela funciona. A tela de cadastro
 precisa de uma prova que só o dono da conta Cloudflare tem.
 
