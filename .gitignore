@@ -1,0 +1,19 @@
+node_modules/
+dist/
+.wrangler/
+coverage/
+test-results/
+playwright-report/
+*.tsbuildinfo
+*.tgz
+.DS_Store
+
+# Local secrets never enter the repository.
+.dev.vars
+.dev.vars.*
+.env
+.env.*
+
+# Local agent preferences (the project ones live in .claude/settings.json).
+.claude/settings.local.json
+CLAUDE.local.md

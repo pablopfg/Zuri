@@ -181,6 +181,7 @@ npm run dev        # agente + interface com IA simulada
 | `npm run typecheck` | TypeScript em todos os pacotes |
 | `npm run lint` | Biome e o lint de textos sem tradução |
 | `npm test` | Testes unitários e de integração (dentro do workerd) |
+| `npm run i18n` | Confere o catálogo de traduções em pt-BR e en |
 | `npm run test:e2e` | Testes de interface com Playwright |
 | `npm run build` | Build da interface e do Worker |
 

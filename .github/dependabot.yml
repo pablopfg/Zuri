@@ -1,0 +1,50 @@
+# Checks npm dependencies (every workspace, through the root lockfile) and the
+# SHA-pinned GitHub Actions, and opens grouped pull requests into develop.
+# Security updates skip the cooldown and arrive as soon as an advisory is out.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    target-branch: develop
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: America/Sao_Paulo
+    # A new release waits before a PR opens, so a compromised or broken version
+    # is usually pulled before it reaches us. Bigger jumps wait longer.
+    cooldown:
+      semver-patch-days: 3
+      semver-minor-days: 7
+      semver-major-days: 14
+    open-pull-requests-limit: 5
+    labels: [sem-changelog]
+    commit-message:
+      prefix: chore
+      prefix-development: chore
+      include: scope
+    groups:
+      dev-dependencies:
+        dependency-type: development
+        update-types: [minor, patch]
+      dependencies:
+        dependency-type: production
+        update-types: [minor, patch]
+
+  - package-ecosystem: github-actions
+    directory: /
+    target-branch: develop
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: America/Sao_Paulo
+    cooldown:
+      default-days: 7
+    labels: [sem-changelog]
+    commit-message:
+      prefix: ci
+      include: scope
+    groups:
+      actions:
+        patterns: ["*"]
