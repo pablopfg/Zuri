@@ -252,6 +252,9 @@ describe("configuration", () => {
       { OWNER_PASSWORD_HASH: undefined, OWNER_PASSWORD: "x".repeat(19) },
       { OWNER_EMAIL: undefined },
       { OWNER_EMAIL: "nao-e-email" },
+      // A code that is set must be usable: short or repetitive fails closed.
+      { SETUP_CODE: "c".repeat(31) },
+      { SETUP_CODE: "ab".repeat(30) },
     ]) {
       const api = await call(`${ORIGIN}/api/health`, {}, overrides);
       expect(api.status, JSON.stringify(overrides)).toBe(503);
@@ -264,10 +267,12 @@ describe("configuration", () => {
     }
   });
 
-  it("accepts secrets of exactly 48 characters and a plain OWNER_PASSWORD of 20 in place of the hash", async () => {
+  it("accepts secrets of exactly 48 characters, a plain OWNER_PASSWORD of 20 in place of the hash, and a code alone", async () => {
     for (const overrides of [
       { SESSION_SECRET: "s".repeat(48), PASSWORD_PEPPER: "p".repeat(48) },
       { OWNER_PASSWORD_HASH: undefined, OWNER_PASSWORD: "x".repeat(20) },
+      // A new installation: no owner secrets, only a usable installation code.
+      { OWNER_EMAIL: undefined, OWNER_PASSWORD_HASH: undefined, SETUP_CODE: "q8Zr-T4mW-x2Lp-9vNc-K7bY-e3Hs-J6uF-a1Dg" },
     ]) {
       const res = await call(`${ORIGIN}/api/health`, {}, overrides);
       expect(res.status, JSON.stringify(overrides)).toBe(200);

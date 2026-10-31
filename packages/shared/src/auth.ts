@@ -160,6 +160,10 @@ export const sessionStateSchema = /* @__PURE__ */ mini.strictObject({
   passwordChangeRequired: mini.boolean(),
   /** The password is already stored by the app: the owner should delete the OWNER_PASSWORD secret. */
   removePlainPasswordSecret: mini.boolean(),
+  /** Created at the first access and still without two-step sign-in: only turning it on works. */
+  secondStepRequired: mini.boolean(),
+  /** The owner exists and the SETUP_CODE secret is still set: the owner should delete it. */
+  removeSetupCodeSecret: mini.boolean(),
   /** Until when sensitive actions work without typing the password again. */
   recentAuthUntil: mini.nullable(isoInstant),
   deadlines: sessionDeadlinesSchema,
@@ -189,6 +193,10 @@ export const AUTH_EVENT_KINDS = [
   "recovery_code_used",
   "passkey_added",
   "passkey_removed",
+  "setup_failure",
+  "setup_locked",
+  "owner_created",
+  "access_recovered",
 ] as const;
 export type AuthEventKind = (typeof AUTH_EVENT_KINDS)[number];
 
@@ -198,8 +206,8 @@ export const AUTH_ACTIVITY_LIMIT = 50;
 /** The access log's filters, as the screen groups the kinds. */
 export const AUTH_ACTIVITY_GROUPS = {
   success: ["login_success"],
-  failure: ["login_failure", "confirm_failure", "password_change_failure", "mfa_failure"],
-  blocked: ["login_rate_limited", "login_attack"],
+  failure: ["login_failure", "confirm_failure", "password_change_failure", "mfa_failure", "setup_failure"],
+  blocked: ["login_rate_limited", "login_attack", "setup_locked"],
   robot: ["login_turnstile"],
   account: [
     "logout",
@@ -214,6 +222,8 @@ export const AUTH_ACTIVITY_GROUPS = {
     "recovery_code_used",
     "passkey_added",
     "passkey_removed",
+    "owner_created",
+    "access_recovered",
   ],
 } as const satisfies Record<string, readonly AuthEventKind[]>;
 export type AuthActivityGroup = keyof typeof AUTH_ACTIVITY_GROUPS;

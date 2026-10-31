@@ -71,14 +71,21 @@ Segredos sobrevivem ao deploy.
 | `PUBLIC_URL` | segredo | sim | Só a origem, em HTTPS, como `https://zuri.exemplo.com.br`, sem caminho nem parâmetros |
 | `SESSION_SECRET` | segredo | sim | 48 caracteres aleatórios ou mais |
 | `PASSWORD_PEPPER` | segredo | sim | 48 caracteres aleatórios ou mais |
-| `OWNER_EMAIL` | segredo | sim | Um e-mail válido; o login compara por HMAC |
-| `OWNER_PASSWORD` | segredo | até o 1º login* | 20 caracteres ou mais |
+| `SETUP_CODE` | segredo | até o primeiro acesso | 32 a 256 caracteres aleatórios, com pelo menos 10 diferentes; vale 1 hora e uma vez só |
+| `OWNER_EMAIL` | segredo | só com `OWNER_PASSWORD` ou `OWNER_PASSWORD_HASH`* | Um e-mail válido; o login compara por HMAC |
+| `OWNER_PASSWORD` | segredo | não* | 20 caracteres ou mais |
 | `OWNER_PASSWORD_HASH` | segredo | não* | `pbkdf2$100000$<sal>$<hash>`, feito com o `PASSWORD_PEPPER` |
 | `TURNSTILE_SITE_KEY`, `TURNSTILE_SECRET_KEY` | segredo | sim (fora do local) | Os dois, do widget do Turnstile; sem eles (ou com as chaves de teste) o login fica fechado com `NOT_CONFIGURED`. Passo a passo em `docs/configuracao-cloudflare.md` |
 | `ACCESS_TEAM_DOMAIN`, `ACCESS_AUD` | segredo | não | Os dois ou nenhum |
 | `DEFAULT_TIMEZONE`, `AGENT_NAME` | variável | sim | Já vêm no `wrangler.jsonc` |
 
-\* Instalação sem instalador: grave `OWNER_PASSWORD`. O primeiro login com ela
+Instalação nova: grave o `SETUP_CODE` só na hora de abrir o endereço, porque
+ele vale 1 hora. A tela de primeiro acesso pede o código, depois e-mail, senha,
+idioma e fuso, e exige ligar a verificação em duas etapas antes de abrir o
+resto. Um `SETUP_CODE` novo, depois disso, só serve para recuperar o acesso.
+Detalhes em [seguranca.md](seguranca.md#primeiro-acesso-e-recuperação-com-o-código-de-instalação).
+
+\* Instalações antigas: grave `OWNER_EMAIL` e `OWNER_PASSWORD`. O primeiro login com ela
 exige a troca; o Zuri grava o hash da senha nova no banco e a sessão passa a
 avisar (`removePlainPasswordSecret`) que o segredo pode ser apagado do painel.
 Apagar o segredo depois disso não muda nada. Gravar uma senha nova no painel
@@ -94,8 +101,9 @@ O que acontece quando falta algo:
   malformado: a interface abre, mas a API, inclusive `GET /api/health`, responde
   503 `NOT_CONFIGURED`, sem dizer qual valor falta. O log do Worker, na chamada
   do health check, lista só os **nomes** que faltam.
-- Nenhuma senha (nem segredo nem hash no banco): o health check e o login
-  respondem 503 `NOT_CONFIGURED`, e o log pede `OWNER_PASSWORD`.
+- Nenhuma senha (nem segredo nem hash no banco) e nenhum `SETUP_CODE`
+  utilizável: o health check e o login respondem 503 `NOT_CONFIGURED`, e o log
+  pede o `SETUP_CODE`.
 
 ## Modelo de dados
 

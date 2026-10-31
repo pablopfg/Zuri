@@ -14,6 +14,9 @@ import {
   type PasskeyInfo,
   type PasskeyRegistration,
   PASSWORD_PROBLEM_MESSAGE,
+  type SetupCodeRequest,
+  type SetupOwnerRequest,
+  type SetupRecoverRequest,
   passwordProblem,
   randomToken,
   type SessionState,
@@ -32,6 +35,7 @@ import { LoginLimiter } from "./login-limiter.ts";
 import { type ChallengeRow, type MfaFactor, TwoStep } from "./mfa.ts";
 import { Passkeys, type RelyingParty } from "./passkeys.ts";
 import { type SessionRow, Sessions } from "./sessions.ts";
+import { type CodeState, SetupCode } from "./setup-code.ts";
 import type { Turnstile } from "./turnstile.ts";
 
 /** What a wrong second step says, by kind. */
@@ -44,7 +48,10 @@ const ATTACK_ALERT_INTERVAL_MS = 6 * 3600_000;
 export interface AuthSecrets {
   sessionSecret: string;
   pepper: string;
-  ownerEmail: string;
+  /** OWNER_EMAIL, the installation before the first-access screen; the e-mail typed there wins. */
+  ownerEmail?: string | undefined;
+  /** SETUP_CODE: opens the first access once, then only the recovery of the access. */
+  setupCode?: string | undefined;
   /** OWNER_PASSWORD_HASH, when set. */
   passwordHash?: string | undefined;
   /** OWNER_PASSWORD (20+ characters), the installation without an installer. */
@@ -133,6 +140,7 @@ export class AuthService {
   readonly events: AuthEvents;
   readonly twoStep: TwoStep;
   readonly passkeys: Passkeys;
+  readonly setupCode: SetupCode;
   readonly #clock: () => number;
   #synced: Promise<void> | undefined;
 
@@ -147,6 +155,13 @@ export class AuthService {
     this.events = new AuthEvents(deps.db, deps.state, this.#clock);
     this.twoStep = new TwoStep(deps.db, deps.state, { pepper: deps.secrets.pepper, sessionSecret: deps.secrets.sessionSecret }, this.#clock);
     this.passkeys = new Passkeys(deps.db, deps.state, this.#clock);
+    this.setupCode = new SetupCode(deps.state, deps.secrets, this.#clock);
+  }
+
+  /** The owner's e-mail: the one typed at the first access, else the OWNER_EMAIL secret, else none. */
+  private ownerEmail(): string {
+    const stored = this.deps.state.get<string>("owner_email");
+    return typeof stored === "string" && stored !== "" ? stored : (this.deps.secrets.ownerEmail ?? "");
   }
 
   get relyingParty(): RelyingParty {
@@ -247,16 +262,18 @@ export class AuthService {
 
   private async checkEmail(email: string): Promise<boolean> {
     const key = this.deps.secrets.sessionSecret;
+    const owner = this.ownerEmail();
     const [given, expected] = await Promise.all([
       hmacSha256Hex(key, `zuri:email:v1:${normalizeEmail(email)}`),
-      hmacSha256Hex(key, `zuri:email:v1:${normalizeEmail(this.deps.secrets.ownerEmail)}`),
+      hmacSha256Hex(key, `zuri:email:v1:${normalizeEmail(owner)}`),
     ]);
-    return timingSafeEqualText(given, expected);
+    // Both hashes always run; without an owner e-mail nothing matches.
+    return owner !== "" && timingSafeEqualText(given, expected);
   }
 
   /** What a new password must not lean on: the owner's e-mail and the agent's name. */
   private personalWords(): string[] {
-    return [this.deps.secrets.ownerEmail, this.deps.secrets.agentName ?? ""].filter(Boolean);
+    return [this.ownerEmail(), this.deps.secrets.agentName ?? ""].filter(Boolean);
   }
 
   private deviceId(token: string): Promise<string> {
@@ -582,6 +599,8 @@ export class AuthService {
       authenticated: true,
       passwordChangeRequired: this.passwordChangeRequired(),
       removePlainPasswordSecret: Boolean(this.deps.secrets.plainPassword) && source !== null && source.kind !== "plain",
+      secondStepRequired: this.secondStepRequired(),
+      removeSetupCodeSecret: this.setupCode.configured() && this.ownerExists(),
       recentAuthUntil: until === null ? null : new Date(until).toISOString(),
       deadlines: this.sessions.deadlines(row),
     };
@@ -675,6 +694,147 @@ export class AuthService {
     return { token: next.token, session: next.row };
   }
 
+  // ---------- First access and recovery with the installation code ----------
+
+  /** An owner exists: created at the first access, or by the password secrets of an older installation. */
+  ownerExists(): boolean {
+    const email = this.deps.state.get<string>("owner_email");
+    return (typeof email === "string" && email !== "") || this.passwordSource() !== null;
+  }
+
+  /** Created at the first access and still without two-step sign-in: nothing else opens yet. */
+  secondStepRequired(): boolean {
+    return this.deps.state.get<boolean>("setup_second_step_required") === true && !this.twoStep.enabled();
+  }
+
+  /** Whether the first access is still to be done. Starts the code's hour when a code is set. */
+  async setupStatus(): Promise<{ setup: boolean }> {
+    await this.sync();
+    const setup = !this.ownerExists();
+    // The hour starts the first time the code is seen, and this is the first screen the owner opens.
+    if (setup) await this.setupCode.current();
+    return { setup };
+  }
+
+  /**
+   * The installation code, in this order: its own pause (5 wrong in 15 min),
+   * the robot check, then the keyed comparison. Every refusal says the same
+   * thing, whether the code is wrong, spent, expired or locked. A right one
+   * gives the form's ticket (cookie) and says which form comes next.
+   */
+  async setupCheckCode(input: SetupCodeRequest, client: ClientInfo): Promise<{ token: string; expiresAt: number; mode: "setup" | "recovery" }> {
+    await this.sync();
+    if (!this.turnstile && this.deps.turnstileMandatory) throw new AppError("NOT_CONFIGURED", "error.turnstileNotConfigured");
+    const code = await this.setupCode.current();
+    if (code) {
+      const until = this.setupCode.pausedUntil(code.record);
+      if (until !== null) {
+        this.recordRefusal("login_rate_limited", client, "setup");
+        throw new AppError("RATE_LIMITED", undefined, { retryAfter: Math.max(1, Math.ceil((until - this.#clock()) / 1000)) });
+      }
+    }
+    await this.assertHuman(input.turnstileToken, client);
+    if (!code || code.problem !== null) {
+      // Nothing to guess against: no count, the same answer as a wrong code.
+      this.events.record("setup_failure", client, { reason: code?.problem ?? "missing" });
+      throw this.codeRejected();
+    }
+    if (!(await this.setupCode.matches(code.record, input.code))) {
+      this.wrongSetupTry(code, client, "code");
+      throw this.codeRejected();
+    }
+    const ticket = await this.setupCode.issueTicket(code.record);
+    return { ...ticket, mode: this.ownerExists() ? "recovery" : "setup" };
+  }
+
+  private codeRejected(): AppError {
+    return new AppError("INVALID_CREDENTIALS", "auth.setup.codeRejected", this.turnstile ? { turnstileSiteKey: this.turnstile.siteKey } : undefined);
+  }
+
+  private wrongSetupTry(code: CodeState, client: ClientInfo, reason: string): void {
+    const locked = this.setupCode.noteFailure(code.record);
+    this.events.record(locked ? "setup_locked" : "setup_failure", client, { reason, alert: locked });
+  }
+
+  /** The form's ticket must belong to the configured code, still usable. */
+  private async liveTicket(token: string | null): Promise<CodeState> {
+    const code = await this.setupCode.current();
+    if (!code || code.problem !== null || !(await this.setupCode.validTicket(code.record, token))) {
+      throw new AppError("UNAUTHORIZED", "auth.setup.expired", { setup: "expired" });
+    }
+    return code;
+  }
+
+  /** The new password under the same rules as a change: the policy, then the breach check (no answer refuses). */
+  private async acceptablePassword(password: string, personal: string[]): Promise<string> {
+    const problem = passwordProblem(password, personal);
+    if (problem) throw new AppError("VALIDATION_FAILED", PASSWORD_PROBLEM_MESSAGE[problem], { fields: ["password"], problem });
+    const breached = await this.deps.breached(password);
+    if (breached === true) throw new AppError("VALIDATION_FAILED", "auth.password.breached", { fields: ["password"], problem: "breached" });
+    if (breached !== false) throw new AppError("SERVICE_UNAVAILABLE", "error.breachCheckUnavailable");
+    return hashPassword(password, this.deps.secrets.pepper);
+  }
+
+  /**
+   * Creates the owner, once. The code is spent in the same transaction that
+   * checks there is still no owner, so two forms sent together make one owner
+   * (the other gets CONFLICT). A session opens, and only turning on two-step
+   * sign-in works until it is on.
+   */
+  async setupOwner(token: string | null, input: SetupOwnerRequest, client: ClientInfo, cookies: SignInCookies): Promise<SignedIn> {
+    await this.sync();
+    if (this.ownerExists()) throw new AppError("CONFLICT", "auth.setup.done");
+    const code = await this.liveTicket(token);
+    const email = normalizeEmail(input.email);
+    const hash = await this.acceptablePassword(input.password, [email, this.deps.secrets.agentName ?? ""].filter(Boolean));
+    const created = this.deps.db.transaction(() => {
+      // Read again after the awaits: another form may have finished meanwhile.
+      if (this.ownerExists()) return false;
+      const fresh = this.setupCode.problemNow(code.record);
+      if (fresh !== null) return false;
+      this.setupCode.spend(code.record);
+      this.deps.state.set("owner_email", email);
+      this.deps.state.set("auth_password_hash", hash);
+      this.deps.state.set("setup_second_step_required", true);
+      this.deps.settings.update({ language: input.language, timeZone: input.timeZone });
+      this.events.record("owner_created", client, { alert: true });
+      return true;
+    });
+    if (!created) throw new AppError("CONFLICT", "auth.setup.done");
+    const device = await this.knownDevice(cookies.device);
+    const source = this.requireConfigured();
+    return this.openSession(client, cookies.session, device, () => sameSource(source, this.passwordSource()), false, false, "password");
+  }
+
+  /**
+   * A new code after the owner exists: the registered e-mail and a new password.
+   * The data stays, every session and pending sign-in ends, known browsers are
+   * forgotten, and two-step sign-in stays as it was (the next sign-in asks for it).
+   */
+  async setupRecover(token: string | null, input: SetupRecoverRequest, client: ClientInfo): Promise<void> {
+    await this.sync();
+    if (!this.ownerExists()) throw new AppError("CONFLICT");
+    const code = await this.liveTicket(token);
+    if (!(await this.checkEmail(input.email))) {
+      // Counts against the code like a wrong code: twenty in all lock it.
+      this.wrongSetupTry(code, client, "email");
+      throw new AppError("INVALID_CREDENTIALS", "auth.setup.notOwnerEmail");
+    }
+    const hash = await this.acceptablePassword(input.password, this.personalWords());
+    const recovered = this.deps.db.transaction(() => {
+      if (this.setupCode.problemNow(code.record) !== null) return false;
+      this.setupCode.spend(code.record);
+      this.deps.state.set("auth_password_hash", hash);
+      this.deps.state.delete("auth_password_change_required");
+      this.sessions.revokeAll();
+      this.twoStep.dropChallenges();
+      this.events.forgetDevices();
+      this.events.record("access_recovered", client, { alert: true });
+      return true;
+    });
+    if (!recovered) throw new AppError("UNAUTHORIZED", "auth.setup.expired", { setup: "expired" });
+  }
+
   // ---------- Managing the second step (signed in, password typed recently) ----------
 
   /**
@@ -718,6 +878,8 @@ export class AuthService {
     }
     this.limiter.succeed(attempt);
     this.afterMfaChange(row, client, "mfa_enabled");
+    // The first access asked for it: with it on, the rest of the app opens.
+    this.deps.state.delete("setup_second_step_required");
     return codes;
   }
 

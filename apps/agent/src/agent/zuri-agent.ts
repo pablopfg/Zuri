@@ -1,4 +1,4 @@
-import { DEFAULT_LOCALE, isBreachedPassword, isPasswordHash, type Locale } from "@zuri/shared";
+import { DEFAULT_LOCALE, isBreachedPassword, isPasswordHash, isUsableSetupCode, type Locale } from "@zuri/shared";
 import { Agent } from "agents";
 import { chooseProvider, MeteredAI, UsageMeter } from "../ai/index.ts";
 import type { AiLimits } from "../ai/usage.ts";
@@ -59,6 +59,7 @@ export class ZuriAgent extends Agent<WorkerEnv> {
     aiUsage: () => this.store.usage.report(this.aiLimits(), this.development() ? "mock" : "workers-ai", this.store.settings.field("aiModel")),
     passwordSecretSet: () =>
       isPasswordHash(this.env.OWNER_PASSWORD_HASH) || (this.env.OWNER_PASSWORD?.length ?? 0) >= MIN_OWNER_PASSWORD_LENGTH,
+    setupCodeSet: () => isUsableSetupCode(this.env.SETUP_CODE),
     origin: () => this.publicUrl().origin,
     development: () => this.development(),
   });
@@ -119,6 +120,7 @@ export class ZuriAgent extends Agent<WorkerEnv> {
           ownerEmail: env.OWNER_EMAIL,
           passwordHash: env.OWNER_PASSWORD_HASH,
           plainPassword: env.OWNER_PASSWORD,
+          setupCode: env.SETUP_CODE,
           agentName: env.AGENT_NAME,
         },
         ...signInTurnstile(env),

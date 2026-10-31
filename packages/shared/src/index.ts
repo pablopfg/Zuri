@@ -45,6 +45,7 @@ export {
   settingsUpdateSchema,
 } from "./settings.ts";
 export * from "./auth.ts";
+export * from "./setup.ts";
 export {
   fromBase64Url,
   hashPassword,

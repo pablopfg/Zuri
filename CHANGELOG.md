@@ -9,6 +9,16 @@ o [SemVer](https://semver.org/lang/pt-BR/). Cada PR escreve a sua entrada em
 
 ### Adicionado
 
+- Primeiro acesso protegido por um código de instalação (servidor). Enquanto
+  não existe dono, `GET /api/setup`, `POST /api/setup/code` e
+  `POST /api/setup/owner` criam o dono uma vez só. O código é um segredo de 32
+  caracteres ou mais, vale 1 hora e é gasto no cadastro. Cada tentativa passa
+  pela verificação contra robôs, 5 erros em 15 minutos pausam e 20 travam o
+  código. Logo depois do cadastro, a verificação em duas etapas é obrigatória
+  antes de qualquer outra tela. Um código novo, depois, só recupera o acesso
+  (`POST /api/setup/recover`), mantendo os dados e o 2FA. Os quatro eventos
+  novos aparecem em Acessos. A tela vem no próximo PR.
+
 - Paleta de comandos com Ctrl/⌘ K, ou pelo botão Buscar na barra lateral e no
   topo do celular. Ela leva a qualquer página ou seção das configurações, cria
   uma tarefa ou nota e busca tarefas, notas e memórias (a partir de 2 letras,
@@ -277,6 +287,11 @@ o [SemVer](https://semver.org/lang/pt-BR/). Cada PR escreve a sua entrada em
 
 ### Atualização
 
+- Segredo novo `SETUP_CODE` para instalações novas (32+ caracteres
+  aleatórios). O `OWNER_EMAIL` deixou de ser obrigatório: só é preciso junto
+  com `OWNER_PASSWORD` ou `OWNER_PASSWORD_HASH`, nas instalações antigas, que
+  continuam funcionando sem mudança. Sem migration: o e-mail do primeiro acesso
+  fica nas configurações internas do banco. Nada disso gera custo.
 - Migration 7 cria `zur_usage_daily` e `zur_model_usage_daily`, só com
   contadores de uso da IA (nenhum texto), guardados por 90 dias. Nada muda nos
   dados que já existem. O Worker passa a declarar o binding `AI` (Workers AI,

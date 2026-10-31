@@ -134,8 +134,9 @@ Tudo roda num **único Worker** que serve a interface e a API, com **um único D
 | `WORKFLOW` | Workflows | sim | Monitor de sites |
 | `SEND_EMAIL` | send\_email | não | Alertas e recuperação por e-mail (Email Routing) |
 | `SESSION_SECRET` | segredo | sim | Assinatura de sessões e derivação de HMACs (inclusive o segredo do webhook do Telegram) |
-| `OWNER_PASSWORD_HASH` | segredo | sim | Senha do dono (PBKDF2 com pepper) |
-| `OWNER_EMAIL` | segredo | sim | Login e recuperação |
+| `SETUP_CODE` | segredo | até o primeiro acesso | Código de instalação (32+ caracteres aleatórios, 1 h, uso único); um código novo depois só recupera o acesso (N13) |
+| `OWNER_PASSWORD_HASH` | segredo | não (instalações antigas) | Senha do dono (PBKDF2 com pepper); o primeiro acesso grava a senha no banco |
+| `OWNER_EMAIL` | segredo | só com `OWNER_PASSWORD` ou `OWNER_PASSWORD_HASH` | Login das instalações antigas; o primeiro acesso grava o e-mail no banco |
 | `PASSWORD_PEPPER` | segredo | sim | Pepper do hash de senha |
 | `TELEGRAM_BOT_TOKEN` | segredo | não | Bot do administrador |
 | `TELEGRAM_ADMIN_ID` | segredo | não | Id numérico da conta do dono no Telegram, trava extra além do vínculo por código |
@@ -203,6 +204,10 @@ Todas as rotas ficam sob `/api`, recebem e devolvem JSON validado por Zod (`pack
 | Etapa | Método e rota | Credencial | Corpo | Respostas |
 | --- | --- | --- | --- | --- |
 | 1 | GET `/api/health` | nenhuma | — | 200 `{ok:true}`; 503 `NOT_CONFIGURED` sem segredos obrigatórios |
+| N13 | GET `/api/setup` | CSRF | — | 200 `{setup}` (primeiro acesso ainda por fazer); começa a hora do código |
+| N13 | POST `/api/setup/code` | CSRF + Turnstile em toda tentativa | `{code, turnstileToken?}` | 200 `{mode: "setup"\|"recovery", expiresAt}` + cookie `__Host-zuri_setup` (15 min); 401 `INVALID_CREDENTIALS`; 429 `RATE_LIMITED` (5 erros em 15 min); 400 `TURNSTILE_REQUIRED`; 503 |
+| N13 | POST `/api/setup/owner` | CSRF + cookie do primeiro acesso | `{email, password, language, timeZone}` | 201 sessão (`secondStepRequired: true`); 400 `VALIDATION_FAILED`; 401 `UNAUTHORIZED` com `details.setup: "expired"`; 409 `CONFLICT` (dono já existe); 503 (HIBP sem resposta) |
+| N13 | POST `/api/setup/recover` | CSRF + cookie do primeiro acesso | `{email, password}` | 204 (todas as sessões terminam); 401 `INVALID_CREDENTIALS`; 401 `UNAUTHORIZED`; 409 `CONFLICT` (sem dono) |
 | 3 | POST `/api/auth/login` | CSRF + Turnstile em toda tentativa | `{email, password, turnstileToken?}` | 200 sessão; 200 `{mfaRequired:true}`; 401 `INVALID_CREDENTIALS`; 429 `RATE_LIMITED` + `Retry-After`; 400 `TURNSTILE_REQUIRED`; 503 `SERVICE_UNAVAILABLE` (Turnstile sem resposta) |
 | 3 | GET `/api/auth/login-options` (respondido pelo Worker, sem o Durable Object) | CSRF | — | 200 `{turnstileSiteKey}`; `null` só no local sem chaves |
 | 3 | GET `/api/auth/activity?days=1\|7\|30\|90&group=success\|failure\|blocked\|robot\|account&ip=<começo>&before=<cursor>` | sessão + CSRF | — | 200 `{events, nextCursor}` (50 por página, IP, país, ASN, navegador); 400 `VALIDATION_FAILED` |
