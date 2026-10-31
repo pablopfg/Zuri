@@ -1,5 +1,6 @@
 import { AGENT_INSTANCE_NAME } from "@zuri/shared";
-import { type Config, readConfig } from "./config.ts";
+import { CLIENT_GEO_HEADER, geoFromCf } from "./auth/client.ts";
+import { type Config, readConfig, secretProblems } from "./config.ts";
 import type { WorkerEnv } from "./env.ts";
 import { type AccessConfig, verifyAccessToken } from "./gates/access.ts";
 import { withApiHeaders, withWebHeaders } from "./gates/headers.ts";
@@ -57,7 +58,11 @@ async function handle(request: Request, env: WorkerEnv): Promise<Response> {
   // Gate 4 for the interface: the asset, with the interface's headers.
   if (!isApiPath(url.pathname)) return withWebHeaders(await env.ASSETS.fetch(request), url.pathname);
 
-  if (!config.secretsReady) return refuse(new AppError("NOT_CONFIGURED"));
+  if (!config.secretsReady) {
+    // The answer never says what is missing; the owner's log does, by name only.
+    if (url.pathname === "/api/health") console.warn(JSON.stringify({ message: "not configured", secrets: secretProblems(env) }));
+    return refuse(new AppError("NOT_CONFIGURED"));
+  }
   // Zuri has no sub-agents; the object refuses these too (onBeforeSubAgent).
   if (url.pathname.split("/").includes("sub")) return refuse(new AppError("NOT_FOUND"));
 
@@ -65,7 +70,7 @@ async function handle(request: Request, env: WorkerEnv): Promise<Response> {
   // getAgentByName: that adds an RPC per request, and each one counts toward the
   // Free plan's Durable Object requests; the object initializes itself on fetch.
   const agent = env.AGENT.getByName(AGENT_INSTANCE_NAME);
-  return withApiHeaders(withoutRawErrors(await agent.fetch(withoutInternalHeaders(request))));
+  return withApiHeaders(withoutRawErrors(await agent.fetch(withClientGeo(withoutInternalHeaders(request)))));
 }
 
 function isApiPath(pathname: string): boolean {
@@ -131,13 +136,32 @@ async function passesAccess(
  * may set them, and it never does), and Cloudflare Access's identity headers:
  * gate 3 already checked the token, and without Access a client could forge them.
  */
-const INTERNAL_HEADER_PREFIXES = ["x-agents-", "x-agent-", "x-cf-agents-", "x-cf-harness-", "x-channels-", "x-partykit-", "cf-access-"];
+const INTERNAL_HEADER_PREFIXES = [
+  "x-agents-",
+  "x-agent-",
+  "x-cf-agents-",
+  "x-cf-harness-",
+  "x-channels-",
+  "x-partykit-",
+  "cf-access-",
+  "x-zuri-client-",
+];
 
 export function withoutInternalHeaders(request: Request): Request {
   const internal = [...request.headers.keys()].filter((name) => INTERNAL_HEADER_PREFIXES.some((p) => name.startsWith(p)));
   if (internal.length === 0) return request;
   const headers = new Headers(request.headers);
   for (const name of internal) headers.delete(name);
+  return new Request(request, { headers });
+}
+
+/**
+ * The visitor's location as the edge saw it (request.cf), for the access
+ * activity. Always set here, after any copy from the client was removed.
+ */
+export function withClientGeo(request: Request): Request {
+  const headers = new Headers(request.headers);
+  headers.set(CLIENT_GEO_HEADER, encodeURIComponent(JSON.stringify(geoFromCf(request.cf as IncomingRequestCfProperties | undefined))));
   return new Request(request, { headers });
 }
 

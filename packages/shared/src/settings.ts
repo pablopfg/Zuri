@@ -18,11 +18,26 @@ export function isTimeZone(value: string): boolean {
   }
 }
 
-/** The settings of step 2. Later steps add fields here, each with its default. */
+/**
+ * Automatic sign-out (step 3): minutes without use, minutes without any open
+ * tab, and the most hours a session lasts. The ranges are what the owner may pick.
+ */
+export const SESSION_TIMEOUT_RANGES = {
+  sessionIdleMinutes: { min: 5, max: 60, default: 30 },
+  sessionPresenceMinutes: { min: 3, max: 15, default: 5 },
+  sessionMaxHours: { min: 1, max: 24, default: 6 },
+} as const;
+
+const range = (r: { min: number; max: number }) => z.number().int().min(r.min).max(r.max);
+
+/** The settings of steps 2 and 3. Later steps add fields here, each with its default. */
 export const settingsSchema = z
   .object({
     language: z.enum(LOCALES),
     timeZone: z.string().refine(isTimeZone),
+    sessionIdleMinutes: range(SESSION_TIMEOUT_RANGES.sessionIdleMinutes),
+    sessionPresenceMinutes: range(SESSION_TIMEOUT_RANGES.sessionPresenceMinutes),
+    sessionMaxHours: range(SESSION_TIMEOUT_RANGES.sessionMaxHours),
   })
   .strict();
 
@@ -39,4 +54,7 @@ export type SettingsUpdate = z.infer<typeof settingsUpdateSchema>;
 export const DEFAULT_SETTINGS: Settings = Object.freeze({
   language: DEFAULT_LOCALE,
   timeZone: DEFAULT_TIME_ZONE,
+  sessionIdleMinutes: SESSION_TIMEOUT_RANGES.sessionIdleMinutes.default,
+  sessionPresenceMinutes: SESSION_TIMEOUT_RANGES.sessionPresenceMinutes.default,
+  sessionMaxHours: SESSION_TIMEOUT_RANGES.sessionMaxHours.default,
 });

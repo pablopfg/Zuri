@@ -3,7 +3,8 @@ import { runInDurableObject } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
 import type { ZuriAgent } from "../src/agent/zuri-agent.ts";
 import { Database } from "../src/db/database.ts";
-import { call, ORIGIN, testEnv } from "./helpers.ts";
+import { LATEST_SCHEMA_VERSION } from "../src/db/migrations.ts";
+import { CSRF, ORIGIN, call, testEnv } from "./helpers.ts";
 
 // Its own file: storage is shared by the tests of a file, and this one needs
 // the owner's database to start empty.
@@ -21,10 +22,10 @@ describe("the database on demand", () => {
     expect(await inOwner(zurTables)).toEqual([]);
   });
 
-  it("is created on the first request that needs it, at migration 1", async () => {
-    expect((await call(`${ORIGIN}/api/tasks`)).status).toBe(401);
+  it("is created on the first request that needs it, at the latest migration", async () => {
+    expect((await call(`${ORIGIN}/api/tasks`, { headers: CSRF })).status).toBe(401);
     const version = await inOwner((db) => db.one<{ version: number }>(`SELECT version FROM zur_schema_version`)?.version);
-    expect(version).toBe(1);
+    expect(version).toBe(LATEST_SCHEMA_VERSION);
   });
 });
 

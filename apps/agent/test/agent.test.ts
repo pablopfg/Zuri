@@ -1,9 +1,11 @@
 import { AGENT_INSTANCE_NAME, apiErrorSchema, healthSchema } from "@zuri/shared";
 import { listDurableObjectIds, runInDurableObject } from "cloudflare:test";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { ZuriAgent } from "../src/agent/zuri-agent.ts";
+import { createApi } from "../src/api/app.ts";
+import type { AuthService } from "../src/auth/service.ts";
 import { withoutInternalHeaders, withoutRawErrors } from "../src/index.ts";
-import { call, errorBody, ORIGIN, testEnv } from "./helpers.ts";
+import { CSRF, call, errorBody, ORIGIN, testEnv } from "./helpers.ts";
 
 describe("GET /api/health", () => {
   it("answers 200 { ok: true } and nothing else", async () => {
@@ -14,6 +16,23 @@ describe("GET /api/health", () => {
     expect(res.headers.get("set-cookie")).toBeNull();
   });
 
+  it("answers 503 NOT_CONFIGURED, saying nothing more, while no password exists at all", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    const api = createApi({
+      locale: () => "pt-BR",
+      auth: () => ({ passwordConfigured: () => false }) as AuthService,
+      passwordSecretSet: () => false,
+      origin: () => ORIGIN,
+      development: () => false,
+    });
+    const res = await api.fetch(new Request(`${ORIGIN}/api/health`), testEnv);
+    expect(res.status).toBe(503);
+    expect(await errorBody(res)).toEqual({ code: "NOT_CONFIGURED", message: "O Zuri ainda não foi configurado por completo." });
+    // The owner's log names what to set; the answer doesn't.
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining("OWNER_PASSWORD"));
+    warn.mockRestore();
+  });
+
   it("answers HEAD too, without a body", async () => {
     const res = await call(`${ORIGIN}/api/health`, { method: "HEAD" });
     expect(res.status).toBe(200);
@@ -22,22 +41,53 @@ describe("GET /api/health", () => {
 });
 
 describe("gate 5: authentication", () => {
-  it("refuses every other API route with 401 while no credential exists (sessions come in step 3)", async () => {
+  it("refuses every other API route with 401 without a valid session, whatever else the request carries", async () => {
     for (const [method, path] of [
       ["GET", "/api"],
       ["GET", "/api/"],
       ["GET", "/api/tasks"],
-      ["POST", "/api/auth/login"],
+      ["GET", "/api/auth/session"],
+      ["POST", "/api/auth/logout"],
+      ["POST", "/api/auth/heartbeat"],
+      ["POST", "/api/auth/confirm"],
+      ["POST", "/api/auth/password"],
       ["POST", "/api/health"],
       ["GET", "/api/health/extra"],
       ["DELETE", "/api/telegram"],
     ] as const) {
       const res = await call(`${ORIGIN}${path}`, {
         method,
-        headers: { authorization: "Bearer zur_pat_falso", cookie: "__Host-zuri_session=falso" },
+        headers: { ...CSRF, authorization: "Bearer zur_pat_falso", cookie: "__Host-zuri_session=falso" },
       });
       expect(res.status, `${method} ${path}`).toBe(401);
       expect(apiErrorSchema.parse(await res.json()).code).toBe("UNAUTHORIZED");
+    }
+  });
+
+  it("refuses with 403 CSRF_FAILED, before anything else, a request without the header or from another origin", async () => {
+    for (const [label, headers] of [
+      ["no header", {}],
+      ["header with another value", { "x-zuri-request": "true" }],
+      ["another origin", { ...CSRF, origin: "https://outro.exemplo.com.br" }],
+      ["same host over http", { ...CSRF, origin: "http://zuri.exemplo.com.br" }],
+      ["origin null", { ...CSRF, origin: "null" }],
+      ["cross-site fetch", { ...CSRF, "sec-fetch-site": "cross-site" }],
+      ["same-site subdomain", { ...CSRF, "sec-fetch-site": "same-site" }],
+    ] as const) {
+      for (const [method, path] of [
+        ["POST", "/api/auth/login"],
+        ["GET", "/api/auth/session"],
+        ["POST", "/api/auth/logout"],
+        ["GET", "/api/tasks"],
+      ] as const) {
+        const res = await call(`${ORIGIN}${path}`, { method, headers });
+        expect(res.status, `${label}: ${method} ${path}`).toBe(403);
+        expect((await errorBody(res)).code, `${label}: ${method} ${path}`).toBe("CSRF_FAILED");
+      }
+    }
+    // The owner's own origin, or a same-origin fetch without Origin, passes the check.
+    for (const headers of [{ ...CSRF, origin: ORIGIN }, { ...CSRF, "sec-fetch-site": "same-origin" }, CSRF]) {
+      expect((await call(`${ORIGIN}/api/auth/session`, { headers })).status).toBe(401);
     }
   });
 });

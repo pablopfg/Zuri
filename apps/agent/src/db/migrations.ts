@@ -36,6 +36,78 @@ export const MIGRATIONS: readonly Migration[] = [
       `CREATE INDEX IF NOT EXISTS zur_activity_at ON zur_activity (at)`,
     ],
   },
+  {
+    version: 2,
+    name: "access",
+    statements: [
+      // Browser sessions. `id` is HMAC(SESSION_SECRET, token): the token itself
+      // lives only in the cookie, so a copy of the database opens nothing.
+      // Times are milliseconds since the epoch. Not in the backup.
+      `CREATE TABLE IF NOT EXISTS zur_sessions (
+        id TEXT PRIMARY KEY,
+        created_at INTEGER NOT NULL,
+        last_seen_at INTEGER NOT NULL,
+        last_presence_at INTEGER NOT NULL,
+        expires_at INTEGER NOT NULL,
+        confirmed_at INTEGER,
+        user_agent TEXT NOT NULL DEFAULT '',
+        network TEXT NOT NULL DEFAULT ''
+      )`,
+      `CREATE INDEX IF NOT EXISTS zur_sessions_last_seen ON zur_sessions (last_seen_at)`,
+      // One row per sign-in try, for the rate limit: the network (an IPv4
+      // address or an IPv6 /64), never the e-mail or password typed.
+      // outcome: 0 failure (counted from before the check), 1 success, 2 refused robot check.
+      `CREATE TABLE IF NOT EXISTS zur_login_attempts (
+        id INTEGER PRIMARY KEY,
+        network TEXT NOT NULL,
+        outcome INTEGER NOT NULL,
+        at INTEGER NOT NULL
+      )`,
+      `CREATE INDEX IF NOT EXISTS zur_login_attempts_at ON zur_login_attempts (at, outcome)`,
+      `CREATE INDEX IF NOT EXISTS zur_login_attempts_network ON zur_login_attempts (network, at)`,
+      // Access activity, 90 days in detail (rule 10: no password, code, token or
+      // typed e-mail). alert_pending = 1 waits for step 11 to tell the owner.
+      // `count` > 1 when repeated refusals were folded into one row. Not in the backup.
+      `CREATE TABLE IF NOT EXISTS zur_auth_events (
+        id INTEGER PRIMARY KEY,
+        at INTEGER NOT NULL,
+        last_at INTEGER NOT NULL,
+        kind TEXT NOT NULL,
+        reason TEXT NOT NULL DEFAULT '',
+        network TEXT NOT NULL DEFAULT '',
+        ip TEXT NOT NULL DEFAULT '',
+        country TEXT NOT NULL DEFAULT '',
+        region TEXT NOT NULL DEFAULT '',
+        city TEXT NOT NULL DEFAULT '',
+        asn INTEGER,
+        colo TEXT NOT NULL DEFAULT '',
+        user_agent TEXT NOT NULL DEFAULT '',
+        known_device INTEGER NOT NULL DEFAULT 0,
+        session TEXT NOT NULL DEFAULT '',
+        count INTEGER NOT NULL DEFAULT 1,
+        alert_pending INTEGER NOT NULL DEFAULT 0
+      )`,
+      `CREATE INDEX IF NOT EXISTS zur_auth_events_at ON zur_auth_events (at)`,
+      `CREATE INDEX IF NOT EXISTS zur_auth_events_network ON zur_auth_events (network, kind, at)`,
+      `CREATE INDEX IF NOT EXISTS zur_auth_events_alert ON zur_auth_events (alert_pending) WHERE alert_pending = 1`,
+      // What is left of the detail after 90 days: counts per day, kind and
+      // country, without IP or user agent, kept for a year.
+      `CREATE TABLE IF NOT EXISTS zur_auth_events_daily (
+        day TEXT NOT NULL,
+        kind TEXT NOT NULL,
+        country TEXT NOT NULL DEFAULT '',
+        count INTEGER NOT NULL,
+        PRIMARY KEY (day, kind, country)
+      )`,
+      // Browsers seen at a sign-in: only HMAC(SESSION_SECRET, device cookie).
+      // It tells a known browser from a new one and never signs anyone in. Not in the backup.
+      `CREATE TABLE IF NOT EXISTS zur_devices (
+        id TEXT PRIMARY KEY,
+        first_seen_at INTEGER NOT NULL,
+        last_seen_at INTEGER NOT NULL
+      )`,
+    ],
+  },
 ];
 
 export const LATEST_SCHEMA_VERSION = MIGRATIONS.at(-1)?.version ?? 0;

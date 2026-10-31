@@ -153,8 +153,10 @@ describe("gate 3: Cloudflare Access in the Worker", () => {
     const post = (headers: Record<string, string>, overrides: Record<string, string> = env, url = webhook) =>
       call(url, { method: "POST", headers, body: "{}" }, overrides);
 
-    // Past Access: the API answers (401 until the webhook route exists in step 12).
-    expect((await post({ "x-telegram-bot-api-secret-token": secret })).status).toBe(401);
+    // Past Access: the API answers (its CSRF check, until the webhook route exists in step 12).
+    const passed = await post({ "x-telegram-bot-api-secret-token": secret });
+    expect(passed.status).toBe(403);
+    expect((await errorBody(passed)).code).toBe("CSRF_FAILED");
 
     for (const [label, res] of [
       ["no header", await post({})],

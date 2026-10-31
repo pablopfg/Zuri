@@ -75,6 +75,7 @@ describe("the migration list", () => {
     // changing an existing line means someone edited a merged migration.
     const PINNED: Record<number, string> = {
       1: "0314d64480376044fda39b0b67b8da58d9dd35beccd96ff96e2a3de45b5ca0b0",
+      2: "fe263cac0a60df796e6d9a58e5907fbc44d5b5c891b846cf7f36df71e4181553",
     };
     for (const m of MIGRATIONS) {
       const digest = createHash("sha256").update(statementText(m).replace(/\r\n/g, "\n")).digest("hex");
@@ -84,17 +85,28 @@ describe("the migration list", () => {
 });
 
 describe("migrate", () => {
-  it("brings an empty database to the latest version with the core tables", async () => {
+  it("brings an empty database to the latest version with the core and access tables", async () => {
     await withEmptyDatabase("empty", (db) => {
       expect(schemaVersion(db)).toBe(0);
       expect(zurObjects(db)).toEqual([]);
 
       expect(migrate(db)).toBe(LATEST_SCHEMA_VERSION);
-      expect(schemaVersion(db)).toBe(1);
+      expect(schemaVersion(db)).toBe(2);
       expect(zurObjects(db)).toEqual([
         "table:zur_activity",
         "index:zur_activity_at",
+        "table:zur_auth_events",
+        "index:zur_auth_events_alert",
+        "index:zur_auth_events_at",
+        "table:zur_auth_events_daily",
+        "index:zur_auth_events_network",
+        "table:zur_devices",
+        "table:zur_login_attempts",
+        "index:zur_login_attempts_at",
+        "index:zur_login_attempts_network",
         "table:zur_schema_version",
+        "table:zur_sessions",
+        "index:zur_sessions_last_seen",
         "table:zur_settings",
       ]);
     });
@@ -106,7 +118,7 @@ describe("migrate", () => {
       db.run(`INSERT INTO zur_settings (key, value, updated_at) VALUES ('language', '"en"', 'x')`);
       const before = db.one(`SELECT updated_at FROM zur_schema_version`);
 
-      expect(migrate(db)).toBe(1);
+      expect(migrate(db)).toBe(LATEST_SCHEMA_VERSION);
       expect(db.one(`SELECT updated_at FROM zur_schema_version`)).toEqual(before);
       expect(db.all(`SELECT key, value FROM zur_settings`)).toEqual([{ key: "language", value: '"en"' }]);
     });
@@ -118,6 +130,18 @@ describe("migrate", () => {
       db.run(`INSERT INTO zur_activity (at, kind) VALUES ('2026-10-31T00:00:00Z', 'settings.updated')`);
       for (const m of MIGRATIONS) for (const statement of m.statements) db.run(statement);
       expect(db.one<{ n: number }>(`SELECT count(*) AS n FROM zur_activity`)?.n).toBe(1);
+    });
+  });
+
+  it("upgrades a database at version 1 to 2 and keeps the owner's settings and activity", async () => {
+    await withEmptyDatabase("from-1", (db) => {
+      expect(migrate(db, MIGRATIONS.slice(0, 1))).toBe(1);
+      db.run(`INSERT INTO zur_settings (key, value, updated_at) VALUES ('language', '"en"', 'x')`);
+      db.run(`INSERT INTO zur_activity (at, kind) VALUES ('2026-10-31T00:00:00Z', 'settings.updated')`);
+      expect(migrate(db)).toBe(2);
+      expect(db.all(`SELECT key, value FROM zur_settings`)).toEqual([{ key: "language", value: '"en"' }]);
+      expect(db.one<{ n: number }>(`SELECT count(*) AS n FROM zur_activity`)?.n).toBe(1);
+      expect(zurObjects(db)).toContain("table:zur_sessions");
     });
   });
 

@@ -51,7 +51,7 @@ test("a WebSocket connection is refused", async ({ page }) => {
 });
 
 test("other API routes ask for a credential", async ({ request }) => {
-  const response = await request.get("/api/tasks");
+  const response = await request.get("/api/tasks", { headers: { "x-zuri-request": "1" } });
   expect(response.status()).toBe(401);
   expect((await response.json()).code).toBe("UNAUTHORIZED");
 });

@@ -1,3 +1,4 @@
+import { isPasswordHash } from "@zuri/shared";
 import { z } from "zod";
 import type { WorkerEnv } from "./env.ts";
 import { type AccessConfig, accessConfig } from "./gates/access.ts";
@@ -23,16 +24,25 @@ export const MIN_SECRET_LENGTH = 48;
 export const MIN_OWNER_PASSWORD_LENGTH = 20;
 
 const secret = z.string().trim().min(MIN_SECRET_LENGTH);
-const requiredSecrets = z
-  .object({
-    SESSION_SECRET: secret,
-    PASSWORD_PEPPER: secret,
-    OWNER_EMAIL: z.email(),
-    OWNER_PASSWORD_HASH: z.string().trim().min(1).optional(),
-    // Without the hash, the plain password is accepted until the first sign-in replaces it (step 3).
-    OWNER_PASSWORD: z.string().min(MIN_OWNER_PASSWORD_LENGTH).optional(),
-  })
-  .refine((env) => env.OWNER_PASSWORD_HASH !== undefined || env.OWNER_PASSWORD !== undefined);
+/**
+ * The password itself is checked inside the Durable Object: after the first
+ * change it lives in the database, and the owner deletes OWNER_PASSWORD. Here a
+ * password secret that is set must at least be well formed: a typo fails closed.
+ */
+const requiredSecrets = z.object({
+  SESSION_SECRET: secret,
+  PASSWORD_PEPPER: secret,
+  OWNER_EMAIL: z.email(),
+  OWNER_PASSWORD_HASH: z.string().refine(isPasswordHash).optional(),
+  // Without the hash, the plain password is accepted until the first sign-in replaces it.
+  OWNER_PASSWORD: z.string().min(MIN_OWNER_PASSWORD_LENGTH).optional(),
+});
+
+/** Names (never values) of the secrets that are missing or malformed, for the log of the health check. */
+export function secretProblems(env: WorkerEnv): string[] {
+  const result = requiredSecrets.safeParse(env);
+  return result.success ? [] : [...new Set(result.error.issues.map((issue) => String(issue.path[0])))];
+}
 
 /**
  * PUBLIC_URL must be a bare origin: https, or http on a loopback host for local

@@ -24,8 +24,34 @@ export {
   DEFAULT_SETTINGS,
   DEFAULT_TIME_ZONE,
   isTimeZone,
+  SESSION_TIMEOUT_RANGES,
   type Settings,
   type SettingsUpdate,
   settingsSchema,
   settingsUpdateSchema,
 } from "./settings.ts";
+export * from "./auth.ts";
+export {
+  fromBase64Url,
+  hashPassword,
+  hmacSha256Hex,
+  isPasswordHash,
+  PBKDF2_ITERATIONS,
+  randomToken,
+  sha256Hex,
+  timingSafeEqual,
+  timingSafeEqualText,
+  toBase64Url,
+  verifyPassword,
+} from "./crypto.ts";
+export {
+  BREACH_API,
+  isBreachedPassword,
+  MIN_BREACH_LINES,
+  PASSWORD_MAX_LENGTH,
+  PASSWORD_MIN_LENGTH,
+  PASSWORD_PROBLEM_MESSAGE,
+  type PasswordProblem,
+  passwordProblem,
+  unpredictableLength,
+} from "./password.ts";

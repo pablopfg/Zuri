@@ -12,6 +12,11 @@ export type WorkerEnv = Env & {
   ACCESS_AUD?: string;
   /** Plain owner password, only while OWNER_PASSWORD_HASH is unset (step 3 replaces it on first sign-in). */
   OWNER_PASSWORD?: string;
+  /** Optional before the first sign-in; afterwards the hash lives in the database (step 3). */
+  OWNER_PASSWORD_HASH?: string;
+  /** Cloudflare Turnstile: the public site key (a variable) and its secret. Both or neither. */
+  TURNSTILE_SITE_KEY?: string;
+  TURNSTILE_SECRET_KEY?: string;
   /** The Telegram bot (step 12). Its webhook secret is derived from SESSION_SECRET. */
   TELEGRAM_BOT_TOKEN?: string;
 };

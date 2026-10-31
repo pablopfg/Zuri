@@ -46,5 +46,11 @@ export function errorResponse(error: unknown, locale: Locale = DEFAULT_LOCALE): 
     message: t(locale, appError.messageKey),
     ...(appError.details ? { details: appError.details } : {}),
   };
-  return Response.json(body, { status: appError.status });
+  const response = Response.json(body, { status: appError.status });
+  // RATE_LIMITED says when to come back, in the body and in the standard header.
+  const retryAfter = appError.details?.retryAfter;
+  if (typeof retryAfter === "number" && Number.isInteger(retryAfter) && retryAfter > 0) {
+    response.headers.set("retry-after", String(retryAfter));
+  }
+  return response;
 }

@@ -97,3 +97,22 @@ acrescente aqui cada armadilha nova que encontrar (sem dados pessoais).
 - Os invocation logs estão ligados. Antes da etapa 12, confira num log real do
   painel se cabeçalhos como `x-telegram-bot-api-secret-token` aparecem; se
   aparecerem, desligue `invocation_logs` ou torne o segredo rotacionável.
+
+## Segredos no `wrangler dev`
+
+- Com `secrets.required` no `wrangler.jsonc`, o `wrangler dev` só carrega do
+  `--env-file`/`.dev.vars` os segredos listados ali. Um segredo opcional (como
+  `OWNER_PASSWORD_HASH`) vai por `--var NOME:valor` (veja `playwright.config.ts`).
+- "Can't read from request stream after response has been sent" aparece no log
+  do `wrangler dev` quando a API recusa um pedido com corpo antes de lê-lo
+  (CSRF, sem sessão). Já existia antes da etapa 3, não afeta a resposta e
+  cancelar o corpo não resolve. Não é falha de teste.
+
+## Limitador de login
+
+- A contagem global de recusas fica na memória do `LoginLimiter` (carregada uma
+  vez por objeto). Em teste, linhas gravadas direto em `zur_login_attempts`
+  depois do primeiro uso não são vistas: grave antes, ou use `rebuild()` para
+  um serviço novo.
+- Leia o estado do banco (`sync`) **antes** de ler a fonte da senha; ler antes
+  deixou a senha antiga entrar uma vez depois de uma redefinição (SEC-3-01).

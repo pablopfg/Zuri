@@ -2,8 +2,14 @@ import { describe, expect, it } from "vitest";
 import { DEFAULT_SETTINGS, DEFAULT_TIME_ZONE, isTimeZone, settingsSchema, settingsUpdateSchema } from "../src/index.ts";
 
 describe("default settings", () => {
-  it("start in pt-BR and in the São Paulo time zone", () => {
-    expect(DEFAULT_SETTINGS).toEqual({ language: "pt-BR", timeZone: "America/Sao_Paulo" });
+  it("start in pt-BR, in the São Paulo time zone and with sign-out after 30 min idle, 5 min without a tab or 6 h", () => {
+    expect(DEFAULT_SETTINGS).toEqual({
+      language: "pt-BR",
+      timeZone: "America/Sao_Paulo",
+      sessionIdleMinutes: 30,
+      sessionPresenceMinutes: 5,
+      sessionMaxHours: 6,
+    });
     expect(DEFAULT_TIME_ZONE).toBe("America/Sao_Paulo");
     expect(settingsSchema.parse(DEFAULT_SETTINGS)).toEqual(DEFAULT_SETTINGS);
   });
@@ -29,6 +35,19 @@ describe("isTimeZone", () => {
     `America/${"A".repeat(60)}`,
     "-03:00",
   ])("refuses %j", (zone) => expect(isTimeZone(zone)).toBe(false));
+});
+
+describe("session timeouts", () => {
+  it.each([
+    ["sessionIdleMinutes", 5, 60],
+    ["sessionPresenceMinutes", 3, 15],
+    ["sessionMaxHours", 1, 24],
+  ] as const)("%s accepts %i to %i and nothing outside", (field, min, max) => {
+    for (const ok of [min, min + 1, max - 1, max]) expect(settingsUpdateSchema.safeParse({ [field]: ok }).success, `${ok}`).toBe(true);
+    for (const bad of [min - 1, max + 1, min + 0.5, "10", null]) {
+      expect(settingsUpdateSchema.safeParse({ [field]: bad }).success, `${bad}`).toBe(false);
+    }
+  });
 });
 
 describe("settingsUpdateSchema", () => {
