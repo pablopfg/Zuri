@@ -78,4 +78,8 @@ export const ptBRSettings = {
   "web.account.timeZone": "Fuso horário",
   "web.account.timeZoneHint": "Datas, lembretes e rotinas seguem este fuso.",
   "web.account.signOutTitle": "Sair deste aparelho",
+  "web.password.title": "Senha",
+  "web.password.hint": "Trocar a senha encerra as outras sessões abertas.",
+  "web.theme.title": "Aparência",
+  "web.settings.sections": "Seções das configurações",
 } as const;

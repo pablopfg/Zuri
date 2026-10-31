@@ -1,8 +1,10 @@
 import { ptBRMemory } from "./pt-BR-memory.ts";
+import { ptBRPalette } from "./pt-BR-palette.ts";
 import { ptBRProductivity } from "./pt-BR-productivity.ts";
 import { ptBRAi } from "./pt-BR-ai.ts";
 import { ptBRChat } from "./pt-BR-chat.ts";
 import { ptBRSecurity } from "./pt-BR-security.ts";
+import { ptBRServer } from "./pt-BR-server.ts";
 import { ptBRSettings } from "./pt-BR-settings.ts";
 
 // Default and fallback catalog. Every key must also exist in en.ts and be used in the code (npm run lint).
@@ -10,43 +12,9 @@ import { ptBRSettings } from "./pt-BR-settings.ts";
 // pt-BR-security.ts), so the interface loads them with those screens (rule P11).
 export const ptBRCore = {
   "app.name": "Zuri",
-  "error.unauthorized": "Entre para continuar.",
-  "error.forbidden": "Você não tem permissão para fazer isso.",
-  "error.httpsRequired": "Use uma conexão segura (HTTPS).",
-  "error.websocketNotSupported": "Este endereço não aceita WebSocket.",
-  "error.accessRequired": "Acesso não autorizado. Entre pelo endereço protegido para continuar.",
-  "error.hostNotAllowed": "Este endereço não atende o Zuri.",
-  "error.notFound": "Não encontrado.",
-  "error.notConfigured": "O Zuri ainda não foi configurado por completo.",
   "error.internal": "Algo deu errado. Seus dados estão seguros; tente de novo.",
-  "error.validationFailed": "Confira os dados enviados.",
   "format.dateTime": "{date} às {time}",
-  "auth.password.tooShort": "Use pelo menos 15 caracteres.",
-  "auth.password.tooLong": "Use no máximo 256 caracteres.",
-  "auth.password.predictable": "Senha fácil de adivinhar: palavras comuns, sequências como 1234 e os seus próprios dados não contam. Acrescente mais palavras sem relação entre si.",
-  "auth.password.breached": "Esta senha apareceu num vazamento conhecido. Escolha outra.",
-  "auth.password.sameAsCurrent": "Escolha uma senha diferente da atual.",
-  "auth.password.currentWrong": "A senha atual está incorreta.",
-  "auth.password.wrong": "Senha incorreta.",
-  "error.invalidCredentials": "E-mail ou senha incorretos.",
-  "error.csrfFailed": "Pedido recusado por segurança. Recarregue a página e tente de novo.",
-  "error.recentAuthRequired": "Digite a sua senha de novo para continuar.",
-  "error.passwordChangeRequired": "Troque a sua senha para continuar.",
-  "error.rateLimited": "Muitas tentativas. Espere um pouco e tente de novo.",
-  "error.turnstileRequired": "Confirme a verificação de segurança e tente de novo.",
-  "error.turnstileFailed": "A verificação de segurança não passou. Tente de novo.",
-  "error.turnstileUnavailable": "Não deu para confirmar a verificação contra robôs agora. Tente de novo em instantes.",
-  "error.turnstileNotConfigured": "O login está fechado: falta configurar a verificação contra robôs (Turnstile). Veja docs/configuracao-cloudflare.md.",
-  "error.breachCheckUnavailable": "Não deu para conferir a senha nas listas de vazamentos agora. Tente de novo em instantes.",
-  "error.serviceUnavailable": "Um serviço necessário não respondeu. Tente de novo em instantes.",
-  "error.bodyTooLarge": "O pedido é grande demais.",
-  "error.clientAddressMissing": "Não foi possível confirmar a sua conexão. Tente de novo pelo endereço de sempre.",
-  "auth.passkey.noneHere": "Nenhuma passkey funciona neste endereço. Use o código do aplicativo autenticador.",
-  "auth.passkey.notAccepted": "Esta passkey não foi aceita, ou o pedido venceu. Tente de novo ou use o código do aplicativo.",
   "auth.passkey.needsMfa": "Ligue antes a verificação em duas etapas com um aplicativo autenticador. Os códigos de recuperação dele são o caminho de volta se você perder as passkeys.",
-  "auth.passkey.limit": "Você já tem 10 passkeys. Remova uma antes.",
-  "error.conflict": "Isso não pode ser feito agora.",
-  "error.storageFull": "O armazenamento do Zuri está cheio. Esvazie a lixeira ou apague o que não precisa mais para guardar coisas novas.",
   "web.loading": "Carregando…",
   "web.retry": "Tentar de novo",
   "web.cancel": "Cancelar",
@@ -61,6 +29,7 @@ export const ptBRCore = {
   "web.nav.home": "Início",
   "web.nav.homeLink": "Zuri, página inicial",
   "web.nav.settings": "Configurações",
+  "web.search.open": "Buscar",
   "web.nav.signOut": "Sair",
   "web.nav.signOutConfirmTitle": "Sair do Zuri?",
   "web.nav.collapse": "Recolher menu",
@@ -129,8 +98,6 @@ export const ptBRCore = {
   "web.crash.reload": "Recarregar",
   "web.passwordRequired.title": "Troque a sua senha",
   "web.passwordRequired.body": "A senha atual não segue as regras de segurança. Escolha uma nova para continuar; o resto do Zuri fica bloqueado até lá.",
-  "web.password.title": "Senha",
-  "web.password.hint": "Trocar a senha encerra as outras sessões abertas.",
   "web.password.current": "Senha atual",
   "web.password.new": "Nova senha",
   "web.password.repeat": "Repita a nova senha",
@@ -145,7 +112,6 @@ export const ptBRCore = {
   "web.mfaReminder.short": "Duas etapas desligadas",
   "web.mfaReminder.action": "Ligar agora",
   "web.mfaReminder.later": "Lembrar depois",
-  "web.settings.sections": "Seções das configurações",
   "web.settings.tab.account": "Conta",
   "web.settings.tab.security": "Segurança",
   "web.settings.tab.ai": "IA",
@@ -153,7 +119,6 @@ export const ptBRCore = {
   "web.settings.tab.integrations": "Integrações",
   "web.settings.tab.data": "Dados",
   "web.account.signOutHint": "Encerra esta sessão. As outras abas deste navegador saem junto.",
-  "web.theme.title": "Aparência",
   "web.theme.label": "Tema",
   "web.theme.system": "Como o sistema",
   "web.theme.light": "Claro",
@@ -169,7 +134,7 @@ export const ptBRCore = {
 } as const;
 
 /** Joins catalog parts. Marked pure so a bundle that never uses the whole catalog drops the call. */
-function join<A extends object, B extends object, C extends object, D extends object, E extends object, F extends object, G extends object>(
+function join<A extends object, B extends object, C extends object, D extends object, E extends object, F extends object, G extends object, H extends object, I extends object>(
   a: A,
   b: B,
   c: C,
@@ -177,9 +142,11 @@ function join<A extends object, B extends object, C extends object, D extends ob
   e: E,
   f: F,
   g: G,
-): A & B & C & D & E & F & G {
-  return { ...a, ...b, ...c, ...d, ...e, ...f, ...g };
+  h: H,
+  i: I,
+): A & B & C & D & E & F & G & H & I {
+  return { ...a, ...b, ...c, ...d, ...e, ...f, ...g, ...h, ...i };
 }
 
 /** The whole pt-BR catalog: what the server, the tests and the lint use. */
-export const ptBR = /* @__PURE__ */ join(ptBRCore, ptBRMemory, ptBRProductivity, ptBRSecurity, ptBRAi, ptBRChat, ptBRSettings);
+export const ptBR = /* @__PURE__ */ join(ptBRCore, ptBRMemory, ptBRProductivity, ptBRSecurity, ptBRAi, ptBRChat, ptBRSettings, ptBRServer, ptBRPalette);
