@@ -51,7 +51,7 @@ Medido dentro do workerd por `apps/agent/test/free-tier-budget.test.ts`, com
 | `GET /api/notes` | 402 (índice e linha de cada uma das 200) | 0 |
 | `GET /api/notes?q=…` (FTS5) | 34 | 0 |
 | `POST /api/tasks` | 5 | 8 (a linha, os índices e o contador) |
-| Acordar o objeto (migrations já aplicadas) | 1 (antes: 91) | 0 |
+| Acordar o objeto: só as migrations já aplicadas | 1 (antes: 91) | 0 |
 
 As vistas "Hoje" e "Atrasadas" leem as tarefas que mostram (o índice parcial de
 tarefas abertas vai direto a elas) e a busca de tarefas ainda varre a tabela:
@@ -152,10 +152,13 @@ Numeradas para o PR poder citar ("segue P2 e P4").
 
 - Migration 5: índice `zur_tasks_board` com a ordem da lista de tarefas. "Todas"
   passou de 4.001 para 201 linhas lidas e "Próximas" de 2.491 para 711, com
-  2.000 tarefas. Custa uma linha escrita a mais por tarefa criada ou alterada.
+  2.000 tarefas. Custa uma linha escrita a mais por tarefa criada ou alterada
+  e, uma vez só, uma linha por tarefa já guardada quando a migration roda (no
+  teto de 20.000 tarefas, um quinto das escritas daquele dia).
 - `migrate()` não procura mais a tabela de versão no `sqlite_master` a cada vez
   que o objeto acorda: 91 linhas viraram 1, e o número antigo crescia com cada
-  tabela nova.
+  tabela nova. Ao acordar também rodam a limpeza da lixeira (uma
+  busca por índice) e as tabelas internas do Agents SDK, fora desta conta.
 - `Database.usage` soma as linhas lidas e escritas, para os testes de orçamento.
 
 ## Para o Pablo (pede decisão)

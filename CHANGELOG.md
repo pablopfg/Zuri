@@ -125,9 +125,9 @@ o [SemVer](https://semver.org/lang/pt-BR/). Cada PR escreve a sua entrada em
 
 - Migration 5 cria o índice `zur_tasks_board`, com a ordem da lista de
   tarefas. Com 2.000 tarefas, "Todas" passa a ler 201 linhas do banco em vez
-  de 4.001, e "Próximas", 711 em vez de 2.491. Acordar o objeto lê 1 linha em
-  vez de 91. Nada muda na tela; o banco gasta menos da cota diária do plano
-  Free.
+  de 4.001, e "Próximas", 711 em vez de 2.491. As migrations conferidas ao
+  acordar o objeto leem 1 linha em vez de 91. Nada muda na tela. Ao rodar, a
+  migration grava uma linha de índice por tarefa já guardada, uma vez só.
 - Novos valores no painel da Cloudflare: a variável `PUBLIC_URL` e os segredos
   `SESSION_SECRET`, `PASSWORD_PEPPER`, `OWNER_PASSWORD_HASH` e `OWNER_EMAIL`.
   Opcionais: `ACCESS_TEAM_DOMAIN` e `ACCESS_AUD`. Detalhes em
