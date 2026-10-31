@@ -29,7 +29,7 @@ etapas ficam detalhadas; as mais antigas viram uma linha na tabela.
 - Entregou: `packages/shared/src/{dates,productivity}.ts` (datas checadas campo a campo, `zonedTimeToUtc`, schemas estritos), `apps/agent/src/productivity/` (`TaskRepository`, `NoteRepository`, `ProjectRepository`, `Trash`, `StorageGuard`, `search.ts`), rotas `/api/tasks`, `/api/notes`, `/api/projects`, `/api/trash`; telas `/tarefas`, `/notas/:id?`, lixeira na aba Dados; `components/Markdown.tsx`. Doc: `docs/produtividade.md`.
 - Migrations: versão 4 (`zur_projects`, `zur_tasks`, `zur_notes` + `zur_notes_fts`, `zur_trash`, `zur_counts` com gatilhos).
 - Decisões técnicas: busca de tarefas por `instr(lower(col), ?)` e não `LIKE` (o DO recusa padrão de LIKE acima de 50 bytes; CF-6-01); limite por tipo lido de `zur_counts`; edição que cresce em bytes respeita o teto de 900 MB; lixeira guarda cópia JSON e restaura por lista fixa de colunas; prazo só com dia vale 23:59 no fuso do dono; Markdown com react-markdown 10.1.0 + remark-gfm 4.0.1, sem HTML, links só http/https/mailto.
-- Ficou para depois: Próximas, Todas e buscas de tarefas ainda leem a tabela inteira (até 20.000 linhas).
+- Ficou para depois: a busca de tarefas ainda varre a tabela (Todas e Próximas ganharam índice na migration 5, PR de performance).
 - Atenção para a próxima: as ferramentas da etapa 9 chamam os repositórios (que validam de novo com Zod); conteúdo de notas e tarefas entra no prompt em `<data>`; memória (etapa 7) pode reusar `search.ts` (`ftsQuery`, `asciiLower`) e o padrão de `zur_counts`.
 
 ### Etapa 5 · Casca da interface
@@ -52,6 +52,9 @@ etapas ficam detalhadas; as mais antigas viram uma linha na tabela.
 ## Esperando o Pablo
 
 <!-- Itens "▶ Antes, você fornece" das próximas etapas e perguntas abertas. -->
+
+- Não travam: teto diário único de Neurons (os padrões de IA e áudio passam da cota de 10.000; afeta a etapa 8) e busca de tarefas por FTS5. Ver `docs/arquitetura/orcamento-free-tier.md`, "Para o Pablo".
+- Toda etapa segue `.claude/rules/performance.md` (P1 a P14) e preenche "Custo no plano Free" no PR.
 
 - Não travam: perguntas abertas da etapa 4 (senha digitada de novo para ligar 2FA/passkey; repetir alerta de ataque lento ao TOTP), da etapa 3 (acerto não zera falhas).
 - Rulesets da `develop` e da `main` conferidos ativos pela API em 31/10/2026.

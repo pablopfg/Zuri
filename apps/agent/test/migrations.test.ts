@@ -17,6 +17,13 @@ const zurObjects = (db: Database) =>
     .all<{ type: string; name: string }>(`SELECT type, name FROM sqlite_master WHERE name LIKE 'zur\\_%' ESCAPE '\\' ORDER BY name`)
     .map((row) => `${row.type}:${row.name}`);
 
+/** Rows the statements inside `fn` read, as the Free plan bills them. */
+function countRowsRead(db: Database, fn: () => void): number {
+  const before = db.usage.rowsRead;
+  fn();
+  return db.usage.rowsRead - before;
+}
+
 const statementText = (m: Migration) => m.statements.join("\n");
 /** The SQL without its comments, so a "-- note" line cannot hide a CREATE from the checks. */
 const withoutComments = (sql: string) => sql.replace(/--[^\n]*/g, "").replace(/\/\*[\s\S]*?\*\//g, "").trim();
@@ -78,6 +85,7 @@ describe("the migration list", () => {
       2: "fe263cac0a60df796e6d9a58e5907fbc44d5b5c891b846cf7f36df71e4181553",
       3: "42d9a6b3b30214125e809253e2f1d4472fdd885fdf77e3a5a017100a52ec63a2",
       4: "c66593e92a8fc765ad8096be69f544cac424de2a815e8eb3776dd4a98cc95ef7",
+      5: "8c5284cbf1f107f27133133552387e56029c61885b3bc0d9940c2f8bd648fbf1",
     };
     for (const m of MIGRATIONS) {
       const digest = createHash("sha256").update(statementText(m).replace(/\r\n/g, "\n")).digest("hex");
@@ -93,7 +101,7 @@ describe("migrate", () => {
       expect(zurObjects(db)).toEqual([]);
 
       expect(migrate(db)).toBe(LATEST_SCHEMA_VERSION);
-      expect(schemaVersion(db)).toBe(4);
+      expect(schemaVersion(db)).toBe(5);
       // FTS5 keeps shadow tables of its own (zur_notes_fts_data and others): only ours are listed.
       expect(zurObjects(db).filter((name) => !/^table:zur_notes_fts_/.test(name))).toEqual([
         "table:zur_activity",
@@ -133,6 +141,7 @@ describe("migrate", () => {
         "index:zur_sessions_last_seen",
         "table:zur_settings",
         "table:zur_tasks",
+        "index:zur_tasks_board",
         "index:zur_tasks_done_completed",
         "index:zur_tasks_open_due",
         "index:zur_tasks_project",
@@ -197,7 +206,7 @@ describe("migrate", () => {
     await withEmptyDatabase("from-3", (db) => {
       expect(migrate(db, MIGRATIONS.slice(0, 3))).toBe(3);
       db.run(`INSERT INTO zur_passkeys (id, name, public_key, rp_id, created_at) VALUES ('p', 'Celular', 'k', 'exemplo.com.br', 1)`);
-      expect(migrate(db)).toBe(4);
+      expect(migrate(db, MIGRATIONS.slice(0, 4))).toBe(4);
       expect(db.one<{ n: number }>(`SELECT count(*) AS n FROM zur_passkeys`)?.n).toBe(1);
       expect(db.all(`SELECT kind, n FROM zur_counts ORDER BY kind`)).toEqual([
         { kind: "notes", n: 0 },
@@ -226,6 +235,25 @@ describe("migrate", () => {
       // Values outside the lists are refused by the table itself.
       expect(() => db.run(`INSERT INTO zur_tasks (id, title, status, created_at, updated_at) VALUES ('t2', 'x', 'later', 'x', 'x')`)).toThrow();
       expect(() => db.run(`INSERT INTO zur_trash (id, kind, item_id, title, payload, bytes, deleted_at, expires_at) VALUES ('y', 'memory', 'm', 'a', '{}', 2, 'x', 'y')`)).toThrow();
+    });
+  });
+
+  it("upgrades a database at version 4 to 5: the task list's order as an index, tasks kept", async () => {
+    await withEmptyDatabase("from-4", (db) => {
+      expect(migrate(db, MIGRATIONS.slice(0, 4))).toBe(4);
+      db.run(`INSERT INTO zur_tasks (id, title, created_at, updated_at) VALUES ('t1', 'Ligar', 'x', 'x')`);
+      expect(migrate(db)).toBe(5);
+      expect(db.all(`SELECT id FROM zur_tasks`)).toEqual([{ id: "t1" }]);
+      expect(zurObjects(db)).toContain("index:zur_tasks_board");
+    });
+  });
+
+  it("reads the schema version without scanning sqlite_master on every wake", async () => {
+    await withEmptyDatabase("wake", (db) => {
+      migrate(db);
+      // Already migrated, as on each wake of the object: only the version row is read.
+      const reads = countRowsRead(db, () => migrate(db));
+      expect(reads).toBeLessThanOrEqual(1);
     });
   });
 
