@@ -226,6 +226,7 @@ Execute a etapa 18 da especificação ("Servidores MCP remotos").
 - Leia no Talorys o docs/mcp.md e a parte de MCP do docs/security.md. Os testes de lá viram testes aqui.
 - O fetch protegido é reutilizado pela etapa 22. Teste trava de origem, DNS para IP privado, redirecionamento recusado, limite de tamanho, tempo de 35 s, e que a troca de URL zera a confiança e a credencial.
 - Resultado de MCP é dado, nunca instrução. Ferramentas desligadas por padrão, com prefixo mcp_.
+- Leia docs/planos/mcp.md: triagem das ferramentas por turno, find_tools, sessão fechada no fim do turno (P5) e divisão em 18a (sem auth e Bearer) e 18b (OAuth). O Zuri não é servidor MCP (decisão do Pablo).
 - Fluxo completo de etapa (auditoria de SSRF e injeção indireta), PR para develop, link e resultado dos testes.
 ```
 
