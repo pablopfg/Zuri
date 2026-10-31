@@ -8,6 +8,12 @@ describe("plainExcerpt", () => {
     );
   });
 
+  it("keeps the text of links and images, and drops their addresses and HTML tags", () => {
+    expect(plainExcerpt('Veja [o site](https://exemplo.com.br) e ![a foto](x.png) <img src=x onerror="alert(1)"> fim')).toBe(
+      "Veja o site e a foto fim",
+    );
+  });
+
   it("keeps single * and _ that belong to the text", () => {
     expect(plainExcerpt("nome_do_arquivo e 2*3")).toBe("nome_do_arquivo e 2*3");
   });

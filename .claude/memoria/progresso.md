@@ -29,7 +29,7 @@ etapas ficam detalhadas; as mais antigas viram uma linha na tabela.
 - Entregou: `packages/shared/src/{dates,productivity}.ts` (datas checadas campo a campo, `zonedTimeToUtc`, schemas estritos), `apps/agent/src/productivity/` (`TaskRepository`, `NoteRepository`, `ProjectRepository`, `Trash`, `StorageGuard`, `search.ts`), rotas `/api/tasks`, `/api/notes`, `/api/projects`, `/api/trash`; telas `/tarefas`, `/notas/:id?`, lixeira na aba Dados; `components/Markdown.tsx`. Doc: `docs/produtividade.md`.
 - Migrations: versão 4 (`zur_projects`, `zur_tasks`, `zur_notes` + `zur_notes_fts`, `zur_trash`, `zur_counts` com gatilhos).
 - Decisões técnicas: busca de tarefas por `instr(lower(col), ?)` e não `LIKE` (o DO recusa padrão de LIKE acima de 50 bytes; CF-6-01); limite por tipo lido de `zur_counts`; edição que cresce em bytes respeita o teto de 900 MB; lixeira guarda cópia JSON e restaura por lista fixa de colunas; prazo só com dia vale 23:59 no fuso do dono; Markdown com react-markdown 10.1.0 + remark-gfm 4.0.1, sem HTML, links só http/https/mailto.
-- Ficou para depois: Próximas, Todas e buscas de tarefas ainda leem a tabela inteira (até 20.000 linhas); apagar da lixeira não pede login recente.
+- Ficou para depois: Próximas, Todas e buscas de tarefas ainda leem a tabela inteira (até 20.000 linhas).
 - Atenção para a próxima: as ferramentas da etapa 9 chamam os repositórios (que validam de novo com Zod); conteúdo de notas e tarefas entra no prompt em `<data>`; memória (etapa 7) pode reusar `search.ts` (`ftsQuery`, `asciiLower`) e o padrão de `zur_counts`.
 
 ### Etapa 5 · Casca da interface
@@ -53,7 +53,7 @@ etapas ficam detalhadas; as mais antigas viram uma linha na tabela.
 
 <!-- Itens "▶ Antes, você fornece" das próximas etapas e perguntas abertas. -->
 
-- Não travam: perguntas abertas da etapa 4 (senha digitada de novo para ligar 2FA/passkey; repetir alerta de ataque lento ao TOTP), da etapa 3 (acerto não zera falhas) e da etapa 6 (esvaziar a lixeira deve pedir login recente?).
+- Não travam: perguntas abertas da etapa 4 (senha digitada de novo para ligar 2FA/passkey; repetir alerta de ataque lento ao TOTP), da etapa 3 (acerto não zera falhas).
 - Rulesets da `develop` e da `main` conferidos ativos pela API em 31/10/2026.
 
 ## Próxima etapa

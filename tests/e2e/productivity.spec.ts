@@ -1,5 +1,5 @@
 import { expect, type Page, test } from "@playwright/test";
-import { CSRF, expectAccessible, signIn } from "./ui-helpers.ts";
+import { CSRF, expectAccessible, signIn, tooSmallControls } from "./ui-helpers.ts";
 
 // Tasks, notes, projects and the trash against the real Worker (step 6):
 // create, edit, complete, delete and restore. pt-BR, the owner in São Paulo.
@@ -27,7 +27,18 @@ test("a task: create with a deadline and a project, edit, complete, delete and r
 
   // Quick add: the title in view, the rest behind "Prazo, projeto e prioridade".
   const form = page.getByRole("region", { name: "Nova tarefa" });
-  await form.getByLabel("Título").fill(title);
+
+  // In the Today view, a title alone is due today by the end of the day (23:59 in São Paulo).
+  await form.getByLabel("Adicionar uma tarefa para hoje").fill(`${title} hoje`);
+  const quick = page.waitForResponse((r) => r.url().endsWith("/api/tasks") && r.request().method() === "POST");
+  await form.getByLabel("Adicionar uma tarefa para hoje").press("Enter");
+  const today = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(new Date());
+  const tomorrowUtc = new Date(Date.parse(`${today}T00:00:00Z`) + 86_400_000).toISOString().slice(0, 10);
+  expect(((await (await quick).json()) as { task: { dueAt: string } }).task.dueAt).toBe(`${tomorrowUtc}T02:59:00.000Z`);
+  await expect(page.getByRole("region", { name: "Lista de tarefas" }).getByRole("button", { name: `${title} hoje` })).toBeVisible();
+  expect(await tooSmallControls(page), "a task row is a 44 px target").toEqual([]);
+
+  await form.getByLabel("Adicionar uma tarefa para hoje").fill(title);
   await form.getByRole("button", { name: "Prazo, projeto e prioridade" }).click();
   await form.getByLabel("Prazo").fill("2099-12-10");
   await form.getByLabel("Hora").fill("18:30");
@@ -108,6 +119,16 @@ test("a note: write Markdown, preview it safely, search, delete and restore @mob
   await expect(page.getByText("Alterações não salvas")).toBeVisible();
   await page.getByLabel("Texto da nota").press("ControlOrMeta+s");
   await expect(page.getByRole("status").filter({ hasText: "Salvo." })).toBeVisible();
+
+  // Leaving with unsaved text asks first; staying keeps the text.
+  await page.getByLabel("Texto da nota").pressSequentially("\n- canela");
+  await page.getByRole("link", { name: narrow ? "Todas as notas" : "Nova nota" }).click();
+  const leave = page.getByRole("dialog", { name: "Sair sem salvar?" });
+  await leave.getByRole("button", { name: "Continuar editando" }).click();
+  await expect(leave).toBeHidden();
+  await expect(page.getByLabel("Texto da nota")).toHaveValue(/- canela/);
+  await page.getByLabel("Texto da nota").press("ControlOrMeta+s");
+  await expect(page.getByText("Alterações não salvas")).toBeHidden();
 
   // Full-text search without the accent finds it.
   if (narrow) await page.getByRole("link", { name: "Todas as notas" }).click();

@@ -1,10 +1,10 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { NOTE_CONTENT_MAX, NOTE_TITLE_MAX, type Note, type TrashItem } from "@zuri/shared";
 import { ArrowLeft, NotebookPen, Plus, Search, Trash2 } from "lucide-react";
-import { type FormEvent, useEffect, useState } from "react";
+import { type FormEvent, type MouseEvent, useEffect, useState } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router";
 import { Markdown } from "../../components/Markdown.tsx";
-import { Button, cn, EmptyState, ErrorNotice, fieldClass, SelectField, Spinner, TextField } from "../../components/ui.tsx";
+import { Button, cn, Dialog, EmptyState, ErrorNotice, fieldClass, SelectField, Spinner, TextField } from "../../components/ui.tsx";
 import { NOTES_KEY, PROJECTS_KEY, useNote, useNotes, useProjects } from "../../hooks/productivity.ts";
 import { api, errorMessage } from "../../lib/api.ts";
 import { useDebounced } from "../../lib/debounce.ts";
@@ -20,27 +20,69 @@ import { ProjectOptions, TrashedNotice } from "./shared.tsx";
 export function NotesPage() {
   const { id } = useParams();
   const { t } = useI18n();
+  const navigate = useNavigate();
+  // Beside the list, one click on another note would drop unsaved text: the
+  // editor reports whether it has any, and leaving then asks first.
+  const [dirty, setDirty] = useState(false);
+  const [leavingTo, setLeavingTo] = useState<string | null>(null);
+  const guard = (to: string) => (event: MouseEvent) => {
+    if (!dirty) return;
+    event.preventDefault();
+    setLeavingTo(to);
+  };
+  const heading = id === "nova" ? t("web.notes.new") : t("web.notes.edit");
+
   return (
     <div className="lg:grid lg:grid-cols-[18rem_minmax(0,1fr)] lg:items-start lg:gap-6">
       <div className={cn("space-y-4", id && "hidden lg:block")}>
-        <NotesList activeId={id} />
+        <NotesList activeId={id} guard={guard} />
       </div>
       <div className={cn("space-y-4", !id && "hidden lg:block")}>
-        {id === "nova" ? (
-          <NoteEditor key="new" />
-        ) : id ? (
-          <ExistingNote id={id} />
+        {id ? (
+          <>
+            <Link
+              to="/notas"
+              onClick={guard("/notas")}
+              className="inline-flex min-h-11 items-center gap-2 rounded-xl px-2 text-sm font-medium text-fg-muted hover:bg-raised hover:text-fg lg:hidden"
+            >
+              <ArrowLeft className="h-4 w-4" aria-hidden />
+              {t("web.notes.back")}
+            </Link>
+            {/* Alone on a narrow screen the editor is the page; beside the list, the list's heading is. */}
+            <h1 className="sr-only lg:hidden">{heading}</h1>
+            <h2 className="sr-only hidden lg:block">{heading}</h2>
+            {id === "nova" ? <NoteEditor key="new" onDirty={setDirty} /> : <ExistingNote id={id} onDirty={setDirty} />}
+          </>
         ) : (
           <EmptyState icon={<NotebookPen className="h-6 w-6" />} title={t("web.notes.selectTitle")}>
             <p>{t("web.notes.selectBody")}</p>
           </EmptyState>
         )}
       </div>
+      <Dialog open={leavingTo !== null} onClose={() => setLeavingTo(null)} title={t("web.notes.discardTitle")}>
+        <p className="text-sm leading-6 text-fg-muted">{t("web.notes.discardBody")}</p>
+        <div className="flex flex-wrap justify-end gap-2">
+          <Button variant="secondary" onClick={() => setLeavingTo(null)}>
+            {t("web.notes.keepEditing")}
+          </Button>
+          <Button
+            variant="danger"
+            onClick={() => {
+              const to = leavingTo;
+              setLeavingTo(null);
+              setDirty(false);
+              if (to) navigate(to);
+            }}
+          >
+            {t("web.notes.discard")}
+          </Button>
+        </div>
+      </Dialog>
     </div>
   );
 }
 
-function NotesList({ activeId }: { activeId: string | undefined }) {
+function NotesList({ activeId, guard }: { activeId: string | undefined; guard: (to: string) => (event: MouseEvent) => void }) {
   const { t, dateTime } = useI18n();
   const [query, setQuery] = useState("");
   const q = useDebounced(query.trim());
@@ -57,6 +99,10 @@ function NotesList({ activeId }: { activeId: string | undefined }) {
     if (item) setTrashed(item);
     navigate(".", { replace: true, state: null });
   }, [location.state, navigate]);
+  // Beside the editor the list stays mounted: opening a note closes the old notice.
+  useEffect(() => {
+    if (activeId) setTrashed(null);
+  }, [activeId]);
 
   return (
     <>
@@ -65,6 +111,7 @@ function NotesList({ activeId }: { activeId: string | undefined }) {
         <div className="flex gap-1">
           <Link
             to="/configuracoes/dados"
+            onClick={guard("/configuracoes/dados")}
             aria-label={t("web.trash.open")}
             title={t("web.trash.open")}
             className="inline-flex h-11 w-11 items-center justify-center rounded-xl text-fg-muted hover:bg-raised hover:text-fg"
@@ -73,6 +120,7 @@ function NotesList({ activeId }: { activeId: string | undefined }) {
           </Link>
           <Link
             to="/notas/nova"
+            onClick={guard("/notas/nova")}
             aria-label={t("web.notes.new")}
             title={t("web.notes.new")}
             className="inline-flex h-11 w-11 items-center justify-center rounded-xl bg-accent text-accent-fg hover:bg-accent-hover"
@@ -114,6 +162,7 @@ function NotesList({ activeId }: { activeId: string | undefined }) {
             <li key={note.id}>
               <Link
                 to={`/notas/${note.id}`}
+                onClick={guard(`/notas/${note.id}`)}
                 aria-current={note.id === activeId ? "page" : undefined}
                 className={cn("block min-h-11 rounded-xl px-3 py-2.5", note.id === activeId ? "bg-raised" : "hover:bg-raised/60")}
               >
@@ -131,14 +180,14 @@ function NotesList({ activeId }: { activeId: string | undefined }) {
   );
 }
 
-function ExistingNote({ id }: { id: string }) {
+function ExistingNote({ id, onDirty }: { id: string; onDirty: (dirty: boolean) => void }) {
   const note = useNote(id);
   if (note.isPending) return <Spinner />;
   if (note.isError) return <ErrorNotice error={note.error} onRetry={() => void note.refetch()} />;
-  return <NoteEditor key={note.data.note.id} note={note.data.note} />;
+  return <NoteEditor key={note.data.note.id} note={note.data.note} onDirty={onDirty} />;
 }
 
-function NoteEditor({ note }: { note?: Note }) {
+function NoteEditor({ note, onDirty }: { note?: Note; onDirty: (dirty: boolean) => void }) {
   const { t } = useI18n();
   const qc = useQueryClient();
   const navigate = useNavigate();
@@ -152,6 +201,11 @@ function NoteEditor({ note }: { note?: Note }) {
   const [pending, setPending] = useState<"save" | "delete" | null>(null);
   const [justSaved, setJustSaved] = useState(false);
   const dirty = title !== saved.title || content !== saved.content || projectId !== saved.projectId;
+
+  useEffect(() => {
+    onDirty(dirty);
+  }, [dirty, onDirty]);
+  useEffect(() => () => onDirty(false), [onDirty]);
 
   // Closing the tab with unsaved text asks first.
   useEffect(() => {
@@ -214,16 +268,6 @@ function NoteEditor({ note }: { note?: Note }) {
       }}
       className="space-y-4"
     >
-      <Link
-        to="/notas"
-        className="inline-flex min-h-11 items-center gap-2 rounded-xl px-2 text-sm font-medium text-fg-muted hover:bg-raised hover:text-fg lg:hidden"
-      >
-        <ArrowLeft className="h-4 w-4" aria-hidden />
-        {t("web.notes.back")}
-      </Link>
-      {/* Alone on a narrow screen the editor is the page; beside the list, the list's heading is. */}
-      <h1 className="sr-only lg:hidden">{note ? t("web.notes.edit") : t("web.notes.new")}</h1>
-      <h2 className="sr-only hidden lg:block">{note ? t("web.notes.edit") : t("web.notes.new")}</h2>
       <div className="grid gap-3 sm:grid-cols-[1fr_16rem]">
         <TextField label={t("web.notes.field.title")} value={title} required maxLength={NOTE_TITLE_MAX} onChange={(e) => setTitle(e.target.value)} />
         <SelectField label={t("web.tasks.field.project")} value={projectId} onChange={(e) => setProjectId(e.target.value)}>

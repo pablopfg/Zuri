@@ -19,7 +19,7 @@ import { Button, cn, Dialog, EmptyState, ErrorNotice, fieldClass, SelectField, S
 import { PROJECTS_KEY, TASKS_KEY, useProjects, useTasks } from "../../hooks/productivity.ts";
 import { api, errorMessage } from "../../lib/api.ts";
 import { useDebounced } from "../../lib/debounce.ts";
-import { dueFromInputs, dueInputs, formatDue } from "../../lib/due.ts";
+import { dueFromInputs, dueInputs, formatDue, quickAddDue } from "../../lib/due.ts";
 import { useI18n } from "../../lib/i18n.tsx";
 import { ProjectsDialog } from "./ProjectsDialog.tsx";
 import { PRIORITY_LABEL, ProjectOptions, STATUS_LABEL, TrashedNotice, VIEW_EMPTY, VIEW_LABEL } from "./shared.tsx";
@@ -70,7 +70,7 @@ export function TasksPage() {
               onClick={() => setView(item)}
               className={cn(
                 "min-h-11 flex-1 rounded-lg px-3 text-sm font-medium transition-colors",
-                view === item ? "bg-surface text-fg shadow-sm" : "text-fg-muted hover:text-fg",
+                view === item ? "bg-surface text-fg shadow-sm ring-1 ring-border-strong" : "text-fg-muted hover:text-fg",
               )}
             >
               {t(VIEW_LABEL[item])}
@@ -80,7 +80,8 @@ export function TasksPage() {
       </div>
 
       <div className="space-y-4">
-        {view !== "completed" && <NewTask projects={projectList} forToday={view === "today"} />}
+        {/* A task added here would not show up in Completed or Overdue, so those views have no quick add. */}
+        {view !== "completed" && view !== "overdue" && <NewTask projects={projectList} forToday={view === "today"} />}
 
         <section aria-label={t("web.tasks.listLabel")} className="space-y-3">
           <div className="grid gap-2 sm:grid-cols-[1fr_14rem]">
@@ -145,7 +146,7 @@ export function TasksPage() {
  * (date, time, project, priority) sits behind "More options".
  */
 function NewTask({ projects, forToday }: { projects: Project[]; forToday: boolean }) {
-  const { t, timeZone } = useI18n();
+  const { t, locale, timeZone } = useI18n();
   const qc = useQueryClient();
   const [title, setTitle] = useState("");
   const [more, setMore] = useState(false);
@@ -159,8 +160,7 @@ function NewTask({ projects, forToday }: { projects: Project[]; forToday: boolea
 
   async function submit(event: FormEvent) {
     event.preventDefault();
-    const day = date || (forToday ? dueInputs(new Date().toISOString(), timeZone).date : "");
-    const dueAt = dueFromInputs(day, date ? time : "", timeZone);
+    const dueAt = quickAddDue(date, time, forToday, new Date(), timeZone);
     if (dueAt === null) {
       setError(t("web.tasks.invalidDate"));
       return;
@@ -169,9 +169,13 @@ function NewTask({ projects, forToday }: { projects: Project[]; forToday: boolea
     setError(null);
     try {
       await api("/tasks", { method: "POST", body: { title, priority, dueAt: dueAt || null, projectId: projectId || null } });
+      // Every task starts plain: nothing chosen for one carries over, unseen, to the next.
       setTitle("");
       setDate("");
       setTime("");
+      setProjectId("");
+      setPriority("medium");
+      setMore(false);
       await qc.invalidateQueries({ queryKey: TASKS_KEY });
     } catch (err) {
       setError(errorMessage(err));
@@ -179,6 +183,14 @@ function NewTask({ projects, forToday }: { projects: Project[]; forToday: boolea
       setPending(false);
     }
   }
+
+  const placeholder = forToday && !date ? t("web.tasks.addForToday") : t("web.tasks.addOne");
+  // With the panel closed, what is chosen in it stays in view.
+  const chosen = [
+    date && formatDue(dueFromInputs(date, time, timeZone) || "", locale, timeZone),
+    projects.find((project) => project.id === projectId)?.name,
+    priority !== "medium" && t(PRIORITY_LABEL[priority]),
+  ].filter(Boolean);
 
   return (
     <section aria-label={t("web.tasks.new")}>
@@ -189,8 +201,8 @@ function NewTask({ projects, forToday }: { projects: Project[]; forToday: boolea
             required
             maxLength={TASK_TITLE_MAX}
             onChange={(e) => setTitle(e.target.value)}
-            placeholder={forToday ? t("web.tasks.addForToday") : t("web.tasks.addOne")}
-            aria-label={t("web.tasks.field.title")}
+            placeholder={placeholder}
+            aria-label={placeholder}
             className={cn(fieldClass, "flex-1")}
           />
           <Button type="submit" loading={pending} disabled={!title.trim()} aria-label={t("web.tasks.add")}>
@@ -208,6 +220,7 @@ function NewTask({ projects, forToday }: { projects: Project[]; forToday: boolea
           <ChevronDown className={cn("h-4 w-4 transition-transform", more && "rotate-180")} aria-hidden />
           {t("web.tasks.moreOptions")}
         </button>
+        {!more && chosen.length > 0 && <span className="ml-1 text-sm text-fg-muted">{t("web.tasks.optionsChosen", { summary: chosen.join(" · ") })}</span>}
         <div id={optionsId} hidden={!more} className="mt-1 space-y-2 rounded-2xl border border-border bg-surface p-4">
           <div className="grid gap-3 sm:grid-cols-4">
             <TextField label={t("web.tasks.field.date")} type="date" value={date} min="2000-01-01" max="2199-12-31" onChange={(e) => setDate(e.target.value)} />
@@ -277,7 +290,7 @@ function TaskRow({ task, projects, onOpen }: { task: Task; projects: Project[]; 
         <button
           type="button"
           onClick={onOpen}
-          className={cn("min-h-9 w-full rounded-lg px-1 text-left text-[15px] leading-6 hover:underline", done && "text-fg-muted line-through")}
+          className={cn("min-h-11 w-full rounded-lg px-1 text-left text-[15px] leading-6 hover:underline", done && "text-fg-muted line-through")}
         >
           {task.title}
         </button>

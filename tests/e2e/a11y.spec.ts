@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { expectAccessible, signIn } from "./ui-helpers.ts";
+import { expectAccessible, signIn, tooSmallControls } from "./ui-helpers.ts";
 
 // axe (WCAG 2.1 A and AA) on every screen of the shell, in both themes. Serious
 // and critical violations fail; the Lighthouse score is in the PR.
@@ -67,14 +67,7 @@ test("the two-step setup and the confirmation dialog have no serious violation",
 });
 
 test("every control is at least 44 px tall on a phone @mobile", async ({ page }) => {
-  const tooSmall = () =>
-    page.evaluate(() =>
-      [...document.querySelectorAll<HTMLElement>("button, a[href], select, input:not([type=radio])")]
-        // Visible ones only; the skip link is 1 px until focused, then a full-size target.
-        .filter((el) => el.offsetParent !== null && !el.classList.contains("sr-only"))
-        .map((el) => ({ text: el.textContent?.trim() || el.getAttribute("aria-label") || el.tagName, height: el.getBoundingClientRect().height }))
-        .filter((el) => el.height < 44),
-    );
+  const tooSmall = () => tooSmallControls(page);
   await page.goto("/entrar");
   await expect(page.getByRole("button", { name: "Entrar" })).toBeVisible();
   expect(await tooSmall()).toEqual([]);

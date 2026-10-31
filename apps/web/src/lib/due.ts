@@ -35,6 +35,16 @@ export function dueFromInputs(date: string, time: string, timeZone: string): str
   return instant ? instant.toISOString() : null;
 }
 
+/**
+ * The deadline of a quick add: the day (and time) chosen, or, in the Today
+ * view with no day, today by the end of the day in the owner's zone, so the
+ * task shows up where it was typed. "" for none, null for an impossible date.
+ */
+export function quickAddDue(date: string, time: string, forToday: boolean, now: Date, timeZone: string): string | null | "" {
+  if (date) return dueFromInputs(date, time, timeZone);
+  return forToday ? dueFromInputs(dueInputs(now.toISOString(), timeZone).date, "", timeZone) : "";
+}
+
 /** "05/11/2026" for a day-only deadline, "05/11/2026 às 18:00" with a time. */
 export function formatDue(iso: string, locale: Locale, timeZone: string): string {
   if (dueInputs(iso, timeZone).time === "") {
