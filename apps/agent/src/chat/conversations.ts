@@ -29,7 +29,7 @@ interface ConversationRow {
 }
 
 export interface MessageRow {
-  /** SQLite's rowid: the order messages were written in. */
+  /** The message's seq (its rowid, an INTEGER PRIMARY KEY): the order messages were written in, stable across VACUUM. */
   seq: number;
   id: string;
   conversation_id: string;
@@ -104,7 +104,7 @@ export class ConversationRepository {
   /** Starts a conversation; refused when it would leave no room for its first two messages. */
   create(title: string): Conversation {
     this.storage.assertRoom("conversations");
-    if (this.storage.count("messages") + 2 > this.storage.limits.messages) this.storage.assertRoom("messages");
+    this.storage.assertRoom("messages", 2);
     const at = now();
     const row: ConversationRow = { id: crypto.randomUUID(), title: titleFrom(title).slice(0, CONVERSATION_TITLE_MAX) || "…", summary: null, summary_upto: 0, created_at: at, updated_at: at };
     this.db.run(
@@ -165,6 +165,11 @@ export class ConversationRepository {
     });
   }
 
+  /** A turn stores two messages: refused before the owner's one when the answer would find no room. */
+  assertRoomForTurn(): void {
+    this.storage.assertRoom("messages", 2);
+  }
+
   /** Adds one message and moves the conversation to the top of the list, in one transaction. */
   addMessage(input: {
     conversationId: string;
@@ -176,6 +181,8 @@ export class ConversationRepository {
     source?: MessageSource;
     id?: string;
   }): ChatMessage {
+    // A conversation deleted while its answer was being written takes no more messages (no orphan rows).
+    this.row(input.conversationId);
     this.storage.assertRoom("messages");
     const at = now();
     const id = input.id ?? crypto.randomUUID();

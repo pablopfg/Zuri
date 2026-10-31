@@ -352,6 +352,15 @@ limite real está no servidor:
   quando o dono aprova no cartão, uma vez só, e só se o alvo ainda estiver como
   na proposta (hash do retrato). O modelo não consegue aprovar: as rotas de
   aprovação pedem a sessão, o CSRF e a origem do navegador do dono.
+- **Sem renomear para depois apagar.** Se o agente mudou um item no turno
+  (título, texto, status, memória), ele não pode propor apagar ou reescrever o
+  mesmo item no mesmo turno. Sem isso, uma injeção poderia renomear "Pagar
+  aluguel" para "Tarefa duplicada (pode apagar)" e o cartão mostraria o nome
+  inventado. O dono ainda pode pedir de novo numa mensagem nova. A linha de
+  atividade de uma ferramenta destrutiva não mostra o texto do modelo.
+- **Links mostram o destino.** Nas respostas do agente, todo link mostra o
+  endereço real ao lado do texto, e só `https:`, `http:` e `mailto:` viram
+  link. Um "Abrir a nota" que aponte para outro site aparece com o nome dele.
 - **Planos são rascunhos.** Um plano de tarefas não cria nada até o dono
   confirmar. O servidor recusa tarefas que o agente não propôs.
 - **Limites por turno.** Até 6 chamadas de ferramenta e 4 passos por resposta
@@ -371,7 +380,11 @@ limite real está no servidor:
 | Resultado de ferramenta manda mudar tudo | `chat-runner.test.ts`, "a tool result that orders mass changes" |
 | Modelo em laço | `chat-runner.test.ts`, "a model stuck in a loop" |
 | Plano injetado | `chat-runner.test.ts`, "an injected plan creates nothing" |
-| Conversa importada com ordens | `chat-runner.test.ts`, "a restored conversation is shown to the model as past data" |
+| Conversa importada com ordens ou `</data>` falso | `chat-runner.test.ts`, "a restored conversation is shown to the model as past data" |
+| Renomear e propor apagar no mesmo turno | `chat-runner.test.ts`, "SEC-09-01 renaming an item and then proposing to destroy it" |
+| Áudio de bitrate baixo para fugir do limite | `ai-transcription.test.ts`, "SEC-09-02 a low-bitrate file" |
+| Conversa apagada durante a resposta | `chat-routes.test.ts`, "SEC-09-04 deleting the conversation while its answer is written" |
+| Link de resposta para outro site | `tests/e2e/chat.spec.ts`, "a link in an answer shows where it really goes" |
 | Modelo diz que fez o que não fez | `chat-runner.test.ts`, "past proposals reach the model with their real outcome" |
 | Nota com `</data>` e ordens | `chat-tools.test.ts`, "read_note hands back a stored injection as inert data" |
 | Aprovação dupla ou alvo trocado | `chat-tools.test.ts`, "two approvals at the same time", "TARGET_CHANGED" |
@@ -386,7 +399,10 @@ teste passa quando, mesmo assim, nada é apagado sem o dono.
 A voz da conversa precisa do microfone, então a `Permissions-Policy` passou de
 `microphone=()` para `microphone=(self)`: só o próprio Zuri pode pedir, nunca
 um frame de outra origem. O navegador ainda pergunta ao dono na primeira vez. O
-áudio vai para a transcrição e não é guardado.
+áudio vai para a transcrição e não é guardado. Se o modelo ouvir um áudio
+mais longo do que o tamanho indicava (um arquivo de bitrate muito baixo), conta
+a duração que ele ouviu, mesmo acima da reserva, e o próximo áudio já encontra
+o limite do dia.
 
 ## Dados apagados
 

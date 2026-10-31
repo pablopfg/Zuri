@@ -25,6 +25,14 @@ import { readJson } from "./http.ts";
 /** Most turns running at once (several tabs): each one holds the object and spends AI. */
 export const MAX_ACTIVE_TURNS = 2;
 
+/**
+ * A comment line (`: ping`) goes down the stream this often while a turn runs.
+ * A closed tab makes the write fail, which stops the model even in a step that
+ * writes no text (a tool call, the summary): the request's own abort signal is
+ * not delivered to the object without extra compatibility flags.
+ */
+export const SSE_PING_MS = 5_000;
+
 /** What the chat routes need from the Durable Object. */
 export interface ChatDeps {
   runner(): AgentRunner;
@@ -38,6 +46,8 @@ export interface ChatDeps {
   /** Voice to text through the meter, one clip at a time. */
   transcribe(audio: string, seconds: number, signal: AbortSignal): Promise<{ text: string; seconds: number }>;
   locale(): Locale;
+  /** SSE_PING_MS; the tests shorten it. */
+  pingMs(): number;
 }
 
 function recordId(value: string | undefined): string {
@@ -95,7 +105,8 @@ export function registerChatRoutes(app: Hono<ApiEnv>, deps: () => ChatDeps): voi
   /**
    * One turn as server-sent events (`start`, `text`, `tool`, `approval`,
    * `plan`, `error`, `done`). The stream is written inside the object; the
-   * answer is stored however it ends, and a closed tab stops the model.
+   * answer is stored however it ends, and a closed tab stops the model at the
+   * next write or ping (SSE_PING_MS).
    */
   app.post("/chat", async (c) => {
     const input = await readJson(c.req.raw, chatRequestSchema, CHAT_BODY_MAX_BYTES);
@@ -108,7 +119,6 @@ export function registerChatRoutes(app: Hono<ApiEnv>, deps: () => ChatDeps): voi
     // Claimed before any await, so a second request for the same conversation sees it.
     const pending = input.conversationId ?? `new:${crypto.randomUUID()}`;
     deps().activeRuns.set(pending, controller);
-    c.req.raw.signal?.addEventListener("abort", () => controller.abort());
     const { readable, writable } = new TransformStream<Uint8Array, Uint8Array>();
     const writer = writable.getWriter();
     let gone = false;
@@ -122,6 +132,13 @@ export function registerChatRoutes(app: Hono<ApiEnv>, deps: () => ChatDeps): voi
         controller.abort();
       }
     };
+    const ping = setInterval(() => {
+      if (gone) return;
+      writer.write(encoder.encode(": ping\n\n")).catch(() => {
+        gone = true;
+        controller.abort();
+      });
+    }, deps().pingMs());
     const run = async () => {
       let key = pending;
       try {
@@ -139,6 +156,8 @@ export function registerChatRoutes(app: Hono<ApiEnv>, deps: () => ChatDeps): voi
         if (!(error instanceof AppError)) console.error(JSON.stringify({ message: "chat stream failed", error: error instanceof Error ? error.name : typeof error }));
         await send({ type: "error", code: appError.code, message: t(deps().locale(), appError.messageKey), ...(appError.details ? { details: appError.details } : {}) });
       } finally {
+        // Nothing keeps the object busy after the turn (rule P5).
+        clearInterval(ping);
         if (deps().activeRuns.get(key) === controller) deps().activeRuns.delete(key);
         await writer.close().catch(() => undefined);
       }

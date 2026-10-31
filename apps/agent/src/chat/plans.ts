@@ -50,6 +50,7 @@ export class TaskPlanService {
 
   /** Stores the proposal as a pending draft; tasks repeated inside it are left out. */
   propose(conversationId: string, input: ProposedPlan): { plan: TaskPlan; skipped: string[] } {
+    if (!this.db.one(`SELECT 1 AS ok FROM zur_conversations WHERE id = ?`, conversationId)) throw new AppError("NOT_FOUND", "error.conversationNotFound");
     const seen = new Set<string>();
     const skipped: string[] = [];
     const tasks: TaskPlanContent["tasks"] = [];

@@ -1,4 +1,4 @@
-import { DESTRUCTIVE_TOOLS, PENDING_ACTION_TTL_MS, TASK_PLAN_TTL_MS, type TaskPlanContent, TOOL_NAMES } from "@zuri/shared";
+import { DESTRUCTIVE_TOOLS, PENDING_ACTION_TTL_MS, STORAGE_LIMITS, TASK_PLAN_TTL_MS, type TaskPlanContent, TOOL_NAMES } from "@zuri/shared";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import { AppError } from "../src/http/errors.ts";
@@ -442,7 +442,14 @@ describe("destructive tools: a proposal the owner approves", () => {
       expect(await refused(noConversation.execute("delete_task", { task: task.id }, "1"))).toMatch(/works only in the chat/);
       const run = executor(world, conversation(world));
       expect(await refused(run.execute("delete_note", { id: crypto.randomUUID() }, "2"))).toMatch(/No note has this id/);
-      expect(world.actions.forConversation(conversation(world))).toEqual([]);
+      expect(world.db.one<{ n: number }>("SELECT count(*) AS n FROM zur_pending_actions")?.n).toBe(0);
+      // Nor for a conversation deleted while the turn ran.
+      const gone = conversation(world);
+      const late = executor(world, gone);
+      world.conversations.delete(gone);
+      expect(await refused(late.execute("delete_task", { task: task.id }, "3"))).toMatch(/does not exist/);
+      expect(await refused(late.execute("propose_task_plan", { title: "x", tasks: [{ title: "a" }, { title: "b" }] }, "4"))).toMatch(/does not exist/);
+      expect(world.db.one<{ n: number }>("SELECT (SELECT count(*) FROM zur_pending_actions) + (SELECT count(*) FROM zur_task_plan_drafts) AS n")?.n).toBe(0);
     });
   });
 
@@ -535,6 +542,26 @@ describe("task plans: a draft only the owner's confirmation turns into tasks", (
       const replay = world.plans.confirm(planId, plan.revision, edited);
       expect(replay.replayed).toBe(true);
       expect(world.productivity.tasks.list({ view: "all" })).toHaveLength(2);
+    });
+  });
+
+  it("a confirmation that fails half way (no room for the 3rd task) creates nothing: no task, no project, the plan still pending", async () => {
+    await withChatWorld(async (world) => {
+      const { planId, plan } = await propose(world, { new_project: "Lisboa 2026" });
+      const count = world.db.one<{ n: number }>(`SELECT n FROM zur_counts WHERE kind = 'tasks'`)?.n ?? 0;
+      // Room for two tasks only: the third one is refused inside the transaction.
+      world.db.run(`UPDATE zur_counts SET n = ? WHERE kind = 'tasks'`, STORAGE_LIMITS.tasks - 2);
+      try {
+        expect(() => world.plans.confirm(planId, plan.revision, plan.plan)).toThrow(expect.objectContaining({ code: "STORAGE_LIMIT_REACHED" }));
+      } finally {
+        world.db.run(`UPDATE zur_counts SET n = ? WHERE kind = 'tasks'`, count);
+      }
+      expect(world.productivity.tasks.list({ view: "all" })).toEqual([]);
+      expect(world.productivity.projects.list()).toEqual([]);
+      expect(world.plans.get(planId)).toMatchObject({ status: "pending", result: null });
+      // With room again, the same confirmation goes through.
+      expect(world.plans.confirm(planId, plan.revision, plan.plan).plan.status).toBe("confirmed");
+      expect(world.productivity.tasks.list({ view: "all" })).toHaveLength(3);
     });
   });
 

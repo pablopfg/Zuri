@@ -413,12 +413,15 @@ export const MIGRATIONS: readonly Migration[] = [
       )`,
       // The list, most recent first, read by a cursor.
       `CREATE INDEX IF NOT EXISTS zur_conversations_updated ON zur_conversations (updated_at, id)`,
-      // Messages, in the order they were written: the index on conversation_id
-      // is ordered by rowid inside each conversation. `tools` is JSON of what the
-      // owner sees (names, status, the proposal ids), never a tool's output.
-      // `error_key` is a catalog key: the database keeps data, not translated text.
+      // Messages, in the order they were written: `seq` is the rowid, kept as an
+      // INTEGER PRIMARY KEY so it never changes (a VACUUM may renumber a hidden
+      // rowid, and the running summary points at one). The index on
+      // conversation_id is ordered by seq inside each conversation. `tools` is
+      // JSON of what the owner sees (names, status, the proposal ids), never a
+      // tool's output. `error_key` is a catalog key: data, not translated text.
       `CREATE TABLE IF NOT EXISTS zur_messages (
-        id TEXT PRIMARY KEY,
+        seq INTEGER PRIMARY KEY,
+        id TEXT NOT NULL UNIQUE,
         conversation_id TEXT NOT NULL,
         role TEXT NOT NULL CHECK (role IN ('user', 'assistant')),
         content TEXT NOT NULL,
@@ -447,7 +450,7 @@ export const MIGRATIONS: readonly Migration[] = [
         expires_at TEXT NOT NULL,
         resolved_at TEXT
       )`,
-      `CREATE INDEX IF NOT EXISTS zur_pending_actions_conversation ON zur_pending_actions (conversation_id)`,
+      `CREATE INDEX IF NOT EXISTS zur_pending_actions_conversation ON zur_pending_actions (conversation_id, created_at)`,
       `CREATE INDEX IF NOT EXISTS zur_pending_actions_created ON zur_pending_actions (created_at)`,
       // Task plans the agent proposed: a draft until the owner confirms it; only
       // the confirmation creates tasks. Kept 30 days. Not in the backup.
@@ -462,7 +465,7 @@ export const MIGRATIONS: readonly Migration[] = [
         expires_at TEXT NOT NULL,
         confirmed_at TEXT
       )`,
-      `CREATE INDEX IF NOT EXISTS zur_task_plan_drafts_conversation ON zur_task_plan_drafts (conversation_id)`,
+      `CREATE INDEX IF NOT EXISTS zur_task_plan_drafts_conversation ON zur_task_plan_drafts (conversation_id, created_at)`,
       `CREATE INDEX IF NOT EXISTS zur_task_plan_drafts_created ON zur_task_plan_drafts (created_at)`,
       // Counters for the limits per kind (5,000 conversations, 200,000 messages).
       `INSERT INTO zur_counts (kind, n) SELECT 'conversations', count(*) FROM zur_conversations WHERE 1 ON CONFLICT (kind) DO UPDATE SET n = excluded.n`,

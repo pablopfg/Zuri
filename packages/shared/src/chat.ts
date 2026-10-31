@@ -3,7 +3,7 @@ import "./zod-config.ts";
 
 import { z } from "zod";
 import type { ApiErrorCode } from "./errors.ts";
-import { isValidCalendarDate } from "./dates.ts";
+import { isValidCalendarDate, MAX_DATE_YEAR, MIN_DATE_YEAR } from "./dates.ts";
 import { line, RECORD_ID, recordIdSchema, TASK_PRIORITIES, type TaskPriority, text } from "./productivity.ts";
 
 /**
@@ -119,6 +119,8 @@ const LOCAL_DUE = /^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2}))?$/;
 export function isLocalDue(value: string): boolean {
   const match = LOCAL_DUE.exec(value);
   if (!match) return false;
+  // The years a task deadline may have (dates.ts), read in the owner's calendar.
+  if (Number(match[1]) < MIN_DATE_YEAR || Number(match[1]) > MAX_DATE_YEAR) return false;
   if (!isValidCalendarDate(Number(match[1]), Number(match[2]), Number(match[3]))) return false;
   return match[4] === undefined || (Number(match[4]) <= 23 && Number(match[5]) <= 59);
 }
@@ -261,10 +263,21 @@ export const VOICE_LIMITS = { maxClipSeconds: 60, maxClipBytes: 2 * 1024 * 1024 
 /** The base64 text of the largest clip. */
 export const VOICE_BASE64_MAX = Math.ceil(VOICE_LIMITS.maxClipBytes / 3) * 4;
 
+/** Bytes a base64 text decodes to. */
+export function base64Length(value: string): number {
+  return (value.length / 4) * 3 - (value.endsWith("==") ? 2 : value.endsWith("=") ? 1 : 0);
+}
+
 export const transcribeRequestSchema = /* @__PURE__ */ z
   .object({
     /** The recording (WebM/Opus, Ogg or MP4/AAC, as the browser makes it), in base64. */
-    audio: z.string().min(4).max(VOICE_BASE64_MAX).regex(/^[A-Za-z0-9+/]+={0,2}$/),
+    audio: z
+      .string()
+      .min(4)
+      .max(VOICE_BASE64_MAX)
+      .regex(/^[A-Za-z0-9+/]+={0,2}$/)
+      // Whole base64 only, and never a byte over the clip cap (n+1 is refused).
+      .refine((value) => value.length % 4 === 0 && base64Length(value) <= VOICE_LIMITS.maxClipBytes),
     /** The length the browser measured, in seconds; the longer of it and the server's estimate is charged. */
     seconds: z.number().positive().max(VOICE_LIMITS.maxClipSeconds + 1),
   })

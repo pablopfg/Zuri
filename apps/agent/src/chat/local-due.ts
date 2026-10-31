@@ -1,4 +1,4 @@
-import { isLocalDue, zonedParts, zonedTimeToUtc } from "@zuri/shared";
+import { isLocalDue, MAX_DATE_YEAR, MIN_DATE_YEAR, zonedParts, zonedTimeToUtc } from "@zuri/shared";
 
 /** A deadline with only a day means "by the end of that day", as in the tasks screen. */
 const END_OF_DAY = { hour: 23, minute: 59 };
@@ -13,7 +13,9 @@ export function localDueToInstant(value: string, timeZone: string): string | nul
   const [year, month, day] = date.split("-").map(Number);
   const [hour, minute] = time ? time.split(":").map(Number) : [END_OF_DAY.hour, END_OF_DAY.minute];
   const instant = zonedTimeToUtc({ year: year ?? 0, month: month ?? 0, day: day ?? 0, hour: hour ?? 0, minute: minute ?? 0 }, timeZone);
-  return instant ? instant.toISOString() : null;
+  // A day at the edge of the range can land in another UTC year (31/12/2199 at night is 2200 in UTC).
+  if (!instant || instant.getUTCFullYear() < MIN_DATE_YEAR || instant.getUTCFullYear() > MAX_DATE_YEAR) return null;
+  return instant.toISOString();
 }
 
 const pad = (n: number) => String(n).padStart(2, "0");

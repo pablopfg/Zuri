@@ -87,6 +87,7 @@ export const noteTools = [
       if (content !== undefined && content.length > MAX_AGENT_NOTE_CHARS) {
         throw new ToolError(`This note would pass ${MAX_AGENT_NOTE_CHARS} characters. Start a new note instead.`);
       }
+      ctx.changed?.add(found.id);
       const updated = ctx.productivity.notes.update(found.id, {
         ...(input.title !== undefined ? { title: input.title } : {}),
         ...(content !== undefined ? { content } : {}),

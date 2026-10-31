@@ -179,3 +179,53 @@ test("a message over 8,000 characters can't be sent; the counter says why", asyn
   await expect(box).toHaveAttribute("aria-invalid", "true");
   await expect(page.getByRole("button", { name: "Enviar" })).toBeDisabled();
 });
+
+test("a link in an answer shows where it really goes, and a script link is plain text", async ({ page }) => {
+  await openChat(page);
+  // The simulated model repeats the message, so its answer carries these links as an injected note could.
+  await send(page, "[Abrir a nota](https://evil.exemplo.com.br/?d=segredos) e [clique](javascript:alert(1))");
+  const answer = log(page).locator("li").filter({ hasText: "(IA simulada)" }).last();
+  const link = answer.getByRole("link", { name: /Abrir a nota/ });
+  await expect(link).toContainText("(evil.exemplo.com.br)");
+  await expect(link).toHaveAttribute("rel", "noopener noreferrer nofollow");
+  await expect(answer.getByRole("link", { name: "clique" })).toHaveCount(0);
+  await expect(answer.getByText("clique", { exact: true })).toBeVisible();
+});
+
+test("Stop in the middle of an answer keeps what was written, marked as stopped, also after a reload", async ({ page }) => {
+  const word = tag();
+  await openChat(page);
+  const box = page.getByRole("textbox", { name: "Mensagem" });
+  // `slow ` makes the simulated model write a word every 200 ms.
+  await box.fill(`slow ${word} ${"palavra ".repeat(40)}`);
+  await box.press("Enter");
+  const stop = page.getByRole("button", { name: "Parar" });
+  await expect(log(page).getByText("(IA simulada)", { exact: false })).toBeVisible();
+  await stop.click();
+  await expect(stop).toHaveCount(0);
+  await expect(log(page).getByText("Resposta interrompida.")).toBeVisible();
+  await expect(page.getByRole("textbox", { name: "Mensagem" })).toBeEnabled();
+  await page.reload();
+  await expect(log(page).getByText("Resposta interrompida.")).toBeVisible();
+});
+
+test.describe("a device in another zone than the owner's", () => {
+  test.use({ timezoneId: "Asia/Tokyo" });
+
+  test("a plan's dates are the owner's: shown and saved as days in São Paulo", async ({ page }) => {
+    const word = tag();
+    await openChat(page);
+    const plan = { title: `Viagem ${word}`, tasks: [{ title: `Passaporte ${word}`, due: "2026-12-05" }, { title: `Malas ${word}`, due: "2026-12-06T09:30" }] };
+    await send(page, `call propose_task_plan ${JSON.stringify(plan)}`);
+    const card = page.getByRole("region", { name: `Viagem ${word}` });
+    await expect(card).toContainText("05/12/2026");
+    await expect(card).toContainText("06/12/2026 às 09:30");
+    await card.getByRole("button", { name: "Criar 2 tarefas" }).click();
+    await expect(card.getByRole("status")).toContainText("2 tarefas criadas.");
+    const after = (await (await page.request.get(`/api/tasks?view=all&q=${word}`, { headers: CSRF })).json()) as { tasks: { title: string; dueAt: string }[] };
+    const due = Object.fromEntries(after.tasks.map((t) => [t.title, t.dueAt]));
+    // The end of 05/12 and 09:30 of 06/12 in São Paulo (UTC−3), whatever the device's zone.
+    expect(due[`Passaporte ${word}`]).toBe("2026-12-06T02:59:00.000Z");
+    expect(due[`Malas ${word}`]).toBe("2026-12-06T12:30:00.000Z");
+  });
+});

@@ -29,7 +29,8 @@ dono confirma.
    código e o texto no idioma do dono).
 
 Eventos do stream, em ordem: `start`, `text`, `tool`, `approval`, `plan`,
-`error` e `done`. Um erro antes do turno (conversa cheia, por exemplo) chega
+`error` e `done`. A cada 5 s sai também uma linha de comentário (`: ping`): se
+a aba fechou, a escrita falha e o modelo para, mesmo num passo sem texto. Um erro antes do turno (conversa cheia, por exemplo) chega
 como `error`. Uma recusa antes do stream (409 ocupado, 400, 401) vem como
 resposta JSON comum.
 
@@ -77,6 +78,7 @@ O executor (`tools/registry.ts`) também:
 
 - recusa o nome de uma ferramenta que não existe e a chamada exata repetida no
   mesmo turno (laço);
+- recusa propor apagar ou reescrever um item que o agente mudou no mesmo turno;
 - devolve ao modelo toda saída numa linha `<data source="tool">`, cortada em
   8.000 caracteres;
 - descreve as falhas em inglês, só para o modelo, sem detalhe interno;
@@ -128,7 +130,10 @@ política `Permissions-Policy` libera o microfone só para o próprio Zuri
 Os contadores `conversations` (até 5.000) e `messages` (até 200.000) ficam em
 `zur_counts`, mantidos por gatilhos. Apagar uma conversa apaga as mensagens,
 propostas e planos dela; as tarefas, notas e memórias criadas continuam.
-Propostas e planos são limpos 30 dias depois de criados.
+Propostas e planos são limpos 30 dias depois de criados. Apagar uma conversa
+no meio de uma resposta para o turno e não deixa nenhuma linha para trás.
+`zur_messages.seq` (a rowid como `INTEGER PRIMARY KEY`) dá a ordem das
+mensagens e não muda nem num `VACUUM`.
 
 ## API
 
@@ -157,4 +162,6 @@ essas rotas: só o navegador do dono.
 - `apps/agent/test/chat-routes.test.ts` e `ai-transcription.test.ts`: as rotas
   e a voz. `free-tier-budget.test.ts` mede as linhas lidas por rota.
 - `tests/e2e/chat.spec.ts` e `chat-voice.spec.ts`: a tela no navegador, com o
-  modelo simulado (`call <ferramenta> {json}` chama uma ferramenta de verdade).
+  modelo simulado (`call <ferramenta> {json}` chama uma ferramenta de verdade, e
+  uma mensagem que começa com `slow ` volta uma palavra a cada 200 ms, para
+  testar o botão Parar).

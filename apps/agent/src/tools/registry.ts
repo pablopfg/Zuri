@@ -24,6 +24,12 @@ export interface ToolContext {
   mode: "chat" | "scheduled";
   /** The conversation that owns proposals made in this turn. */
   conversationId: string | null;
+  /**
+   * Ids of existing items a write tool changed in this turn. A destructive
+   * proposal on one of them is refused: renaming an item and then proposing to
+   * delete it would put the model's own words on the owner's card.
+   */
+  changed?: Set<string>;
 }
 
 interface BaseTool<S extends z.ZodType> {
@@ -142,11 +148,15 @@ export class ToolExecutor {
   private readonly actionsByCall = new Map<string, string>();
   private readonly plansByCall = new Map<string, string>();
 
+  private readonly ctx: ToolContext;
+
   constructor(
     private readonly tools: readonly ToolDefinition[],
-    private readonly ctx: ToolContext,
+    ctx: ToolContext,
     private readonly limits: ExecutorLimits,
-  ) {}
+  ) {
+    this.ctx = { ...ctx, changed: new Set() };
+  }
 
   get callCount(): number {
     return this.calls;
@@ -226,6 +236,9 @@ export class ToolExecutor {
   private async propose(tool: DestructiveTool, input: unknown, callId: string) {
     if (this.ctx.mode !== "chat" || !this.ctx.conversationId) throw new ToolError(`"${tool.name}" needs the owner's approval and works only in the chat.`);
     const target = tool.target(input, this.ctx);
+    if (this.ctx.changed?.has(target.id)) {
+      throw new ToolError("You changed this item earlier in this request, so it can't be proposed for deletion or rewriting now. Tell the owner what you changed; they can ask again in a new message.");
+    }
     const snapshot = tool.snapshot(target.id, this.ctx);
     if (snapshot === null || snapshot === undefined) throw new ToolError("That item does not exist anymore.");
     const action = this.ctx.actions.create({

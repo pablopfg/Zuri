@@ -69,7 +69,8 @@ export function ChatPage() {
   const controller = useRef<AbortController | null>(null);
   const page = useQuery({
     queryKey: pageKey(id ?? ""),
-    queryFn: ({ signal }) => api<ConversationPage>(`/conversations/${id}`, { signal }),
+    // Encoded: an address like /conversa/..%2Fusage must stay one id, never another API path.
+    queryFn: ({ signal }) => api<ConversationPage>(`/conversations/${encodeURIComponent(id ?? "")}`, { signal }),
     enabled: Boolean(id),
   });
   const conversation = page.data?.conversation;
@@ -602,7 +603,7 @@ function AssistantBody({
         )}
         {text ? (
           <div className="rounded-2xl rounded-tl-md border border-border bg-surface px-4 py-3 text-[15px] shadow-sm">
-            <Markdown content={text} />
+            <Markdown content={text} showDestination />
           </div>
         ) : (
           streaming &&

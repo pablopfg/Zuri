@@ -1,4 +1,4 @@
-import { AGENT_INSTANCE_NAME, apiErrorSchema, type ChatEvent, type Conversation, type ConversationPage, type PendingAction, type TaskPlan } from "@zuri/shared";
+import { AGENT_INSTANCE_NAME, apiErrorSchema, CHAT_BODY_MAX_BYTES, VOICE_BASE64_MAX, type ChatEvent, type Conversation, type ConversationPage, type PendingAction, type TaskPlan } from "@zuri/shared";
 import { runInDurableObject } from "cloudflare:test";
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
 import type { ZuriAgent } from "../src/agent/zuri-agent.ts";
@@ -48,7 +48,8 @@ async function events(res: Response): Promise<ChatEvent[]> {
   const text = await res.text();
   return text
     .split("\n\n")
-    .filter(Boolean)
+    // Pings (": ping") keep a long turn's connection checked; they carry no event.
+    .filter((block) => block && !block.startsWith(":"))
     .map((block) => {
       const [eventLine, dataLine] = block.split("\n");
       const event = JSON.parse(dataLine?.replace(/^data: /, "") ?? "") as ChatEvent;
@@ -161,6 +162,14 @@ describe("POST /api/chat", () => {
     expect(all.at(-1)?.type).toBe("done");
   });
 
+  it("a body over each route's read limit is refused before it is parsed (chat, rename, stop)", async () => {
+    const tooBig = (bytes: number) => ({ message: "x".repeat(bytes) });
+    expect((await refusal(await api("POST", "/chat", tooBig(CHAT_BODY_MAX_BYTES)), 400)).details).toEqual({ fields: ["_body"] });
+    const id = MISSING;
+    expect((await refusal(await api("PATCH", `/conversations/${id}`, { title: "x".repeat(2 * 1024) }), 400)).details).toEqual({ fields: ["_body"] });
+    expect((await refusal(await api("POST", "/chat/cancel", { conversationId: "x".repeat(1024) }), 400)).details).toEqual({ fields: ["_body"] });
+  });
+
   it("refuses a conversation that doesn't exist, before any model call", async () => {
     await useProvider(new MockAIProvider());
     expect((await refusal(await api("POST", "/chat", { message: "oi", conversationId: MISSING }), 404)).code).toBe("NOT_FOUND");
@@ -220,6 +229,53 @@ describe("POST /api/chat", () => {
     expect((await refusal(await api("POST", "/chat/cancel", { conversationId: "x" }), 400)).code).toBe("VALIDATION_FAILED");
   });
 
+  it("a closed tab stops the model even in a step that writes nothing: the ping's failed write aborts it", async () => {
+    let started: () => void = () => undefined;
+    const running = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    let aborted: () => void = () => undefined;
+    const stopped = new Promise<void>((resolve) => {
+      aborted = resolve;
+    });
+    await inAgent((agent) => {
+      agent.streamPingMs = 20;
+    });
+    try {
+      await useProvider(
+        new ScriptedProvider([
+          async (req) => {
+            started();
+            await new Promise((_, reject) =>
+              req.signal?.addEventListener("abort", () => {
+                aborted();
+                reject(new DOMException("stopped", "AbortError"));
+              }),
+            );
+            return { text: "nunca" };
+          },
+        ]),
+      );
+      const res = await api("POST", "/chat", { message: "demore" });
+      await running;
+      const reader = res.body?.getReader();
+      const first = new TextDecoder().decode((await reader?.read())?.value);
+      expect(first).toMatch(/^event: start\n/);
+      // Pings arrive while the model is silent.
+      let seen = "";
+      while (!seen.includes(": ping")) seen += new TextDecoder().decode((await reader?.read())?.value);
+      await reader?.cancel();
+      await stopped;
+      await expect.poll(() => inAgent((agent) => agent.activeRuns.size)).toBe(0);
+      const stored = await inAgent((agent) => agent.store.db.one<{ status: string }>(`SELECT status FROM zur_messages WHERE role = 'assistant'`));
+      expect(stored?.status).toBe("cancelled");
+    } finally {
+      await inAgent((agent) => {
+        agent.streamPingMs = 5_000;
+      });
+    }
+  });
+
   it("out of the daily limit: an error event with the reason, in the owner's language", async () => {
     await useProvider(new MockAIProvider());
     await inAgent((agent) => agent.store.settings.update({ aiRequestsPerDay: 10 }));
@@ -238,6 +294,47 @@ describe("POST /api/chat", () => {
     } finally {
       await inAgent((agent) => agent.store.db.run(`UPDATE zur_counts SET n = 0 WHERE kind = 'conversations'`));
     }
+  });
+
+  it("an existing conversation needs room for both messages: at 200,000 − 1 the turn is refused before anything is stored (n+1), at − 2 it runs (n)", async () => {
+    await useProvider(new MockAIProvider());
+    const id = startOf(await chat("primeira")).conversation.id;
+    try {
+      await inAgent((agent) => agent.store.db.run(`UPDATE zur_counts SET n = 199999 WHERE kind = 'messages'`));
+      expect(await chat("segunda", id)).toEqual([expect.objectContaining({ type: "error", code: "STORAGE_LIMIT_REACHED" })]);
+      expect(await inAgent((agent) => agent.store.db.one<{ n: number }>(`SELECT count(*) AS n FROM zur_messages`)?.n)).toBe(2);
+      await inAgent((agent) => agent.store.db.run(`UPDATE zur_counts SET n = 199998 WHERE kind = 'messages'`));
+      expect((await chat("terceira", id)).at(-1)).toMatchObject({ type: "done", message: { status: "complete" } });
+    } finally {
+      await inAgent((agent) => agent.store.db.run(`UPDATE zur_counts SET n = (SELECT count(*) FROM zur_messages) WHERE kind = 'messages'`));
+    }
+  });
+
+  it("SEC-09-04 deleting the conversation while its answer is written leaves no row behind", async () => {
+    let started: () => void = () => undefined;
+    const running = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    await useProvider(
+      new ScriptedProvider([
+        async (req) => {
+          started();
+          await new Promise((_, reject) => req.signal?.addEventListener("abort", () => reject(new DOMException("stopped", "AbortError"))));
+          return { text: "nunca" };
+        },
+      ]),
+    );
+    const res = await api("POST", "/chat", { message: "demore" });
+    await running;
+    const id = await inAgent((agent) => [...agent.activeRuns.keys()][0] as string);
+    expect((await api("DELETE", `/conversations/${id}`)).status).toBe(204);
+    const all = await events(res);
+    expect(all.at(-1)).toMatchObject({ type: "done", message: { status: "cancelled" } });
+    const left = await inAgent((agent) =>
+      ["zur_messages", "zur_pending_actions", "zur_task_plan_drafts", "zur_conversations"].map((t) => agent.store.db.one<{ n: number }>(`SELECT count(*) AS n FROM ${t}`)?.n),
+    );
+    expect(left).toEqual([0, 0, 0, 0]);
+    expect(await inAgent((agent) => agent.store.db.one<{ n: number }>(`SELECT n FROM zur_counts WHERE kind = 'messages'`)?.n)).toBe(0);
   });
 });
 
@@ -363,11 +460,15 @@ describe("POST /api/transcribe", () => {
     expect(await inAgent((agent) => agent.store.db.one(`SELECT audio_seconds FROM zur_usage_daily`))).toEqual({ audio_seconds: 120 });
   });
 
-  it("refuses a clip over 2 MB (n+1) by size, before reading it all", async () => {
+  it("takes a clip of exactly 2 MiB (n), refuses one byte more (n+1), broken base64, and a body over the read limit", async () => {
     await useProvider(null, new MockTranscriber());
-    const big = "A".repeat(Math.ceil((2 * 1024 * 1024) / 3) * 4 + 4);
-    const res = await api("POST", "/transcribe", { audio: big, seconds: 10 });
-    expect([400, 413]).toContain(res.status);
+    const MiB2 = 2 * 1024 * 1024;
+    expect((await api("POST", "/transcribe", { audio: btoa("x".repeat(MiB2)), seconds: 10 })).status).toBe(200);
+    const over = await refusal(await api("POST", "/transcribe", { audio: btoa("x".repeat(MiB2 + 1)), seconds: 10 }), 400);
+    expect(over).toMatchObject({ code: "VALIDATION_FAILED", details: { fields: ["audio"] } });
+    expect((await refusal(await api("POST", "/transcribe", { audio: "AAAAA", seconds: 1 }), 400)).details).toEqual({ fields: ["audio"] });
+    const huge = await refusal(await api("POST", "/transcribe", { audio: "A".repeat(VOICE_BASE64_MAX + 4_096), seconds: 10 }), 400);
+    expect(huge.details).toEqual({ fields: ["_body"] });
   });
 
   it("an hour a day of audio: the clip that would pass it is refused", async () => {
@@ -379,6 +480,10 @@ describe("POST /api/transcribe", () => {
   });
 
   it("one clip at a time: a second one while the first is transcribing is CONFLICT", async () => {
+    let started: () => void = () => undefined;
+    const running = new Promise<void>((resolve) => {
+      started = resolve;
+    });
     let release: () => void = () => undefined;
     const gate = new Promise<void>((resolve) => {
       release = resolve;
@@ -387,13 +492,14 @@ describe("POST /api/transcribe", () => {
       model: "mock-whisper",
       billable: false,
       transcribe: async () => {
+        started();
         await gate;
         return { text: "ok", seconds: 1 };
       },
     };
     await useProvider(null, slow);
     const first = api("POST", "/transcribe", { audio: clip(300), seconds: 1 });
-    await new Promise((resolve) => setTimeout(resolve, 20));
+    await running;
     const second = await refusal(await api("POST", "/transcribe", { audio: clip(300), seconds: 1 }), 409);
     expect(second.message).toBe("Já há um áudio sendo transcrito. Espere ele terminar.");
     release();

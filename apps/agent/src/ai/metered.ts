@@ -37,6 +37,9 @@ export class MeteredAI {
    * One voice clip to text. The longer of the browser's length and the size's
    * estimate is counted against the hour a day and the Neuron cap before the
    * call, and charged in full once the call was made, also when it failed.
+   * When the model reports a longer clip than that (a low-bitrate file), the
+   * real length is charged, above the reservation: the next clip then finds
+   * the day's hour spent (rule P7).
    */
   async transcribe(audio: string, browserSeconds: number, options: { locale: Locale; signal?: AbortSignal | undefined }): Promise<{ text: string; seconds: number }> {
     if (!this.transcriber) throw new AppError("NOT_CONFIGURED");
@@ -44,17 +47,19 @@ export class MeteredAI {
     const seconds = Math.min(VOICE_LIMITS.maxClipSeconds, Math.ceil(Math.max(browserSeconds, estimatedSeconds(base64Bytes(audio)))));
     const reservation = this.meter.reserveAudio({ model: this.transcriber.model, seconds, billable: this.transcriber.billable }, this.limits());
     const call = this.callSignal(options.signal);
+    let charged = seconds;
     try {
       const result = await this.transcriber.transcribe(audio, { locale: options.locale, signal: call.signal });
+      charged = Math.max(seconds, Math.ceil(result.seconds ?? 0));
       if (call.timedOut()) throw timeout();
-      return { text: result.text, seconds };
+      return { text: result.text, seconds: charged };
     } catch (error) {
       const outcome = call.outcome(error);
       this.meter.failed(reservation.day, outcome === "aborted");
       throw outcome === "error" && call.timedOut() ? timeout() : classifyAiError(error);
     } finally {
       call.end();
-      this.meter.settleAudio(reservation, seconds);
+      this.meter.settleAudio(reservation, charged);
     }
   }
 

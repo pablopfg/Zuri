@@ -46,6 +46,8 @@ export class PendingActionRepository {
   }
 
   create(input: { conversationId: string; tool: DestructiveToolName; targetId: string; targetHash: string; targetLabel: string; payload: unknown }): PendingAction {
+    // Never a proposal for a conversation the owner deleted while the turn ran.
+    if (!this.db.one(`SELECT 1 AS ok FROM zur_conversations WHERE id = ?`, input.conversationId)) throw new AppError("NOT_FOUND", "error.conversationNotFound");
     const at = this.clock();
     const row: ActionRow = {
       id: crypto.randomUUID(),

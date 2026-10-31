@@ -4,6 +4,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import type { ZuriAgent } from "../src/agent/zuri-agent.ts";
 import { MeteredAI } from "../src/ai/metered.ts";
 import { MockAIProvider } from "../src/ai/mock.ts";
+import { MockTranscriber } from "../src/ai/transcription.ts";
 import { CSRF, call, HUMAN_TOKEN, ORIGIN, TEST_EMAIL, TEST_PASSWORD, testEnv } from "./helpers.ts";
 
 // What each route costs in the units the Free plan bills: rows read and rows
@@ -302,6 +303,7 @@ describe("the Free plan budget of each route", () => {
   it("chat: the list and a long conversation read about one page; a turn reads a bounded window, whatever the history", async () => {
     const id = await runInDurableObject(owner(), (agent: ZuriAgent) => {
       agent.testProvider = new MockAIProvider();
+      agent.testTranscriber = new MockTranscriber();
       const { db, conversations } = agent.store;
       let last = "";
       db.transaction(() => {
@@ -327,9 +329,37 @@ describe("the Free plan budget of each route", () => {
       expect(turn.status).toBe(200);
       expect(turn.read).toBeLessThanOrEqual(3 * 200 + 200 + 60);
       expect(turn.written).toBeLessThanOrEqual(30);
+
+      // A proposal and a plan, made by the mock's `call` form, then approved and confirmed.
+      const task = await runInDurableObject(owner(), (agent: ZuriAgent) => agent.store.productivity.tasks.create({ title: "orçamento" }).id);
+      await cost("POST", "/chat", { conversationId: id, message: `call delete_task {"task":"${task}"}` });
+      await cost("POST", "/chat", { conversationId: id, message: 'call propose_task_plan {"title":"Plano","tasks":[{"title":"Um"},{"title":"Dois"},{"title":"Três"}]}' });
+      const { actionId, plan } = await runInDurableObject(owner(), (agent: ZuriAgent) => ({
+        actionId: agent.store.db.one<{ id: string }>(`SELECT id FROM zur_pending_actions`)?.id ?? "",
+        plan: agent.store.plans.forConversation(id)[0],
+      }));
+      const approve = await cost("POST", `/actions/${actionId}/approve`);
+      expect(approve.status).toBe(200);
+      expect(approve.read).toBeLessThanOrEqual(25);
+      expect(approve.written).toBeLessThanOrEqual(12);
+      const confirm = await cost("POST", `/plans/${plan?.id}/confirm`, { revision: plan?.revision, plan: plan?.plan });
+      expect(confirm.status).toBe(200);
+      expect(confirm.read).toBeLessThanOrEqual(25);
+      // The plan's row, then each task with its indexes and counter.
+      expect(confirm.written).toBeLessThanOrEqual(30);
+      const voice = await cost("POST", "/transcribe", { audio: btoa("x".repeat(30_000)), seconds: 8 });
+      expect(voice.status).toBe(200);
+      expect(voice.read).toBeLessThanOrEqual(6);
+      expect(voice.written).toBeLessThanOrEqual(6);
+      // Deleting a conversation grows with it: about 2 rows written and 3 read per message (406 here).
+      const remove = await cost("DELETE", `/conversations/${id}`);
+      expect(remove.status).toBe(204);
+      expect(remove.read).toBeLessThanOrEqual(3 * 410);
+      expect(remove.written).toBeLessThanOrEqual(2 * 410 + 10);
     } finally {
       await runInDurableObject(owner(), (agent: ZuriAgent) => {
         agent.testProvider = null;
+        agent.testTranscriber = null;
       });
     }
   });

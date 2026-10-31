@@ -167,6 +167,7 @@ export const taskTools = [
         ...(input.project !== undefined ? { projectId: resolveProject(input.project, ctx) } : {}),
       };
       if (Object.keys(patch).length === 0) throw new ToolError("Nothing to change: pass at least one field.");
+      ctx.changed?.add(task.id);
       return { updated: presentTask(ctx.productivity.tasks.update(task.id, patch), ctx) };
     },
   }),
@@ -180,6 +181,7 @@ export const taskTools = [
     execute: (input, ctx) => {
       const task = resolveTask(input.task, ctx);
       if (task.status === "done") return { already_done: presentTask(task, ctx) };
+      ctx.changed?.add(task.id);
       return { completed: presentTask(ctx.productivity.tasks.update(task.id, { status: "done" }), ctx) };
     },
   }),
@@ -189,7 +191,6 @@ export const taskTools = [
     permission: "destructive",
     maxCallsPerTurn: 3,
     input: z.object({ task: ref("task") }).strict(),
-    detail: (input) => input.task,
     target: (input, ctx) => {
       const task = resolveTask(input.task, ctx);
       return { id: task.id, label: task.title };
@@ -205,7 +206,6 @@ export const taskTools = [
     permission: "destructive",
     maxCallsPerTurn: 2,
     input: z.object({ task: ref("task"), description: z.string().max(TASK_DESCRIPTION_MAX) }).strict(),
-    detail: (input) => input.task,
     target: (input, ctx) => {
       const task = resolveTask(input.task, ctx);
       return { id: task.id, label: task.title, payload: { text: input.description } };

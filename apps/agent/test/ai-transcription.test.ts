@@ -32,6 +32,22 @@ describe("transcription", () => {
     });
   });
 
+  it("SEC-09-02 a low-bitrate file the model hears as 45 minutes is charged as 45 minutes, and the next clip is refused", async () => {
+    await withAiWorld(async (world) => {
+      const long: Transcriber = { model: TRANSCRIPTION_MODEL, billable: true, transcribe: async () => ({ text: "…", seconds: 2_700.4 }) };
+      const ai = new MeteredAI(new MockAIProvider(), world.meter, () => LIMITS, undefined, long);
+      // 2 MB at about 6 kbit/s: the size suggests 60 s at most.
+      expect(await ai.transcribe(clip(1_500_000), 60, { locale: "pt-BR" })).toMatchObject({ seconds: 2_701 });
+      expect(seconds(world)?.audio_seconds).toBe(2_701);
+      expect(world.meter.report(LIMITS, "workers-ai", "@cf/zai-org/glm-4.7-flash").today.neurons).toBeCloseTo((2_701 / 60) * 46.63, 1);
+      // The rest of the hour: 14 normal clips of 60 s fit (3,541 s), the 15th does not.
+      const normal = new MeteredAI(new MockAIProvider(), world.meter, () => LIMITS, undefined, new MockTranscriber());
+      for (let i = 0; i < 14; i++) await normal.transcribe(clip(100), 60, { locale: "pt-BR" });
+      const refused = await normal.transcribe(clip(100), 60, { locale: "pt-BR" }).catch((e: unknown) => e);
+      expect(refused).toMatchObject({ code: "AI_LIMIT_REACHED", details: { limit: "audio" } });
+    });
+  });
+
   it("a failed call is still charged and counted as an error; a stopped one as aborted", async () => {
     await withAiWorld(async (world) => {
       const failing: Transcriber = {

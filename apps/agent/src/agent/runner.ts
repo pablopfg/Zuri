@@ -71,8 +71,10 @@ export class AgentRunner {
     const settings = this.deps.settings();
     const locale = this.deps.locale();
     let conversation: Conversation;
-    if (input.conversationId) conversation = conversations.get(input.conversationId);
-    else conversation = conversations.create(input.message);
+    if (input.conversationId) {
+      conversation = conversations.get(input.conversationId);
+      conversations.assertRoomForTurn();
+    } else conversation = conversations.create(input.message);
     const userMessage = conversations.addMessage({ conversationId: conversation.id, role: "user", content: input.message });
     const assistantMessageId = crypto.randomUUID();
     yield { type: "start", conversation: conversations.get(conversation.id), userMessage, assistantMessageId };
@@ -84,7 +86,23 @@ export class AgentRunner {
       // A plan proposed in a turn the owner stopped is withdrawn: a half answer leaves nothing to confirm.
       if (status === "cancelled" && executor) this.deps.tools.plans.discard(executor.proposedPlans());
       for (const tool of tools) if (tool.status === "running") tool.status = "error";
-      return conversations.addMessage({ id: assistantMessageId, conversationId: conversation.id, role: "assistant", content: text, tools, status, error });
+      try {
+        return conversations.addMessage({ id: assistantMessageId, conversationId: conversation.id, role: "assistant", content: text, tools, status, error });
+      } catch (failure) {
+        if (!(failure instanceof AppError && failure.code === "NOT_FOUND")) throw failure;
+        // The owner deleted the conversation meanwhile: nothing is stored, the tab only learns how it ended.
+        return {
+          id: assistantMessageId,
+          conversationId: conversation.id,
+          role: "assistant",
+          content: "",
+          tools: [],
+          status: "cancelled",
+          error: null,
+          source: "app",
+          createdAt: new Date().toISOString(),
+        };
+      }
     };
 
     try {

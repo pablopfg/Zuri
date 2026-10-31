@@ -88,7 +88,7 @@ describe("the migration list", () => {
       5: "8c5284cbf1f107f27133133552387e56029c61885b3bc0d9940c2f8bd648fbf1",
       6: "fcebcd8e24cdf35cfa227b8e884e5a8fef72dd5858b886054fa7dade848e5730",
       7: "975245f3b1af6fcdea2793c1cc14adf75da337311943fffb54de586f2ae81701",
-      8: "3a0f2c888bf6140b9a9bf532ab481208bb289c2ac9b4d36c46f4114e4bd7694c",
+      8: "3a4d991d471e05c298ff80f2c84e6b5b8046f2150b86af3b716e06ff4f611d90",
     };
     for (const m of MIGRATIONS) {
       const digest = createHash("sha256").update(statementText(m).replace(/\r\n/g, "\n")).digest("hex");

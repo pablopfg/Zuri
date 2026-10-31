@@ -53,6 +53,7 @@ export const memoryTools = [
       if (before.status === "historical") throw new ToolError("This memory is already a past fact. Save the new fact with remember.");
       // A new version, never an overwrite: the agent can't erase what the owner told it (rule 4 of the tools).
       const result = ctx.memories.correct(before.id, { content: input.content, ...(input.category ? { category: input.category } : {}) }, "app");
+      ctx.changed?.add(before.id).add(result.memory.id);
       return { updated: presentMemory(result.memory), previous_kept_as_history: before.id };
     },
   }),

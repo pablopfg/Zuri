@@ -191,7 +191,8 @@ export class UsageMeter {
   settleAudio(reservation: Reservation, seconds: number): void {
     if (reservation.done) return;
     reservation.done = true;
-    const used = Math.min(Math.max(0, Math.ceil(seconds)), reservation.audioSeconds);
+    // Above the reservation when the model heard a longer clip than the estimate (MeteredAI.transcribe).
+    const used = Math.max(0, Math.ceil(seconds));
     const neurons = reservation.billable ? audioNeurons(used) : 0;
     const cost = neuronsToUsd(neurons);
     this.db.transaction(() => {

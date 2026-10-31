@@ -97,7 +97,8 @@ function render(row: MessageRow, actions: Map<string, PendingAction>, plans: Map
   const text = row.role === "user" ? [...row.content].slice(0, REPLAY_CHARS).join("") : row.content;
   const notes = row.role === "assistant" ? outcomes(row, actions, plans) : [];
   const body = notes.length ? `${text}\n\n${notes.join("\n")}`.trim() : text;
-  return row.source === "import" ? `${IMPORTED_PREFIX}${body}` : body;
+  // A restored message was never typed in this app: a backup file could carry anything, so it is data (rule 2).
+  return row.source === "import" ? `${IMPORTED_PREFIX}${dataLine("summary", `restored-${row.role}`, body)}` : body;
 }
 
 /** The request for an updated running summary: the earlier summary and the overflowing messages, as data. */

@@ -153,6 +153,22 @@ describe("local deadlines", () => {
     expect(localDueToInstant("2026-12-05T08:30", TIME_ZONE)).toBe("2026-12-05T11:30:00.000Z");
   });
 
+  it("keeps to the years a task may have (2000 to 2199), in the owner's calendar and in UTC", () => {
+    // São Paulo still had summer time in 2000 (UTC−2).
+    expect(localDueToInstant("2000-01-01", TIME_ZONE)).toBe("2000-01-02T01:59:00.000Z");
+    expect(localDueToInstant("2199-12-31T20:00", TIME_ZONE)).toBe("2199-12-31T23:00:00.000Z");
+    for (const value of ["1999-12-31", "2199-12-31", "2200-01-01", "0001-01-01"]) expect(localDueToInstant(value, TIME_ZONE), value).toBeNull();
+  });
+
+  it("an hour in a day of 23 or 25 hours (New York's clock changes) lands on the right instant", () => {
+    // 8 March 2026: 02:00 jumps to 03:00 (EDT, UTC−4). 1 November 2026: 02:00 falls back to 01:00 (EST, UTC−5).
+    expect(localDueToInstant("2026-03-08T01:30", "America/New_York")).toBe("2026-03-08T06:30:00.000Z");
+    expect(localDueToInstant("2026-03-08T03:30", "America/New_York")).toBe("2026-03-08T07:30:00.000Z");
+    expect(localDueToInstant("2026-03-08", "America/New_York")).toBe("2026-03-09T03:59:00.000Z");
+    expect(localDueToInstant("2026-11-01", "America/New_York")).toBe("2026-11-02T04:59:00.000Z");
+    expect(instantToLocal("2026-11-01T06:30:00.000Z", "America/New_York")).toBe("2026-11-01T01:30");
+  });
+
   it("refuses dates that don't exist and text that is not a date", () => {
     for (const value of ["2026-02-31", "2026-12-05T25:00", "05/12/2026", "", "2026-12-05T08:30Z"]) {
       expect(localDueToInstant(value, TIME_ZONE), value).toBeNull();

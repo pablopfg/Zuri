@@ -5,6 +5,7 @@ import type { AIProvider } from "../ai/provider.ts";
 import { MockTranscriber, type Transcriber, WorkersAITranscriber } from "../ai/transcription.ts";
 import type { AiLimits } from "../ai/usage.ts";
 import { createApi } from "../api/app.ts";
+import { SSE_PING_MS } from "../api/chat.ts";
 import { AuthService } from "../auth/service.ts";
 import { createTurnstile, type Turnstile } from "../auth/turnstile.ts";
 import { MIN_OWNER_PASSWORD_LENGTH, parsePublicUrl } from "../config.ts";
@@ -70,6 +71,8 @@ export class ZuriAgent extends Agent<WorkerEnv> {
    */
   testProvider: AIProvider | null = null;
   testTranscriber: Transcriber | null = null;
+  /** How often a running chat stream writes a ping (SSE_PING_MS); the tests shorten it. */
+  streamPingMs = SSE_PING_MS;
   readonly #api = createApi({
     locale: () => this.locale(),
     auth: () => this.store.auth,
@@ -90,6 +93,7 @@ export class ZuriAgent extends Agent<WorkerEnv> {
       activeRuns: this.activeRuns,
       transcribe: (audio, seconds, signal) => this.transcribe(audio, seconds, signal),
       locale: () => this.locale(),
+      pingMs: () => this.streamPingMs,
     }),
   });
 

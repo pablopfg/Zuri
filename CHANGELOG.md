@@ -214,6 +214,14 @@ o [SemVer](https://semver.org/lang/pt-BR/). Cada PR escreve a sua entrada em
   injeção de prompt viraram testes (`docs/seguranca.md`).
 - A `Permissions-Policy` libera o microfone só para o próprio Zuri
   (`microphone=(self)`), para a voz da conversa.
+- O agente não pode renomear um item e, no mesmo turno, propor apagá-lo ou
+  reescrevê-lo. O cartão de aprovação nunca mostra um nome que o próprio
+  agente acabou de dar.
+- Um áudio que o modelo ouve como mais longo do que o tamanho indicava conta
+  a duração real no limite diário de voz.
+- Links nas respostas do agente mostram o site de destino ao lado do texto.
+- Apagar uma conversa enquanto a resposta está sendo escrita não deixa mais
+  mensagem, proposta ou plano guardados.
 - Teto diário no segundo passo do login: 30 códigos errados em 24 horas
   suspendem o código e a passkey para redes desconhecidas até o mais antigo
   completar um dia, e o dono recebe um alerta. No seu navegador e na sua rede,
