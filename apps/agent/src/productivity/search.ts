@@ -16,6 +16,22 @@ export function foldedColumn(column: string): string {
 }
 
 /**
+ * True when a folded search has an accented Latin letter. Only then does the
+ * column need foldedColumn's 30 replace() calls: without one, folding the
+ * column's accented capitals can't change whether instr() finds the text, and
+ * the plain lower(column) costs about 20 times less CPU on a long table.
+ */
+export function needsLatinFold(folded: string): boolean {
+  for (const c of folded) if (LATIN_SMALL.includes(c)) return true;
+  return false;
+}
+
+/** The column expression to compare with foldSearch(q): folded only when q needs it. */
+export function searchColumn(column: string, folded: string): string {
+  return needsLatinFold(folded) ? foldedColumn(column) : `lower(${column})`;
+}
+
+/**
  * The search text folded exactly as foldedColumn folds a column, in NFC (the
  * form stored text is kept in). Compared with `instr(<folded column>, ?)`, %, _
  * and \ are plain characters. LIKE is out because the platform caps a LIKE

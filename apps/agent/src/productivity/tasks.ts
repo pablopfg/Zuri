@@ -11,14 +11,10 @@ import {
 } from "@zuri/shared";
 import type { Database, SqlValue } from "../db/database.ts";
 import { AppError } from "../http/errors.ts";
-import { foldedColumn, foldSearch } from "./search.ts";
+import { foldSearch, searchColumn } from "./search.ts";
 import { parse, type Untrusted } from "./validate.ts";
 import type { StorageGuard } from "./storage.ts";
 import type { Trash } from "./trash.ts";
-
-/** The literal search compares these to foldSearch(q) (search.ts). */
-const FOLDED_TITLE = foldedColumn("title");
-const FOLDED_DESCRIPTION = foldedColumn("coalesce(description, '')");
 
 interface TaskRow {
   id: string;
@@ -110,8 +106,9 @@ export class TaskRepository {
     }
     if (query.q) {
       // instr, not LIKE: the platform caps a LIKE pattern at 50 bytes, and the search box allows 200 (CF-6-01).
-      where.push(`(instr(${FOLDED_TITLE}, ?) > 0 OR instr(${FOLDED_DESCRIPTION}, ?) > 0)`);
-      params.push(foldSearch(query.q), foldSearch(query.q));
+      const q = foldSearch(query.q);
+      where.push(`(instr(${searchColumn("title", q)}, ?) > 0 OR instr(${searchColumn("coalesce(description, '')", q)}, ?) > 0)`);
+      params.push(q, q);
     }
     const order =
       query.view === "completed"

@@ -5,7 +5,7 @@ import { Database } from "../src/db/database.ts";
 import { migrate } from "../src/db/migrations.ts";
 import { AppError } from "../src/http/errors.ts";
 import { Productivity } from "../src/productivity/index.ts";
-import { foldSearch, ftsQuery, searchTerms } from "../src/productivity/search.ts";
+import { foldSearch, ftsQuery, needsLatinFold, searchColumn, searchTerms } from "../src/productivity/search.ts";
 import { testEnv } from "./helpers.ts";
 
 // The repositories over a database of their own, with a clock the test moves.
@@ -48,6 +48,13 @@ describe("search helpers", () => {
     expect(foldSearch("ÇÃO ÉÊ ÔÕ Ü Ñ")).toBe("ção éê ôõ ü ñ");
     // Decomposed input (A + combining acute) folds like the composed letter.
     expect(foldSearch("A\u0301GUA")).toBe("água");
+  });
+
+  it("fold the column only when the search has an accented letter (the 30 replace() calls cost CPU)", () => {
+    expect(needsLatinFold(foldSearch("AGUA 50%"))).toBe(false);
+    expect(needsLatinFold(foldSearch("ÁGUA"))).toBe(true);
+    expect(searchColumn("title", "agua")).toBe("lower(title)");
+    expect(searchColumn("title", "água")).toMatch(/^lower\(replace\(/);
   });
 
   it("turn any text into quoted FTS5 prefixes: no operator, quote or column filter survives", () => {
@@ -143,6 +150,9 @@ describe("tasks", () => {
       expect(search("ção")).toEqual(["Revisar"]);
       // Accents still count: "agua" is another word than "água" in a literal search.
       expect(search("agua")).toEqual([]);
+      // Without an accent the cheap path runs and still ignores case.
+      expect(search("CASA")).toEqual(["Água da casa"]);
+      expect(search("da Casa")).toEqual(["Água da casa"]);
       p.notes.create({ title: "Símbolos", content: "MEIA ÁGUA 100%" });
       expect(p.notes.list({ q: "água 100%" }).map((n) => n.title)).toEqual(["Símbolos"]);
       expect(p.notes.list({ q: "%" }).map((n) => n.title)).toEqual(["Símbolos"]);

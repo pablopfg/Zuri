@@ -136,11 +136,14 @@ acrescente aqui cada armadilha nova que encontrar (sem dados pessoais).
 
 - Um padrão de `LIKE` ou `GLOB` passa de 50 bytes e a consulta falha (500),
   mas só quando a tabela tem linhas; em teste com tabela vazia passa. Para
-  busca literal use `instr(<foldedColumn(coluna)>, ?)` com `foldSearch(q)`
+  busca literal use `instr(<searchColumn(coluna, q)>, ?)` com `q = foldSearch(texto)`
   (`productivity/search.ts`), como na etapa 6 (CF-6-01).
 - `lower()` do SQLite só dobra A–Z: `lower('Água')` continua `Água`, e "água"
   não achava "Água". Por isso `foldedColumn` troca as maiúsculas acentuadas
-  latinas antes do `lower()`.
+  latinas antes do `lower()`, mas só quando a busca tem acento: as 30 trocas
+  por linha custam cerca de 20 vezes mais CPU numa tabela grande.
+- Texto gravado em NFD antes de 31/10/2026 só é achado por busca com acento
+  depois de editado (a busca vai em NFC). Navegadores mandam NFC, então é raro.
 - O SQLite guarda UTF-8: um surrogate solto vira U+FFFD sem aviso. Os schemas de
   texto recusam surrogate solto e guardam em NFC.
 - Sem `ANALYZE`, o planejador prefere um índice `(status, due_at)` a um índice
