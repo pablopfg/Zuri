@@ -21,7 +21,7 @@ etapas ficam detalhadas; as mais antigas viram uma linha na tabela.
 | 3 | mesclada (31/10/2026) | #8 | Login, sessões, CSRF, força bruta, Turnstile adaptativo, atividade de acesso |
 | 4 | mesclada (31/10/2026) | #9 | 2FA TOTP, códigos de recuperação, desafio em cookie, passkeys reutilizáveis |
 | 5 | mesclada (31/10/2026) | #10 | Casca da interface: login com 2FA, guarda de sessão, configurações, PWA (fecha a fase A) |
-| 6 | mesclada (31/10/2026) | #PRNUM | Tarefas, notas (Markdown, FTS5), projetos, lixeira de 30 dias, limites por tipo |
+| 6 | mesclada (31/10/2026) | #12 | Tarefas, notas (Markdown, FTS5), projetos, lixeira de 30 dias, limites por tipo |
 
 ## Últimas etapas (detalhe)
 
@@ -59,5 +59,5 @@ etapas ficam detalhadas; as mais antigas viram uma linha na tabela.
 ## Próxima etapa
 
 - Número e nome: 7 · Memória e histórico (paralela com 8; uma de cada vez no modo contínuo)
-- Dependências mescladas: sim (etapa 6, #PRNUM)
+- Dependências mescladas: sim (etapa 6, #12)
 - Precisa de algo do Pablo antes: não
