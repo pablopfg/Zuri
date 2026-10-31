@@ -285,10 +285,14 @@ function TaskDialog({ task, projects, onClose, onTrashed }: { task: Task; projec
     setPending("save");
     setError(null);
     try {
-      await api(`/tasks/${task.id}`, {
-        method: "PATCH",
-        body: { title, description, status, priority, dueAt: dueAt || null, projectId: projectId || null },
-      });
+      // Only what changed: an untouched deadline keeps its exact value (seconds included).
+      const next = { title, description, status, priority, dueAt: dueAt || null, projectId: projectId || null };
+      const changed = Object.fromEntries(
+        Object.entries(next).filter(([key, value]) =>
+          key === "dueAt" ? date !== initial.date || time !== initial.time : value !== task[key as keyof typeof next],
+        ),
+      );
+      if (Object.keys(changed).length > 0) await api(`/tasks/${task.id}`, { method: "PATCH", body: changed });
       await qc.invalidateQueries({ queryKey: TASKS_KEY });
       onClose();
     } catch (err) {

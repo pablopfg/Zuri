@@ -90,6 +90,10 @@ function TrashCard() {
         ) : items.length === 0 ? (
           <EmptyState icon={<Trash2 className="h-6 w-6" />} title={t("web.trash.emptyTitle")} />
         ) : (
+          <>
+          {(trash.data?.total ?? 0) > items.length && (
+            <Notice tone="info">{t("web.trash.showing", { shown: items.length, total: trash.data?.total ?? 0 })}</Notice>
+          )}
           <ul className="divide-y divide-border rounded-xl border border-border">
             {items.map((item) => (
               <li key={item.id} className="flex flex-wrap items-center justify-between gap-2 p-3">
@@ -122,6 +126,7 @@ function TrashCard() {
               </li>
             ))}
           </ul>
+          </>
         )}
       </div>
       <Dialog open={confirm !== null} onClose={() => setConfirm(null)} title={confirm?.kind === "empty" ? t("web.trash.emptyConfirmTitle") : t("web.trash.purgeConfirmTitle")}>

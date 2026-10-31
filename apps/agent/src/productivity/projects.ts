@@ -84,6 +84,8 @@ export class ProjectRepository {
       ...(patch.status !== undefined ? { status: patch.status } : {}),
       updated_at: new Date(this.#clock()).toISOString(),
     };
+    // A longer text at the database ceiling is refused; other edits still work (rule 9, SEC-6-01).
+    this.deps.storage.assertEditFits([current.name, current.description], [next.name, next.description]);
     this.db.run(
       `UPDATE zur_projects SET name = ?, description = ?, status = ?, updated_at = ? WHERE id = ?`,
       next.name,

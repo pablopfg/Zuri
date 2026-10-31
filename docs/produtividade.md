@@ -24,7 +24,7 @@ responde `404 NOT_FOUND`.
 | `POST /api/projects` | `{name, description?, status?}` | `201 {project}` |
 | `PATCH`, `DELETE /api/projects/:id` | `PATCH`: `{name?, description?, status?}` | `200 {project}`; `DELETE`: `200 {trashItem}` |
 | `GET /api/trash` | `kind` (`task`, `note`, `project`), `limit` | `200 {items, total}` |
-| `POST /api/trash/:id/restore` | — | `200 {restored: {kind, itemId}}`; `404` se não está mais lá; `409` se já voltou |
+| `POST /api/trash/:id/restore` | — | `200 {restored: {kind, itemId}}`; `404` se não está mais lá (já restaurado, apagado de vez ou vencido); `409` se a cópia não pode voltar |
 | `DELETE /api/trash/:id` | — | `204` |
 | `POST /api/trash/empty` | — | `200 {deleted}` |
 
@@ -54,15 +54,33 @@ prazo; Próximas mostra o resto do que está aberto.
 
 ## Busca
 
-- **Tarefas:** `LIKE` no título e na descrição, com `ESCAPE`: `%`, `_` e `\`
-  são caracteres comuns. Maiúsculas e minúsculas só se igualam em letras sem
-  acento (limite do SQLite).
+- **Tarefas:** `instr(lower(coluna), ?)` no título e na descrição, então `%`,
+  `_` e `\` são caracteres comuns. Maiúsculas e minúsculas só se igualam em
+  letras sem acento (o `lower()` do SQLite só dobra A–Z). Não usamos `LIKE`
+  porque o SQLite do Durable Object recusa um padrão de `LIKE` com mais de 50
+  bytes, e a caixa de busca aceita 200 caracteres.
 - **Notas:** índice FTS5 (`unicode61 remove_diacritics 2`), então "reuniao"
   acha "reunião". O texto vira palavras (só letras e números), cada uma entre
   aspas e como prefixo, e todas precisam aparecer. Aspas, `AND`, `OR`, `NOT`,
   `NEAR`, `*`, `^` e `coluna:` digitados nunca viram sintaxe do FTS5. Palavras
   muito comuns ("de", "com", "the") são ignoradas. Uma busca sem palavra
-  nenhuma (só `%` ou `_`) procura o texto literal com `LIKE`.
+  nenhuma (só `%` ou `_`) procura o texto literal com `instr`, no título e no
+  conteúdo.
+
+## Custo das listas
+
+O SQLite do Durable Object cobra cada linha lida, então as visões usam
+índices que leem só o que aparece:
+
+- **Hoje** e **Atrasadas** buscam no índice parcial `zur_tasks_open_due`
+  (prazo das tarefas abertas). Hoje junta essa busca com a das tarefas em
+  andamento sem prazo, por `OR` entre dois índices.
+- **Concluídas** segue `zur_tasks_done_completed` (status e data de
+  conclusão), então lê no máximo o limite da página, por mais tarefas
+  concluídas que existam.
+- **Próximas**, **Todas** e qualquer busca de tarefas ainda leem a tabela
+  inteira: até 20.000 linhas por carga no pior caso. A busca de notas com
+  palavras usa o FTS5; a busca só com símbolos lê todas as notas (até 5.000).
 
 ## Limites
 
@@ -87,7 +105,8 @@ Restaurar da lixeira também conta.
   existe mais deixa a tarefa ou a nota sem projeto.
 - Apagar um projeto deixa as tarefas e notas dele sem projeto. Restaurar o
   projeto liga de novo as que continuam sem projeto; as que o dono pôs em outro
-  projeto ficam onde estão.
+  projeto ficam onde estão. Uma tarefa ou nota apagada depois do projeto já
+  estava sem projeto, então volta sem ele.
 - Limpeza automática: o que passou de 30 dias some no próximo uso da lixeira e
   sempre que o Durable Object acorda. Passando de 10.000 itens ou 128 MB, os
   mais antigos saem primeiro.

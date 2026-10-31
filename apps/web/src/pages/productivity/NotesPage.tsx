@@ -26,7 +26,12 @@ function NotesList() {
   const notes = useNotes(q);
   // The editor hands over what it just moved to the trash, so the undo shows here.
   const location = useLocation();
+  const navigate = useNavigate();
   const [trashed, setTrashed] = useState<TrashItem | null>(() => (location.state as { trashed?: TrashItem } | null)?.trashed ?? null);
+  // Read once: a reload must not offer the undo again.
+  useEffect(() => {
+    if (location.state) navigate(".", { replace: true, state: null });
+  }, [location.state, navigate]);
 
   return (
     <>

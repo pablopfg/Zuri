@@ -84,7 +84,8 @@ o [SemVer](https://semver.org/lang/pt-BR/). Cada PR escreve a sua entrada em
   `%`, `_`, aspas e operadores do FTS5 como texto comum.
 - Limites por tipo (20.000 tarefas, 5.000 notas, 1.000 projetos) e teto de
   900 MB do banco: passar deles responde `STORAGE_LIMIT_REACHED` (507) e nada
-  é apagado para abrir espaço.
+  é apagado para abrir espaço. Uma edição que aumenta o texto também respeita
+  o teto do banco.
 
 - Conexões WebSocket e caminhos de sub-agente são recusados, e os cabeçalhos
   internos do Agents SDK são removidos antes de chegar ao agente.

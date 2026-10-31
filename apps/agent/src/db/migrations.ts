@@ -187,6 +187,10 @@ export const MIGRATIONS: readonly Migration[] = [
         completed_at TEXT
       )`,
       `CREATE INDEX IF NOT EXISTS zur_tasks_status_due ON zur_tasks (status, due_at)`,
+      // Partial indexes for the views: open tasks by deadline, finished ones by completion.
+      // Each row a query reads is billed, and without them every view would scan the table.
+      `CREATE INDEX IF NOT EXISTS zur_tasks_open_due ON zur_tasks (due_at) WHERE status != 'done'`,
+      `CREATE INDEX IF NOT EXISTS zur_tasks_done_completed ON zur_tasks (status, completed_at)`,
       `CREATE INDEX IF NOT EXISTS zur_tasks_project ON zur_tasks (project_id)`,
       // Markdown written by the owner: data, never instructions (rule 2). In the backup.
       `CREATE TABLE IF NOT EXISTS zur_notes (

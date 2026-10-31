@@ -150,7 +150,6 @@ describe("tasks", () => {
 
   it("takes the 20,000th task and refuses the next one with 507", async () => {
     const setCount = (n: number) => runOwner((db) => db.run(`UPDATE zur_counts SET n = ? WHERE kind = 'tasks'`, n));
-    const real = await runOwner((db) => db.one<{ n: number }>(`SELECT n FROM zur_counts WHERE kind = 'tasks'`)?.n ?? 0);
     try {
       await setCount(19_999);
       const { task } = await json<{ task: Task }>(await api("POST", "/tasks", { title: "a última" }), 201);
@@ -159,7 +158,8 @@ describe("tasks", () => {
       await json(await api("DELETE", `/tasks/${task.id}`), 200);
       await json(await api("POST", "/tasks", { title: "cabe de novo" }), 201);
     } finally {
-      await setCount(real + 1);
+      // Back to the truth, whatever happened above.
+      await runOwner((db) => db.run(`UPDATE zur_counts SET n = (SELECT count(*) FROM zur_tasks) WHERE kind = 'tasks'`));
     }
   });
 });

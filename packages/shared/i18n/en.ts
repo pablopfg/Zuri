@@ -311,6 +311,7 @@ export const en: Messages = {
   "web.trash.moveTo": "Move to the trash",
   "web.trash.undo": "Undo",
   "web.trash.emptyTitle": "The trash is empty",
+  "web.trash.showing": "Showing the {shown} most recent of {total}. Restore or delete these to see the others.",
   "web.trash.kind.task": "Task",
   "web.trash.kind.note": "Note",
   "web.trash.kind.project": "Project",

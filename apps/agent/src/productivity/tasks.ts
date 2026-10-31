@@ -11,7 +11,7 @@ import {
 } from "@zuri/shared";
 import type { Database, SqlValue } from "../db/database.ts";
 import { AppError } from "../http/errors.ts";
-import { likePattern } from "./search.ts";
+import { asciiLower } from "./search.ts";
 import { parse, type Untrusted } from "./validate.ts";
 import type { StorageGuard } from "./storage.ts";
 import type { Trash } from "./trash.ts";
@@ -81,7 +81,8 @@ export class TaskRepository {
     switch (query.view) {
       case "today":
         // Open tasks due before the end of the owner's day (overdue included), and undated work under way.
-        where.push(`status != 'done' AND ((due_at IS NOT NULL AND due_at < ?) OR (due_at IS NULL AND status = 'in_progress'))`);
+        // Written as two index searches joined by OR, so a big backlog of later tasks is never read (CF-6-03).
+        where.push(`((status != 'done' AND due_at < ?) OR (status = 'in_progress' AND due_at IS NULL))`);
         params.push(dayEnd);
         break;
       case "upcoming":
@@ -104,12 +105,13 @@ export class TaskRepository {
       params.push(query.projectId);
     }
     if (query.q) {
-      where.push(`(title LIKE ? ESCAPE '\\' OR description LIKE ? ESCAPE '\\')`);
-      params.push(likePattern(query.q), likePattern(query.q));
+      // instr, not LIKE: the platform caps a LIKE pattern at 50 bytes, and the search box allows 200 (CF-6-01).
+      where.push(`(instr(lower(title), ?) > 0 OR instr(lower(coalesce(description, '')), ?) > 0)`);
+      params.push(asciiLower(query.q), asciiLower(query.q));
     }
     const order =
       query.view === "completed"
-        ? `completed_at DESC, id`
+        ? `completed_at DESC, rowid DESC` // follows zur_tasks_done_completed, so no sort over every done task
         : `status = 'done', due_at IS NULL, due_at ASC, ${PRIORITY_ORDER}, created_at ASC, id`;
     const rows = this.db.all<TaskRow>(
       `SELECT * FROM zur_tasks ${where.length ? `WHERE ${where.join(" AND ")}` : ""} ORDER BY ${order} LIMIT ?`,
@@ -179,6 +181,8 @@ export class TaskRepository {
       updated_at: at,
     };
     if (next.status !== current.status) next.completed_at = next.status === "done" ? at : null;
+    // A longer text at the database ceiling is refused; other edits still work (rule 9, SEC-6-01).
+    this.deps.storage.assertEditFits([current.title, current.description], [next.title, next.description]);
     this.db.run(
       `UPDATE zur_tasks SET title = ?, description = ?, status = ?, priority = ?, due_at = ?, project_id = ?, updated_at = ?, completed_at = ?
        WHERE id = ?`,

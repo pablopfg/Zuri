@@ -1,11 +1,13 @@
-/** Search helpers shared by tasks (LIKE) and notes (FTS5). Nothing typed by the owner is ever SQL. */
+/** Search helpers shared by tasks (instr) and notes (FTS5). Nothing typed by the owner is ever SQL. */
 
 /**
- * A LIKE pattern that matches `query` literally anywhere in the text, for use
- * with `ESCAPE '\'`: the owner's %, _ and \ are just characters.
+ * The search text folded the way SQLite's lower() folds a column: ASCII only.
+ * Compared with `instr(lower(col), ?)`, it matches like LIKE did (A–Z ignore
+ * case, everything else exact), and %, _ and \ are plain characters. LIKE is
+ * out because the platform caps a LIKE pattern at 50 bytes.
  */
-export function likePattern(query: string): string {
-  return `%${query.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
+export function asciiLower(query: string): string {
+  return query.replace(/[A-Z]/g, (c) => c.toLowerCase());
 }
 
 /** Words too common to narrow a search (pt-BR and en). */
@@ -29,7 +31,7 @@ export function searchTerms(query: string): string[] {
  * A safe FTS5 MATCH expression: every word quoted, as a prefix, all required.
  * Quotes, operators (AND, OR, NOT, NEAR), column filters, ^ and * typed by the
  * owner never reach FTS5 as syntax: only letters and digits survive, inside
- * quotes. Null when nothing searchable is left (then the caller uses LIKE).
+ * quotes. Null when nothing searchable is left (then the caller looks for the text literally with instr).
  */
 export function ftsQuery(query: string): string | null {
   const terms = searchTerms(query);

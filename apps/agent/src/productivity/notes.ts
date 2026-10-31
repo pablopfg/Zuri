@@ -12,7 +12,7 @@ import {
 } from "@zuri/shared";
 import type { SqlValue } from "../db/database.ts";
 import { AppError } from "../http/errors.ts";
-import { ftsQuery, likePattern } from "./search.ts";
+import { asciiLower, ftsQuery } from "./search.ts";
 import { assertProject, type RepositoryDeps } from "./tasks.ts";
 import { parse, type Untrusted } from "./validate.ts";
 
@@ -63,7 +63,7 @@ export class NoteRepository {
   /**
    * Newest first; with a search, best match first. The words go to FTS5 as
    * quoted prefixes (see ftsQuery); a search with no word in it (only symbols,
-   * like "%" or "_") looks for that text literally with LIKE.
+   * like "%" or "_") looks for that text literally with instr.
    */
   list(input: NoteListQuery | Untrusted = {}): NoteSummary[] {
     const query = parse(noteListQuerySchema, input);
@@ -89,9 +89,9 @@ export class NoteRepository {
       }
       const rows = this.db.all<SummaryRow>(
         `SELECT ${SUMMARY} FROM zur_notes n
-         WHERE (n.title LIKE ? ESCAPE '\\' OR n.content LIKE ? ESCAPE '\\')${and(filters)} ORDER BY n.updated_at DESC LIMIT ?`,
-        likePattern(query.q),
-        likePattern(query.q),
+         WHERE (instr(lower(n.title), ?) > 0 OR instr(lower(n.content), ?) > 0)${and(filters)} ORDER BY n.updated_at DESC LIMIT ?`,
+        asciiLower(query.q),
+        asciiLower(query.q),
         ...params,
         query.limit,
       );
@@ -144,8 +144,6 @@ export class NoteRepository {
     const patch = parse(noteUpdateSchema, input);
     const current = this.row(id);
     if (patch.projectId !== undefined) assertProject(this.db, patch.projectId);
-    // A longer text can grow the database: the ceiling applies to edits too.
-    if (patch.content !== undefined && patch.content.length > current.content.length) this.deps.storage.assertBytes();
     const next: NoteRow = {
       ...current,
       ...(patch.title !== undefined ? { title: patch.title } : {}),
@@ -153,6 +151,8 @@ export class NoteRepository {
       ...(patch.projectId !== undefined ? { project_id: patch.projectId } : {}),
       updated_at: new Date(this.#clock()).toISOString(),
     };
+    // A longer text at the database ceiling is refused; other edits still work (rule 9, SEC-6-01).
+    this.deps.storage.assertEditFits([current.title, current.content], [next.title, next.content]);
     this.db.run(
       `UPDATE zur_notes SET title = ?, content = ?, project_id = ?, updated_at = ? WHERE id = ?`,
       next.title,

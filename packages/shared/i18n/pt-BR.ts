@@ -310,6 +310,7 @@ export const ptBR = {
   "web.trash.moveTo": "Mover para a lixeira",
   "web.trash.undo": "Desfazer",
   "web.trash.emptyTitle": "A lixeira está vazia",
+  "web.trash.showing": "Mostrando os {shown} mais recentes de {total}. Restaure ou apague estes para ver os outros.",
   "web.trash.kind.task": "Tarefa",
   "web.trash.kind.note": "Nota",
   "web.trash.kind.project": "Projeto",

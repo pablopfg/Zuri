@@ -36,8 +36,20 @@ export class StorageGuard {
     this.assertBytes();
   }
 
+  /**
+   * For an edit: refuses at the ceiling only when the text grows in bytes (the
+   * same length in characters can take three times the bytes). Completing a
+   * task or shortening a note still works on a full database (rule 9, SEC-6-01).
+   */
+  assertEditFits(before: readonly (string | null)[], after: readonly (string | null)[]): void {
+    if (utf8Bytes(after) > utf8Bytes(before)) this.assertBytes();
+  }
+
   /** Throws STORAGE_LIMIT_REACHED when the database reached its ceiling; deleting (and emptying the trash) lifts it. */
   assertBytes(): void {
     if (this.db.size() >= this.maxBytes) throw new AppError("STORAGE_LIMIT_REACHED", "error.storageFull", { kind: "bytes" });
   }
 }
+
+const encoder = new TextEncoder();
+const utf8Bytes = (values: readonly (string | null)[]) => values.reduce((sum, value) => sum + (value ? encoder.encode(value).byteLength : 0), 0);
