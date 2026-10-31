@@ -74,7 +74,7 @@ export function Card({ title, description, children, className, actions }: { tit
   );
 }
 
-const fieldClass =
+export const fieldClass =
   "min-h-11 w-full rounded-xl border border-border-strong bg-surface px-3 text-[15px] text-fg placeholder:text-fg-muted focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/30 aria-[invalid=true]:border-danger";
 
 export function TextField({ label, hint, error, className, ...rest }: ComponentProps<"input"> & { label: string; hint?: string; error?: string | null }) {

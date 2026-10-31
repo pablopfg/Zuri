@@ -12,10 +12,10 @@ import {
   type TaskView,
   type TrashItem,
 } from "@zuri/shared";
-import { CheckCircle2, Circle, FolderKanban, ListTodo, Search, Trash2 } from "lucide-react";
-import { type FormEvent, useState } from "react";
+import { CalendarDays, CheckCircle2, ChevronDown, Circle, CircleDot, Flag, FolderKanban, Plus, Search, Trash2 } from "lucide-react";
+import { type FormEvent, useId, useState } from "react";
 import { Link } from "react-router";
-import { Button, Card, cn, Dialog, EmptyState, ErrorNotice, SelectField, Spinner, TextAreaField, TextField } from "../../components/ui.tsx";
+import { Button, cn, Dialog, EmptyState, ErrorNotice, fieldClass, SelectField, Spinner, TextAreaField, TextField } from "../../components/ui.tsx";
 import { PROJECTS_KEY, TASKS_KEY, useProjects, useTasks } from "../../hooks/productivity.ts";
 import { api, errorMessage } from "../../lib/api.ts";
 import { useDebounced } from "../../lib/debounce.ts";
@@ -24,7 +24,7 @@ import { useI18n } from "../../lib/i18n.tsx";
 import { ProjectsDialog } from "./ProjectsDialog.tsx";
 import { PRIORITY_LABEL, ProjectOptions, STATUS_LABEL, TrashedNotice, VIEW_EMPTY, VIEW_LABEL } from "./shared.tsx";
 
-/** Tasks: views by deadline, a project filter, search, quick add, completion and an editor. */
+/** Tasks: views by deadline, a project filter, search, quick add, completion and an editor (layout after the Talorys list). */
 export function TasksPage() {
   const { t } = useI18n();
   const [view, setView] = useState<TaskView>("today");
@@ -40,10 +40,13 @@ export function TasksPage() {
 
   return (
     <>
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-2xl font-bold tracking-tight">{t("web.tasks.title")}</h1>
-        <div className="flex flex-wrap gap-2">
-          <Button variant="secondary" onClick={() => setProjectsOpen(true)}>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0 space-y-1">
+          <h1 className="text-2xl font-semibold tracking-tight">{t("web.tasks.title")}</h1>
+          <p className="text-sm leading-6 text-fg-muted">{t("web.tasks.description")}</p>
+        </div>
+        <div className="flex flex-wrap gap-1">
+          <Button variant="ghost" onClick={() => setProjectsOpen(true)}>
             <FolderKanban className="h-4 w-4" aria-hidden />
             {t("web.projects.manage")}
           </Button>
@@ -56,65 +59,69 @@ export function TasksPage() {
 
       {trashed && <TrashedNotice item={trashed} message={t("web.tasks.trashed")} onDone={() => setTrashed(null)} />}
 
-      <NewTask projects={projectList} />
+      <div className="-mx-4 overflow-x-auto px-4">
+        <fieldset className="flex min-w-max gap-1 rounded-xl bg-raised p-1 sm:min-w-0">
+          <legend className="sr-only">{t("web.tasks.viewLabel")}</legend>
+          {TASK_VIEWS.map((item) => (
+            <button
+              key={item}
+              type="button"
+              aria-pressed={view === item}
+              onClick={() => setView(item)}
+              className={cn(
+                "min-h-11 flex-1 rounded-lg px-3 text-sm font-medium transition-colors",
+                view === item ? "bg-surface text-fg shadow-sm" : "text-fg-muted hover:text-fg",
+              )}
+            >
+              {t(VIEW_LABEL[item])}
+            </button>
+          ))}
+        </fieldset>
+      </div>
 
-      <section aria-label={t("web.tasks.listLabel")} className="space-y-4">
-        <div className="-mx-4 overflow-x-auto px-4">
-          <fieldset className="flex min-w-max gap-1">
-            <legend className="sr-only">{t("web.tasks.viewLabel")}</legend>
-            {TASK_VIEWS.map((item) => (
-              <button
-                key={item}
-                type="button"
-                aria-pressed={view === item}
-                onClick={() => setView(item)}
-                className={cn(
-                  "min-h-11 rounded-xl px-3 text-sm font-medium",
-                  view === item ? "bg-accent-soft text-accent-text" : "text-fg-muted hover:bg-raised hover:text-fg",
-                )}
-              >
-                {t(VIEW_LABEL[item])}
-              </button>
-            ))}
-          </fieldset>
-        </div>
-        <div className="grid gap-3 sm:grid-cols-2">
-          <SelectField label={t("web.tasks.filterProject")} value={projectId} onChange={(e) => setProjectId(e.target.value)}>
-            <option value="">{t("web.tasks.allProjects")}</option>
-            <option value="none">{t("web.tasks.noProject")}</option>
-            {projectList.map((project) => (
-              <option key={project.id} value={project.id}>
-                {project.name}
-              </option>
-            ))}
-          </SelectField>
-          <div className="relative">
-            <TextField
-              label={t("web.tasks.search")}
-              type="search"
-              value={query}
-              maxLength={200}
-              onChange={(e) => setQuery(e.target.value)}
-              className="[&_input]:pl-9"
-            />
-            <Search className="pointer-events-none absolute bottom-3.5 left-3 h-4 w-4 text-fg-muted" aria-hidden />
+      <div className="space-y-4">
+        {view !== "completed" && <NewTask projects={projectList} forToday={view === "today"} />}
+
+        <section aria-label={t("web.tasks.listLabel")} className="space-y-3">
+          <div className="grid gap-2 sm:grid-cols-[1fr_14rem]">
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-fg-muted" aria-hidden />
+              <input
+                type="search"
+                value={query}
+                maxLength={200}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder={t("web.tasks.search")}
+                aria-label={t("web.tasks.search")}
+                className={cn(fieldClass, "pl-9")}
+              />
+            </div>
+            <select value={projectId} onChange={(e) => setProjectId(e.target.value)} aria-label={t("web.tasks.filterProject")} className={fieldClass}>
+              <option value="">{t("web.tasks.allProjects")}</option>
+              <option value="none">{t("web.tasks.noProject")}</option>
+              {projectList.map((project) => (
+                <option key={project.id} value={project.id}>
+                  {project.name}
+                </option>
+              ))}
+            </select>
           </div>
-        </div>
 
-        {tasks.isPending ? (
-          <Spinner />
-        ) : tasks.isError ? (
-          <ErrorNotice error={tasks.error} onRetry={() => void tasks.refetch()} />
-        ) : tasks.data.tasks.length === 0 ? (
-          <EmptyState icon={<ListTodo className="h-6 w-6" />} title={q ? t("web.tasks.empty.search") : t(VIEW_EMPTY[view])} />
-        ) : (
-          <ul className="divide-y divide-border rounded-2xl border border-border bg-surface">
-            {tasks.data.tasks.map((task) => (
-              <TaskRow key={task.id} task={task} projects={projectList} onOpen={() => setEditing(task)} />
-            ))}
-          </ul>
-        )}
-      </section>
+          {tasks.isPending ? (
+            <Spinner />
+          ) : tasks.isError ? (
+            <ErrorNotice error={tasks.error} onRetry={() => void tasks.refetch()} />
+          ) : tasks.data.tasks.length === 0 ? (
+            <EmptyState icon={<CheckCircle2 className="h-6 w-6" />} title={q ? t("web.tasks.empty.search") : t(VIEW_EMPTY[view])} />
+          ) : (
+            <ul className="divide-y divide-border overflow-hidden rounded-2xl border border-border bg-surface">
+              {tasks.data.tasks.map((task) => (
+                <TaskRow key={task.id} task={task} projects={projectList} onOpen={() => setEditing(task)} />
+              ))}
+            </ul>
+          )}
+        </section>
+      </div>
 
       {editing && (
         <TaskDialog
@@ -132,20 +139,28 @@ export function TasksPage() {
   );
 }
 
-function NewTask({ projects }: { projects: Project[] }) {
+/**
+ * Quick add: a title and Enter. In the Today view a task without a date is due
+ * today (by the end of the day), so it shows up where it was typed. The rest
+ * (date, time, project, priority) sits behind "More options".
+ */
+function NewTask({ projects, forToday }: { projects: Project[]; forToday: boolean }) {
   const { t, timeZone } = useI18n();
   const qc = useQueryClient();
   const [title, setTitle] = useState("");
+  const [more, setMore] = useState(false);
   const [date, setDate] = useState("");
   const [time, setTime] = useState("");
   const [projectId, setProjectId] = useState("");
   const [priority, setPriority] = useState<TaskPriority>("medium");
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  const optionsId = useId();
 
   async function submit(event: FormEvent) {
     event.preventDefault();
-    const dueAt = dueFromInputs(date, time, timeZone);
+    const day = date || (forToday ? dueInputs(new Date().toISOString(), timeZone).date : "");
+    const dueAt = dueFromInputs(day, date ? time : "", timeZone);
     if (dueAt === null) {
       setError(t("web.tasks.invalidDate"));
       return;
@@ -166,34 +181,57 @@ function NewTask({ projects }: { projects: Project[] }) {
   }
 
   return (
-    <Card title={t("web.tasks.new")}>
-      <form onSubmit={(e) => void submit(e)} className="space-y-3">
-        <TextField label={t("web.tasks.field.title")} value={title} required maxLength={TASK_TITLE_MAX} onChange={(e) => setTitle(e.target.value)} />
-        <div className="grid gap-3 sm:grid-cols-4">
-          <TextField label={t("web.tasks.field.date")} type="date" value={date} min="2000-01-01" max="2199-12-31" onChange={(e) => setDate(e.target.value)} />
-          <TextField label={t("web.tasks.field.time")} type="time" value={time} disabled={!date} onChange={(e) => setTime(e.target.value)} />
-          <SelectField label={t("web.tasks.field.project")} value={projectId} onChange={(e) => setProjectId(e.target.value)}>
-            <ProjectOptions projects={projects} none={t("web.tasks.noProject")} />
-          </SelectField>
-          <SelectField label={t("web.tasks.field.priority")} value={priority} onChange={(e) => setPriority(e.target.value as TaskPriority)}>
-            {TASK_PRIORITIES.map((item) => (
-              <option key={item} value={item}>
-                {t(PRIORITY_LABEL[item])}
-              </option>
-            ))}
-          </SelectField>
+    <section aria-label={t("web.tasks.new")}>
+      <form onSubmit={(e) => void submit(e)} className="space-y-1">
+        <div className="flex gap-2">
+          <input
+            value={title}
+            required
+            maxLength={TASK_TITLE_MAX}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder={forToday ? t("web.tasks.addForToday") : t("web.tasks.addOne")}
+            aria-label={t("web.tasks.field.title")}
+            className={cn(fieldClass, "flex-1")}
+          />
+          <Button type="submit" loading={pending} disabled={!title.trim()} aria-label={t("web.tasks.add")}>
+            {!pending && <Plus className="h-4 w-4" aria-hidden />}
+            <span className="hidden sm:inline">{t("web.tasks.addShort")}</span>
+          </Button>
         </div>
-        <p className="text-xs leading-5 text-fg-muted">{t("web.tasks.timeHint")}</p>
+        <button
+          type="button"
+          aria-expanded={more}
+          aria-controls={optionsId}
+          onClick={() => setMore((open) => !open)}
+          className="inline-flex min-h-11 items-center gap-1 rounded-lg px-2 text-sm font-medium text-fg-muted hover:bg-raised hover:text-fg"
+        >
+          <ChevronDown className={cn("h-4 w-4 transition-transform", more && "rotate-180")} aria-hidden />
+          {t("web.tasks.moreOptions")}
+        </button>
+        <div id={optionsId} hidden={!more} className="mt-1 space-y-2 rounded-2xl border border-border bg-surface p-4">
+          <div className="grid gap-3 sm:grid-cols-4">
+            <TextField label={t("web.tasks.field.date")} type="date" value={date} min="2000-01-01" max="2199-12-31" onChange={(e) => setDate(e.target.value)} />
+            <TextField label={t("web.tasks.field.time")} type="time" value={time} disabled={!date} onChange={(e) => setTime(e.target.value)} />
+            <SelectField label={t("web.tasks.field.project")} value={projectId} onChange={(e) => setProjectId(e.target.value)}>
+              <ProjectOptions projects={projects} none={t("web.tasks.noProject")} />
+            </SelectField>
+            <SelectField label={t("web.tasks.field.priority")} value={priority} onChange={(e) => setPriority(e.target.value as TaskPriority)}>
+              {TASK_PRIORITIES.map((item) => (
+                <option key={item} value={item}>
+                  {t(PRIORITY_LABEL[item])}
+                </option>
+              ))}
+            </SelectField>
+          </div>
+          <p className="text-xs leading-5 text-fg-muted">{t("web.tasks.timeHint")}</p>
+        </div>
         {error && (
           <p role="alert" className="text-sm text-danger">
             {error}
           </p>
         )}
-        <Button type="submit" loading={pending} disabled={!title.trim()}>
-          {t("web.tasks.add")}
-        </Button>
       </form>
-    </Card>
+    </section>
   );
 }
 
@@ -205,6 +243,7 @@ function TaskRow({ task, projects, onOpen }: { task: Task; projects: Project[]; 
   const done = task.status === "done";
   const overdue = !done && task.dueAt !== null && Date.parse(task.dueAt) < Date.now();
   const project = projects.find((item) => item.id === task.projectId);
+  const flagged = !done && (task.priority === "high" || task.priority === "urgent");
 
   async function toggle() {
     setPending(true);
@@ -219,37 +258,39 @@ function TaskRow({ task, projects, onOpen }: { task: Task; projects: Project[]; 
     }
   }
 
+  const Mark = done ? CheckCircle2 : task.status === "in_progress" ? CircleDot : Circle;
   return (
-    <li className="flex items-start gap-2 p-2">
+    <li className="flex items-start gap-1 px-2 py-1.5 transition-colors hover:bg-raised/60">
       {/* A real checkbox, drawn as a 44 px round mark: the icon shows the state, the input takes the touch. */}
-      <span className="relative flex h-11 w-11 shrink-0 items-center justify-center text-accent-text">
+      <span className={cn("relative flex h-11 w-11 shrink-0 items-center justify-center", done ? "text-accent-text" : "text-fg-muted")}>
         <input
           type="checkbox"
           checked={done}
           disabled={pending}
           onChange={() => void toggle()}
           aria-label={t(done ? "web.tasks.reopen" : "web.tasks.complete", { title: task.title })}
-          className="absolute inset-0 h-11 w-11 cursor-pointer appearance-none rounded-xl hover:bg-raised disabled:cursor-wait"
+          className="peer absolute inset-0 h-11 w-11 cursor-pointer appearance-none rounded-xl disabled:cursor-wait"
         />
-        {done ? <CheckCircle2 className="pointer-events-none relative h-6 w-6" aria-hidden /> : <Circle className="pointer-events-none relative h-6 w-6" aria-hidden />}
+        <Mark className="pointer-events-none relative h-5 w-5 peer-hover:text-accent-text" aria-hidden />
       </span>
-      <div className="min-w-0 flex-1">
+      <div className="min-w-0 flex-1 py-1">
         <button
           type="button"
           onClick={onOpen}
-          className={cn("min-h-11 w-full rounded-lg px-1 text-left font-medium hover:underline", done && "text-fg-muted line-through")}
+          className={cn("min-h-9 w-full rounded-lg px-1 text-left text-[15px] leading-6 hover:underline", done && "text-fg-muted line-through")}
         >
           {task.title}
         </button>
-        <div className="flex flex-wrap gap-x-3 gap-y-1 px-1 pb-1 text-xs text-fg-muted">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-1 text-xs text-fg-muted">
           {task.dueAt && (
-            <span className={cn(overdue && "font-semibold text-danger")}>
+            <span className={cn("inline-flex items-center gap-1", overdue && "font-medium text-danger")}>
+              <CalendarDays className="h-3 w-3" aria-hidden />
               {overdue ? t("web.tasks.overdueAt", { date: formatDue(task.dueAt, locale, timeZone) }) : t("web.tasks.dueAt", { date: formatDue(task.dueAt, locale, timeZone) })}
             </span>
           )}
           {project && <span>{project.name}</span>}
-          {(task.priority === "high" || task.priority === "urgent") && <span className="font-semibold text-warning">{t(PRIORITY_LABEL[task.priority])}</span>}
           {task.status === "in_progress" && <span>{t(STATUS_LABEL.in_progress)}</span>}
+          {task.description && <span className="max-w-[16rem] truncate">{task.description}</span>}
         </div>
         {error && (
           <p role="alert" className="px-1 text-sm text-danger">
@@ -257,6 +298,17 @@ function TaskRow({ task, projects, onOpen }: { task: Task; projects: Project[]; 
           </p>
         )}
       </div>
+      {flagged && (
+        <span
+          className={cn(
+            "mt-2.5 inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium",
+            task.priority === "urgent" ? "bg-danger-soft text-danger" : "bg-warning-soft text-warning",
+          )}
+        >
+          <Flag className="h-3 w-3" aria-hidden />
+          {t(PRIORITY_LABEL[task.priority])}
+        </span>
+      )}
     </li>
   );
 }

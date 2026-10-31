@@ -4,22 +4,43 @@ import { ArrowLeft, NotebookPen, Plus, Search, Trash2 } from "lucide-react";
 import { type FormEvent, useEffect, useState } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router";
 import { Markdown } from "../../components/Markdown.tsx";
-import { Button, cn, EmptyState, ErrorNotice, SelectField, Spinner, TextField } from "../../components/ui.tsx";
+import { Button, cn, EmptyState, ErrorNotice, fieldClass, SelectField, Spinner, TextField } from "../../components/ui.tsx";
 import { NOTES_KEY, PROJECTS_KEY, useNote, useNotes, useProjects } from "../../hooks/productivity.ts";
 import { api, errorMessage } from "../../lib/api.ts";
 import { useDebounced } from "../../lib/debounce.ts";
+import { plainExcerpt } from "../../lib/excerpt.ts";
 import { useI18n } from "../../lib/i18n.tsx";
 import { ProjectOptions, TrashedNotice } from "./shared.tsx";
 
-/** The notes list (with full-text search) at /notas, and one note's editor at /notas/:id (or /notas/nova). */
+/**
+ * Notes at /notas, one note at /notas/:id (or /notas/nova). Like Talorys: on a
+ * wide screen the list stays at the side of the editor; on a narrow one the
+ * list and the editor take turns.
+ */
 export function NotesPage() {
   const { id } = useParams();
-  if (id === "nova") return <NoteEditor key="new" />;
-  if (id) return <ExistingNote id={id} />;
-  return <NotesList />;
+  const { t } = useI18n();
+  return (
+    <div className="lg:grid lg:grid-cols-[18rem_minmax(0,1fr)] lg:items-start lg:gap-6">
+      <div className={cn("space-y-4", id && "hidden lg:block")}>
+        <NotesList activeId={id} />
+      </div>
+      <div className={cn("space-y-4", !id && "hidden lg:block")}>
+        {id === "nova" ? (
+          <NoteEditor key="new" />
+        ) : id ? (
+          <ExistingNote id={id} />
+        ) : (
+          <EmptyState icon={<NotebookPen className="h-6 w-6" />} title={t("web.notes.selectTitle")}>
+            <p>{t("web.notes.selectBody")}</p>
+          </EmptyState>
+        )}
+      </div>
+    </div>
+  );
 }
 
-function NotesList() {
+function NotesList({ activeId }: { activeId: string | undefined }) {
   const { t, dateTime } = useI18n();
   const [query, setQuery] = useState("");
   const q = useDebounced(query.trim());
@@ -27,42 +48,57 @@ function NotesList() {
   // The editor hands over what it just moved to the trash, so the undo shows here.
   const location = useLocation();
   const navigate = useNavigate();
-  const [trashed, setTrashed] = useState<TrashItem | null>(() => (location.state as { trashed?: TrashItem } | null)?.trashed ?? null);
-  // Read once: a reload must not offer the undo again.
+  const [trashed, setTrashed] = useState<TrashItem | null>(null);
+  // Read once, then clear it: a reload must not offer the undo again. An effect,
+  // not the initial state, because beside the editor the list is already mounted.
   useEffect(() => {
-    if (location.state) navigate(".", { replace: true, state: null });
+    if (!location.state) return;
+    const item = (location.state as { trashed?: TrashItem }).trashed;
+    if (item) setTrashed(item);
+    navigate(".", { replace: true, state: null });
   }, [location.state, navigate]);
 
   return (
     <>
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-2xl font-bold tracking-tight">{t("web.notes.title")}</h1>
-        <div className="flex flex-wrap gap-2">
-          <Link to="/configuracoes/dados" className="inline-flex min-h-11 items-center gap-2 rounded-xl px-3 text-sm font-medium hover:bg-raised">
+      <div className="flex items-center justify-between gap-2">
+        <h1 className="text-2xl font-semibold tracking-tight">{t("web.notes.title")}</h1>
+        <div className="flex gap-1">
+          <Link
+            to="/configuracoes/dados"
+            aria-label={t("web.trash.open")}
+            title={t("web.trash.open")}
+            className="inline-flex h-11 w-11 items-center justify-center rounded-xl text-fg-muted hover:bg-raised hover:text-fg"
+          >
             <Trash2 className="h-4 w-4" aria-hidden />
-            {t("web.trash.open")}
           </Link>
           <Link
             to="/notas/nova"
-            className="inline-flex min-h-11 items-center gap-2 rounded-xl bg-accent px-4 text-sm font-semibold text-accent-fg hover:bg-accent-hover"
+            aria-label={t("web.notes.new")}
+            title={t("web.notes.new")}
+            className="inline-flex h-11 w-11 items-center justify-center rounded-xl bg-accent text-accent-fg hover:bg-accent-hover"
           >
             <Plus className="h-4 w-4" aria-hidden />
-            {t("web.notes.new")}
           </Link>
         </div>
       </div>
       {trashed && <TrashedNotice item={trashed} message={t("web.notes.trashed")} onDone={() => setTrashed(null)} />}
-      <div className="relative">
-        <TextField
-          label={t("web.notes.search")}
-          hint={t("web.notes.searchHint")}
-          type="search"
-          value={query}
-          maxLength={200}
-          onChange={(e) => setQuery(e.target.value)}
-          className="[&_input]:pl-9"
-        />
-        <Search className="pointer-events-none absolute left-3 top-[2.6rem] h-4 w-4 text-fg-muted" aria-hidden />
+      <div className="space-y-1.5">
+        <div className="relative">
+          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-fg-muted" aria-hidden />
+          <input
+            type="search"
+            value={query}
+            maxLength={200}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder={t("web.notes.search")}
+            aria-label={t("web.notes.search")}
+            aria-describedby="notes-search-hint"
+            className={cn(fieldClass, "pl-9")}
+          />
+        </div>
+        <p id="notes-search-hint" className="text-xs leading-5 text-fg-muted">
+          {t("web.notes.searchHint")}
+        </p>
       </div>
       {notes.isPending ? (
         <Spinner />
@@ -73,13 +109,19 @@ function NotesList() {
           {!q && <p>{t("web.notes.emptyBody")}</p>}
         </EmptyState>
       ) : (
-        <ul aria-label={t("web.notes.listLabel")} className="grid gap-3 sm:grid-cols-2">
+        <ul aria-label={t("web.notes.listLabel")} className="space-y-0.5">
           {notes.data.notes.map((note) => (
             <li key={note.id}>
-              <Link to={`/notas/${note.id}`} className="block min-h-11 rounded-2xl border border-border bg-surface p-4 hover:bg-raised">
-                <span className="block truncate font-semibold">{note.title}</span>
-                {note.excerpt && <span className="mt-1 line-clamp-2 block text-sm text-fg-muted">{note.excerpt}</span>}
-                <span className="mt-2 block text-xs text-fg-muted">{t("web.notes.updated", { time: dateTime(note.updatedAt) })}</span>
+              <Link
+                to={`/notas/${note.id}`}
+                aria-current={note.id === activeId ? "page" : undefined}
+                className={cn("block min-h-11 rounded-xl px-3 py-2.5", note.id === activeId ? "bg-raised" : "hover:bg-raised/60")}
+              >
+                <span className="block truncate text-sm font-medium">{note.title}</span>
+                <span className="mt-0.5 line-clamp-2 block text-xs leading-5 text-fg-muted">
+                  {t("web.notes.updated", { time: dateTime(note.updatedAt) })}
+                  {note.excerpt && ` · ${plainExcerpt(note.excerpt)}`}
+                </span>
               </Link>
             </li>
           ))}
@@ -172,11 +214,16 @@ function NoteEditor({ note }: { note?: Note }) {
       }}
       className="space-y-4"
     >
-      <Link to="/notas" className="inline-flex min-h-11 items-center gap-2 rounded-xl px-2 text-sm font-medium text-fg-muted hover:bg-raised hover:text-fg">
+      <Link
+        to="/notas"
+        className="inline-flex min-h-11 items-center gap-2 rounded-xl px-2 text-sm font-medium text-fg-muted hover:bg-raised hover:text-fg lg:hidden"
+      >
         <ArrowLeft className="h-4 w-4" aria-hidden />
         {t("web.notes.back")}
       </Link>
-      <h1 className="sr-only">{note ? t("web.notes.edit") : t("web.notes.new")}</h1>
+      {/* Alone on a narrow screen the editor is the page; beside the list, the list's heading is. */}
+      <h1 className="sr-only lg:hidden">{note ? t("web.notes.edit") : t("web.notes.new")}</h1>
+      <h2 className="sr-only hidden lg:block">{note ? t("web.notes.edit") : t("web.notes.new")}</h2>
       <div className="grid gap-3 sm:grid-cols-[1fr_16rem]">
         <TextField label={t("web.notes.field.title")} value={title} required maxLength={NOTE_TITLE_MAX} onChange={(e) => setTitle(e.target.value)} />
         <SelectField label={t("web.tasks.field.project")} value={projectId} onChange={(e) => setProjectId(e.target.value)}>

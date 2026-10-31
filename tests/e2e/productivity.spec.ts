@@ -25,8 +25,10 @@ test("a task: create with a deadline and a project, edit, complete, delete and r
   await expect(projects.getByText(`Casa ${test.info().project.name}`)).toBeVisible();
   await projects.getByRole("button", { name: "Fechar" }).click();
 
+  // Quick add: the title in view, the rest behind "Prazo, projeto e prioridade".
   const form = page.getByRole("region", { name: "Nova tarefa" });
   await form.getByLabel("Título").fill(title);
+  await form.getByRole("button", { name: "Prazo, projeto e prioridade" }).click();
   await form.getByLabel("Prazo").fill("2099-12-10");
   await form.getByLabel("Hora").fill("18:30");
   await form.getByLabel("Projeto").selectOption({ label: `Casa ${test.info().project.name}` });
@@ -78,11 +80,14 @@ test("a task: create with a deadline and a project, edit, complete, delete and r
   await expect(page.getByRole("button", { name: `${title} de dezembro` })).toBeVisible();
 });
 
-test("a note: write Markdown, preview it safely, search, delete and restore", async ({ page }) => {
+test("a note: write Markdown, preview it safely, search, delete and restore @mobile", async ({ page }) => {
+  // Wide screens keep the list beside the editor; phones take turns between them.
+  const narrow = test.info().project.name === "mobile";
+  const title = `Receita de bolo ${test.info().project.name}`;
   await openSignedIn(page, "/notas");
   await expect(page.getByRole("heading", { level: 1, name: "Notas" })).toBeVisible();
   await page.getByRole("link", { name: "Nova nota" }).click();
-  await page.getByLabel("Título").fill("Receita de bolo");
+  await page.getByLabel("Título").fill(title);
   await page
     .getByLabel("Texto da nota")
     .fill('# Bolo de laranja\n\n- 3 ovos\n- [ ] comprar fermento\n\n<img src=x onerror="alert(1)">\n\n[link](javascript:alert(1))');
@@ -105,23 +110,27 @@ test("a note: write Markdown, preview it safely, search, delete and restore", as
   await expect(page.getByRole("status").filter({ hasText: "Salvo." })).toBeVisible();
 
   // Full-text search without the accent finds it.
-  await page.getByRole("link", { name: "Todas as notas" }).click();
+  if (narrow) await page.getByRole("link", { name: "Todas as notas" }).click();
+  else {
+    await expect(page.getByRole("link", { name: "Todas as notas" })).toBeHidden();
+    await expect(page.getByRole("link", { name: new RegExp(title) })).toHaveAttribute("aria-current", "page");
+  }
   await page.getByLabel("Buscar notas").fill("acucar");
-  await expect(page.getByRole("link", { name: /Receita de bolo/ })).toBeVisible();
+  await expect(page.getByRole("link", { name: new RegExp(title) })).toBeVisible();
   await page.getByLabel("Buscar notas").fill('"fermento OR');
-  await expect(page.getByRole("link", { name: /Receita de bolo/ })).toBeVisible();
+  await expect(page.getByRole("link", { name: new RegExp(title) })).toBeVisible();
   await page.getByLabel("Buscar notas").fill("abacaxi");
   await expect(page.getByText("Nenhuma nota encontrada")).toBeVisible();
 
   // Delete and undo from the list.
   await page.getByLabel("Buscar notas").fill("");
-  await page.getByRole("link", { name: /Receita de bolo/ }).click();
+  await page.getByRole("link", { name: new RegExp(title) }).click();
   await page.getByRole("button", { name: "Mover para a lixeira" }).click();
   await expect(page).toHaveURL(/\/notas$/);
   await expect(page.getByText("Nota movida para a lixeira.")).toBeVisible();
-  await expect(page.getByRole("link", { name: /Receita de bolo/ })).toBeHidden();
+  await expect(page.getByRole("link", { name: new RegExp(title) })).toBeHidden();
   await page.getByRole("button", { name: "Desfazer" }).click();
-  await expect(page.getByRole("link", { name: /Receita de bolo/ })).toBeVisible();
+  await expect(page.getByRole("link", { name: new RegExp(title) })).toBeVisible();
 });
 
 test("the trash: purge one item and empty the rest, each after a confirmation", async ({ page }) => {
