@@ -172,3 +172,24 @@ test("the password typed at sign-in is never kept in the page's storage", async 
   expect(stored).not.toContain(EMAIL);
   expect(stored).not.toContain("zuri_session");
 });
+
+test("the two-step reminder shows until put off, and never on the settings @mobile", async ({ page }) => {
+  await page.goto("/");
+  await signIn(page);
+  const reminder = page.getByRole("status").filter({ hasText: "A verificação em duas etapas está desligada." });
+  await expect(reminder).toBeVisible();
+  // The home page says the same, with when the session ends at the latest.
+  await expect(page.getByRole("region", { name: "Segurança" })).toContainText("Verificação em duas etapas desligada");
+  await expect(page.getByRole("region", { name: "Sessão" })).toContainText(/Aberta até \d{2}\/\d{2}\/\d{4}/);
+  await reminder.getByRole("link", { name: "Ligar agora" }).click();
+  await expect(page).toHaveURL(/\/configuracoes\/seguranca$/);
+  await expect(reminder).toHaveCount(0);
+
+  await page.getByRole("link", { name: "Início" }).first().click();
+  await expect(reminder).toBeVisible();
+  await reminder.getByRole("button", { name: "Lembrar depois" }).click();
+  await expect(reminder).toHaveCount(0);
+  await page.reload();
+  await expect(page.getByRole("heading", { level: 1, name: "Olá!" })).toBeVisible();
+  await expect(reminder).toHaveCount(0);
+});

@@ -47,6 +47,9 @@ o [SemVer](https://semver.org/lang/pt-BR/). Cada PR escreve a sua entrada em
   central de avisos (vazia até a etapa 11) e Configurações com as abas Conta,
   Segurança, IA, Avisos, Integrações e Dados. Tema claro, escuro ou como o
   sistema, layout para celular e computador, em pt-BR e en.
+- Casca depois do login no estilo do Talorys: barra lateral de altura total,
+  barra superior e navegação inferior no celular, e um lembrete para ligar a
+  verificação em duas etapas enquanto ela estiver desligada.
 - Identidade visual do Zuri, "Sinal": logo de um i cujo pingo é uma luz
   verde, que pulsa enquanto o Zuri trabalha; favicon, ícones e cores da
   interface nos dois temas.

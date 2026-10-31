@@ -53,6 +53,21 @@ instalável e que, offline, a API falha em vez de responder do cache. Toda
 resposta de `/api/*` sai com `Cache-Control: no-store`, e o cliente pede com
 `cache: "no-store"`.
 
+## Casca depois do login
+
+Segue a UI do Talorys (decisão do Pablo, 31/10/2026):
+
+- **Computador:** barra lateral de altura total (`AppShell`), com a marca e o
+  sino de avisos no topo, as seções do app no meio e Configurações e Sair no
+  pé. Uma seção nova é um item a mais em `sections`.
+- **Celular:** barra superior com a marca, os avisos e Sair; navegação inferior
+  com as seções e Configurações.
+- **Páginas:** começam com `PageHeader` (título, uma linha de contexto e ações
+  à direita), numa coluna de até 5xl.
+- **Lembrete de 2FA:** enquanto a verificação em duas etapas estiver
+  desligada, uma faixa acima do conteúdo chama para ligar. "Lembrar depois"
+  esconde por 3 dias, só neste navegador; nas Configurações ela não aparece.
+
 ## Identidade visual
 
 Opção "Sinal", escolhida pelo Pablo: um "i" claro sobre um quadrado cor de
