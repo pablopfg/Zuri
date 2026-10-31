@@ -186,8 +186,59 @@ export const AUTH_EVENT_KINDS = [
 ] as const;
 export type AuthEventKind = (typeof AUTH_EVENT_KINDS)[number];
 
-/** Rows the activity screen shows: the newest ones, enough for a glance (the rest stays for the alerts). */
+/** Rows per page of the access log (the newest first; "load more" asks for the next page). */
 export const AUTH_ACTIVITY_LIMIT = 50;
+
+/** The access log's filters, as the screen groups the kinds. */
+export const AUTH_ACTIVITY_GROUPS = {
+  success: ["login_success"],
+  failure: ["login_failure", "confirm_failure", "password_change_failure", "mfa_failure"],
+  blocked: ["login_rate_limited", "login_attack"],
+  robot: ["login_turnstile"],
+  account: [
+    "logout",
+    "session_ended",
+    "confirm_success",
+    "password_changed",
+    "credentials_reset",
+    "mfa_challenge",
+    "mfa_enabled",
+    "mfa_disabled",
+    "mfa_codes_regenerated",
+    "recovery_code_used",
+    "passkey_added",
+    "passkey_removed",
+  ],
+} as const satisfies Record<string, readonly AuthEventKind[]>;
+export type AuthActivityGroup = keyof typeof AUTH_ACTIVITY_GROUPS;
+export const AUTH_ACTIVITY_GROUP_NAMES = Object.keys(AUTH_ACTIVITY_GROUPS) as AuthActivityGroup[];
+
+/** How far back the log looks, in days (the detail is kept for AUTH_EVENT_DETAIL_DAYS). */
+export const AUTH_ACTIVITY_PERIODS = [1, 7, 30, 90] as const;
+export type AuthActivityPeriod = (typeof AUTH_ACTIVITY_PERIODS)[number];
+
+/** Where a page ends: the last row's time and id, so rows written meanwhile never repeat or vanish. */
+const activityCursor = /^\d{1,15}:\d{1,15}$/;
+
+/**
+ * GET /api/auth/activity's query. Every field is optional: none at all is the
+ * newest page of everything. `ip` matches the start of the address (digits,
+ * letters a to f, dots and colons only), so a whole /24 or /64 can be searched.
+ */
+export const authActivityQuerySchema = z
+  .object({
+    days: z.enum(AUTH_ACTIVITY_PERIODS.map(String) as [string, ...string[]]).transform(Number).optional(),
+    group: z.enum(AUTH_ACTIVITY_GROUP_NAMES as [AuthActivityGroup, ...AuthActivityGroup[]]).optional(),
+    ip: z
+      .string()
+      .max(45)
+      .regex(/^[0-9A-Fa-f.:]+$/)
+      .transform((value) => value.toLowerCase())
+      .optional(),
+    before: z.string().regex(activityCursor).optional(),
+  })
+  .strict();
+export type AuthActivityQuery = z.infer<typeof authActivityQuerySchema>;
 
 export const authActivityEventSchema = z
   .object({
@@ -201,13 +252,21 @@ export const authActivityEventSchema = z
     country: z.string(),
     region: z.string(),
     city: z.string(),
+    /** The visitor's network operator (autonomous system number), as the edge saw it. */
+    asn: z.number().int().nonnegative().nullable(),
     userAgent: z.string(),
     knownDevice: z.boolean(),
     count: z.number().int().min(1),
   })
   .strict();
 
-export const authActivitySchema = z.object({ events: z.array(authActivityEventSchema) }).strict();
+export const authActivitySchema = z
+  .object({
+    events: z.array(authActivityEventSchema),
+    /** Pass as `before` for the next page; null on the last one. */
+    nextCursor: z.string().regex(activityCursor).nullable(),
+  })
+  .strict();
 
 export type AuthActivityEvent = z.infer<typeof authActivityEventSchema>;
 export type AuthActivity = z.infer<typeof authActivitySchema>;

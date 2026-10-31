@@ -1,6 +1,7 @@
 import {
   ACTIVITY_HEADER,
   AUTH_ACTIVITY_LIMIT,
+  authActivityQuerySchema,
   changePasswordRequestSchema,
   confirmRequestSchema,
   heartbeatRequestSchema,
@@ -207,7 +208,15 @@ export function createApi(deps: ApiDeps) {
 
   // ---------- Access activity ----------
 
-  app.get("/auth/activity", () => Response.json({ events: deps.auth().events.recent(AUTH_ACTIVITY_LIMIT) }));
+  app.get("/auth/activity", (c) => {
+    const parsed = authActivityQuerySchema.safeParse(c.req.query());
+    if (!parsed.success) {
+      // Names the parameters with problems, never the values sent.
+      const fields = [...new Set(parsed.error.issues.map((issue) => issue.path.join(".") || "_query"))];
+      throw new AppError("VALIDATION_FAILED", undefined, { fields });
+    }
+    return Response.json(deps.auth().events.page(parsed.data, AUTH_ACTIVITY_LIMIT));
+  });
 
   // ---------- Two-step sign-in, signed in (sensitive: the password typed recently) ----------
 
