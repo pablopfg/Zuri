@@ -105,7 +105,8 @@ o [SemVer](https://semver.org/lang/pt-BR/). Cada PR escreve a sua entrada em
   de 9.000 Neurons (conversa, voz e busca juntas), o pedido é recusado com um
   aviso claro antes de gastar, e a conta fica dentro da cota grátis de 10.000.
   Chamadas que falham ou são interrompidas no meio também entram na conta.
-  No desenvolvimento local, uma IA simulada responde sem gastar nada.
+  Uma resposta que passa de 120 s é cancelada com aviso, e depois do botão
+  Parar nenhuma chamada nova ao modelo começa. No desenvolvimento local, uma IA simulada responde sem gastar nada.
 - Aba **IA** nas Configurações: uso de hoje (Neurons, pedidos e áudio contra
   os limites, custo estimado, falhas e interrupções), uso por modelo, os
   últimos 7 dias e a hora em que a cota renova. Ali se escolhe o modelo e se
