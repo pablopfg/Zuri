@@ -1,6 +1,8 @@
 # Logs e monitoramento em produção: plano
 
-Situação: plano. Nada aqui foi implementado.
+Situação: **aprovado pelo Pablo em 31/10/2026** ("Sim, como recomendado").
+O item 1 sai num PR próprio antes da etapa 10; o resto entra nas etapas da
+tabela do fim.
 Escrito em 31/10/2026, a partir da pergunta do Pablo: "como vamos acompanhar
 erros, falhas, bugs e comportamentos inadequados quando estiver em produção?"
 
