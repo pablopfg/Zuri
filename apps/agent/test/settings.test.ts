@@ -1,6 +1,6 @@
 import { AGENT_INSTANCE_NAME, DEFAULT_SETTINGS } from "@zuri/shared";
 import { runInDurableObject } from "cloudflare:test";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { ZuriAgent } from "../src/agent/zuri-agent.ts";
 import { Database } from "../src/db/database.ts";
 import { migrate } from "../src/db/migrations.ts";
@@ -115,7 +115,7 @@ describe("API errors in the owner's language", () => {
     await inOwner((agent) => agent.store.settings.update({ language: "en" }));
     const res = await call(`${ORIGIN}/api/nada`, { method: "POST" });
     expect(res.status).toBe(401);
-    expect((await errorBody(res)).code).toBe("UNAUTHORIZED");
+    expect(await errorBody(res)).toEqual({ code: "UNAUTHORIZED", message: "Sign in to continue." });
   });
 
   it("stay in the default language for the Worker's gates, which answer before the object is woken", async () => {
@@ -124,7 +124,8 @@ describe("API errors in the owner's language", () => {
     expect(await errorBody(res)).toEqual({ code: "HOST_NOT_ALLOWED", message: "Este endereço não atende o Zuri." });
   });
 
-  it("fall back to pt-BR if the database cannot be read", async () => {
+  it("fall back to pt-BR if the database cannot be read, and log only the error's name", async () => {
+    const log = vi.spyOn(console, "error").mockImplementation(() => {});
     const locale = await inOwner((agent, db) => {
       agent.store.settings.update({ language: "en" });
       // Simulates a broken database: the settings table disappears under the agent.
@@ -135,5 +136,10 @@ describe("API errors in the owner's language", () => {
     const res = await call(`${ORIGIN}/api/tasks`);
     expect(res.status).toBe(401);
     expect((await errorBody(res)).message).toBe("Entre para continuar.");
+    // Put the table back so a test added after this one finds a whole database.
+    await inOwner((_agent, db) => db.run(`ALTER TABLE zur_settings_gone RENAME TO zur_settings`));
+    expect(log).toHaveBeenCalledWith(JSON.stringify({ message: "settings unreadable", error: "Error" }));
+    expect(JSON.stringify(log.mock.calls)).not.toMatch(/zur_settings|SELECT/);
+    log.mockRestore();
   });
 });

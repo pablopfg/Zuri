@@ -39,7 +39,10 @@ export class ZuriAgent extends Agent<WorkerEnv> {
   locale(): Locale {
     try {
       return this.store.settings.locale();
-    } catch {
+    } catch (error) {
+      // Only the name: the message may quote SQL or data. Without this line a
+      // broken migration would hide behind answers that still look normal.
+      console.error(JSON.stringify({ message: "settings unreadable", error: error instanceof Error ? error.name : typeof error }));
       return DEFAULT_LOCALE;
     }
   }

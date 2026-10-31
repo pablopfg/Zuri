@@ -3,7 +3,7 @@ import { cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } f
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { IGNORE_FILE, lint, lintSource, SOURCE_DIRS } from "../../scripts/lint-i18n.ts";
+import { catalogProblems, IGNORE_FILE, lint, lintSource, SOURCE_DIRS, unusedCatalogKeys } from "../../scripts/lint-i18n.ts";
 import { ROOT, readJson } from "./helpers.ts";
 
 const KEYS = new Set(["app.name", "error.forbidden", "FORBIDDEN", "NOT_FOUND"]);
@@ -29,6 +29,30 @@ describe("lintSource", () => {
     expect(texts("throw new AppError(`Falhou ${x}`);", "x.ts")).toEqual(["app-error 1 Falhou"]);
   });
 
+  it("sees through type casts and a qualified AppError", () => {
+    const code = `
+      throw new AppError("FORBIDDEN", "Texto solto" as never);
+      throw new AppError("FORBIDDEN", "Outro texto" satisfies string);
+      throw new AppError("FORBIDDEN", ("Mais um")!);
+      throw new errors.AppError("FORBIDDEN", "Qualificado");
+      const a = <p title={"Dica" as string}>{"Filho" as string}</p>;
+    `;
+    expect(texts(code)).toEqual([
+      "app-error 2 Texto solto",
+      "app-error 3 Outro texto",
+      "app-error 4 Mais um",
+      "app-error 5 Qualificado",
+      "jsx-attribute 6 Dica",
+      "jsx-text 6 Filho",
+    ]);
+  });
+
+  it("collects the file's string literals, never its comments", () => {
+    const strings = new Set<string>();
+    lintSource(`// "app.name" in a comment\nconst k = 'error.forbidden'; const p = \`tasks.count\`; const q = \`x\${y}\`;`, "x.ts", KEYS, strings);
+    expect([...strings].sort()).toEqual(["error.forbidden", "tasks.count"]);
+  });
+
   it("lets catalog keys, error codes, computed values and non-text attributes through", () => {
     const code = `
       throw new AppError("FORBIDDEN", "error.forbidden");
@@ -41,6 +65,29 @@ describe("lintSource", () => {
 
   it("does not care about text in plain TypeScript outside those places", () => {
     expect(texts(`console.error("log line"); const s = "texto qualquer";`, "x.ts")).toEqual([]);
+  });
+});
+
+describe("catalog checks", () => {
+  it("treat a plural key as used through its base", () => {
+    const keys = ["tasks.count.one", "tasks.count.other", "inbox.many", "app.name", "app.unused"];
+    expect(unusedCatalogKeys(keys, new Set(["tasks.count", "inbox", "app.name"]))).toEqual(["app.unused"]);
+  });
+
+  it("report a key in one language only and an empty translation", () => {
+    const problems = catalogProblems({
+      "pt-BR": { "app.name": "Zuri", "app.only": "Só aqui" },
+      en: { "app.name": " ", "app.extra": "Only here" },
+    });
+    expect(problems).toEqual([
+      'en: falta a chave "app.only"',
+      'pt-BR: falta a chave "app.extra" (existe só em en)',
+      'en: a chave "app.name" está vazia',
+    ]);
+  });
+
+  it("report nothing for the shipped catalogs", () => {
+    expect(catalogProblems()).toEqual([]);
   });
 });
 

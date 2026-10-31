@@ -23,6 +23,14 @@ export const IGNORE_FILE = "i18n-ignore.json";
 /** Attributes whose value a person reads or hears. */
 const TEXT_ATTRIBUTES = new Set(["title", "aria-label", "placeholder", "alt"]);
 const LETTER = /\p{L}/u;
+const TYPE_WRAPPERS = new Set(["TSAsExpression", "TSSatisfiesExpression", "TSNonNullExpression", "TSTypeAssertion", "ParenthesizedExpression"]);
+
+/** `AppError` or `something.AppError`. */
+function isAppError(callee: unknown): boolean {
+  if (!isNode(callee)) return false;
+  if (callee.type === "Identifier") return callee.name === "AppError";
+  return callee.type === "MemberExpression" && isNode(callee.property) && callee.property.name === "AppError";
+}
 
 export interface Finding {
   file: string;
@@ -49,6 +57,8 @@ const isNode = (value: unknown): value is Node =>
 /** The text of a string literal or of a template literal's fixed parts; null for anything computed. */
 function literalText(node: unknown): string | null {
   if (!isNode(node)) return null;
+  // "Texto" as MessageKey, "Texto" satisfies string, ("Texto")! are still the literal.
+  if (TYPE_WRAPPERS.has(node.type)) return literalText(node.expression);
   if (node.type === "Literal" && typeof node.value === "string") return node.value;
   if (node.type === "TemplateLiteral") {
     const quasis = node.quasis as { value: { cooked: string | null } }[];
@@ -72,8 +82,12 @@ function attributeName(node: Node): string | null {
   return null;
 }
 
-/** Finds the visible literals in one file's source. `allowed` holds the catalog keys and the error codes. */
-export function lintSource(code: string, file: string, allowed: ReadonlySet<string>): Finding[] {
+/**
+ * Finds the visible literals in one file's source. `allowed` holds the catalog
+ * keys and the error codes. When given, `strings` collects every string literal
+ * of the file (comments never count), to tell which catalog keys are in use.
+ */
+export function lintSource(code: string, file: string, allowed: ReadonlySet<string>, strings?: Set<string>): Finding[] {
   const lang = file.endsWith(".tsx") ? "tsx" : file.endsWith(".jsx") ? "jsx" : "ts";
   const ast = parseAst(code, { lang }, file) as unknown as Node;
   const lineStarts = [0];
@@ -109,7 +123,11 @@ export function lintSource(code: string, file: string, allowed: ReadonlySet<stri
         if (text !== null) report(node, text, "jsx-attribute");
       }
     }
-    if (node.type === "NewExpression" && isNode(node.callee) && node.callee.type === "Identifier" && node.callee.name === "AppError") {
+    if (strings && node.type === "Literal" && typeof node.value === "string") strings.add(node.value);
+    if (strings && node.type === "TemplateLiteral" && (node.expressions as unknown[]).length === 0) {
+      strings.add((node.quasis as { value: { cooked: string | null } }[])[0]?.value.cooked ?? "");
+    }
+    if (node.type === "NewExpression" && isAppError(node.callee)) {
       for (const argument of node.arguments as unknown[]) {
         const text = literalText(argument);
         if (text !== null && isNode(argument)) report(argument, text, "app-error");
@@ -137,18 +155,25 @@ function sourceFiles(root: string): string[] {
 }
 
 /** Keys missing in a language or translated as an empty string. */
-export function catalogProblems(): string[] {
+export function catalogProblems(sources: Record<string, Record<string, string>> = catalogs): string[] {
   const problems: string[] = [];
-  const reference = Object.keys(catalogs[DEFAULT_LOCALE]);
+  const reference = Object.keys(sources[DEFAULT_LOCALE] ?? {});
   for (const locale of LOCALES) {
-    const keys = new Set(Object.keys(catalogs[locale]));
+    const catalog = sources[locale] ?? {};
+    const keys = new Set(Object.keys(catalog));
     for (const key of reference) if (!keys.has(key)) problems.push(`${locale}: falta a chave "${key}"`);
     for (const key of keys) if (!reference.includes(key)) problems.push(`${DEFAULT_LOCALE}: falta a chave "${key}" (existe só em ${locale})`);
-    for (const [key, value] of Object.entries(catalogs[locale])) {
+    for (const [key, value] of Object.entries(catalog)) {
       if (value.trim() === "") problems.push(`${locale}: a chave "${key}" está vazia`);
     }
   }
   return problems;
+}
+
+/** A key is used when some string literal names it; a plural key ("tasks.count.one") also through its base, as in plural(l, "tasks.count", n). */
+export function unusedCatalogKeys(keys: readonly string[], strings: ReadonlySet<string>): string[] {
+  const pluralBase = (key: string) => key.replace(/\.(zero|one|two|few|many|other)$/, "");
+  return keys.filter((key) => !strings.has(key) && !strings.has(pluralBase(key)));
 }
 
 export interface LintResult {
@@ -164,7 +189,8 @@ export function lint(root: string): LintResult {
   const files = sourceFiles(root);
   const texts = new Map(files.map((file) => [relative(root, file).split(sep).join("/"), readFileSync(file, "utf8")]));
 
-  const raw = [...texts].flatMap(([file, code]) => lintSource(code, file, allowed));
+  const strings = new Set<string>();
+  const raw = [...texts].flatMap(([file, code]) => lintSource(code, file, allowed, strings));
 
   const ignoreProblems: string[] = [];
   const ignorePath = join(root, IGNORE_FILE);
@@ -186,10 +212,7 @@ export function lint(root: string): LintResult {
     if (!used.has(entry)) ignoreProblems.push(`${IGNORE_FILE}: a exceção não corresponde a nada (remova-a): ${JSON.stringify(entry)}`);
   }
 
-  const allSource = [...texts.values()].join("\n");
-  // A plural key ("tasks.count.one") is used through its base: plural(locale, "tasks.count", n).
-  const pluralBase = (key: string) => key.replace(/\.(zero|one|two|few|many|other)$/, "");
-  const unusedKeys = keys.filter((key) => !allSource.includes(`"${key}"`) && !allSource.includes(`"${pluralBase(key)}"`));
+  const unusedKeys = unusedCatalogKeys(keys, strings);
 
   return { findings, catalog: catalogProblems(), unusedKeys, ignoreProblems };
 }

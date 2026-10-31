@@ -20,6 +20,10 @@ describe("formatDateTime", () => {
     expect(formatDateTime("2026-10-31T02:30:00Z", "pt-BR", "UTC")).toBe("31/10/2026 às 02:30");
   });
 
+  it("throws on an invalid date instead of printing \"Invalid Date\"", () => {
+    expect(() => formatDateTime("not a date", "pt-BR", "America/Sao_Paulo")).toThrow(RangeError);
+  });
+
   it("follows daylight saving time where the zone has it", () => {
     expect(formatDateTime("2026-07-01T12:00:00Z", "pt-BR", "Europe/Lisbon")).toBe("01/07/2026 às 13:00");
     expect(formatDateTime("2026-12-01T12:00:00Z", "pt-BR", "Europe/Lisbon")).toBe("01/12/2026 às 12:00");

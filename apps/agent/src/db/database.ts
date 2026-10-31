@@ -16,11 +16,12 @@ export class Database {
     return this.all<T>(query, ...params)[0] ?? null;
   }
 
-  run(query: string, ...params: SqlValue[]): { changes: number } {
+  /** `rowsWritten` counts index and upsert writes too: never use it as "how many rows matched". */
+  run(query: string, ...params: SqlValue[]): { rowsWritten: number } {
     const cursor = this.storage.sql.exec(query, ...params);
     // Drain the cursor so the statement runs to the end before counting.
     cursor.toArray();
-    return { changes: cursor.rowsWritten };
+    return { rowsWritten: cursor.rowsWritten };
   }
 
   /** Runs `fn` atomically: throwing rolls every write back. */

@@ -1,5 +1,3 @@
-import { readdirSync, readFileSync } from "node:fs";
-import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { catalogs, createTranslator, DEFAULT_LOCALE, isLocale, LOCALES, t } from "../i18n/index.ts";
 
@@ -35,22 +33,8 @@ describe("i18n catalogs", () => {
   });
 });
 
-// Every key must be used somewhere in the code; an unused key is dead text.
-// scripts/lint-i18n.ts checks the same and also the visible literals outside the catalog.
-const ROOT = join(import.meta.dirname, "..", "..", "..");
-const SOURCE_DIRS = ["apps/agent/src", "apps/web/src", "packages/shared/src"];
-const sourceText = SOURCE_DIRS.flatMap((dir) =>
-  (readdirSync(join(ROOT, dir), { recursive: true, withFileTypes: true }) as import("node:fs").Dirent[])
-    .filter((entry) => entry.isFile() && /\.(ts|tsx)$/.test(entry.name))
-    .map((entry) => readFileSync(join(entry.parentPath, entry.name), "utf8")),
-).join("\n");
-
-describe("i18n usage", () => {
-  it("uses every catalog key in the code", () => {
-    const unused = Object.keys(catalogs[DEFAULT_LOCALE]).filter((key) => !sourceText.includes(`"${key}"`));
-    expect(unused).toEqual([]);
-  });
-});
+// Whether every key is used in the code is checked by scripts/lint-i18n.ts
+// (npm run lint and the i18n job), which also understands plural bases.
 
 describe("t", () => {
   it("interpolates placeholders", () => {

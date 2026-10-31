@@ -18,6 +18,8 @@ const zurObjects = (db: Database) =>
     .map((row) => `${row.type}:${row.name}`);
 
 const statementText = (m: Migration) => m.statements.join("\n");
+/** The SQL without its comments, so a "-- note" line cannot hide a CREATE from the checks. */
+const withoutComments = (sql: string) => sql.replace(/--[^\n]*/g, "").replace(/\/\*[\s\S]*?\*\//g, "").trim();
 
 describe("the migration list", () => {
   it("never drops, deletes or touches the Agents SDK's tables", () => {
@@ -36,15 +38,30 @@ describe("the migration list", () => {
     expect(statementText(planted)).toMatch(/\bDROP\b/i);
   });
 
-  it("only creates zur_ tables and indexes, always IF NOT EXISTS", () => {
+  it("only creates zur_ tables, indexes, triggers and views, always IF NOT EXISTS", () => {
     for (const m of MIGRATIONS) {
-      for (const statement of m.statements) {
-        const create = statement.match(/^\s*CREATE\s+(?:UNIQUE\s+)?(TABLE|INDEX|TRIGGER|VIRTUAL TABLE)\s+(IF NOT EXISTS\s+)?(\w+)/i);
-        if (!create) continue;
-        expect(create[2], statement).toBeTruthy();
-        expect(create[3], statement).toMatch(/^zur_/);
+      for (const statement of m.statements.map(withoutComments)) {
+        expect(statement, `migration ${m.version}`).toMatch(/^(CREATE|ALTER TABLE|INSERT|UPDATE)\b/i);
+        if (!/^CREATE\b/i.test(statement)) continue;
+        const create = statement.match(/^CREATE\s+(?:UNIQUE\s+|TEMP\s+|TEMPORARY\s+)?(?:TABLE|INDEX|TRIGGER|VIEW|VIRTUAL\s+TABLE)\s+(IF\s+NOT\s+EXISTS\s+)?(\w+)/i);
+        expect(create, statement).not.toBeNull();
+        expect(create?.[1], statement).toBeTruthy();
+        expect(create?.[2], statement).toMatch(/^zur_/);
       }
     }
+  });
+
+  it("never adds a NOT NULL column without a DEFAULT", () => {
+    for (const m of MIGRATIONS) {
+      for (const statement of m.statements.map(withoutComments)) {
+        const added = statement.match(/ADD\s+COLUMN\s+([\s\S]*)$/i)?.[1];
+        if (added && /\bNOT\s+NULL\b/i.test(added)) expect(added, statement).toMatch(/\bDEFAULT\b/i);
+      }
+    }
+  });
+
+  it("strips comments before checking, so a commented CREATE is still checked", () => {
+    expect(withoutComments("-- note\nCREATE TABLE x (id INTEGER)")).toBe("CREATE TABLE x (id INTEGER)");
   });
 
   it("numbers versions 1, 2, 3... with no gap, repeat or reordering", () => {
