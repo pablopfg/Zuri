@@ -2,6 +2,7 @@ import { ptBRMemory } from "./pt-BR-memory.ts";
 import { ptBRPalette } from "./pt-BR-palette.ts";
 import { ptBRProductivity } from "./pt-BR-productivity.ts";
 import { ptBRAi } from "./pt-BR-ai.ts";
+import { ptBRChat } from "./pt-BR-chat.ts";
 import { ptBRSecurity } from "./pt-BR-security.ts";
 import { ptBRServer } from "./pt-BR-server.ts";
 import { ptBRSettings } from "./pt-BR-settings.ts";
@@ -96,8 +97,6 @@ export const ptBRCore = {
   "web.crash.reload": "Recarregar",
   "web.passwordRequired.title": "Troque a sua senha",
   "web.passwordRequired.body": "A senha atual não segue as regras de segurança. Escolha uma nova para continuar; o resto da Zuri fica bloqueado até lá.",
-  "web.password.title": "Senha",
-  "web.password.hint": "Trocar a senha encerra as outras sessões abertas.",
   "web.password.current": "Senha atual",
   "web.password.new": "Nova senha",
   "web.password.repeat": "Repita a nova senha",
@@ -112,21 +111,13 @@ export const ptBRCore = {
   "web.mfaReminder.short": "Duas etapas desligadas",
   "web.mfaReminder.action": "Ligar agora",
   "web.mfaReminder.later": "Lembrar depois",
-  "web.settings.sections": "Seções das configurações",
   "web.settings.tab.account": "Conta",
   "web.settings.tab.security": "Segurança",
   "web.settings.tab.ai": "IA",
   "web.settings.tab.notifications": "Avisos",
   "web.settings.tab.integrations": "Integrações",
   "web.settings.tab.data": "Dados",
-  "web.account.preferences": "Nome, idioma e fuso horário",
-  "web.account.preferencesHint": "Valem para a interface, as mensagens do servidor e, depois, o bot.",
-  "web.account.language": "Idioma",
-  "web.account.timeZone": "Fuso horário",
-  "web.account.timeZoneHint": "Datas, lembretes e rotinas seguem este fuso.",
-  "web.account.signOutTitle": "Sair deste aparelho",
   "web.account.signOutHint": "Encerra esta sessão. As outras abas deste navegador saem junto.",
-  "web.theme.title": "Aparência",
   "web.theme.label": "Tema",
   "web.theme.system": "Como o sistema",
   "web.theme.light": "Claro",
@@ -138,10 +129,11 @@ export const ptBRCore = {
   "web.markdown.done": "Feito",
   "web.markdown.open": "A fazer",
   "web.nav.memory": "Memória",
+  "web.nav.chat": "Conversa",
 } as const;
 
 /** Joins catalog parts. Marked pure so a bundle that never uses the whole catalog drops the call. */
-function join<A extends object, B extends object, C extends object, D extends object, E extends object, F extends object, G extends object, H extends object, I extends object>(
+function join<A extends object, B extends object, C extends object, D extends object, E extends object, F extends object, G extends object, H extends object, I extends object, J extends object>(
   a: A,
   b: B,
   c: C,
@@ -151,9 +143,10 @@ function join<A extends object, B extends object, C extends object, D extends ob
   g: G,
   h: H,
   i: I,
-): A & B & C & D & E & F & G & H & I {
-  return { ...a, ...b, ...c, ...d, ...e, ...f, ...g, ...h, ...i };
+  j: J,
+): A & B & C & D & E & F & G & H & I & J {
+  return { ...a, ...b, ...c, ...d, ...e, ...f, ...g, ...h, ...i, ...j };
 }
 
 /** The whole pt-BR catalog: what the server, the tests and the lint use. */
-export const ptBR = /* @__PURE__ */ join(ptBRCore, ptBRMemory, ptBRProductivity, ptBRSecurity, ptBRAi, ptBRSettings, ptBRServer, ptBRPalette, ptBRGreeting);
+export const ptBR = /* @__PURE__ */ join(ptBRCore, ptBRMemory, ptBRProductivity, ptBRSecurity, ptBRAi, ptBRChat, ptBRSettings, ptBRServer, ptBRPalette, ptBRGreeting);

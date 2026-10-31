@@ -198,6 +198,18 @@ acrescente aqui cada armadilha nova que encontrar (sem dados pessoais).
   `wrangler dev`. Não afeta a resposta; cancelar o corpo no objeto não resolve
   (o erro nasce no Worker, que repassa o fluxo). Fica para investigar.
 
+- `response.finished()` do Playwright não termina numa resposta em SSE que o
+  navegador lê aos poucos: o teste trava até o tempo limite. Espere o estado da
+  tela (o botão Parar sumir, nenhum `[aria-busy=true]`), não o fim da resposta.
+- `role="log"` direto num `<ol>` tira a semântica de lista e o axe acusa
+  "listitem". Ponha o `role="log"` numa `div` em volta da lista.
+- O `request.signal` não avisa o Durable Object quando a aba fecha: sem os
+  flags `enable_request_signal` e `request_signal_passthrough`, o sinal nunca
+  dispara. O chat descobre a aba fechada pela escrita que falha, e manda um
+  `: ping` a cada 5 s para isso valer também nos passos sem texto.
+- `test.use({ launchOptions })` não vale dentro de um `describe`: um teste que
+  precisa de outro navegador (microfone falso) vai para um arquivo próprio.
+
 ## Ambiente de nuvem
 
 - Com o binding `ai` no `wrangler.jsonc`, `wrangler dev` sem `--local` tenta

@@ -12,7 +12,7 @@
 [![Licença: MIT](https://img.shields.io/badge/licen%C3%A7a-MIT-0b0f19)](LICENSE)
 [![Roda na Cloudflare](https://img.shields.io/badge/roda%20na-Cloudflare-f38020?logo=cloudflare&logoColor=white)](https://developers.cloudflare.com/workers/)
 [![Plano Free](https://img.shields.io/badge/plano%20Free-compat%C3%ADvel-22c55e)](#-plano-free-sem-surpresa-na-fatura)
-[![Etapas](https://img.shields.io/badge/etapas-8%20de%2026-22c55e)](#️-mapa-das-etapas)
+[![Etapas](https://img.shields.io/badge/etapas-10%20de%2026-22c55e)](#️-mapa-das-etapas)
 [![Sem telemetria](https://img.shields.io/badge/telemetria-nenhuma-0b0f19)](#-segurança-e-privacidade)
 [![Node.js 24+](https://img.shields.io/badge/node-24%2B-339933?logo=nodedotjs&logoColor=white)](.nvmrc)
 
@@ -24,7 +24,7 @@ de um Durable Object e conversa com você pelo navegador e, em breve, pelo Teleg
 </div>
 
 > [!NOTE]
-> **Em construção.** A Zuri sai em 26 etapas, uma por PR, a partir da [especificação](docs/especificacao.md). As etapas 0 a 7 estão na `develop` e a 8 (provedor de IA e medição de uso) está em andamento. O [mapa das etapas](#️-mapa-das-etapas) mostra o que já existe e o que vem a seguir; o estado detalhado fica em [`progresso.md`](.claude/memoria/progresso.md).
+> **Em construção.** A Zuri sai em 26 etapas, uma por PR, a partir da [especificação](docs/especificacao.md). As etapas 0 a 9 estão na `develop`, inclusive a conversa com o agente. O [mapa das etapas](#️-mapa-das-etapas) mostra o que já existe e o que vem a seguir; o estado detalhado fica em [`progresso.md`](.claude/memoria/progresso.md).
 
 ## Sumário
 
@@ -57,12 +57,20 @@ Cada pessoa publica a própria Zuri na própria conta Cloudflare, e ela atende s
 
 As capturas abaixo acompanham o tema do seu GitHub (claro ou escuro) e saem da `develop` com dados de exemplo.
 
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/capturas/conversa-computador-escuro.png">
+    <img src="docs/capturas/conversa-computador-claro.png" alt="Tela Conversa: o dono pede ajuda para organizar a mudança e o agente responde com um plano de quatro tarefas, com prioridades e prazos, e os botões Criar 4 tarefas, Editar e Descartar" width="85%">
+  </picture>
+</p>
+<p align="center"><b>Conversa</b>: o agente propõe, você confere e confirma</p>
+
 <table>
   <tr>
     <td width="50%" valign="top">
       <picture>
         <source media="(prefers-color-scheme: dark)" srcset="docs/capturas/inicio-computador-escuro.png">
-        <img src="docs/capturas/inicio-computador-claro.png" alt="Início da Zuri no computador: cumprimento pelo horário com o nome do dono, barra lateral com Início, Tarefas, Notas, Memória e Acessos, e cartões de Segurança e Sessão">
+        <img src="docs/capturas/inicio-computador-claro.png" alt="Início da Zuri no computador: cumprimento pelo horário com o nome do dono, barra lateral com Início, Conversa, Tarefas, Notas, Memória e Acessos, e cartões de Segurança e Sessão">
       </picture>
       <p align="center"><b>Início</b>: cumprimento pelo horário, segurança da conta e sessão num relance</p>
     </td>
@@ -119,12 +127,17 @@ As capturas abaixo acompanham o tema do seu GitHub (claro ou escuro) e saem da `
   &nbsp;
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="docs/capturas/inicio-celular-escuro.png">
-    <img src="docs/capturas/inicio-celular-claro.png" alt="Início no celular, com a navegação inferior" width="30%">
+    <img src="docs/capturas/inicio-celular-claro.png" alt="Início no celular, com a navegação inferior" width="23%">
   </picture>
   &nbsp;
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="docs/capturas/tarefas-celular-escuro.png">
-    <img src="docs/capturas/tarefas-celular-claro.png" alt="Tarefas no celular" width="30%">
+    <img src="docs/capturas/tarefas-celular-claro.png" alt="Tarefas no celular" width="23%">
+  </picture>
+  &nbsp;
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/capturas/conversa-celular-escuro.png">
+    <img src="docs/capturas/conversa-celular-claro.png" alt="Conversa no celular, com o cartão do plano de tarefas" width="23%">
   </picture>
 </p>
 </details>
@@ -146,13 +159,13 @@ O que está na `develop` hoje, etapa por etapa. "extra" marca melhorias feitas f
 | ✅ | **Tarefas e projetos** | Hoje, próximas, atrasadas e concluídas, com prioridade, prazo no seu fuso e projetos. | 6 |
 | 📝 | **Notas** | Markdown seguro, busca de texto completo (com ou sem acento) e lixeira de 30 dias. | 6 |
 | 🧠 | **Memória** | Fatos que você guarda, edita e apaga. O que muda vira histórico (atual, incerto ou passado), e conflitos vão para uma fila de revisão. | 7 |
+| 📊 | **IA com medição** | Workers AI com contador por chamada e um teto único de 9.000 Neurons por dia, com aviso claro ao chegar nele. | 8 |
+| 💬 | **Conversa com ferramentas** | Respostas em tempo real. O agente cria e organiza tarefas, notas e memórias; o que apaga ou reescreve vira um cartão para você aprovar, e planos de tarefas só viram tarefas depois da sua confirmação. Também aceita voz. | 9 |
 
 ## 🔭 O que vem a seguir
 
 | | Funcionalidade | O que faz | Etapa |
 | :---: | --- | --- | :---: |
-| 📊 | **IA com medição** | Workers AI com contador por chamada e um teto único de 9.000 Neurons por dia, com aviso claro ao chegar nele. | 8 |
-| 💬 | **Chat com ferramentas** | Respostas em tempo real, ferramentas com permissão e ações destrutivas que viram proposta para você aprovar. | 9 |
 | ⏰ | **Automações e avisos** | Lembretes, resumos e rotinas de IA; central de avisos com push, e-mail e prioridade. | 10–11 |
 | 🤖 | **Bot do Telegram** | Painel de administração no bolso: consultas sem IA, conversa por texto e voz, aprovações com passkey e modo de bloqueio. | 12–16 |
 | 🔌 | **Integrações** | Busca semântica, servidores MCP, Google Agenda, acesso remoto para o n8n e monitor de sites, todos opcionais. | 17–22 |
@@ -202,7 +215,7 @@ Mais detalhes em [docs/arquitetura.md](docs/arquitetura.md).
 - **Login forte.** Senha de 15 caracteres ou mais, Turnstile validado no Worker antes da senha, 2FA, passkeys, códigos de recuperação e defesa contra ataque lento ao segundo passo.
 - **Você vê quem tentou.** A página Acessos registra cada tentativa. O IP fica no banco da Zuri e não vai para os logs.
 - **Agente com limites.** Sem shell, execução de código, HTTP livre, credenciais ou deploy. Ação destrutiva vira proposta e só roda com a sua aprovação.
-- **Conteúdo é dado, nunca instrução.** Notas, memórias e mensagens entram no modelo em blocos `<data>` neutralizados, contra injeção de prompt.
+- **Conteúdo é dado, nunca instrução.** Notas, memórias, mensagens e resultados de ferramentas entram no modelo em blocos `<data>` neutralizados. Os cenários de injeção de prompt são testados com um modelo que obedece ao texto injetado, e mesmo assim nada é apagado sem você.
 - **Segredos só no Worker.** Nada sensível no navegador, no repositório ou nos logs. A CSP da interface é testada na CI.
 - **Sem telemetria.** Nenhuma chamada a serviços dos desenvolvedores.
 
@@ -234,8 +247,8 @@ O orçamento de cada cota está em [docs/arquitetura/orcamento-free-tier.md](doc
 | | 5 | Casca da interface e identidade visual | ✅ |
 | **B · Assistente na web** | 6 | Tarefas, notas e projetos | ✅ |
 | | 7 | Memória e histórico | ✅ |
-| | 8 | Provedor de IA e medição de uso | 🚧 |
-| | 9 | Chat com ferramentas | ⬜ |
+| | 8 | Provedor de IA e medição de uso | ✅ |
+| | 9 | Chat com ferramentas | ✅ |
 | | 10 | Automações | ⬜ |
 | | 11 | Central de avisos, push e e-mail | ⬜ |
 | **C · Bot do Telegram** | 12 | Fundação do bot | ⬜ |

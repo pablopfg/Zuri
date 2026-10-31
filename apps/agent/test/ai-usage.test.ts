@@ -178,15 +178,18 @@ describe("the daily limits, counted before the call", () => {
     });
   });
 
-  it("checks audio against the Neuron cap too, and never settles more seconds than reserved", async () => {
+  it("checks audio against the Neuron cap too, and settles the length the model heard, once, even above the reservation", async () => {
     await withAiWorld(({ meter }) => {
       const limits = { ...LIMITS, neuronsPerDay: 500 };
       // 11 minutes = 512.9 Neurons: over a cap of 500.
       expect(refusal(() => meter.reserveAudio({ model: TRANSCRIPTION_MODEL, seconds: 660 }, limits)).details).toMatchObject({ limit: "neurons" });
       const r = meter.reserveAudio({ model: TRANSCRIPTION_MODEL, seconds: 60 }, limits);
+      // A low-bitrate file: estimated at 60 s, heard as 10 minutes. The call was made, so all of it counts.
+      meter.settleAudio(r, 600);
       meter.settleAudio(r, 9_999);
-      meter.settleAudio(r, 9_999);
-      expect(meter.report(limits, "workers-ai", GLM).today).toMatchObject({ audioSeconds: 60, neurons: expect.closeTo(46.63, 6) });
+      expect(meter.report(limits, "workers-ai", GLM).today).toMatchObject({ audioSeconds: 600, neurons: expect.closeTo(466.3, 6) });
+      // The next clip finds the Neuron cap nearly spent.
+      expect(refusal(() => meter.reserveAudio({ model: TRANSCRIPTION_MODEL, seconds: 60 }, limits)).details).toMatchObject({ limit: "neurons" });
     });
   });
 

@@ -33,6 +33,9 @@ describe("GET /api/health", () => {
       aiUsage: () => {
         throw new Error("not used");
       },
+      chat: () => {
+        throw new Error("not used");
+      },
       passwordSecretSet: () => false,
       origin: () => ORIGIN,
       development: () => false,

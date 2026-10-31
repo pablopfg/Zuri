@@ -78,7 +78,9 @@ desatualizadas" e "Passadas", dentro de um orçamento de
 `min(1500, 20% do contexto)` tokens. As passadas só entram quando a pergunta é
 sobre o passado ("onde eu morava?", "what did I drive before?").
 
-Cada memória vira uma linha `<data source="memory" id="…">…</data>`. Dentro
+Cada memória vira uma linha `<data source="memory" id="…">…</data>`. A
+memória que a assistente guardou numa conversa ganha `saved_by="assistant"`, e
+o cabeçalho pede ao modelo que confie menos nela. Dentro
 dela, `<`, `>` e os sinais parecidos (`‹ › ＜ ＞ ﹤ ﹥ 〈 〉 ⟨ ⟩ « »`) viram `‹` e
 `›`, então nenhum texto guardado imita uma tag, nem uma tag já neutralizada.
 Quebras de linha (inclusive U+2028 e U+2029) e caracteres de controle viram um
@@ -178,5 +180,17 @@ linhas lidas/gravadas por requisição:
 
 Cada item tem botões de 44 px: atualizar o fato, editar, histórico, mudar o
 estado e apagar. O texto da memória aparece sempre como texto, nunca como HTML.
+A memória que a assistente guardou numa conversa (`remember`
+ou `update_memory`) aparece com a marca **Anotada pela assistente**.
+
+## Quem escreveu
+
+A coluna `author` de `zur_memories` (migration 8) diz quem escreveu a memória:
+`owner` ou `agent`. O canal continua em `origin` (`app`, `telegram`,
+`import`). As memórias anteriores à migration são do dono. Uma memória da
+assistente passa a ser do dono quando ele a edita ou guarda o mesmo texto. A
+assistente repetir uma memória do dono não muda nada, e uma versão nova que ela
+escreva sobre uma memória do dono é dela, com a do dono guardada como fato
+passado.
 
 Capturas: `docs/assets/etapa-07/`.

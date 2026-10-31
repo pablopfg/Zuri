@@ -25,15 +25,16 @@ export const WORKERS_AI_PRICING = {
 
 /**
  * Chat models the owner may pick, all with tool calling and a published rate in
- * Neurons per million input and output tokens. The default is the Talorys
+ * Neurons per million input and output tokens. `context` is the model's whole
+ * window (prompt + answer) in tokens, from each model's page on the same date. The default is the Talorys
  * default on 30/10/2026. Paid providers are out (decision N7).
  */
 export const CHAT_MODELS = {
-  "@cf/zai-org/glm-4.7-flash": { label: "GLM 4.7 Flash", input: 5_500, output: 36_400 },
-  "@cf/qwen/qwen3-30b-a3b-fp8": { label: "Qwen3 30B A3B", input: 4_625, output: 30_475 },
-  "@cf/meta/llama-4-scout-17b-16e-instruct": { label: "Llama 4 Scout 17B", input: 24_545, output: 77_273 },
-  "@cf/meta/llama-3.3-70b-instruct-fp8-fast": { label: "Llama 3.3 70B", input: 26_668, output: 204_805 },
-} as const satisfies Record<string, { label: string; input: number; output: number }>;
+  "@cf/zai-org/glm-4.7-flash": { label: "GLM 4.7 Flash", input: 5_500, output: 36_400, context: 131_072 },
+  "@cf/qwen/qwen3-30b-a3b-fp8": { label: "Qwen3 30B A3B", input: 4_625, output: 30_475, context: 32_768 },
+  "@cf/meta/llama-4-scout-17b-16e-instruct": { label: "Llama 4 Scout 17B", input: 24_545, output: 77_273, context: 131_000 },
+  "@cf/meta/llama-3.3-70b-instruct-fp8-fast": { label: "Llama 3.3 70B", input: 26_668, output: 204_805, context: 24_000 },
+} as const satisfies Record<string, { label: string; input: number; output: number; context: number }>;
 
 /** A typical answer for the cost hints: 6,000 tokens of context in, 400 out. */
 export const TYPICAL_TURN_TOKENS = { input: 6_000, output: 400 } as const;

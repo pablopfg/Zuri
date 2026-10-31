@@ -1,4 +1,4 @@
-import { Brain, House, ListTodo, LogOut, NotebookPen, PanelLeftClose, PanelLeftOpen, Search, Settings, ShieldCheck } from "lucide-react";
+import { Brain, House, ListTodo, LogOut, MessageCircle, NotebookPen, PanelLeftClose, PanelLeftOpen, Search, Settings, ShieldCheck } from "lucide-react";
 import { lazy, type ReactNode, Suspense, useEffect, useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router";
 import { useSession } from "../hooks/session.tsx";
@@ -26,13 +26,14 @@ export function AppShell() {
   const { session, signOut } = useSession();
   const sections = [
     { to: "/", label: t("web.nav.home"), icon: House, end: true },
+    { to: "/conversa", label: t("web.nav.chat"), icon: MessageCircle, end: false },
     { to: "/tarefas", label: t("web.nav.tasks"), icon: ListTodo, end: false },
     { to: "/notas", label: t("web.nav.notes"), icon: NotebookPen, end: false },
     { to: "/memoria", label: t("web.nav.memory"), icon: Brain, end: false },
     { to: "/acessos", label: t("web.nav.accessLog"), icon: ShieldCheck, end: false },
   ];
-  // Four places fit the phone's bar: the access log is one tap away in Settings > Security there.
-  const mobileItems = [...sections.filter((s) => s.to !== "/acessos"), { to: "/configuracoes", label: t("web.nav.settings"), icon: Settings, end: false }];
+  // Five places fit the phone's bar. Settings sit in the top bar there, and the access log one tap away in Settings > Security.
+  const mobileItems = sections.filter((s) => s.to !== "/acessos");
   const [collapsed, setCollapsed] = useState(readSidebarCollapsed);
   // On a phone "Sair" sits next to the bell, where a thumb lands by mistake: it asks first.
   const [confirmSignOut, setConfirmSignOut] = useState(false);
@@ -170,6 +171,13 @@ export function AppShell() {
               <Search className="h-5 w-5" aria-hidden />
             </button>
             <NotificationCenter />
+            <NavLink
+              to="/configuracoes"
+              aria-label={t("web.nav.settings")}
+              className={({ isActive }) => cn("inline-flex h-11 w-11 items-center justify-center rounded-xl hover:bg-raised", isActive ? "text-accent-text" : "text-fg")}
+            >
+              <Settings className="h-5 w-5" aria-hidden />
+            </NavLink>
             <button
               type="button"
               onClick={() => setConfirmSignOut(true)}

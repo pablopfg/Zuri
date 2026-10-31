@@ -33,6 +33,7 @@ for (const scheme of ["light", "dark"] as const) {
       }
 
       for (const [path, heading] of [
+        ["/conversa", "Conversa"],
         ["/tarefas", "Tarefas"],
         ["/notas", "Notas"],
         ["/memoria", "Memória"],

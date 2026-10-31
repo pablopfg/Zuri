@@ -4,12 +4,29 @@ import { estimateTokens, tokens } from "./provider.ts";
 
 /** Longest piece of the owner's message the mock repeats back. */
 const ECHO_MAX = 500;
+/** The pause between words of a `slow ` answer. */
+const SLOW_WORD_MS = 200;
+
+/** Waits, or less when the turn is stopped. */
+function pause(ms: number, signal: AbortSignal | undefined): Promise<void> {
+  return new Promise((resolve) => {
+    const timer = setTimeout(done, ms);
+    function done() {
+      clearTimeout(timer);
+      signal?.removeEventListener("abort", done);
+      resolve();
+    }
+    signal?.addEventListener("abort", done, { once: true });
+  });
+}
 
 /**
  * A deterministic stand-in for the model: local development (`npm run dev`)
  * and the tests. It never calls anything. It repeats the last message back,
  * word by word, and one form, `call <tool> {json}`, asks for a tool, so the
  * real tool pipeline (limits, validation, approvals) runs without a model.
+ * A message that starts with `slow ` comes back a word every 200 ms, so a
+ * browser test can press Stop in the middle of an answer.
  * Its calls cost no Neurons but are metered and count as requests like any other.
  */
 export class MockAIProvider implements AIProvider {
@@ -64,7 +81,9 @@ export class MockAIProvider implements AIProvider {
         outputChars = 0;
         reply = t(this.locale(), error === undefined ? "ai.mock.toolDone" : "ai.mock.toolFailed", { tool: tool.name });
       }
+      const slow = /^slow\s/i.test(input);
       for (const word of reply.match(/\S+\s*/g) ?? [reply]) {
+        if (slow) await pause(SLOW_WORD_MS, req.signal);
         if (req.signal?.aborted) break;
         outputChars += word.length;
         yield { type: "text", delta: word };

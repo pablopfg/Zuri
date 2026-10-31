@@ -7,6 +7,8 @@ const LIMIT_MESSAGE: Record<StorageKind, MessageKey> = {
   notes: "error.storageLimit.notes",
   projects: "error.storageLimit.projects",
   memories: "error.storageLimit.memories",
+  conversations: "error.storageLimit.conversations",
+  messages: "error.storageLimit.messages",
 };
 
 export type CountKind =
@@ -36,9 +38,10 @@ export class StorageGuard {
   }
 
   /** Throws STORAGE_LIMIT_REACHED unless one more record of `kind` fits. */
-  assertRoom(kind: StorageKind): void {
+  /** Refuses when `room` more items of this kind would pass the limit (a chat turn needs two messages). */
+  assertRoom(kind: StorageKind, room = 1): void {
     const limit = this.limits[kind];
-    if (this.count(kind) + 1 > limit) {
+    if (this.count(kind) + room > limit) {
       throw new AppError("STORAGE_LIMIT_REACHED", LIMIT_MESSAGE[kind], { kind, limit });
     }
     this.assertBytes();

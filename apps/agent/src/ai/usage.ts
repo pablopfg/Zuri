@@ -142,9 +142,11 @@ export class UsageMeter {
   }
 
   /** Counts `seconds` of audio to transcribe against the hour a day and the Neuron cap. */
-  reserveAudio(call: { model: string; seconds: number }, limits: AiLimits): Reservation {
+  reserveAudio(call: { model: string; seconds: number; billable?: boolean }, limits: AiLimits): Reservation {
     const seconds = Math.ceil(call.seconds);
-    const estimate = audioNeurons(seconds);
+    const billable = call.billable !== false;
+    // The simulated transcriber costs no Neurons, but its seconds count like any others.
+    const estimate = billable ? audioNeurons(seconds) : 0;
     const day = this.today();
     const row = this.row(day);
     if ((row?.audio_seconds ?? 0) + seconds > AUDIO_SECONDS_PER_DAY) throw this.limitReached("audio", AUDIO_SECONDS_PER_DAY);
@@ -157,7 +159,7 @@ export class UsageMeter {
       seconds,
       estimate,
     );
-    return { day, kind: "transcription", model: call.model, billable: true, neurons: estimate, audioSeconds: seconds, done: false };
+    return { day, kind: "transcription", model: call.model, billable, neurons: estimate, audioSeconds: seconds, done: false };
   }
 
   /** Replaces a chat reservation with what the step used, on the day it was reserved. */
@@ -189,8 +191,9 @@ export class UsageMeter {
   settleAudio(reservation: Reservation, seconds: number): void {
     if (reservation.done) return;
     reservation.done = true;
-    const used = Math.min(Math.max(0, Math.ceil(seconds)), reservation.audioSeconds);
-    const neurons = audioNeurons(used);
+    // Above the reservation when the model heard a longer clip than the estimate (MeteredAI.transcribe).
+    const used = Math.max(0, Math.ceil(seconds));
+    const neurons = reservation.billable ? audioNeurons(used) : 0;
     const cost = neuronsToUsd(neurons);
     this.db.transaction(() => {
       this.db.run(
@@ -199,7 +202,7 @@ export class UsageMeter {
         reservation.day,
       );
       this.adjust(reservation.day, neurons - reservation.neurons, cost);
-      this.db.run(recordModelSql, reservation.day, reservation.model, reservation.kind, 1, 0, 0, 0, 0, used, neurons, cost);
+      this.db.run(recordModelSql, reservation.day, reservation.model, reservation.kind, reservation.billable ? 1 : 0, 0, 0, 0, 0, used, neurons, cost);
     });
   }
 

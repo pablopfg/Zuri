@@ -22,6 +22,9 @@ describe("default settings", () => {
       aiRequestsPerDay: 200,
       aiNeuronsPerDay: 9_000,
       aiMaxOutputTokens: 1_024,
+      aiMaxToolCalls: 6,
+      aiMaxIterations: 4,
+      aiMaxContextTokens: 6_000,
       ownerName: "",
     });
     expect(DEFAULT_TIME_ZONE).toBe("America/Sao_Paulo");
