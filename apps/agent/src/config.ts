@@ -1,4 +1,4 @@
-import { isPasswordHash } from "@zuri/shared";
+import { isPasswordHash, isUsableSetupCode } from "@zuri/shared";
 import { z } from "zod";
 import type { WorkerEnv } from "./env.ts";
 import { type AccessConfig, accessConfig } from "./gates/access.ts";
@@ -32,11 +32,18 @@ const secret = z.string().trim().min(MIN_SECRET_LENGTH);
 const requiredSecrets = z.object({
   SESSION_SECRET: secret,
   PASSWORD_PEPPER: secret,
-  OWNER_EMAIL: z.email(),
+  // The first access stores the e-mail in the database; the secret is for older installations.
+  OWNER_EMAIL: z.email().optional(),
   OWNER_PASSWORD_HASH: z.string().refine(isPasswordHash).optional(),
   // Without the hash, the plain password is accepted until the first sign-in replaces it.
   OWNER_PASSWORD: z.string().min(MIN_OWNER_PASSWORD_LENGTH).optional(),
-});
+  // A code that is set must be usable: a short or repetitive one fails closed, it is never ignored.
+  SETUP_CODE: z.string().refine(isUsableSetupCode).optional(),
+}).refine(
+  // A password secret signs in only together with the e-mail it belongs to.
+  (env) => (env.OWNER_PASSWORD === undefined && env.OWNER_PASSWORD_HASH === undefined) || env.OWNER_EMAIL !== undefined,
+  { path: ["OWNER_EMAIL"] },
+);
 
 /** Names (never values) of the secrets that are missing or malformed, for the log of the health check. */
 export function secretProblems(env: WorkerEnv): string[] {

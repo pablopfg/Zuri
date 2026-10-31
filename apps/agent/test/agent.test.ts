@@ -44,7 +44,7 @@ describe("GET /api/health", () => {
     expect(res.status).toBe(503);
     expect(await errorBody(res)).toEqual({ code: "NOT_CONFIGURED", message: "O Zuri ainda não foi configurado por completo." });
     // The owner's log names what to set; the answer doesn't.
-    expect(warn).toHaveBeenCalledWith(expect.stringContaining("OWNER_PASSWORD"));
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining("SETUP_CODE"));
     warn.mockRestore();
   });
 

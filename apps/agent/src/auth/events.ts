@@ -33,7 +33,7 @@ const OWNER_KINDS: readonly AuthEventKind[] = [
   "passkey_removed",
 ];
 /** Repeated refusals from one network in the window fold into one row with a count. */
-const FOLDED_KINDS: readonly AuthEventKind[] = ["login_rate_limited", "login_turnstile"];
+const FOLDED_KINDS: readonly AuthEventKind[] = ["login_rate_limited", "login_turnstile", "setup_failure"];
 /** A folded row's count reaches storage at most this often, so hammering a blocked sign-in costs no extra writes. */
 const FOLD_WRITE_INTERVAL_MS = 60_000;
 const PRUNE_INTERVAL_MS = 3600_000;
