@@ -160,8 +160,9 @@ export class TwoStep {
   /**
    * Turns the second step on with the pending secret and a code made from it.
    * Returns the recovery codes, shown once; null for a wrong or expired setup.
+   * `check` runs again after the awaits, inside the write (it throws to refuse).
    */
-  async enable(code: string): Promise<string[] | null> {
+  async enable(code: string, check: () => void = () => {}): Promise<string[] | null> {
     const pending = this.row("pending");
     if (!pending || (pending.expires_at ?? 0) <= this.clock()) return null;
     const secret = await this.open(pending.secret);
@@ -174,6 +175,7 @@ export class TwoStep {
       // Read again after the awaits: another tab may have finished or replaced the setup meanwhile.
       const current = this.row("pending");
       if (!current || current.secret !== pending.secret || this.enabled()) return false;
+      check();
       const now = this.clock();
       this.db.run(`INSERT INTO zur_mfa_secrets (kind, secret, created_at, last_step) VALUES ('active', ?, ?, ?)`, pending.secret, now, step);
       this.db.run(`DELETE FROM zur_mfa_secrets WHERE kind = 'pending'`);
@@ -193,8 +195,9 @@ export class TwoStep {
    * for its second step go. Passkeys are a second step too; without the
    * recovery codes behind them they would have no way back.
    */
-  disable(): void {
+  disable(check: () => void = () => {}): void {
     this.db.transaction(() => {
+      check();
       this.db.run(`DELETE FROM zur_mfa_secrets`);
       this.db.run(`DELETE FROM zur_recovery_codes`);
       this.db.run(`DELETE FROM zur_passkeys`);
@@ -205,11 +208,12 @@ export class TwoStep {
   }
 
   /** New recovery codes; the old ones stop working. */
-  async regenerateCodes(): Promise<string[]> {
+  async regenerateCodes(check: () => void = () => {}): Promise<string[]> {
     const codes = Array.from({ length: RECOVERY_CODE_COUNT }, newRecoveryCode);
     const hashes = await Promise.all(codes.map(hashRecoveryCode));
     return this.db.transaction(() => {
       if (!this.enabled()) return [];
+      check();
       this.writeCodes(hashes, this.clock());
       return codes;
     });
@@ -286,13 +290,21 @@ export class TwoStep {
     return hmacSha256Hex(this.secrets.sessionSecret, `zuri:mfa:v1:${token}`);
   }
 
-  /** Starts the second step of a sign-in. Returns the cookie value. */
-  async createChallenge(input: { loginAttempt: number; weakPassword: boolean; network: string }): Promise<{ token: string; expiresAt: number }> {
+  /**
+   * Starts the second step of a sign-in. Returns the cookie value. `check`
+   * runs after the await, in the same write (it throws to refuse): a password
+   * changed meanwhile must not leave a challenge opened by the old one.
+   */
+  async createChallenge(
+    input: { loginAttempt: number; weakPassword: boolean; network: string },
+    check: () => void = () => {},
+  ): Promise<{ token: string; expiresAt: number }> {
     const token = randomToken(32);
     const id = await this.challengeId(token);
     const now = this.clock();
     const expiresAt = now + MFA_CHALLENGE_TTL_MS;
     this.db.transaction(() => {
+      check();
       this.db.run(`DELETE FROM zur_mfa_challenges WHERE expires_at <= ?`, now);
       this.db.run(
         `INSERT INTO zur_mfa_challenges (id, created_at, expires_at, login_attempt, weak_password, network) VALUES (?, ?, ?, ?, ?, ?)`,

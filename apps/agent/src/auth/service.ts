@@ -301,8 +301,9 @@ export class AuthService {
     const weak = this.weakPassword(source, input.password);
     if (this.twoStep.enabled()) {
       // The password was right; the code comes next. The try stays a failure until then.
-      if (!sameSource(source, this.passwordSource())) throw new AppError("INVALID_CREDENTIALS");
-      const challenge = await this.twoStep.createChallenge({ loginAttempt: attempt, weakPassword: weak, network: client.network });
+      const challenge = await this.twoStep.createChallenge({ loginAttempt: attempt, weakPassword: weak, network: client.network }, () => {
+        if (!sameSource(source, this.passwordSource()) || !this.twoStep.enabled()) throw new AppError("INVALID_CREDENTIALS");
+      });
       this.events.record("mfa_challenge", client);
       return { mfa: { ...challenge, passkey: this.passkeys.usableHere(this.relyingParty.rpId) } };
     }
@@ -678,11 +679,11 @@ export class AuthService {
 
   /** Turns it on with a code from the new secret. The recovery codes come back once, here. Other sessions end. */
   async mfaEnable(row: SessionRow, code: string, client: ClientInfo): Promise<string[]> {
-    this.requireRecentAuth(row);
+    this.assertStillRecent(row);
     if (this.twoStep.enabled()) throw new AppError("CONFLICT", "auth.mfa.alreadyOn");
     // Same limit as any other code: a stolen session can't try a million of them here either.
     const attempt = this.beginChecked(client, "mfa_failure");
-    const codes = await this.twoStep.enable(code);
+    const codes = await this.twoStep.enable(code, () => this.assertStillRecent(row));
     if (!codes) {
       this.events.record("mfa_failure", client, { reason: "enable", session: row.id.slice(0, 16) });
       throw new AppError("VALIDATION_FAILED", "auth.mfa.setupWrongCode", { fields: ["code"] });
@@ -694,21 +695,31 @@ export class AuthService {
 
   /** Turns it off: the password typed recently and a current code (or a recovery code). */
   async mfaDisable(row: SessionRow, code: string, client: ClientInfo): Promise<void> {
-    this.requireRecentAuth(row);
+    this.assertStillRecent(row);
     if (!this.twoStep.enabled()) return;
     await this.checkCode(row, code, client, { recovery: true }, "disable");
-    this.twoStep.disable();
+    this.twoStep.disable(() => this.assertStillRecent(row));
     this.afterMfaChange(row, client, "mfa_disabled");
   }
 
   /** New recovery codes, with a current code from the app (a recovery code can't make more of itself). */
   async regenerateRecoveryCodes(row: SessionRow, code: string, client: ClientInfo): Promise<string[]> {
-    this.requireRecentAuth(row);
+    this.assertStillRecent(row);
     if (!this.twoStep.enabled()) throw new AppError("CONFLICT", "auth.mfa.off");
     await this.checkCode(row, code, client, { recovery: false }, "recovery_codes");
-    const codes = await this.twoStep.regenerateCodes();
+    const codes = await this.twoStep.regenerateCodes(() => this.assertStillRecent(row));
     this.events.record("mfa_codes_regenerated", client, { session: row.id.slice(0, 16), alert: true });
     return codes;
+  }
+
+  /**
+   * Read again after the awaits: another tab may have ended this session (a
+   * password change) or its 15 minutes may have run out meanwhile.
+   */
+  private assertStillRecent(row: SessionRow): void {
+    const current = this.sessions.get(row.id);
+    if (!current) throw new AppError("UNAUTHORIZED");
+    this.requireRecentAuth(current);
   }
 
   /** Turning the second step on or off ends every other session, and the owner is told. */

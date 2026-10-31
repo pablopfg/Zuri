@@ -311,6 +311,29 @@ describe("the code in a signed-in session", () => {
     });
   });
 
+  it("CF-4-02: a session ended while the code was checked changes nothing (turn off, new codes)", async () => {
+    await withAuth("mfa-stale-session", async (h) => {
+      const { secret, codes, row } = await turnOn(h);
+      // Another tab ended this session (a password change) after this request read it.
+      h.db.run(`DELETE FROM zur_sessions WHERE id = ?`, row.id);
+      expect(await outcome(h.service.mfaDisable(row, codes[0] ?? "", client(OWN)))).toBe("UNAUTHORIZED");
+      expect(h.service.twoStep.status()).toMatchObject({ enabled: true, recoveryCodesLeft: 10 });
+      expect(await outcome(h.service.regenerateRecoveryCodes(row, await code(h, secret), client(OWN)))).toBe("UNAUTHORIZED");
+      expect(h.db.all(`SELECT hash FROM zur_recovery_codes`)).toHaveLength(10);
+    });
+  });
+
+  it("CF-4-01: a challenge isn't created once the password it checked is gone", async () => {
+    await withAuth("mfa-challenge-check", async (h) => {
+      await turnOn(h);
+      const refuse = () => {
+        throw new Error("password changed");
+      };
+      await expect(h.service.twoStep.createChallenge({ loginAttempt: 1, weakPassword: false, network: NET }, refuse)).rejects.toThrow();
+      expect(h.db.one<{ n: number }>(`SELECT count(*) AS n FROM zur_mfa_challenges`)?.n).toBe(0);
+    });
+  });
+
   it("turning off with a wrong code changes nothing", async () => {
     await withAuth("mfa-disable-wrong", async (h) => {
       const { secret, row } = await turnOn(h);
