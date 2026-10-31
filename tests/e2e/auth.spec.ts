@@ -4,7 +4,7 @@ import { expect, HUMAN_TOKEN, test } from "./fixtures.ts";
 // so the cookies are the development ones without the __Host- prefix).
 
 const EMAIL = "dono@exemplo.com.br";
-/** The password whose hash is OWNER_PASSWORD_HASH in tests/e2e/worker.env. */
+/** The password whose hash is OWNER_PASSWORD_HASH in playwright.config.ts. */
 const PASSWORD = "e2e girafa trombone neblina";
 const CSRF = { "x-zuri-request": "1" };
 
