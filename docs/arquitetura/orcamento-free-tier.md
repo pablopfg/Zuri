@@ -159,10 +159,12 @@ Numeradas para o PR poder citar ("segue P2 e P4").
 - **P10. Logs enxutos.** O log de invocação já é o evento da requisição; nada de
   `console.log` no caminho comum nem dentro de laço; traces desligados; amostragem só se os logs passarem de 50.000 por
   dia.
-- **P11. Interface leve.** JavaScript inicial até 160 KB com gzip (hoje 156 KB;
-  meta de 150 KB). Tela nova é carregada sob demanda; biblioteca pesada só no
-  uso. Sem polling além do heartbeat; buscas com espera de digitação; nada de
+- **P11. Interface leve.** JavaScript inicial até 160 KB com gzip (meta de
+  150 KB). Tela nova é carregada sob demanda; biblioteca pesada só no uso. Sem polling além do heartbeat; buscas com espera de digitação; nada de
   `staleTime` abaixo de 15 s. Cada refetch é uma requisição ao objeto.
+  A CI confere com `npm run size`: o teto em `scripts/check-bundle-size.ts`
+  começou em 175 kB (a develop estava em 172,8 kB depois do menu recolhível) e
+  só desce, até chegar a 160.
 - **P12. Cache certo.** Arquivos com hash: `immutable` por um ano. HTML e
   service worker: `no-cache`. API: `no-store`. O service worker não guarda
   respostas da API.

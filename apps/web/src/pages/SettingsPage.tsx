@@ -30,7 +30,11 @@ export function SettingsPage() {
 
   return (
     <>
-      <PageHeader title={t("web.settings.title")} description={t("web.settings.description")} />
+      <PageHeader
+        title={t("web.settings.title")}
+        description={t("web.settings.description")}
+        documentTitle={active ? `${active.label} · ${t("web.settings.title")}` : undefined}
+      />
       <nav aria-label={t("web.settings.sections")} className="-mx-4 overflow-x-auto px-4">
         <ul className="flex min-w-max gap-1 border-b border-border">
           {tabs.map(({ id, label, icon: Icon }) => (

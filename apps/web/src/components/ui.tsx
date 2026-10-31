@@ -1,4 +1,4 @@
-import { LoaderCircle } from "lucide-react";
+import { Eye, EyeOff, LoaderCircle } from "lucide-react";
 import {
   type ButtonHTMLAttributes,
   type ComponentProps,
@@ -7,6 +7,7 @@ import {
   useEffect,
   useId,
   useRef,
+  useState,
 } from "react";
 import { errorMessage } from "../lib/api.ts";
 import { useI18n } from "../lib/i18n.tsx";
@@ -52,8 +53,30 @@ export function Button({
   );
 }
 
-/** The title of a page, with its line of context and, on the right, its actions. */
-export function PageHeader({ title, description, actions }: { title: string; description?: ReactNode; actions?: ReactNode }) {
+/** Names the browser tab (and the history entry) after the page, so tabs and screen readers tell pages apart. */
+export function useDocumentTitle(title: string) {
+  const { t } = useI18n();
+  const app = t("app.name");
+  useEffect(() => {
+    document.title = title === app ? app : `${title} · ${app}`;
+    // Screens without a title of their own (loading, a failed check) don't keep the last page's.
+    return () => {
+      document.title = app;
+    };
+  }, [title, app]);
+}
+
+/**
+ * The title of a page, with its line of context and, on the right, its actions.
+ * It also names the browser tab: `documentTitle` when the heading is a greeting.
+ */
+export function PageHeader({
+  title,
+  description,
+  actions,
+  documentTitle,
+}: { title: string; description?: ReactNode; actions?: ReactNode; documentTitle?: string | undefined }) {
+  useDocumentTitle(documentTitle ?? title);
   return (
     <div className="flex flex-wrap items-end justify-between gap-4">
       <div className="min-w-0 space-y-1">
@@ -145,6 +168,68 @@ export function SelectField({ label, hint, children, className, ...rest }: Selec
       {hint && (
         <p id={`${id}-hint`} className="text-xs leading-5 text-fg-muted">
           {hint}
+        </p>
+      )}
+    </div>
+  );
+}
+
+/** A password box with a button that shows what was typed: long passphrases are easy to mistype unseen. */
+export function PasswordField({ label, hint, error, className, ...rest }: Omit<ComponentProps<"input">, "type"> & { label: string; hint?: string; error?: string | null }) {
+  const { t } = useI18n();
+  const [shown, setShown] = useState(false);
+  const id = useId();
+  // Shown only on request, and hidden again when the form is sent: the browser files the value
+  // as a password (not form history), and the field a refusal or a change empties starts hidden.
+  useEffect(() => {
+    const hide = (event: Event) => {
+      const input = document.getElementById(id);
+      if (!(input instanceof HTMLInputElement) || !(event.target instanceof Node) || !event.target.contains(input)) return;
+      input.type = "password";
+      setShown(false);
+    };
+    document.addEventListener("submit", hide, true);
+    return () => document.removeEventListener("submit", hide, true);
+  }, [id]);
+  const hintId = `${id}-hint`;
+  const errorId = `${id}-error`;
+  const described = [hint ? hintId : null, error ? errorId : null].filter(Boolean).join(" ") || undefined;
+  return (
+    <div className={cn("space-y-1.5", className)}>
+      <label htmlFor={id} className="block text-sm font-medium">
+        {label}
+      </label>
+      <div className="relative">
+        <input
+          {...rest}
+          id={id}
+          type={shown ? "text" : "password"}
+          spellCheck={false}
+          autoCapitalize="none"
+          autoCorrect="off"
+          className={cn(fieldClass, "pr-12")}
+          aria-invalid={error ? true : undefined}
+          aria-describedby={described}
+        />
+        <button
+          type="button"
+          onClick={() => setShown((value) => !value)}
+          aria-label={shown ? t("web.password.hide") : t("web.password.show")}
+          aria-controls={id}
+          disabled={rest.disabled}
+          className="absolute inset-y-0 right-0 inline-flex w-11 items-center justify-center rounded-r-xl text-fg-muted hover:text-fg"
+        >
+          {shown ? <EyeOff className="h-4 w-4" aria-hidden /> : <Eye className="h-4 w-4" aria-hidden />}
+        </button>
+      </div>
+      {hint && (
+        <p id={hintId} className="text-xs leading-5 text-fg-muted">
+          {hint}
+        </p>
+      )}
+      {error && (
+        <p id={errorId} className="text-sm text-danger">
+          {error}
         </p>
       )}
     </div>

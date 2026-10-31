@@ -9,7 +9,7 @@ import { Logo } from "./Logo.tsx";
 import { MfaReminder } from "./MfaReminder.tsx";
 import { NotificationCenter } from "./NotificationCenter.tsx";
 import { SessionGuard } from "./SessionGuard.tsx";
-import { cn, Notice } from "./ui.tsx";
+import { Button, cn, Dialog, Notice } from "./ui.tsx";
 
 /**
  * The frame of every signed-in page, after the Talorys layout: a full-height
@@ -28,6 +28,8 @@ export function AppShell() {
   ];
   const mobileItems = [...sections, { to: "/configuracoes", label: t("web.nav.settings"), icon: Settings, end: false }];
   const [collapsed, setCollapsed] = useState(readSidebarCollapsed);
+  // On a phone "Sair" sits next to the bell, where a thumb lands by mistake: it asks first.
+  const [confirmSignOut, setConfirmSignOut] = useState(false);
   // Escape hides the tooltips until the pointer or focus moves (WCAG 1.4.13).
   const [tipsHidden, setTipsHidden] = useState(false);
   useEffect(() => {
@@ -123,12 +125,22 @@ export function AppShell() {
             <NotificationCenter />
             <button
               type="button"
-              onClick={() => void signOut("manual")}
+              onClick={() => setConfirmSignOut(true)}
               aria-label={t("web.nav.signOut")}
+              aria-haspopup="dialog"
               className="inline-flex h-11 w-11 items-center justify-center rounded-xl text-fg hover:bg-raised"
             >
               <LogOut className="h-5 w-5" aria-hidden />
             </button>
+            <Dialog open={confirmSignOut} onClose={() => setConfirmSignOut(false)} title={t("web.nav.signOutConfirmTitle")}>
+              <p className="text-sm leading-6 text-fg-muted">{t("web.account.signOutHint")}</p>
+              <div className="flex flex-wrap justify-end gap-2">
+                <Button variant="ghost" onClick={() => setConfirmSignOut(false)}>
+                  {t("web.cancel")}
+                </Button>
+                <Button onClick={() => void signOut("manual")}>{t("web.nav.signOut")}</Button>
+              </div>
+            </Dialog>
           </div>
         </header>
         <MfaReminder />

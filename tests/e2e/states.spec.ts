@@ -79,6 +79,7 @@ test("a password that must change locks the app on the change screen @mobile", a
   await page.goto("/configuracoes/seguranca");
   await signIn(page);
   await expect(page.getByRole("heading", { level: 1, name: "Troque a sua senha" })).toBeVisible();
+  await expect(page).toHaveTitle("Troque a sua senha · Zuri");
   await expect(page.getByLabel("Senha atual")).toBeVisible();
   await expect(page.getByRole("navigation")).toHaveCount(0);
   await expectAccessible(page, "troca de senha obrigatória");

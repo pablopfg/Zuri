@@ -89,6 +89,26 @@ o [SemVer](https://semver.org/lang/pt-BR/). Cada PR escreve a sua entrada em
   Zuri pergunta antes de mexer. As regras nunca aposentam uma memória
   sozinhas. A revisão pode ser desligada na própria tela.
 - Rotas `/api/memories` (detalhes em `docs/memoria.md`).
+- Botão de mostrar e ocultar nos campos de senha (login e troca de senha).
+  O campo volta a ficar oculto quando o formulário é enviado.
+- Cada página dá nome à aba do navegador, como "Segurança · Configurações ·
+  Zuri".
+- A lista de notas vazia tem o próprio botão "Nova nota".
+
+### Alterado
+
+- Abertura mais leve: o código do QR e das passkeys saiu do pacote inicial,
+  que cai cerca de 15 KB (gzip). A biblioteca de passkey só baixa quando o
+  segundo passo oferece passkey, e o catálogo em inglês só baixa para quem usa
+  inglês.
+- No celular, "Sair" no topo pede confirmação, e o lembrete da verificação em
+  duas etapas cabe numa linha.
+- Os textos de "em breve" não citam mais números internos de etapa.
+- No celular, as três opções de tema ficam lado a lado.
+- Com a verificação em duas etapas desligada, o cartão de passkeys mostra só
+  o motivo de ainda não dar para adicionar uma.
+- Na atividade de acesso, as recusas trazem um ícone de alerta, além da cor.
+- Revisão de design e UX registrada em `docs/qa/revisao-de-design.md`.
 
 ### Segurança
 
@@ -96,6 +116,10 @@ o [SemVer](https://semver.org/lang/pt-BR/). Cada PR escreve a sua entrada em
   imitam tags (inclusive `‹ › ＜ ＞`) são trocados e caracteres invisíveis
   (bidi, largura zero, "tags" Unicode) somem, então um texto guardado não
   consegue fechar o bloco nem esconder instruções.
+- A interface não provoca mais violação de CSP: o Zod deixa de testar
+  `new Function` (`jitless`), o que a política já recusava.
+- A interface pede aos buscadores que não a indexem (`noindex` e
+  `robots.txt`).
 - A interface só mostra dados depois de o servidor confirmar a sessão; sem
   ela, leva ao login com `?next=`, que só aceita caminhos do próprio Zuri.
 - O service worker não guarda nada em cache: páginas e respostas da API vêm

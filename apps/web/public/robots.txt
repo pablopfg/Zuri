@@ -1,0 +1,4 @@
+# Zuri is a private assistant of one owner. Crawling stays allowed so search
+# engines can read the page's noindex and drop it; nothing here is for them.
+User-agent: *
+Allow: /

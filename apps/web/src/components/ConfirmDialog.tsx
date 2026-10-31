@@ -3,7 +3,7 @@ import type { MfaStatus } from "@zuri/shared";
 import { type FormEvent, useEffect, useRef, useState } from "react";
 import { api, errorMessage, onRecentAuthRequired } from "../lib/api.ts";
 import { useI18n } from "../lib/i18n.tsx";
-import { Button, Dialog, TextField } from "./ui.tsx";
+import { Button, Dialog, PasswordField, TextField } from "./ui.tsx";
 
 /**
  * Sensitive actions need the password typed in the last 15 minutes. When the
@@ -69,7 +69,7 @@ export function ConfirmDialog() {
       <form onSubmit={submit} className="space-y-4" noValidate>
         <p className="text-sm leading-6 text-fg-muted">{t("web.confirm.body")}</p>
         {mode === "password" ? (
-          <TextField key="password" label={t("web.login.password")} type="password" autoComplete="current-password" autoFocus value={value} onChange={(e) => setValue(e.target.value)} error={error} />
+          <PasswordField key="password" label={t("web.login.password")} autoComplete="current-password" autoFocus value={value} onChange={(e) => setValue(e.target.value)} error={error} />
         ) : (
           <TextField
             key="totp"

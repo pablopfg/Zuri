@@ -1,11 +1,11 @@
-import { startAuthentication } from "@simplewebauthn/browser";
+import type { startAuthentication as startAuthenticationFn } from "@simplewebauthn/browser";
 import { mfaRequiredSchema, type SessionState, sessionStateSchema } from "@zuri/shared";
 import { Fingerprint } from "lucide-react";
 import { type FormEvent, useEffect, useRef, useState } from "react";
 import { Navigate, useNavigate, useSearchParams } from "react-router";
 import { Logo } from "../components/Logo.tsx";
 import { TurnstileWidget } from "../components/TurnstileWidget.tsx";
-import { Button, Notice, Spinner, TextField } from "../components/ui.tsx";
+import { Button, Notice, PasswordField, Spinner, TextField, useDocumentTitle } from "../components/ui.tsx";
 import { useSession } from "../hooks/session.tsx";
 import { ApiError, api, errorMessage } from "../lib/api.ts";
 import { useI18n } from "../lib/i18n.tsx";
@@ -45,12 +45,19 @@ export function LoginPage() {
   const [endedReason] = useState(ended);
   const passwordRef = useRef<HTMLInputElement>(null);
   const codeRef = useRef<HTMLInputElement>(null);
+  useDocumentTitle(t("web.login.submit"));
 
   useEffect(() => {
     if (!retryAt) return;
     const timer = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(timer);
   }, [retryAt]);
+  // Fetched as soon as the code step offers a passkey, so the tap doesn't wait on the download
+  // (Safari may drop the tap's permission to open the prompt if the gap grows).
+  const offersPasskey = step.kind === "code" && step.passkey;
+  useEffect(() => {
+    if (offersPasskey) void import("@simplewebauthn/browser").catch(() => {});
+  }, [offersPasskey]);
   const waitSeconds = retryAt ? Math.max(0, Math.ceil((retryAt - now) / 1000)) : 0;
   // A widget that can't load doesn't lock the form: the server decides whether the check was needed.
   const humanMissing = siteKey !== null && !humanToken && !humanBroken;
@@ -139,7 +146,11 @@ export function LoginPage() {
     setPending(true);
     setError(null);
     try {
-      const { options } = await api<{ options: Parameters<typeof startAuthentication>[0]["optionsJSON"] }>("/auth/mfa/passkey/options", { method: "POST" });
+      // Loaded on the tap: most sign-ins never use a passkey, so the first screen stays lighter.
+      const [{ startAuthentication }, { options }] = await Promise.all([
+        import("@simplewebauthn/browser"),
+        api<{ options: Parameters<typeof startAuthenticationFn>[0]["optionsJSON"] }>("/auth/mfa/passkey/options", { method: "POST" }),
+      ]);
       const response = await startAuthentication({ optionsJSON: options });
       finish(sessionStateSchema.parse(await api<unknown>("/auth/mfa/passkey", { method: "POST", body: { response } })));
     } catch (err) {
@@ -179,10 +190,9 @@ export function LoginPage() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
             />
-            <TextField
+            <PasswordField
               ref={passwordRef}
               label={t("web.login.password")}
-              type="password"
               autoComplete="current-password"
               required
               maxLength={1024}

@@ -1,13 +1,12 @@
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import type { MfaSetup, MfaStatus } from "@zuri/shared";
+import { useQueryClient } from "@tanstack/react-query";
+import type { MfaSetup } from "@zuri/shared";
 import { type FormEvent, type ReactNode, useState } from "react";
+import { MFA_KEY, useMfaStatus } from "../../hooks/mfa.ts";
 import { api, errorMessage } from "../../lib/api.ts";
 import { useI18n } from "../../lib/i18n.tsx";
 import { Button, Card, ErrorNotice, Notice, Spinner, TextField } from "../ui.tsx";
 import { QrCode } from "./QrCode.tsx";
 import { RecoveryCodes } from "./RecoveryCodes.tsx";
-
-export const MFA_KEY = ["mfa"] as const;
 
 type Mode = { kind: "idle" } | { kind: "setup"; setup: MfaSetup } | { kind: "codes"; codes: string[] } | { kind: "disable" } | { kind: "regenerate" };
 
@@ -15,7 +14,7 @@ type Mode = { kind: "idle" } | { kind: "setup"; setup: MfaSetup } | { kind: "cod
 export function TwoStepCard() {
   const { t, dateTime, plural } = useI18n();
   const qc = useQueryClient();
-  const status = useQuery({ queryKey: MFA_KEY, queryFn: () => api<MfaStatus>("/auth/mfa") });
+  const status = useMfaStatus();
   const [mode, setMode] = useState<Mode>({ kind: "idle" });
   const [code, setCode] = useState("");
   const [error, setError] = useState<string | null>(null);

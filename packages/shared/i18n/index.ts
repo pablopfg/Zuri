@@ -10,6 +10,9 @@ export const DEFAULT_LOCALE: Locale = "pt-BR";
 
 export const catalogs: Record<Locale, Messages> = { "pt-BR": ptBR, en };
 
+/** The default catalog, which every bundle carries. */
+export { ptBR };
+
 export type Params = Record<string, string | number>;
 
 /** The base of a plural message: "tasks.count" for the keys "tasks.count.one" and "tasks.count.other". */
@@ -57,4 +60,28 @@ export function createTranslator<K extends string>(
   return { t, plural };
 }
 
-export const { t, plural } = createTranslator<MessageKey>(catalogs);
+/**
+ * The catalog of one locale, fetched on demand. The web app keeps only pt-BR in its
+ * first bundle and loads English the first time someone needs it; the Worker uses
+ * `catalogs`, which holds both.
+ */
+export async function loadCatalog(locale: Locale): Promise<Messages> {
+  if (locale === "en") return (await import("./en.ts")).en;
+  return ptBR;
+}
+
+// Built on first use, so a bundle that never translates through these (the web app)
+// can drop them, and with them the English catalog.
+let shipped: ReturnType<typeof createTranslator<MessageKey>> | undefined;
+const translator = () => {
+  shipped ??= createTranslator<MessageKey>(catalogs);
+  return shipped;
+};
+
+export function t(locale: string, key: MessageKey, params?: Params): string {
+  return translator().t(locale, key, params);
+}
+
+export function plural(locale: string, base: PluralBase<MessageKey>, count: number, params?: Params): string {
+  return translator().plural(locale, base, count, params);
+}
