@@ -3,6 +3,7 @@ import {
   type MemoryCategory,
   type MemoryCounts,
   type MemoryFilter,
+  type MemoryAuthor,
   type MemoryOrigin,
   type MemoryReviewReason,
   type MemoryReviewRelationship,
@@ -21,6 +22,7 @@ export interface MemoryRow {
   content: string;
   category: MemoryCategory;
   origin: MemoryOrigin;
+  author: MemoryAuthor;
   status: MemoryStatus;
   superseded_by: string | null;
   valid_from: string | null;
@@ -45,6 +47,7 @@ export const toMemory = (row: MemoryRow): Memory => ({
   content: row.content,
   category: row.category,
   origin: row.origin,
+  author: row.author,
   status: row.status,
   supersededBy: row.superseded_by,
   validFrom: row.valid_from,
@@ -57,7 +60,7 @@ export const toMemory = (row: MemoryRow): Memory => ({
 export const SEARCH_WINDOW = 200;
 
 /** The columns a list reads: everything but the duplicate key. */
-const COLUMNS = "m.id, m.content, m.category, m.origin, m.status, m.superseded_by, m.valid_from, m.valid_until, m.dedupe_key, m.created_at, m.updated_at";
+const COLUMNS = "m.id, m.content, m.category, m.origin, m.author, m.status, m.superseded_by, m.valid_from, m.valid_until, m.dedupe_key, m.created_at, m.updated_at";
 
 /** SQL for a list filter over the table aliased `m`. Every one is served by an index. */
 function filterWhere(filter: MemoryFilter): string {
@@ -183,7 +186,7 @@ export class MemoryRepository {
     return rows.find((row) => row.id !== exceptId && fold(row.content) === folded) ?? null;
   }
 
-  insert(input: { content: string; category: MemoryCategory; origin: MemoryOrigin; validFrom: string | null }): MemoryRow {
+  insert(input: { content: string; category: MemoryCategory; origin: MemoryOrigin; author: MemoryAuthor; validFrom: string | null }): MemoryRow {
     this.storage.assertRoom("memories");
     const at = this.now();
     const row: MemoryRow = {
@@ -191,6 +194,7 @@ export class MemoryRepository {
       content: input.content,
       category: input.category,
       origin: input.origin,
+      author: input.author,
       status: "active",
       superseded_by: null,
       valid_from: input.validFrom,
@@ -200,12 +204,13 @@ export class MemoryRepository {
       updated_at: at,
     };
     this.db.run(
-      `INSERT INTO zur_memories (id, content, category, origin, status, superseded_by, valid_from, valid_until, dedupe_key, created_at, updated_at)
-       VALUES (?, ?, ?, ?, 'active', NULL, ?, NULL, ?, ?, ?)`,
+      `INSERT INTO zur_memories (id, content, category, origin, author, status, superseded_by, valid_from, valid_until, dedupe_key, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, 'active', NULL, ?, NULL, ?, ?, ?)`,
       row.id,
       row.content,
       row.category,
       row.origin,
+      row.author,
       row.valid_from,
       row.dedupe_key,
       row.created_at,
@@ -214,18 +219,23 @@ export class MemoryRepository {
     return row;
   }
 
-  /** Marks a duplicate as seen again: one write, no new row. */
-  touch(id: string): MemoryRow {
-    this.db.run(`UPDATE zur_memories SET updated_at = ? WHERE id = ?`, this.now(), id);
+  /** Marks a duplicate as seen again: one write, no new row. The owner saying it makes it theirs. */
+  touch(id: string, author: MemoryAuthor): MemoryRow {
+    this.db.run(
+      `UPDATE zur_memories SET updated_at = ?, author = CASE WHEN ? = 'owner' THEN 'owner' ELSE author END WHERE id = ?`,
+      this.now(),
+      author,
+      id,
+    );
     return this.require(id);
   }
 
-  /** Edits text and category in place (a typo fix: no history). */
+  /** Edits text and category in place (a typo fix: no history). Only the owner edits, so it becomes theirs. */
   edit(id: string, next: { content: string; category: MemoryCategory; validFrom: string | null }): MemoryRow {
     const current = this.require(id);
     this.storage.assertEditFits([current.content], [next.content]);
     this.db.run(
-      `UPDATE zur_memories SET content = ?, category = ?, valid_from = ?, dedupe_key = ?, updated_at = ? WHERE id = ?`,
+      `UPDATE zur_memories SET content = ?, category = ?, valid_from = ?, dedupe_key = ?, author = 'owner', updated_at = ? WHERE id = ?`,
       next.content,
       next.category,
       next.validFrom,

@@ -640,7 +640,7 @@ describe("rows read and written (Free plan budget)", () => {
       // 2,000 memories inserted directly (no detection), half of them past.
       w.db.transaction(() => {
         for (let i = 0; i < 2_000; i++) {
-          w.m.repo.insert({ content: `Memória de carga número ${i} sobre assunto ${i % 50}`, category: i % 5 === 0 ? "preference" : "fact", origin: "app", validFrom: null });
+          w.m.repo.insert({ content: `Memória de carga número ${i} sobre assunto ${i % 50}`, category: i % 5 === 0 ? "preference" : "fact", origin: "app", author: "owner", validFrom: null });
         }
         w.db.run(`UPDATE zur_memories SET status = 'historical' WHERE rowid % 2 = 0`);
       });

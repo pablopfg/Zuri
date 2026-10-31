@@ -36,6 +36,9 @@ export const settingsSchema = /* @__PURE__ */ z
     aiRequestsPerDay: range(AI_LIMIT_RANGES.aiRequestsPerDay),
     aiNeuronsPerDay: range(AI_LIMIT_RANGES.aiNeuronsPerDay),
     aiMaxOutputTokens: range(AI_LIMIT_RANGES.aiMaxOutputTokens),
+    aiMaxToolCalls: range(AI_LIMIT_RANGES.aiMaxToolCalls),
+    aiMaxIterations: range(AI_LIMIT_RANGES.aiMaxIterations),
+    aiMaxContextTokens: range(AI_LIMIT_RANGES.aiMaxContextTokens),
   })
   .strict();
 
@@ -60,4 +63,7 @@ export const DEFAULT_SETTINGS: Settings = /* @__PURE__ */ Object.freeze({
   aiRequestsPerDay: AI_LIMIT_RANGES.aiRequestsPerDay.default,
   aiNeuronsPerDay: AI_LIMIT_RANGES.aiNeuronsPerDay.default,
   aiMaxOutputTokens: AI_LIMIT_RANGES.aiMaxOutputTokens.default,
+  aiMaxToolCalls: AI_LIMIT_RANGES.aiMaxToolCalls.default,
+  aiMaxIterations: AI_LIMIT_RANGES.aiMaxIterations.default,
+  aiMaxContextTokens: AI_LIMIT_RANGES.aiMaxContextTokens.default,
 });
