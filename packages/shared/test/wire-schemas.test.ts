@@ -3,7 +3,8 @@ import { authActivitySchema, loginOptionsSchema, mfaRequiredSchema, sessionState
 import { apiErrorSchema } from "../src/errors.ts";
 
 // The schemas the interface parses at runtime are built with Zod Mini (rule
-// P11). These pin the exact answers the classic versions gave, edge by edge.
+// P11). These pin their answers at the edges; the same file passed against the
+// classic versions before the switch, so the answers did not change.
 
 const at = "2026-10-31T12:00:00.000Z";
 const deadlines = { now: at, idleAt: at, presenceAt: at, maxAt: at, idleMinutes: 30 };
@@ -76,6 +77,7 @@ describe("mfaRequiredSchema", () => {
     expect(ok(mfaRequiredSchema, { ...challenge, mfaRequired: false })).toBe(false);
     expect(ok(mfaRequiredSchema, { ...challenge, passkey: "yes" })).toBe(false);
     expect(ok(mfaRequiredSchema, { ...challenge, secret: "x" })).toBe(false);
+    expect(ok(mfaRequiredSchema, { ...challenge, expiresAt: "2026-10-31T09:00:00-03:00" })).toBe(false);
   });
 
   it("is never mistaken for a session, and a session never for it", () => {
@@ -98,6 +100,7 @@ describe("apiErrorSchema", () => {
   it("keeps the details object as it came", () => {
     const error = { code: "VALIDATION_FAILED", message: "x", details: { field: "title", nested: { max: 3 } } };
     expect(apiErrorSchema.parse(error)).toEqual(error);
+    expect(apiErrorSchema.parse({ code: "NOT_FOUND", message: "x", details: {} })).toEqual({ code: "NOT_FOUND", message: "x", details: {} });
   });
 
   it("refuses details that are not an object", () => {
@@ -120,7 +123,18 @@ describe("authActivitySchema at the edges", () => {
   });
 
   it("refuses counts below one, negative or broken network numbers and bad ids", () => {
-    for (const change of [{ count: 0 }, { count: 1.5 }, { asn: -1 }, { asn: 1.5 }, { id: 1.5 }, { id: "1" }]) {
+    expect(ok(authActivitySchema, { events: [{ ...event, asn: 0 }], nextCursor: null })).toBe(true);
+    const changes = [
+      { count: 0 },
+      { count: 1.5 },
+      { count: Number.MAX_SAFE_INTEGER + 1 },
+      { asn: -1 },
+      { asn: 1.5 },
+      { id: 1.5 },
+      { id: "1" },
+      { kind: "session" },
+    ];
+    for (const change of changes) {
       expect(ok(authActivitySchema, { events: [{ ...event, ...change }], nextCursor: null }), JSON.stringify(change)).toBe(false);
     }
   });

@@ -17,11 +17,11 @@ export const PASSKEY_TIMEOUT_MS = 2 * 60_000;
 const b64url = (max: number) => z.string().max(max).regex(/^[A-Za-z0-9_-]*$/);
 
 const credentialBase = {
-  id: b64url(1400).min(1),
-  rawId: b64url(1400).min(1),
-  type: z.literal("public-key"),
-  clientExtensionResults: z.record(z.string(), z.unknown()).default({}),
-  authenticatorAttachment: z.enum(["platform", "cross-platform"]).optional(),
+  id: /* @__PURE__ */ b64url(1400).min(1),
+  rawId: /* @__PURE__ */ b64url(1400).min(1),
+  type: /* @__PURE__ */ z.literal("public-key"),
+  clientExtensionResults: /* @__PURE__ */ z.record(z.string(), z.unknown()).default({}),
+  authenticatorAttachment: /* @__PURE__ */ z.enum(["platform", "cross-platform"]).optional(),
 };
 
 const name = /* @__PURE__ */ z.string().trim().min(1).max(PASSKEY_NAME_MAX);
