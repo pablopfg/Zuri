@@ -215,7 +215,11 @@ auditoria completa (a área é autenticação).
      carrega sob demanda.
    - e2e: instalação nova do começo ao fim, código errado, recarregar no meio,
      fechar no segundo passo e voltar; axe; teclado; leitor de tela; celular e
-     computador; claro e escuro. Capturas de cada passo no PR.
+     computador; claro e escuro.
+   - Capturas de cada passo na descrição do PR (computador e celular, claro e
+     escuro, com dados de exemplo), geradas por
+     `scripts/capturas-da-interface.ts` em `docs/capturas/pr/primeiro-acesso/`
+     com link preso ao commit, como pede `.claude/rules/capturas.md`.
 3. **`docs: guia de instalação com código de instalação`**
    - `docs/configuracao-cloudflare.md`, `docs/seguranca.md`,
      `docs/arquitetura.md`, especificação (tabela de segredos, contrato da API,
