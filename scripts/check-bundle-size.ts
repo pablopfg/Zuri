@@ -7,10 +7,11 @@ import { gzipSync } from "node:zlib";
 
 // Ratchet: lowered with each PR that shrinks the bundle (175 kB when the check
 // came in; 158 kB after the design review left English and the QR and passkey
-// code out of the first load; 140 kB once the interface parsed with Zod Mini).
+// code out of the first load; 140 kB once the interface parsed with Zod Mini;
+// 139.5 kB once the texts only the server says left the first load).
 // Never raise it without the owner's OK; the ceiling of P11 is 160 kB and its
 // goal 150 kB.
-const BUDGET_KB = 140;
+const BUDGET_KB = 139.5;
 
 const dist = join(import.meta.dirname, "..", "apps", "web", "dist");
 const html = readFileSync(join(dist, "index.html"), "utf8");

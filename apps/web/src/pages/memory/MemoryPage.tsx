@@ -13,13 +13,14 @@ import {
   type Settings,
 } from "@zuri/shared";
 import { Archive, ArchiveRestore, BadgeCheck, Brain, CircleHelp, GitCompareArrows, History, Pencil, RefreshCw, Search, Trash2 } from "lucide-react";
-import { type FormEvent, useId, useState } from "react";
+import { type FormEvent, useEffect, useId, useState } from "react";
 import { Button, Card, cn, Dialog, EmptyState, ErrorNotice, fieldClass, PageHeader, SelectField, Spinner, TextAreaField } from "../../components/ui.tsx";
 import { MEMORIES_KEY, useMemories, useMemoryHistory, useMemoryReviews } from "../../hooks/memory.ts";
 import { SETTINGS_KEY } from "../../hooks/session.tsx";
 import { api, errorMessage } from "../../lib/api.ts";
 import { useDebounced } from "../../lib/debounce.ts";
 import { addMessages, useI18n } from "../../lib/i18n.tsx";
+import { onMemorySearch } from "../../lib/palette.ts";
 import { useToast } from "../../components/Toaster.tsx";
 import { CATEGORY_LABEL, FILTER_LABEL, ORIGIN_LABEL, REASON_LABEL, STATUS_LABEL, TOPIC_LABEL } from "./labels.ts";
 
@@ -42,6 +43,16 @@ export function MemoryPage() {
   const [filter, setFilter] = useState<(typeof FILTERS)[number]>("all");
   const [category, setCategory] = useState<MemoryCategory | "">("");
   const [query, setQuery] = useState("");
+  // A memory found in the command palette opens here with that search (revisão de design, D1).
+  useEffect(
+    () =>
+      onMemorySearch((q) => {
+        setFilter("all");
+        setCategory("");
+        setQuery(q);
+      }),
+    [],
+  );
   const q = useDebounced(query.trim());
   const memories = useMemories({ filter, category, q });
   const counts = memories.data?.counts;

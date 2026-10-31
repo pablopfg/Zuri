@@ -13,8 +13,8 @@ import {
   type TrashItem,
 } from "@zuri/shared";
 import { CalendarDays, CheckCircle2, ChevronDown, Circle, CircleDot, Flag, FolderKanban, Plus, Search, Trash2 } from "lucide-react";
-import { type FormEvent, useId, useState } from "react";
-import { Link } from "react-router";
+import { type FormEvent, useEffect, useId, useRef, useState } from "react";
+import { Link, useLocation, useNavigate } from "react-router";
 import { Button, cn, Dialog, EmptyState, ErrorNotice, fieldClass, PageHeader, SelectField, Spinner, TextAreaField, TextField } from "../../components/ui.tsx";
 import { PROJECTS_KEY, TASKS_KEY, useProjects, useTasks } from "../../hooks/productivity.ts";
 import { api, errorMessage } from "../../lib/api.ts";
@@ -37,6 +37,23 @@ export function TasksPage() {
   const [projectsOpen, setProjectsOpen] = useState(false);
   const [trashed, setTrashed] = useState<TrashItem | null>(null);
   const projectList = projects.data?.projects ?? [];
+  const [focusNew, setFocusNew] = useState(0);
+  const location = useLocation();
+  const navigate = useNavigate();
+  // The command palette asks to open a task or to start a new one (revisão de design, D1).
+  // biome-ignore lint/correctness/useExhaustiveDependencies: once per arrival (location.key); the state is read then cleared.
+  useEffect(() => {
+    const asked = location.state as { openTask?: Task; newTask?: boolean } | null;
+    if (!asked) return;
+    if (asked.openTask) setEditing(asked.openTask);
+    if (asked.newTask) {
+      // The new-task field only shows where a new task can land.
+      setView((current) => (current === "completed" || current === "overdue" ? "today" : current));
+      setFocusNew((n) => n + 1);
+    }
+    // Once: going back or reloading doesn't open it again.
+    navigate(`${location.pathname}${location.search}`, { replace: true, state: null });
+  }, [location.key]);
 
   return (
     <>
@@ -80,7 +97,7 @@ export function TasksPage() {
 
       <div className="space-y-4">
         {/* A task added here would not show up in Completed or Overdue, so those views have no quick add. */}
-        {view !== "completed" && view !== "overdue" && <NewTask projects={projectList} forToday={view === "today"} />}
+        {view !== "completed" && view !== "overdue" && <NewTask projects={projectList} forToday={view === "today"} focusSignal={focusNew} />}
 
         <section aria-label={t("web.tasks.listLabel")} className="space-y-3">
           <div className="grid gap-2 sm:grid-cols-[1fr_14rem]">
@@ -144,8 +161,12 @@ export function TasksPage() {
  * today (by the end of the day), so it shows up where it was typed. The rest
  * (date, time, project, priority) sits behind "More options".
  */
-function NewTask({ projects, forToday }: { projects: Project[]; forToday: boolean }) {
+function NewTask({ projects, forToday, focusSignal }: { projects: Project[]; forToday: boolean; focusSignal: number }) {
   const { t, locale, timeZone, dateTime } = useI18n();
+  const titleRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (focusSignal > 0) titleRef.current?.focus();
+  }, [focusSignal]);
   const qc = useQueryClient();
   const [title, setTitle] = useState("");
   const [more, setMore] = useState(false);
@@ -198,6 +219,7 @@ function NewTask({ projects, forToday }: { projects: Project[]; forToday: boolea
       <form onSubmit={(e) => void submit(e)} className="space-y-1">
         <div className="flex gap-2">
           <input
+            ref={titleRef}
             value={title}
             required
             maxLength={TASK_TITLE_MAX}
