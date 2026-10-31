@@ -193,7 +193,7 @@ describe("rules every second-step change follows", () => {
     const ip = "192.0.2.68";
     const { session, secret, recoveryCodes } = await turnOn(ip);
     const key = await softPasskey();
-    const { options } = (await (await post("/api/auth/passkeys/options", ip, session)).json()) as { options: { challenge: string } };
+    const { options } = (await (await post("/api/auth/passkeys/options", ip, session)).json()) as { options: { challenge: string; rp: { id: string } } };
     expect((await post("/api/auth/passkeys", ip, session, { name: "Celular", response: await key.register(options, ORIGIN) })).status).toBe(201);
     const id = encodeURIComponent(key.id);
     const stored = () =>

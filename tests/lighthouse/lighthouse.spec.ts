@@ -30,7 +30,7 @@ test.beforeAll(async () => {
   // the debugging port, opens its tabs there and so sees the session cookie.
   context = await chromium.launchPersistentContext(profile, {
     args: [`--remote-debugging-port=${PORT}`],
-    executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE || undefined,
+    ...(process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE ? { executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE } : {}),
     locale: "pt-BR",
   });
 });

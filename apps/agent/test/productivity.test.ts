@@ -208,6 +208,10 @@ describe("notes", () => {
       for (const q of ['"segredo', 'segredo"', '"" OR ""', "segredo OR", "title:senhas", "NOT segredo", "segr*", "NEAR(segredo simples)", "(segredo", "^senhas", "-segredo", "segredo AND"]) {
         expect(() => search(q), q).not.toThrow();
       }
+      // Not only "no error": the words still find the note (a sanitizer that gave up would return nothing).
+      for (const q of ["segr*", "^senhas", "(segredo", "-segredo", '"segredo', "segredo AND"]) {
+        expect(search(q), q).toEqual(["Senhas do wifi"]);
+      }
       expect(search('"segredo"')).toEqual(["Senhas do wifi"]);
       // A column filter is just two words here, and "title" is in no note.
       expect(search("title:senhas")).toEqual([]);

@@ -77,7 +77,9 @@ export function hasControlCharacter(value: string, singleLine: boolean): boolean
  * is refused; and the text is kept in NFC, so "é" typed as e + accent and as
  * one letter is the same text for search and comparison.
  */
-const wellFormed = (value: string) => value.isWellFormed();
+// String.isWellFormed() is ES2024; the interface targets ES2023. In a /u regex a
+// paired surrogate is one astral code point, so only a lone one matches \p{Cs}.
+const wellFormed = (value: string) => !/\p{Cs}/u.test(value);
 const nfc = (value: string) => value.normalize("NFC");
 
 /** One line: no control character at all (a title may end up in a Telegram message or an e-mail subject). */

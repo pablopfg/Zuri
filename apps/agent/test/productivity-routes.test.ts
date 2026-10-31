@@ -216,3 +216,84 @@ describe("projects and the trash", () => {
     expect((await json<{ items: TrashItem[]; total: number }>(await api("GET", "/trash"), 200)).total).toBe(0);
   });
 });
+
+describe("concurrent and repeated requests", () => {
+  it("two restores of one trash item at once: one 200, one 404, and one copy back", async () => {
+    const { task } = await json<{ task: Task }>(await api("POST", "/tasks", { title: "restaurar em dobro" }), 201);
+    const { trashItem } = await json<{ trashItem: TrashItem }>(await api("DELETE", `/tasks/${task.id}`), 200);
+    const answers = await Promise.all([api("POST", `/trash/${trashItem.id}/restore`), api("POST", `/trash/${trashItem.id}/restore`)]);
+    expect(answers.map((r) => r.status).sort()).toEqual([200, 404]);
+    const found = await json<{ tasks: Task[] }>(await api("GET", `/tasks?q=${encodeURIComponent("restaurar em dobro")}&view=all`), 200);
+    expect(found.tasks.map((t) => t.id)).toEqual([task.id]);
+  });
+
+  it("two creates for the last place at once: one 201, one 507, and the count stays true", async () => {
+    const setCount = (n: number) => runOwner((db) => db.run(`UPDATE zur_counts SET n = ? WHERE kind = 'projects'`, n));
+    try {
+      await setCount(999);
+      const answers = await Promise.all([api("POST", "/projects", { name: "corrida A" }), api("POST", "/projects", { name: "corrida B" })]);
+      expect(answers.map((r) => r.status).sort()).toEqual([201, 507]);
+      expect(await runOwner((db) => db.all<{ n: number }>(`SELECT n FROM zur_counts WHERE kind = 'projects'`)[0]?.n)).toBe(1000);
+    } finally {
+      await runOwner((db) => db.run(`UPDATE zur_counts SET n = (SELECT count(*) FROM zur_projects) WHERE kind = 'projects'`));
+    }
+  });
+
+  it("the same delete twice at once: one goes to the trash, the other is 404", async () => {
+    const { note } = await json<{ note: Note }>(await api("POST", "/notes", { title: "apagar em dobro", content: "x" }), 201);
+    const answers = await Promise.all([api("DELETE", `/notes/${note.id}`), api("DELETE", `/notes/${note.id}`)]);
+    expect(answers.map((r) => r.status).sort()).toEqual([200, 404]);
+    const trash = await json<{ items: TrashItem[] }>(await api("GET", "/trash?kind=note"), 200);
+    expect(trash.items.filter((i) => i.itemId === note.id)).toHaveLength(1);
+  });
+});
+
+describe("hostile query strings", () => {
+  it.each(["abc", "1e3", "500.5", "0", "-1", "501", ""])("refuses limit=%s", async (limit) => {
+    expect((await refusal(await api("GET", `/tasks?limit=${limit}`), 400)).details).toEqual({ fields: ["limit"] });
+  });
+
+  it("takes limit 1 and 500 (the edges), and refuses an unknown view in another case", async () => {
+    await json(await api("GET", "/tasks?limit=1"), 200);
+    await json(await api("GET", "/tasks?limit=500"), 200);
+    expect((await refusal(await api("GET", "/tasks?view=TODAY"), 400)).details).toEqual({ fields: ["view"] });
+  });
+
+  it("takes a search of 200 characters and refuses 201", async () => {
+    await json(await api("GET", `/notes?q=${"a".repeat(200)}`), 200);
+    await json(await api("GET", `/tasks?q=${"a".repeat(200)}`), 200);
+    expect((await refusal(await api("GET", `/notes?q=${"a".repeat(201)}`), 400)).details).toEqual({ fields: ["q"] });
+    expect((await refusal(await api("GET", `/tasks?q=${"a".repeat(201)}`), 400)).details).toEqual({ fields: ["q"] });
+  });
+
+  it.each(["%00", "%F0%9F%98%80", "%D7%A9%D7%9C%D7%95%D7%9D", "%E2%80%8B", "%27%3B%20DROP%20TABLE%20zur_tasks%3B--", "%E2%80%AE"])(
+    "answers a search with %s without breaking, and the tables are still there",
+    async (q) => {
+      expect([200, 400]).toContain((await api("GET", `/tasks?q=${q}`)).status);
+      expect([200, 400]).toContain((await api("GET", `/notes?q=${q}`)).status);
+      await json(await api("GET", "/tasks?limit=1"), 200);
+    },
+  );
+
+  it("FTS5 syntax typed in still finds what the words say", async () => {
+    const { note } = await json<{ note: Note }>(await api("POST", "/notes", { title: "Senhas do roteador", content: 'o "segredo" é NOT simples' }), 201);
+    for (const q of ["segr*", "^senhas", "(segredo", "-segredo", '"segredo', "roteador:senhas"]) {
+      const found = await json<{ notes: NoteSummary[] }>(await api("GET", `/notes?q=${encodeURIComponent(q)}`), 200);
+      expect(found.notes.map((n) => n.id), q).toContain(note.id);
+    }
+    await json(await api("DELETE", `/notes/${note.id}`), 200);
+  });
+});
+
+describe("bodies the interface never sends", () => {
+  it("refuses an unpaired surrogate instead of storing a changed text", async () => {
+    const res = await api("POST", "/notes", '{"title":"z\\udc00z","content":"x"}');
+    expect((await refusal(res, 400)).details).toEqual({ fields: ["title"] });
+  });
+
+  it("refuses null, an array and NUL in a title", async () => {
+    for (const body of ["null", "[]", '{"title":"a\\u0000b"}']) {
+      expect((await refusal(await api("POST", "/tasks", body), 400)).code, body).toBe("VALIDATION_FAILED");
+    }
+  });
+});
