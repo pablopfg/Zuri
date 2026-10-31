@@ -9,13 +9,13 @@ etapas ficam detalhadas; as mais antigas viram uma linha na tabela.
 
 - Situação: ligado
 - Avanço: mescla sozinho na `develop`, sem pausa por fase (decisão do Pablo, 30/10/2026)
-- Pausado por: etapa 0 esperando o Pablo importar os rulesets e confirmar a proteção da `develop` e da `main`
+- Pausado por:
 
 ## Etapas
 
 | Etapa | Situação | PR | Resumo em uma linha |
 | --- | --- | --- | --- |
-| 0 | PR aberto, esperando o Pablo | #1 | Monorepo, CI, CodeQL, rulesets, Dependabot |
+| 0 | mesclada (31/10/2026) | #1 | Monorepo, CI, CodeQL, rulesets, Dependabot |
 
 ## Últimas etapas (detalhe)
 
@@ -39,10 +39,10 @@ etapas ficam detalhadas; as mais antigas viram uma linha na tabela.
 
 <!-- Itens "▶ Antes, você fornece" das próximas etapas e perguntas abertas. -->
 
-- Importar os rulesets e ligar as proteções do GitHub (`docs/configuracao-github.md`) e confirmar na thread. Até lá, a etapa 0 não é mesclada.
+- Nada no momento. Rulesets da `develop` e da `main` conferidos ativos pela API em 31/10/2026.
 
 ## Próxima etapa
 
 - Número e nome: 1 · Worker, Durable Object e portões
-- Dependências mescladas: não (falta mesclar a etapa 0)
-- Precisa de algo do Pablo antes: sim, a confirmação dos rulesets
+- Dependências mescladas: sim (etapa 0, #1)
+- Precisa de algo do Pablo antes: não
