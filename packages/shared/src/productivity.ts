@@ -1,4 +1,4 @@
-import { z } from "zod";
+import { z } from "./zod-config.ts";
 import { instantSchema } from "./dates.ts";
 
 /**

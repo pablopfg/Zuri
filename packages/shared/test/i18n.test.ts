@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { catalogs, createTranslator, DEFAULT_LOCALE, isLocale, LOCALES, loadCatalog, ptBR, t } from "../i18n/index.ts";
+import { catalogs, createTranslator, DEFAULT_LOCALE, isLocale, LOCALES, loadCatalog, ptBR, ptBRCore, ptBRMemory, t } from "../i18n/index.ts";
 
 const placeholders = (text: string) => [...text.matchAll(/\{(\w+)\}/g)].map((m) => m[1]).sort();
 
@@ -59,7 +59,9 @@ describe("t", () => {
 describe("isLocale", () => {
   it("loads each catalog on demand, the same one the Worker holds", async () => {
     expect(await loadCatalog("en")).toEqual(catalogs.en);
-    expect(await loadCatalog("pt-BR")).toBe(ptBR);
+    // The whole pt-BR catalog is its core plus each screen's part, nothing more and nothing less.
+    expect({ ...ptBRCore, ...ptBRMemory }).toEqual(ptBR);
+    expect(Object.keys(ptBRCore).some((key) => key.startsWith("web.memory."))).toBe(false);
   });
 
   it("knows only the shipped locales", () => {

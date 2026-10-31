@@ -1,4 +1,4 @@
-import { z } from "zod";
+import { z } from "./zod-config.ts";
 import { DEFAULT_LOCALE, LOCALES } from "../i18n/index.ts";
 
 /** The owner's time zone until changed in Settings. */

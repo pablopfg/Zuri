@@ -1,4 +1,4 @@
-import { z } from "zod";
+import { z } from "./zod-config.ts";
 
 /**
  * Dates of the owner's data (task deadlines, later reminders). An instant is

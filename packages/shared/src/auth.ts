@@ -1,4 +1,4 @@
-import { z } from "zod";
+import { z } from "./zod-config.ts";
 
 const isoDate = z.iso.datetime();
 

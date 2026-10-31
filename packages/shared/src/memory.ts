@@ -1,4 +1,4 @@
-import { z } from "zod";
+import { z } from "./zod-config.ts";
 import { hasControlCharacter, LIST_LIMIT_MAX, RECORD_ID, SEARCH_MAX } from "./productivity.ts";
 
 /**

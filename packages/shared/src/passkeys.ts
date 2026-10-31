@@ -1,4 +1,4 @@
-import { z } from "zod";
+import { z } from "./zod-config.ts";
 
 /**
  * Passkeys (WebAuthn) as a second sign-in step, next to the authenticator app,

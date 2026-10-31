@@ -1,4 +1,4 @@
-import { z } from "zod";
+import { z } from "./zod-config.ts";
 import type { MessageKey } from "../i18n/index.ts";
 
 /**

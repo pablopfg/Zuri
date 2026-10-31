@@ -13,6 +13,8 @@ export {
   type PluralBase,
   plural,
   ptBR,
+  ptBRCore,
+  ptBRMemory,
   t,
 } from "../i18n/index.ts";
 export { AGENT_INSTANCE_NAME } from "./constants.ts";

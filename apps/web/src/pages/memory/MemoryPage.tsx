@@ -9,6 +9,7 @@ import {
   type MemoryReview,
   type MemoryReviewAction,
   type MemoryWriteResult,
+  ptBRMemory,
 } from "@zuri/shared";
 import { Archive, ArchiveRestore, BadgeCheck, Brain, CircleHelp, GitCompareArrows, History, Pencil, RefreshCw, Search, Trash2 } from "lucide-react";
 import { type FormEvent, useId, useState } from "react";
@@ -17,8 +18,11 @@ import { MEMORIES_KEY, useMemories, useMemoryHistory, useMemoryReviews } from ".
 import { useSettings, useSettingsMutation } from "../../hooks/settings.ts";
 import { api, errorMessage } from "../../lib/api.ts";
 import { useDebounced } from "../../lib/debounce.ts";
-import { useI18n } from "../../lib/i18n.tsx";
+import { addMessages, useI18n } from "../../lib/i18n.tsx";
 import { CATEGORY_LABEL, FILTER_LABEL, ORIGIN_LABEL, REASON_LABEL, STATUS_LABEL, TOPIC_LABEL } from "./labels.ts";
+
+// This screen's pt-BR texts travel with its code, not in the first bundle (rule P11).
+addMessages(ptBRMemory);
 
 /** The filters on the page, in order: a count from the server's counters for each. */
 const FILTERS = ["all", "active", "uncertain", "historical"] as const satisfies readonly MemoryFilter[];
