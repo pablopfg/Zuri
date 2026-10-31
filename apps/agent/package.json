@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "wrangler dev --port 8787 --var PUBLIC_URL:http://localhost:8787",
+    "dev": "wrangler dev --port 8787 --var PUBLIC_URL:http://localhost:8787 --var TURNSTILE_SITE_KEY:1x00000000000000000000AA --var TURNSTILE_SECRET_KEY:1x0000000000000000000000000000000AA",
     "build": "wrangler deploy --dry-run --outdir dist",
     "types": "wrangler types",
     "typecheck": "wrangler types --check && tsc --noEmit -p .",

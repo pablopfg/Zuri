@@ -1,4 +1,4 @@
-import { House, ListTodo, LogOut, NotebookPen, PanelLeftClose, PanelLeftOpen, Settings } from "lucide-react";
+import { House, ListTodo, LogOut, NotebookPen, PanelLeftClose, PanelLeftOpen, Settings, ShieldCheck } from "lucide-react";
 import { type ReactNode, useEffect, useState } from "react";
 import { NavLink, Outlet } from "react-router";
 import { useSession } from "../hooks/session.tsx";
@@ -24,8 +24,10 @@ export function AppShell() {
     { to: "/", label: t("web.nav.home"), icon: House, end: true },
     { to: "/tarefas", label: t("web.nav.tasks"), icon: ListTodo, end: false },
     { to: "/notas", label: t("web.nav.notes"), icon: NotebookPen, end: false },
+    { to: "/acessos", label: t("web.nav.accessLog"), icon: ShieldCheck, end: false },
   ];
-  const mobileItems = [...sections, { to: "/configuracoes", label: t("web.nav.settings"), icon: Settings, end: false }];
+  // Four places fit the phone's bar: the access log is one tap away in Settings > Security there.
+  const mobileItems = [...sections.filter((s) => s.to !== "/acessos"), { to: "/configuracoes", label: t("web.nav.settings"), icon: Settings, end: false }];
   const [collapsed, setCollapsed] = useState(readSidebarCollapsed);
   // On a phone "Sair" sits next to the bell, where a thumb lands by mistake: it asks first.
   const [confirmSignOut, setConfirmSignOut] = useState(false);

@@ -1,6 +1,7 @@
 import type { startAuthentication as startAuthenticationFn } from "@simplewebauthn/browser";
-import { mfaRequiredSchema, type SessionState, sessionStateSchema } from "@zuri/shared";
-import { Fingerprint } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { LOGIN_OPTIONS_PATH, loginOptionsSchema, mfaRequiredSchema, type SessionState, sessionStateSchema } from "@zuri/shared";
+import { Fingerprint, RotateCw } from "lucide-react";
 import { type FormEvent, useEffect, useRef, useState } from "react";
 import { Navigate, useNavigate, useSearchParams } from "react-router";
 import { Logo } from "../components/Logo.tsx";
@@ -36,8 +37,16 @@ export function LoginPage() {
   const [pending, setPending] = useState(false);
   const [retryAt, setRetryAt] = useState<number | null>(null);
   const [now, setNow] = useState(Date.now());
-  // The robot check: drawn only once the server asks for it on this network.
-  const [siteKey, setSiteKey] = useState<string | null>(null);
+  // The robot check, on every try: its public key comes with the form's options
+  // (null only in local development without keys). A refusal may carry it too.
+  const options = useQuery({
+    queryKey: ["login-options"],
+    queryFn: async () => loginOptionsSchema.parse(await api<unknown>(LOGIN_OPTIONS_PATH.replace(/^\/api/, ""))),
+    staleTime: Number.POSITIVE_INFINITY,
+    retry: 1,
+  });
+  const [refusedKey, setSiteKey] = useState<string | null>(null);
+  const siteKey = refusedKey ?? options.data?.turnstileSiteKey ?? null;
   const [humanToken, setHumanToken] = useState<string | null>(null);
   const [humanBroken, setHumanBroken] = useState(false);
   const [humanRound, setHumanRound] = useState(0);
@@ -59,8 +68,10 @@ export function LoginPage() {
     if (offersPasskey) void import("@simplewebauthn/browser").catch(() => {});
   }, [offersPasskey]);
   const waitSeconds = retryAt ? Math.max(0, Math.ceil((retryAt - now) / 1000)) : 0;
-  // A widget that can't load doesn't lock the form: the server decides whether the check was needed.
-  const humanMissing = siteKey !== null && !humanToken && !humanBroken;
+  // Without its token the server refuses the try anyway: the button waits for the widget.
+  const humanMissing = siteKey !== null && !humanToken;
+  // Until the options arrive the form can't know whether the check is on; if they fail, the server's refusal tells.
+  const optionsPending = options.isPending && refusedKey === null;
 
   if (loading) return <Spinner />;
   if (session) return <Navigate to={next} replace />;
@@ -75,15 +86,15 @@ export function LoginPage() {
     if (!(err instanceof ApiError)) return;
     const details = err.details as SignInDetails;
     if (err.code === "RATE_LIMITED" && typeof details.retryAfter === "number") setRetryAt(Date.now() + details.retryAfter * 1000);
-    if (typeof details.turnstileSiteKey === "string" && details.turnstileSiteKey) {
-      if (siteKey === null) setHumanRound((n) => n + 1);
+    if (typeof details.turnstileSiteKey === "string" && details.turnstileSiteKey && details.turnstileSiteKey !== siteKey) {
+      setHumanRound((n) => n + 1);
       setSiteKey(details.turnstileSiteKey);
     }
   }
 
   async function submitPassword(e: FormEvent) {
     e.preventDefault();
-    if (!email.trim() || !password || pending || waitSeconds > 0 || humanMissing) return;
+    if (!email.trim() || !password || pending || waitSeconds > 0 || humanMissing || optionsPending) return;
     setPending(true);
     setError(null);
     const token = humanToken;
@@ -199,9 +210,26 @@ export function LoginPage() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
             />
+            {optionsPending && <p className="min-h-[65px] text-sm leading-6 text-fg-muted">{t("web.login.humanLoading")}</p>}
             {siteKey !== null && (
               <div className="space-y-1.5">
-                <p className="text-sm leading-6 text-fg-muted">{humanBroken ? t("web.login.humanBroken") : t("web.login.humanHint")}</p>
+                <p className={humanBroken ? "text-sm leading-6 text-danger" : "text-sm leading-6 text-fg-muted"} role={humanBroken ? "alert" : undefined}>
+                  {humanBroken ? t("web.login.humanBroken") : t("web.login.humanHint")}
+                </p>
+                {humanBroken && (
+                  <Button
+                    variant="secondary"
+                    className="w-full"
+                    onClick={() => {
+                      setHumanBroken(false);
+                      setHumanToken(null);
+                      setHumanRound((n) => n + 1);
+                    }}
+                  >
+                    <RotateCw className="h-4 w-4" aria-hidden />
+                    {t("web.login.humanRetry")}
+                  </Button>
+                )}
                 <TurnstileWidget
                   key={`${siteKey}-${humanRound}`}
                   siteKey={siteKey}
@@ -213,7 +241,7 @@ export function LoginPage() {
                 />
               </div>
             )}
-            <Button type="submit" className="w-full" loading={pending} disabled={!email.trim() || !password || waitSeconds > 0 || humanMissing}>
+            <Button type="submit" className="w-full" loading={pending} disabled={!email.trim() || !password || waitSeconds > 0 || humanMissing || optionsPending}>
               {waitSeconds > 0 ? t("web.login.waitSeconds", { seconds: waitSeconds }) : t("web.login.submit")}
             </Button>
             {errorLine}
