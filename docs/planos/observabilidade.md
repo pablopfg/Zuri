@@ -51,8 +51,10 @@ Ele é o "log bruto" para investigar um caso com até 3 dias. Nada a ligar.
 Ajustes pequenos:
 
 - Toda linha de log ganha o mesmo formato: `{ level, event, code, route,
-  requestId }`. O `requestId` é o `cf-ray` da requisição, que também volta na
-  resposta de erro (`details.ref`), para o dono achar a linha certa no painel.
+  requestId }`. O `requestId` é o `cf-ray` da requisição, que a Cloudflare
+  já devolve no cabeçalho `cf-ray` da resposta; a aba Diagnóstico vai mostrar
+  o último, para o dono achar a linha certa no painel. **Feito** em
+  `apps/agent/src/log.ts`.
 - Lista fechada do que nunca entra em log (regra 2 e "Nada sensível em log" da
   especificação): IP, e-mail, nome, ids do Telegram, tokens, códigos, senha,
   texto de mensagem, nota, memória ou resposta da IA. Um teste falha se um

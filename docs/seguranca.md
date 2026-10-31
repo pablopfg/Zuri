@@ -517,4 +517,7 @@ requisição. A Cloudflare troca por `REDACTED` o valor de cabeçalhos como
 `Cookie`, `Set-Cookie` e os que têm "auth" no nome, então o token de sessão não
 aparece. O IP do visitante e a localização aparecem, como em qualquer log de
 acesso, e ficam pelo prazo dos Workers Logs da conta. O código do Zuri só
-escreve nos logs nomes e códigos, nunca valores.
+escreve nos logs nomes e códigos, nunca valores: tudo passa por
+`apps/agent/src/log.ts`, que só aceita uma lista fechada de campos e descarta
+o que não tiver cara de nome de erro, código, rota ou `cf-ray` (teste em
+`apps/agent/test/log.test.ts`).
