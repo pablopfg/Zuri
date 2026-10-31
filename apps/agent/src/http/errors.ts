@@ -4,6 +4,7 @@ import {
   type ApiErrorCode,
   DEFAULT_ERROR_MESSAGE,
   DEFAULT_LOCALE,
+  type Locale,
   type MessageKey,
   t,
 } from "@zuri/shared";
@@ -28,16 +29,21 @@ export class AppError extends Error {
  * The JSON answer for any error. Anything that is not an AppError becomes the
  * generic INTERNAL_ERROR: a stack trace or an internal message never reaches
  * the client, and only the error's name is logged (its message may quote data).
+ *
+ * The message is in the owner's language when the caller knows it (inside the
+ * Durable Object, from the settings). The Worker's gates answer before the object
+ * is reached, so their refusals use the default language: waking the object to
+ * read a setting for an unknown host or an unauthenticated probe would cost more
+ * than it is worth.
  */
-export function errorResponse(error: unknown): Response {
+export function errorResponse(error: unknown, locale: Locale = DEFAULT_LOCALE): Response {
   const appError = error instanceof AppError ? error : new AppError("INTERNAL_ERROR");
   if (!(error instanceof AppError)) {
     console.error(JSON.stringify({ message: "unhandled error", error: error instanceof Error ? error.name : typeof error }));
   }
-  // Step 2 picks the owner's language from the settings; until then, the default one.
   const body: ApiError = {
     code: appError.code,
-    message: t(DEFAULT_LOCALE, appError.messageKey),
+    message: t(locale, appError.messageKey),
     ...(appError.details ? { details: appError.details } : {}),
   };
   return Response.json(body, { status: appError.status });

@@ -10,9 +10,9 @@
   "scripts": {
     "dev": "npm run build -w @zuri/web && npm run dev -w @zuri/agent",
     "typecheck": "npm run typecheck --workspaces --if-present && tsc --noEmit -p tsconfig.json",
-    "lint": "biome lint .",
+    "lint": "biome lint . && node scripts/lint-i18n.ts",
     "test": "vitest run",
-    "i18n": "vitest run --project shared i18n",
+    "i18n": "node scripts/lint-i18n.ts && vitest run --project shared i18n",
     "build": "npm run build -w @zuri/web && npm run build -w @zuri/agent",
     "test:e2e": "playwright test",
     "audit": "npm audit --audit-level=high"
@@ -22,6 +22,7 @@
     "@biomejs/biome": "2.6.2",
     "@playwright/test": "1.64.1",
     "@types/node": "26.6.5",
+    "rolldown": "1.2.16",
     "typescript": "7.0.2",
     "vitest": "5.0.5",
     "yaml": "2.9.1"

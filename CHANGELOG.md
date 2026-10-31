@@ -21,6 +21,13 @@ o [SemVer](https://semver.org/lang/pt-BR/). Cada PR escreve a sua entrada em
   autenticação. `GET /api/health` responde se o Zuri está no ar e
   configurado, sem nenhum dado.
 - Erros da API no formato `{ code, message }`, com o texto em pt-BR.
+- Banco do agente criado sob demanda, com migrations só de acréscimo, e as
+  configurações de idioma (`pt-BR` ou `en`) e fuso (`America/Sao_Paulo` por
+  padrão). Os erros da API passam a sair no idioma escolhido.
+- Formatação de datas e valores no padrão brasileiro ("30/10/2026 às 15:16",
+  "US$ 1,25") e plural pelas regras de cada idioma.
+- Lint de i18n no `npm run lint` e na CI: falha com texto visível fora do
+  catálogo, chave sem tradução ou chave sem uso.
 
 ### Segurança
 
@@ -35,3 +42,5 @@ o [SemVer](https://semver.org/lang/pt-BR/). Cada PR escreve a sua entrada em
   `SESSION_SECRET`, `PASSWORD_PEPPER`, `OWNER_PASSWORD_HASH` e `OWNER_EMAIL`.
   Opcionais: `ACCESS_TEAM_DOMAIN` e `ACCESS_AUD`. Detalhes em
   `docs/arquitetura.md`.
+- Migration 1 do banco (`zur_settings`, `zur_activity` e
+  `zur_schema_version`), aplicada sozinha na primeira requisição. Nada a fazer.

@@ -1,0 +1,4 @@
+{
+  "$comment": "Exceções do lint de i18n (scripts/lint-i18n.ts): texto visível escrito fora do catálogo de propósito. Cada uma diz o arquivo, o texto exato e o motivo. Uma exceção que não corresponde a nada faz o lint falhar.",
+  "ignore": []
+}
