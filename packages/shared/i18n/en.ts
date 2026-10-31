@@ -59,6 +59,8 @@ export const en: Messages = {
   "web.nav.homeLink": "Zuri, home page",
   "web.nav.settings": "Settings",
   "web.nav.signOut": "Sign out",
+  "web.nav.collapse": "Collapse menu",
+  "web.nav.expand": "Expand menu",
   "web.shell.removePlainSecret": "Your password is now stored by Zuri. Delete the OWNER_PASSWORD secret in the Cloudflare dashboard (Workers › zuri › Settings › Variables and secrets).",
   "web.login.email": "E-mail",
   "web.login.password": "Password",

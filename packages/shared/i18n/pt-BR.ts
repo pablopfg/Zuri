@@ -58,6 +58,8 @@ export const ptBR = {
   "web.nav.homeLink": "Zuri, página inicial",
   "web.nav.settings": "Configurações",
   "web.nav.signOut": "Sair",
+  "web.nav.collapse": "Recolher menu",
+  "web.nav.expand": "Expandir menu",
   "web.shell.removePlainSecret": "A senha já está guardada no Zuri. Apague o segredo OWNER_PASSWORD no painel da Cloudflare (Workers › zuri › Configurações › Variáveis e segredos).",
   "web.login.email": "E-mail",
   "web.login.password": "Senha",

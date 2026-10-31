@@ -50,6 +50,9 @@ o [SemVer](https://semver.org/lang/pt-BR/). Cada PR escreve a sua entrada em
 - Casca depois do login no estilo do Talorys: barra lateral de altura total,
   barra superior e navegação inferior no celular, e um lembrete para ligar a
   verificação em duas etapas enquanto ela estiver desligada.
+- Menu lateral recolhível no computador: o botão "Recolher menu" deixa só os
+  ícones, cada um com o nome ao passar o mouse ou focar pelo teclado. A
+  escolha fica guardada neste navegador e vale para todas as abas.
 - Identidade visual do Zuri, "Sinal": logo de um i cujo pingo é uma luz
   verde, que pulsa enquanto o Zuri trabalha; favicon, ícones e cores da
   interface nos dois temas.
