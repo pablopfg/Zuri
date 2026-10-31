@@ -75,4 +75,5 @@ agentes podem ler as mesmas skills nos repositórios de origem, no commit fixado
 - Leia o código antes de mudar; confirme nomes com busca, não com palpite.
 - Mudou comportamento: atualize testes e `docs/`.
 - Mexeu em rota, autenticação, sessão, ferramenta, MCP, push, Telegram ou e-mail: releia a seção correspondente da especificação e de `docs/seguranca.md` e rode os testes de segurança.
+- Mexeu em consulta, rota, agendamento, chamada de IA ou bundle: siga `.claude/rules/performance.md` (cotas do plano Free) e meça no teste de orçamento.
 - Dúvida de produto (o que o usuário vê, custo, escopo): pergunte ao dono com uma recomendação.

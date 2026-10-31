@@ -1,8 +1,8 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { NOTE_CONTENT_MAX, NOTE_TITLE_MAX, type Note, type TrashItem } from "@zuri/shared";
 import { ArrowLeft, NotebookPen, Plus, Search, Trash2 } from "lucide-react";
-import { type FormEvent, type MouseEvent, useEffect, useState } from "react";
-import { Link, useLocation, useNavigate, useParams } from "react-router";
+import { type FormEvent, useEffect, useState } from "react";
+import { Link, useBlocker, useLocation, useNavigate, useParams } from "react-router";
 import { Markdown } from "../../components/Markdown.tsx";
 import { Button, cn, Dialog, EmptyState, ErrorNotice, fieldClass, PageHeader, SelectField, Spinner, TextField } from "../../components/ui.tsx";
 import { NOTES_KEY, PROJECTS_KEY, useNote, useNotes, useProjects } from "../../hooks/productivity.ts";
@@ -10,6 +10,7 @@ import { api, errorMessage } from "../../lib/api.ts";
 import { useDebounced } from "../../lib/debounce.ts";
 import { plainExcerpt } from "../../lib/excerpt.ts";
 import { useI18n } from "../../lib/i18n.tsx";
+import { EDITOR_DONE, shouldAskBeforeLeaving } from "../../lib/leave-guard.ts";
 import { ProjectOptions, TrashedNotice } from "./shared.tsx";
 
 /**
@@ -20,31 +21,22 @@ import { ProjectOptions, TrashedNotice } from "./shared.tsx";
 export function NotesPage() {
   const { id } = useParams();
   const { t } = useI18n();
-  const navigate = useNavigate();
-  // Beside the list, one click on another note would drop unsaved text: the
-  // editor reports whether it has any, and leaving then asks first.
+  // Leaving would drop unsaved text: the editor reports whether it has any, and
+  // every way out (the list, the sidebar, the browser's back) asks first.
   const [dirty, setDirty] = useState(false);
-  const [leavingTo, setLeavingTo] = useState<string | null>(null);
-  const { pathname } = useLocation();
-  const guard = (to: string) => (event: MouseEvent) => {
-    if (!dirty) return;
-    event.preventDefault();
-    // The note already open: nothing to leave, and asking would lose track of the unsaved text (SEC-6R-01).
-    if (to !== pathname) setLeavingTo(to);
-  };
+  const blocker = useBlocker(({ currentLocation, nextLocation }) => shouldAskBeforeLeaving(dirty, currentLocation, nextLocation));
   const heading = id === "nova" ? t("web.notes.new") : t("web.notes.edit");
 
   return (
     <div className="lg:grid lg:grid-cols-[18rem_minmax(0,1fr)] lg:items-start lg:gap-6">
       <div className={cn("space-y-4", id && "hidden lg:block")}>
-        <NotesList activeId={id} guard={guard} />
+        <NotesList activeId={id} />
       </div>
       <div className={cn("space-y-4", !id && "hidden lg:block")}>
         {id ? (
           <>
             <Link
               to="/notas"
-              onClick={guard("/notas")}
               className="inline-flex min-h-11 items-center gap-2 rounded-xl px-2 text-sm font-medium text-fg-muted hover:bg-raised hover:text-fg lg:hidden"
             >
               <ArrowLeft className="h-4 w-4" aria-hidden />
@@ -61,20 +53,15 @@ export function NotesPage() {
           </EmptyState>
         )}
       </div>
-      <Dialog open={leavingTo !== null} onClose={() => setLeavingTo(null)} title={t("web.notes.discardTitle")}>
+      <Dialog open={blocker.state === "blocked"} onClose={() => blocker.reset?.()} title={t("web.notes.discardTitle")}>
         <p className="text-sm leading-6 text-fg-muted">{t("web.notes.discardBody")}</p>
         <div className="flex flex-wrap justify-end gap-2">
-          <Button variant="secondary" onClick={() => setLeavingTo(null)}>
+          <Button variant="secondary" onClick={() => blocker.reset?.()}>
             {t("web.notes.keepEditing")}
           </Button>
           <Button
             variant="danger"
-            onClick={() => {
-              const to = leavingTo;
-              setLeavingTo(null);
-              setDirty(false);
-              if (to) navigate(to);
-            }}
+            onClick={() => blocker.proceed?.()}
           >
             {t("web.notes.discard")}
           </Button>
@@ -84,7 +71,7 @@ export function NotesPage() {
   );
 }
 
-function NotesList({ activeId, guard }: { activeId: string | undefined; guard: (to: string) => (event: MouseEvent) => void }) {
+function NotesList({ activeId }: { activeId: string | undefined }) {
   const { t, dateTime } = useI18n();
   const [query, setQuery] = useState("");
   const q = useDebounced(query.trim());
@@ -114,7 +101,6 @@ function NotesList({ activeId, guard }: { activeId: string | undefined; guard: (
           <>
             <Link
               to="/configuracoes/dados"
-              onClick={guard("/configuracoes/dados")}
               aria-label={t("web.trash.open")}
               title={t("web.trash.open")}
               className="inline-flex h-11 w-11 items-center justify-center rounded-xl text-fg-muted hover:bg-raised hover:text-fg"
@@ -123,7 +109,6 @@ function NotesList({ activeId, guard }: { activeId: string | undefined; guard: (
             </Link>
             <Link
               to="/notas/nova"
-              onClick={guard("/notas/nova")}
               aria-label={t("web.notes.new")}
               title={t("web.notes.new")}
               className="inline-flex h-11 w-11 items-center justify-center rounded-xl bg-accent text-accent-fg hover:bg-accent-hover"
@@ -166,7 +151,6 @@ function NotesList({ activeId, guard }: { activeId: string | undefined; guard: (
             <li key={note.id}>
               <Link
                 to={`/notas/${note.id}`}
-                onClick={guard(`/notas/${note.id}`)}
                 aria-current={note.id === activeId ? "page" : undefined}
                 className={cn("block min-h-11 rounded-xl px-3 py-2.5", note.id === activeId ? "bg-raised" : "hover:bg-raised/60")}
               >
@@ -236,7 +220,7 @@ function NoteEditor({ note, onDirty }: { note?: Note; onDirty: (dirty: boolean) 
       } else {
         const result = await api<{ note: Note }>("/notes", { method: "POST", body });
         qc.setQueryData([...NOTES_KEY, "one", result.note.id], result);
-        navigate(`/notas/${result.note.id}`, { replace: true });
+        navigate(`/notas/${result.note.id}`, { replace: true, state: EDITOR_DONE });
       }
       await qc.invalidateQueries({ queryKey: [...NOTES_KEY, "list"] });
     } catch (err) {
@@ -254,7 +238,7 @@ function NoteEditor({ note, onDirty }: { note?: Note; onDirty: (dirty: boolean) 
       const { trashItem } = await api<{ trashItem: TrashItem }>(`/notes/${note.id}`, { method: "DELETE" });
       qc.removeQueries({ queryKey: [...NOTES_KEY, "one", note.id] });
       await Promise.all([qc.invalidateQueries({ queryKey: [...NOTES_KEY, "list"] }), qc.invalidateQueries({ queryKey: PROJECTS_KEY })]);
-      navigate("/notas", { state: { trashed: trashItem } });
+      navigate("/notas", { state: { ...EDITOR_DONE, trashed: trashItem } });
     } catch (err) {
       setError(errorMessage(err));
       setPending(null);

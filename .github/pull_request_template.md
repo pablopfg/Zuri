@@ -22,6 +22,14 @@
 
 <!-- Relatório da skill auditoria-seguranca: achados, severidade, correção e teste de cada um. Escreva "nenhum achado" só se a auditoria rodou. -->
 
+## Custo no plano Free
+
+<!-- Regras de .claude/rules/performance.md (P1 a P14). O que muda em cada cota, com a medida de free-tier-budget.test.ts antes e depois. "Não muda" quando nada lê ou grava o banco, nem chama IA, nem cria agendamento. -->
+
+| Cota | Antes | Depois | Como medi |
+| --- | --- | --- | --- |
+|  |  |  |  |
+
 ## Como foi testado
 
 <!-- Comandos rodados nesta sessão e o resultado real (typecheck, lint, testes, e2e). -->
