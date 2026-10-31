@@ -85,6 +85,8 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run build
+      # Rule P11: the initial JavaScript stays under its budget.
+      - run: npm run size
 
   e2e:
     runs-on: ubuntu-latest
