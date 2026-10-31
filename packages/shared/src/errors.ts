@@ -1,3 +1,6 @@
+// Before any schema here: the package is marked side-effect free, so index.ts alone can't order it.
+import "./zod-config.ts";
+
 import { z } from "zod";
 import type { MessageKey } from "../i18n/index.ts";
 
