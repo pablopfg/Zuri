@@ -7,6 +7,13 @@ import { expectAccessible, signIn } from "./ui-helpers.ts";
 
 test.use({ locale: "pt-BR", timezoneId: "America/Sao_Paulo" });
 
+// A rewritten answer can still be in flight when the test ends (a heartbeat or
+// the session check after sign-out); without this, fulfilling it after the page
+// closed fails the test in teardown.
+test.afterEach(async ({ page }) => {
+  await page.unrouteAll({ behavior: "ignoreErrors" });
+});
+
 /** Rewrites each session state the page receives (sign-in, session, heartbeat). */
 async function rewriteSessionState(page: Page, change: (state: Record<string, unknown>) => void) {
   await page.route(/\/api\/auth\/(login|session|heartbeat)$/, async (route) => {
