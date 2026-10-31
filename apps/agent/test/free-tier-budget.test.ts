@@ -299,4 +299,38 @@ describe("the Free plan budget of each route", () => {
     expect(spent.read).toBeLessThanOrEqual(8);
     expect(spent.written).toBeLessThanOrEqual(4);
   });
+  it("chat: the list and a long conversation read about one page; a turn reads a bounded window, whatever the history", async () => {
+    const id = await runInDurableObject(owner(), (agent: ZuriAgent) => {
+      agent.testProvider = new MockAIProvider();
+      const { db, conversations } = agent.store;
+      let last = "";
+      db.transaction(() => {
+        for (let i = 0; i < 80; i++) last = conversations.create(`conversa ${i}`).id;
+        for (let i = 0; i < 400; i++) conversations.addMessage({ conversationId: last, role: i % 2 ? "assistant" : "user", content: `mensagem ${i}` });
+      });
+      return last;
+    });
+    try {
+      const list = await cost("GET", "/conversations");
+      expect(list.status).toBe(200);
+      expect(list.read).toBeLessThanOrEqual(60);
+      expect(list.written).toBe(0);
+
+      const page = await cost("GET", `/conversations/${id}`);
+      expect(page.status).toBe(200);
+      expect(page.read).toBeLessThanOrEqual(115);
+      expect(page.written).toBe(0);
+
+      // The prompt reads the newest 200 messages at most, and the memories' search, which stops at
+      // the 200 newest matches (about three rows each) for a word in every memory; then a few rows.
+      const turn = await cost("POST", "/chat", { conversationId: id, message: "memória tema3 e mensagem 399" });
+      expect(turn.status).toBe(200);
+      expect(turn.read).toBeLessThanOrEqual(3 * 200 + 200 + 60);
+      expect(turn.written).toBeLessThanOrEqual(30);
+    } finally {
+      await runInDurableObject(owner(), (agent: ZuriAgent) => {
+        agent.testProvider = null;
+      });
+    }
+  });
 });

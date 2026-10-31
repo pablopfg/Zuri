@@ -23,9 +23,17 @@ etapas ficam detalhadas; as mais antigas viram uma linha na tabela.
 | 5 | mesclada (31/10/2026) | #10 | Casca da interface: login com 2FA, guarda de sessão, configurações, PWA (fecha a fase A) |
 | 6 | mesclada (31/10/2026) | #12 | Tarefas, notas (Markdown, FTS5), projetos, lixeira de 30 dias, limites por tipo |
 | 7 | mesclada (31/10/2026) | #21 | Memória com estados atual/incerta/passada, substituição sem ciclos, fila de revisão, recordação em `<data>` |
-| 8 | mesclada (31/10/2026) | ver PR da branch `feat/etapa-08-provedor-ia` | Provedor Workers AI e IA simulada, medição por passo, teto de 9.000 Neurons/dia, aba IA |
+| 8 | mesclada (31/10/2026) | #25 | Provedor Workers AI e IA simulada, medição por passo, teto de 9.000 Neurons/dia, aba IA |
+| 9 | em revisão (31/10/2026) | branch `feat/etapa-09-chat-ferramentas` | Conversa em SSE, 20 ferramentas com permissão e limite, aprovações e planos, voz, injeção de prompt testada |
 
 ## Últimas etapas (detalhe)
+
+### Etapa 9 · Chat com ferramentas
+- Entregou: `packages/shared/src/chat.ts` (schemas, limites, eventos do SSE), `apps/agent/src/agent/{prompt,context,runner}.ts`, `apps/agent/src/tools/` (registro, executor, 20 ferramentas), `apps/agent/src/chat/` (`conversations`, `actions`, `plans`, `local-due`), `apps/agent/src/ai/transcription.ts`, rotas em `api/chat.ts`, tela `/conversa` (`apps/web/src/pages/chat/`). Doc: `docs/chat.md`; segurança em `docs/seguranca.md` ("Ferramentas do agente e injeção de prompt").
+- Migrations: versão 8 (`zur_conversations`, `zur_messages`, `zur_pending_actions`, `zur_task_plan_drafts`, contadores `conversations` e `messages`).
+- Decisões técnicas: proposta destrutiva com hash SHA-256 do alvo, reivindicada por `UPDATE … RETURNING` e conferida de novo na transação; plano é rascunho e a confirmação recusa tarefa nova; chamada que chega à ferramenta conta no turno mesmo se falhar, mas devolve a vaga do limite por ferramenta; repetição exata recusada; resultado de ferramenta em `<data source="tool">` cortado em 8.000 caracteres; orçamento de contexto = menor entre o do dono e a janela do modelo; resumo quando 8+ mensagens não cabem; textos pt-BR das Configurações viraram `pt-BR-settings.ts` sob demanda (JS inicial 139,0 kB).
+- Ficou para depois: execução agendada usa só ferramentas `read` (`context: "scheduled"`, etapa 10); origem `telegram` das mensagens (etapa 14); sem atualização ao vivo entre duas abas abertas na mesma conversa.
+- Atenção para a próxima: a etapa 10 chama o runner com `context: "scheduled"` e sem dono presente (nada destrutivo, nenhum plano); toda IA continua por `agent.ai()`. O mock entende `call <ferramenta> {json}`.
 
 ### Etapa 8 · Provedor de IA e medição de uso
 - Entregou: `packages/shared/src/{ai,ai-limits,time-zone}.ts` (modelos, preços datados de 31/10/2026, `usageReportSchema`), `apps/agent/src/ai/` (`provider`, `workers-ai`, `workers-ai-usage`, `mock`, `usage`, `metered`, `index`), `GET /api/usage`, aba `/configuracoes/ia` (`AiTab.tsx`, `hooks/usage.ts`), binding `AI` no `wrangler.jsonc`. Doc: `docs/ia.md`.
@@ -73,6 +81,6 @@ etapas ficam detalhadas; as mais antigas viram uma linha na tabela.
 
 ## Próxima etapa
 
-- Número e nome: 9 · Chat com ferramentas
-- Dependências mescladas: sim (etapas 7 e 8)
+- Número e nome: 10 · Automações
+- Dependências mescladas: depende da etapa 9 (este PR)
 - Precisa de algo do Pablo antes: não

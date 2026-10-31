@@ -1,12 +1,16 @@
 import { Bell, Bot, Database, Plug, Shield, User } from "lucide-react";
 import { NavLink, Navigate, useParams } from "react-router";
 import { cn, PageHeader } from "../components/ui.tsx";
-import { useI18n } from "../lib/i18n.tsx";
+import { ptBRSettings } from "@zuri/shared";
+import { addMessages, useI18n } from "../lib/i18n.tsx";
 import { AccountTab } from "./settings/AccountTab.tsx";
 import { AiTab } from "./settings/AiTab.tsx";
 import { DataTab } from "./settings/DataTab.tsx";
 import { LaterTab } from "./settings/LaterTab.tsx";
 import { SecurityTab } from "./settings/SecurityTab.tsx";
+
+// The screen's pt-BR texts arrive with its code, not in the first bundle (rule P11).
+addMessages(ptBRSettings);
 
 /** The tabs, by the path segment the address shows ("/configuracoes/seguranca"). */
 export const SETTINGS_TABS = ["conta", "seguranca", "ia", "avisos", "integracoes", "dados"] as const;

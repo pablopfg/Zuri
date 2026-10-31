@@ -27,8 +27,8 @@ import { useQueryClient } from "@tanstack/react-query";
 // This tab's pt-BR texts arrive with it, not in the first bundle (rule P11).
 addMessages(ptBRAi);
 
-type LimitField = "aiRequestsPerDay" | "aiNeuronsPerDay" | "aiMaxOutputTokens";
-const LIMIT_FIELDS: readonly LimitField[] = ["aiRequestsPerDay", "aiNeuronsPerDay", "aiMaxOutputTokens"];
+type LimitField = "aiRequestsPerDay" | "aiNeuronsPerDay" | "aiMaxOutputTokens" | "aiMaxToolCalls" | "aiMaxIterations" | "aiMaxContextTokens";
+const LIMIT_FIELDS: readonly LimitField[] = ["aiRequestsPerDay", "aiNeuronsPerDay", "aiMaxOutputTokens", "aiMaxToolCalls", "aiMaxIterations", "aiMaxContextTokens"];
 
 /** From this share of a limit on, the meter turns amber. */
 const NEAR = 0.8;
@@ -381,10 +381,13 @@ const LABELS = {
   aiRequestsPerDay: { label: "web.ai.requestsPerDay", hint: "web.ai.requestsPerDayHint" },
   aiNeuronsPerDay: { label: "web.ai.neuronsPerDay", hint: "web.ai.neuronsPerDayHint" },
   aiMaxOutputTokens: { label: "web.ai.maxOutputTokens", hint: "web.ai.maxOutputTokensHint" },
+  aiMaxToolCalls: { label: "web.ai.maxToolCalls", hint: "web.ai.maxToolCallsHint" },
+  aiMaxIterations: { label: "web.ai.maxIterations", hint: "web.ai.maxIterationsHint" },
+  aiMaxContextTokens: { label: "web.ai.maxContextTokens", hint: "web.ai.maxContextTokensHint" },
 } as const;
 
 function texts(settings: Settings): Record<LimitField, string> {
-  return { aiRequestsPerDay: String(settings.aiRequestsPerDay), aiNeuronsPerDay: String(settings.aiNeuronsPerDay), aiMaxOutputTokens: String(settings.aiMaxOutputTokens) };
+  return Object.fromEntries(LIMIT_FIELDS.map((field) => [field, String(settings[field])])) as Record<LimitField, string>;
 }
 
 /** True unless the text is a whole number inside the field's range (what the server accepts). */

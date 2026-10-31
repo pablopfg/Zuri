@@ -121,9 +121,31 @@ o [SemVer](https://semver.org/lang/pt-BR/). Cada PR escreve a sua entrada em
   últimos 7 dias e a hora em que a cota renova. Ali se escolhe o modelo e se
   mudam os limites de pedidos, de Neurons e o tamanho da resposta.
 - Rota `GET /api/usage` (detalhes em `docs/ia.md`).
+- Tela **Conversa** (etapa 9, `/conversa`): o chat com o agente, com a
+  resposta chegando aos poucos, a lista de conversas (renomear e apagar), o
+  botão Parar e sugestões para começar. O agente cria e atualiza tarefas,
+  projetos, notas e memórias, busca em tudo e mostra o que fez em cada
+  resposta.
+- Tudo o que apaga ou reescreve vira um cartão de aprovação. O cartão mostra
+  o que vai acontecer (numa reescrita, o texto novo inteiro), e a ação roda uma
+  vez só, depois do "Aprovar". A proposta vale 30 minutos.
+- Planos de tarefas: o agente propõe de 2 a 15 tarefas num cartão. O dono
+  edita títulos, prioridades e prazos, tira as que não quer e confirma. Antes
+  disso nada é criado.
+- Voz na conversa: o microfone grava até 60 s e o texto transcrito vai para
+  a caixa de mensagem, para o dono conferir antes de enviar. Uma hora por dia,
+  um áudio de cada vez, e o áudio não é guardado.
+- Configurações > IA ganhou três limites: ações por resposta (6), passos por
+  resposta (4) e memória da conversa (6.000 tokens).
+- Rotas `/api/conversations`, `/api/chat`, `/api/actions`, `/api/plans` e
+  `/api/transcribe` (detalhes em `docs/chat.md`).
 
 ### Alterado
 
+- No celular, a barra de baixo ganhou a Conversa, e a engrenagem das
+  Configurações foi para a barra de cima.
+- Os textos em pt-BR das Configurações chegam junto com a tela, para o JS
+  inicial continuar abaixo de 140 kB com a Conversa.
 - O logo do README e o `CONTRIBUTING.md` usam a identidade Sinal; o
   `CONTRIBUTING.md` explica como manter o README e as capturas em dia.
 - Os textos em pt-BR de Tarefas, Notas, Projetos, Lixeira e Acessos chegam
@@ -165,6 +187,13 @@ o [SemVer](https://semver.org/lang/pt-BR/). Cada PR escreve a sua entrada em
 
 ### Segurança
 
+- Conteúdo guardado (notas, memórias, resultados de ferramentas, resumos e
+  conversas importadas) entra no prompt só como dado. Mesmo que o modelo
+  obedeça a um texto injetado, nada é apagado ou reescrito sem a aprovação do
+  dono, e os limites por resposta seguram ataques em massa. Os cenários de
+  injeção de prompt viraram testes (`docs/seguranca.md`).
+- A `Permissions-Policy` libera o microfone só para o próprio Zuri
+  (`microphone=(self)`), para a voz da conversa.
 - Teto diário no segundo passo do login: 30 códigos errados em 24 horas
   suspendem o código e a passkey para redes desconhecidas até o mais antigo
   completar um dia, e o dono recebe um alerta. No seu navegador e na sua rede,
@@ -233,6 +262,9 @@ o [SemVer](https://semver.org/lang/pt-BR/). Cada PR escreve a sua entrada em
 
 ### Atualização
 
+- Migration 8 cria `zur_conversations`, `zur_messages`,
+  `zur_pending_actions` e `zur_task_plan_drafts`, com os contadores de
+  conversas e mensagens. Nada muda nos dados que já existem.
 - Migration 7 cria `zur_usage_daily` e `zur_model_usage_daily`, só com
   contadores de uso da IA (nenhum texto), guardados por 90 dias. Nada muda nos
   dados que já existem. O Worker passa a declarar o binding `AI` (Workers AI,

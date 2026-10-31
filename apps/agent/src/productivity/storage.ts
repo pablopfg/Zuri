@@ -7,6 +7,8 @@ const LIMIT_MESSAGE: Record<StorageKind, MessageKey> = {
   notes: "error.storageLimit.notes",
   projects: "error.storageLimit.projects",
   memories: "error.storageLimit.memories",
+  conversations: "error.storageLimit.conversations",
+  messages: "error.storageLimit.messages",
 };
 
 export type CountKind =

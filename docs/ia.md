@@ -1,7 +1,8 @@
 # Provedor de IA e medição de uso
 
 Como o Zuri chama a IA e conta o que ela gasta (etapa 8). A conversa com
-ferramentas chega na etapa 9 e usa o que está aqui.
+ferramentas (etapa 9, [conversa e ferramentas](chat.md)) e a voz passam pelo
+mesmo medidor.
 
 ## Provedores
 
@@ -58,6 +59,9 @@ não muda.
 | Pedidos à IA (cada chamada ao modelo conta um) | 200 | 1 a 2.000 | Configurações > IA |
 | Tamanho máximo da resposta | 1.024 tokens | 256 a 4.096 | Configurações > IA |
 | Áudio transcrito | 3.600 s | fixo | — |
+| Ações por resposta | 6 | 1 a 20 | Configurações > IA |
+| Passos por resposta | 4 | 1 a 10 | Configurações > IA |
+| Memória da conversa | 6.000 tokens | 2.000 a 32.000 | Configurações > IA |
 
 - O teto de 9.000 é decisão do Pablo (31/10/2026): fica 1.000 abaixo da cota
   grátis, para sobrar folga a outro uso da conta.
@@ -105,6 +109,25 @@ tempo nunca passam juntos de um limite.
 
 Uma chamada que a Cloudflare recusa por cota esgotada na conta (código 4006)
 vira `AI_LIMIT_REACHED` com `details.limit: "account"`.
+
+## Janela de contexto
+
+Cada modelo tem uma janela de contexto (campo `context` de `CHAT_MODELS` em
+`packages/shared/src/ai.ts`). O histórico de uma conversa usa o menor entre a
+memória da conversa escolhida pelo dono e a janela do modelo, menos a resposta
+máxima, as ferramentas e uma folga de 1.024 tokens. O Llama 3.3 70B, com
+24.000 tokens, é o mais apertado. Cada resultado de ferramenta é cortado em
+8.000 caracteres antes de voltar ao modelo.
+
+## Voz
+
+`POST /api/transcribe` manda o áudio ao Whisper (`whisper-large-v3-turbo`)
+pelo medidor (`MeteredAI.transcribe`, `reserveAudio`), e só o modelo recebe o áudio. Um áudio tem até 60 s e
+2 MB, um de cada vez. O dia tem 3.600 s. O tempo contado é o maior entre o que
+o navegador mediu e o que o tamanho do arquivo indica, então mentir a duração
+não ajuda. A reserva acontece antes da chamada e uma recusa da cota responde
+`429 AI_LIMIT_REACHED` com `details.limit: "audio"`. Na IA simulada a
+transcrição devolve um texto fixo do catálogo.
 
 ## Modelo de dados (migration 7)
 

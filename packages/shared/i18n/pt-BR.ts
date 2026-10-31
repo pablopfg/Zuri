@@ -1,7 +1,9 @@
 import { ptBRMemory } from "./pt-BR-memory.ts";
 import { ptBRProductivity } from "./pt-BR-productivity.ts";
 import { ptBRAi } from "./pt-BR-ai.ts";
+import { ptBRChat } from "./pt-BR-chat.ts";
 import { ptBRSecurity } from "./pt-BR-security.ts";
+import { ptBRSettings } from "./pt-BR-settings.ts";
 
 // Default and fallback catalog. Every key must also exist in en.ts and be used in the code (npm run lint).
 // The texts of the lazy screens live in their own files (pt-BR-memory.ts, pt-BR-productivity.ts,
@@ -145,22 +147,10 @@ export const ptBRCore = {
   "web.password.hide": "Ocultar senha",
   "web.password.submit": "Trocar a senha",
   "web.password.changed": "Senha trocada. As outras sessões foram encerradas.",
-  "web.settings.title": "Configurações",
-  "web.settings.description": "Conta, segurança e o que o Zuri pode usar.",
   "web.mfaReminder.body": "A verificação em duas etapas está desligada. Ligue para proteger a sua conta.",
   "web.mfaReminder.short": "Duas etapas desligadas",
   "web.mfaReminder.action": "Ligar agora",
   "web.mfaReminder.later": "Lembrar depois",
-  "web.settings.sections": "Seções das configurações",
-  "web.settings.tab.account": "Conta",
-  "web.settings.tab.security": "Segurança",
-  "web.settings.tab.ai": "IA",
-  "web.settings.tab.notifications": "Avisos",
-  "web.settings.tab.integrations": "Integrações",
-  "web.settings.tab.data": "Dados",
-  "web.settings.later.notifications": "Push, e-mail, Telegram e categorias de aviso chegam junto com a central de avisos.",
-  "web.settings.later.integrations": "Servidores MCP e Google Agenda chegam numa próxima versão.",
-  "web.settings.later.data": "Backup e uso do armazenamento chegam numa próxima versão.",
   "web.account.preferences": "Idioma e fuso horário",
   "web.account.preferencesHint": "Valem para a interface, as mensagens do servidor e, depois, o bot.",
   "web.account.language": "Idioma",
@@ -173,61 +163,7 @@ export const ptBRCore = {
   "web.theme.system": "Como o sistema",
   "web.theme.light": "Claro",
   "web.theme.dark": "Escuro",
-  "web.mfa.title": "Verificação em duas etapas",
-  "web.mfa.description": "Depois da senha, o Zuri pede um código do aplicativo autenticador (ou uma passkey).",
-  "web.mfa.off": "Desligada. Ligue para proteger a conta mesmo se a senha vazar.",
-  "web.mfa.on": "Ligada.",
-  "web.mfa.onSince": "Ligada desde {time}.",
-  "web.mfa.codesLeft.one": "Resta {count} código de recuperação.",
-  "web.mfa.codesLeft.other": "Restam {count} códigos de recuperação.",
-  "web.mfa.start": "Ligar a verificação em duas etapas",
-  "web.mfa.setupStep1": "Abra o aplicativo autenticador (Google Authenticator, Aegis, 1Password, Bitwarden…) e leia o QR code.",
-  "web.mfa.setupStep2": "Digite o código de 6 dígitos que aparecer para confirmar.",
-  "web.mfa.qrLabel": "QR code para o aplicativo autenticador",
-  "web.mfa.manualKey": "Sem câmera? Digite esta chave no aplicativo:",
-  "web.mfa.setupExpires": "Esta configuração vale até {time}.",
-  "web.mfa.codeLabel": "Código de 6 dígitos",
-  "web.mfa.codeOrRecovery": "Código do aplicativo ou de recuperação",
-  "web.mfa.enable": "Confirmar e ligar",
-  "web.mfa.disable": "Desligar",
-  "web.mfa.disableHint": "Desligar remove também as passkeys como segunda etapa.",
-  "web.mfa.regenerate": "Gerar novos códigos de recuperação",
-  "web.mfa.regenerateHint": "Os códigos antigos param de valer.",
-  "web.mfa.codesTitle": "Códigos de recuperação",
-  "web.mfa.codesWarning": "Guarde estes códigos num lugar seguro, fora deste aparelho. Eles aparecem só agora e cada um vale uma vez, se você perder o celular.",
-  "web.mfa.copyCodes": "Copiar os códigos",
-  "web.mfa.codesSaved": "Já guardei",
-  "web.passkeys.title": "Passkeys",
-  "web.passkeys.description": "Entre com a digital, o rosto ou a chave de segurança no lugar do código.",
-  "web.passkeys.emptyTitle": "Nenhuma passkey",
-  "web.passkeys.emptyBody": "Adicione uma para confirmar o login sem digitar código.",
-  "web.passkeys.add": "Adicionar passkey",
-  "web.passkeys.create": "Criar passkey",
-  "web.passkeys.name": "Nome da passkey",
-  "web.passkeys.nameHint": "Para reconhecer depois, por exemplo \"Celular\" ou \"Notebook\".",
-  "web.passkeys.created": "Criada em {time}",
-  "web.passkeys.lastUsed": "usada em {time}",
-  "web.passkeys.neverUsed": "nunca usada",
-  "web.passkeys.otherAddress": "Feita em outro endereço: não funciona aqui.",
-  "web.passkeys.rename": "Renomear",
-  "web.passkeys.renameNamed": "Renomear a passkey {name}",
-  "web.passkeys.remove": "Remover",
-  "web.passkeys.removeNamed": "Remover a passkey {name}",
-  "web.passkeys.removeConfirm": "Remover a passkey \"{name}\"? Ela deixa de entrar no Zuri.",
-  "web.passkeys.cancelled": "A operação foi cancelada no navegador.",
-  "web.passkeys.unsupported": "Este navegador não aceita passkeys.",
-  "web.sessions.title": "Saída automática",
-  "web.sessions.description": "Quando o Zuri encerra a sessão sozinho. Mudar pede a senha de novo.",
-  "web.sessions.idle": "Sem uso",
-  "web.sessions.presence": "Sem aba aberta",
-  "web.sessions.max": "Duração máxima",
-  "web.unit.minutes.one": "{count} minuto",
-  "web.unit.minutes.other": "{count} minutos",
-  "web.unit.hours.one": "{count} hora",
-  "web.unit.hours.other": "{count} horas",
   "web.nav.accessLog": "Acessos",
-  "web.security.laterTitle": "Em breve nesta aba",
-  "web.security.laterBody": "Lista de sessões abertas, acesso remoto por token e modo de bloqueio.",
   "web.nav.tasks": "Tarefas",
   "web.nav.notes": "Notas",
   "web.markdown.image": "[imagem: {alt}]",
@@ -240,12 +176,21 @@ export const ptBRCore = {
   "error.memoryReviewGone": "Esta revisão já foi resolvida.",
   "error.memorySame": "O texto novo é igual ao atual. Para corrigir um erro de digitação, use Editar.",
   "web.nav.memory": "Memória",
+  "web.nav.chat": "Conversa",
 } as const;
 
 /** Joins catalog parts. Marked pure so a bundle that never uses the whole catalog drops the call. */
-function join<A extends object, B extends object, C extends object, D extends object, E extends object>(a: A, b: B, c: C, d: D, e: E): A & B & C & D & E {
-  return { ...a, ...b, ...c, ...d, ...e };
+function join<A extends object, B extends object, C extends object, D extends object, E extends object, F extends object, G extends object>(
+  a: A,
+  b: B,
+  c: C,
+  d: D,
+  e: E,
+  f: F,
+  g: G,
+): A & B & C & D & E & F & G {
+  return { ...a, ...b, ...c, ...d, ...e, ...f, ...g };
 }
 
 /** The whole pt-BR catalog: what the server, the tests and the lint use. */
-export const ptBR = /* @__PURE__ */ join(ptBRCore, ptBRMemory, ptBRProductivity, ptBRSecurity, ptBRAi);
+export const ptBR = /* @__PURE__ */ join(ptBRCore, ptBRMemory, ptBRProductivity, ptBRSecurity, ptBRAi, ptBRChat, ptBRSettings);

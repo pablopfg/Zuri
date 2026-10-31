@@ -14,10 +14,12 @@ export {
   plural,
   ptBR,
   ptBRAi,
+  ptBRChat,
   ptBRCore,
   ptBRMemory,
   ptBRProductivity,
   ptBRSecurity,
+  ptBRSettings,
   t,
 } from "../i18n/index.ts";
 export { AGENT_INSTANCE_NAME } from "./constants.ts";
@@ -99,3 +101,4 @@ export {
 export * from "./productivity.ts";
 export * from "./memory.ts";
 export * from "./ai.ts";
+export * from "./chat.ts";
