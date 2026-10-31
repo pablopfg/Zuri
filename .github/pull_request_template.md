@@ -6,6 +6,21 @@
 
 <!-- Número e nome da etapa da especificação (docs/especificacao.md), e as dependências já mescladas. -->
 
+## Capturas de tela
+
+<!-- Obrigatório quando o PR cria ou muda uma tela (.claude/rules/capturas.md). Gere com
+node scripts/capturas-da-interface.ts docs/capturas/pr/<assunto> --exemplos <tela>=<rota>,
+faça commit e use links fixados no commit:
+https://raw.githubusercontent.com/pablopfg/Zuri/<sha>/docs/capturas/pr/<assunto>/<tela>-computador-claro.png
+Tela alterada: mostre antes e depois. Sem mudança visível: escreva "Sem mudança visível". -->
+
+**<Tela>**
+
+| | Claro | Escuro |
+| --- | --- | --- |
+| Computador |  |  |
+| Celular |  |  |
+
 ## Matriz de rastreabilidade
 
 <!-- Cada critério de aceite da etapa ligado a pelo menos um teste automatizado. -->
@@ -39,6 +54,7 @@
 - [ ] O título segue o Conventional Commits (`feat(bot): …`, `fix(auth): …`), com o texto em pt-BR
 - [ ] `CHANGELOG.md` atualizado em "Não lançado", ou o rótulo `sem-changelog` foi adicionado
 - [ ] `README.md` atualizado (mapa das etapas, funcionalidades, capturas) quando o PR muda funcionalidade, etapa, tela ou arquitetura
+- [ ] Capturas de tela (computador e celular, claro e escuro) na descrição quando o PR cria ou muda uma tela, ou "Sem mudança visível"
 - [ ] Migrations só de acréscimo; migrations e segredos novos descritos no grupo "Atualização"
 - [ ] Itens que podem sair do plano gratuito da Cloudflare marcados com ⚠️ e aprovados pelo dono
 - [ ] Nenhum segredo, domínio real, e-mail ou id do Telegram nos arquivos

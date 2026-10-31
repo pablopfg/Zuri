@@ -58,6 +58,19 @@ aparece nas capturas ou mexe na arquitetura, atualize o README **no mesmo PR**:
 
 A regra completa está em [`.claude/rules/readme.md`](.claude/rules/readme.md).
 
+## Capturas de tela no PR
+
+PR que cria ou muda uma tela mostra na descrição como ela ficou, no computador
+e no celular, nos temas claro e escuro. Com o servidor do e2e rodando numa base
+vazia:
+
+```sh
+node scripts/capturas-da-interface.ts docs/capturas/pr/<assunto> --exemplos <tela>=<rota>
+```
+
+Faça commit das imagens e preencha a seção "Capturas de tela" do modelo de PR.
+A regra completa está em [`.claude/rules/capturas.md`](.claude/rules/capturas.md).
+
 ## Convenções
 
 - Título do PR e commits em Conventional Commits: prefixo em inglês e o resto

@@ -22,5 +22,5 @@ Siga `docs/qa/estrategia-de-testes.md`.
    - textos em pt-BR e en, leitor de tela e teclado nas telas novas;
    - aparelho em outro fuso que o do dono (e2e com `timezoneId: "Asia/Tokyo"`).
 7. **Regressão.** Rode a suíte completa e compare com a `develop`. Teste instável é bug: ache a corrida.
-8. **Exploratório.** Para telas e bot, rode o app (`npm run dev`) e percorra o roteiro da etapa; anote o que encontrar.
+8. **Exploratório.** Para telas e bot, rode o app (`npm run dev`) e percorra o roteiro da etapa; anote o que encontrar. Olhe as capturas do PR (`.claude/rules/capturas.md`) uma a uma: texto cortado, chave de i18n crua, contraste, tema escuro e celular.
 9. **Relatório no PR** (seção "QA"): matriz, exigências por área cobertas, provas de falha, cobertura (antes e depois), notas do Lighthouse, achados e correções, o que ficou de fora e por quê.
