@@ -123,6 +123,9 @@ navegador (pt-BR quando não reconhece).
 
 ## Capturas de tela
 
-`node scripts/capturas-da-interface.ts <pasta>` tira as capturas do login, do
-início e da aba Segurança, nos temas claro e escuro, no celular e no
-computador. Precisa do servidor dos e2e rodando.
+`node scripts/capturas-da-interface.ts <pasta> [--exemplos] [tela=/rota ...]`
+tira as capturas das telas pedidas (sem pares, a de entrar e o início), nos
+temas claro e escuro, no celular e no computador. `--exemplos` enche a base
+com os dados de exemplo de `scripts/dados-de-exemplo.ts`. Precisa do servidor
+dos e2e rodando numa base vazia. Todo PR que cria ou muda uma tela usa esse
+script e mostra as imagens na descrição: veja `.claude/rules/capturas.md`.

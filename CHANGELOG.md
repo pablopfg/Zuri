@@ -26,6 +26,12 @@ o [SemVer](https://semver.org/lang/pt-BR/). Cada PR escreve a sua entrada em
   resumo em inglês.
 - `scripts/capturas-do-readme.ts` refaz as capturas do README em
   `docs/capturas/`, com dados de exemplo.
+- Regra permanente `.claude/rules/capturas.md`: todo PR que cria ou muda uma
+  tela mostra na descrição como ela ficou, no computador e no celular, nos
+  temas claro e escuro. O modelo de PR ganhou a seção "Capturas de tela".
+- `scripts/capturas-da-interface.ts` agora captura qualquer tela pedida
+  (`tela=/rota`), com dados de exemplo opcionais (`--exemplos`), e grava em
+  `docs/capturas/pr/<assunto>/`.
 - Regra permanente `.claude/rules/readme.md`: todo PR que muda
   funcionalidade, conclui etapa, muda uma tela das capturas ou a arquitetura
   atualiza o README junto com o changelog.

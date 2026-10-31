@@ -365,6 +365,7 @@ O agente executor pode começar a fase A sem nenhuma destas respostas; cada linh
 | N10 | Trava de leitura do bot (destravar por passkey ou e-mail depois de um período sem uso) | Ligada, 12 h | Etapa 15 |
 | N11 | TELEGRAM\_ADMIN\_ID obrigatório para comandos de segurança e aprovações | Sim | Etapa 12 |
 | N12 | Teto do banco | 900 MB (confirmar o limite vigente do plano Free) | Etapa 2 |
+| N13 | Cadastro inicial do dono por uma tela de primeiro acesso | Decidido pelo Pablo em 31/10/2026: código de instalação como segredo, uso único, 1 h de validade, 2FA ou passkey obrigatórios (`docs/planos/cadastro-inicial-do-dono.md`) | Trabalho paralelo, antes da etapa 24 |
 
 ## Etapas de implementação
 
@@ -498,7 +499,7 @@ O comportamento completo está na seção "Bot do Telegram do administrador"; aq
 
 **Etapa 17 · Busca semântica** (`feat: adiciona busca semântica opcional`) — desligada por padrão; ligar cria as tabelas; embeddings do Workers AI em lotes de 50 com teto diário; vetores no SQLite do Durable Object; busca híbrida palavra-chave + significado em memórias, tarefas, notas e automações; reindexar. Aceite: desligada, o comportamento é idêntico ao sem o módulo.
 
-**Etapa 18 · Servidores MCP remotos** (`feat: adiciona servidores MCP remotos`) — Streamable HTTP com o cliente MCP oficial, sem auth / bearer / OAuth, credenciais cifradas com `MCP_CREDENTIAL_KEY`, `fetch` protegido (trava de origem, DNS conferido, sem redirecionamento, limites de tamanho, 35 s), ferramentas desligadas por padrão com prefixo `mcp_`, troca de URL zera confiança e credencial. Aceite: os testes de `docs/mcp.md` do Talorys.
+**Etapa 18 · Servidores MCP remotos** (`feat: adiciona servidores MCP remotos`) — Streamable HTTP com o cliente MCP oficial, sem auth / bearer / OAuth, credenciais cifradas com `MCP_CREDENTIAL_KEY`, `fetch` protegido (trava de origem, DNS conferido, sem redirecionamento, limites de tamanho, 35 s), ferramentas desligadas por padrão com prefixo `mcp_`, troca de URL zera confiança e credencial. Diferente do Talorys, as ferramentas MCP passam por triagem por turno (dica "Quando usar" do dono, no máximo 10 ligadas e 6 oferecidas, ferramenta `find_tools`) e a sessão fecha no fim do turno; detalhes em `docs/planos/mcp.md`. Pode ser entregue em duas partes: 18a (sem auth e Bearer) e 18b (OAuth). Aceite: os testes de `docs/mcp.md` do Talorys e os de `docs/planos/mcp.md`.
 
 **Etapa 19 · Google Agenda** (`feat: integra o Google Agenda`) — OAuth com cliente do próprio dono, agendas só leitura ou leitura e escrita, ferramentas `list_calendar_events`, `create_calendar_event`, `update_calendar_event`, `delete_calendar_event` (esta como proposta), rotinas de briefing às 07:00 e fechamento às 19:00. No bot, `/hoje` passa a incluir a agenda.
 
