@@ -7,6 +7,7 @@ import { App } from "./App.tsx";
 import { SessionProvider } from "./hooks/session.tsx";
 import { ApiError } from "./lib/api.ts";
 import { I18nProvider } from "./lib/i18n.tsx";
+import { RouteErrorPage } from "./pages/RouteErrorPage.tsx";
 import { initTheme } from "./lib/theme.ts";
 import "./styles.css";
 
@@ -32,6 +33,11 @@ const router = createBrowserRouter([
         <SessionProvider>
           <App />
         </SessionProvider>
+      </I18nProvider>
+    ),
+    errorElement: (
+      <I18nProvider>
+        <RouteErrorPage />
       </I18nProvider>
     ),
   },

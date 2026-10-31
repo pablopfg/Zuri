@@ -21,8 +21,10 @@ test("collapsing keeps every control named, remembers the choice and expands aga
   const wide = (await aside.boundingBox())?.width ?? 0;
   expect(wide).toBeGreaterThan(200);
 
+  await expect(aside.getByRole("button", { name: "Recolher menu" })).toHaveAttribute("aria-expanded", "true");
   await aside.getByRole("button", { name: "Recolher menu" }).click();
   await expect(aside).toHaveAttribute("data-collapsed", "true");
+  await expect(aside.getByRole("button", { name: "Expandir menu" })).toHaveAttribute("aria-expanded", "false");
   await expect.poll(async () => (await aside.boundingBox())?.width).toBeLessThanOrEqual(72);
 
   // Labels leave the screen but stay as accessible names.

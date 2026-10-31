@@ -241,3 +241,41 @@ test("unsaved note text never holds back signing out", async ({ page }) => {
   await expect(page).toHaveURL(/\/entrar/);
   await expect(page.getByRole("dialog", { name: "Sair sem salvar?" })).toHaveCount(0);
 });
+
+test("unsaved note text: the main navigation and the browser's back ask first on any screen @mobile", async ({ page }) => {
+  const title = `Rascunho móvel ${test.info().project.name}`;
+  // From the list, so the browser's back has an app page to return to.
+  await openSignedIn(page, "/notas");
+  await page.getByRole("link", { name: "Nova nota" }).click();
+  await page.getByLabel("Título").fill(title);
+  await page.getByRole("button", { name: "Salvar" }).click();
+  await expect(page).toHaveURL(/\/notas\/[0-9a-f-]{36}$/);
+  const noteUrl = page.url();
+  const leave = page.getByRole("dialog", { name: "Sair sem salvar?" });
+
+  // Sidebar on a computer, bottom navigation on a phone: whichever shows.
+  await page.getByLabel("Texto da nota").fill("ainda não salvo");
+  await page.getByRole("link", { name: "Início" }).filter({ visible: true }).last().click();
+  await expect(leave).toBeVisible();
+  await leave.getByRole("button", { name: "Continuar editando" }).click();
+  expect(page.url()).toBe(noteUrl);
+
+  // The browser's back, then leaving anyway: the previous page opens.
+  await page.goBack();
+  await expect(leave).toBeVisible();
+  await leave.getByRole("button", { name: "Sair sem salvar" }).click();
+  await expect(page).toHaveURL(/\/notas$/);
+  await expect(leave).toBeHidden();
+});
+
+test("moving a note with unsaved text to the trash does not ask about leaving", async ({ page }) => {
+  await openSignedIn(page, "/notas/nova");
+  await page.getByLabel("Título").fill(`Para a lixeira ${test.info().project.name}`);
+  await page.getByRole("button", { name: "Salvar" }).click();
+  await expect(page).toHaveURL(/\/notas\/[0-9a-f-]{36}$/);
+  await page.getByLabel("Texto da nota").fill("texto que vai junto");
+  await page.getByRole("button", { name: "Mover para a lixeira" }).click();
+  await expect(page).toHaveURL(/\/notas$/);
+  await expect(page.getByText("Nota movida para a lixeira.")).toBeVisible();
+  await expect(page.getByRole("dialog", { name: "Sair sem salvar?" })).toHaveCount(0);
+});

@@ -61,6 +61,7 @@ export function AppShell() {
       <ConfirmDialog />
 
       <aside
+        id="menu-lateral"
         data-collapsed={collapsed}
         onKeyDown={(event) => event.key === "Escape" && setTipsHidden(true)}
         onFocus={() => setTipsHidden(false)}
@@ -71,7 +72,9 @@ export function AppShell() {
         )}
       >
         <div className={cn("flex px-3", collapsed ? "flex-col items-center gap-1 py-3" : "h-16 items-center justify-between gap-2")}>
-          {brand}
+          <Tip label={collapsed ? t("app.name") : null} hidden={tipsHidden}>
+            {brand}
+          </Tip>
           <Tip label={collapsed ? t("web.notifications.open") : null} hidden={tipsHidden}>
             <NotificationCenter />
           </Tip>
@@ -92,7 +95,7 @@ export function AppShell() {
         </nav>
         <div className="space-y-1 border-t border-border px-3 py-3">
           <Tip label={collapsed ? t("web.nav.expand") : null} hidden={tipsHidden}>
-            <button type="button" onClick={toggle} className={sideLink({ isActive: false })}>
+            <button type="button" onClick={toggle} aria-expanded={!collapsed} aria-controls="menu-lateral" className={sideLink({ isActive: false })}>
               {collapsed ? <PanelLeftOpen className="h-5 w-5 shrink-0" aria-hidden /> : <PanelLeftClose className="h-5 w-5 shrink-0" aria-hidden />}
               <Label text={collapsed ? t("web.nav.expand") : t("web.nav.collapse")} hidden={collapsed} />
             </button>
