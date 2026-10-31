@@ -1,8 +1,8 @@
 # Plano · Cadastro inicial do dono (primeiro acesso)
 
-Situação: **proposta, aguardando aprovação do Pablo** (31/10/2026). Nada deste
-plano está implementado. Depois do OK, a decisão vai para
-`.claude/memoria/decisoes.md` e a especificação passa a citar este arquivo.
+Situação: **aprovado pelo Pablo em 31/10/2026** (opção E, como está). A
+decisão está em `.claude/memoria/decisoes.md` e na especificação (N13). A
+implementação segue os três PRs do passo a passo.
 
 ## O pedido
 
@@ -240,11 +240,11 @@ Os PRs 1 e 2 também atualizam README e CHANGELOG no que mudam.
 | Texto da tela entregar a infraestrutura | Revisão dos textos e teste que procura nomes proibidos no catálogo das telas públicas |
 | Custo | Nada pago: só segredos, Durable Object e Turnstile, todos no plano Free |
 
-## O que preciso do Pablo
+## O que o Pablo confirmou (31/10/2026)
 
-1. Aprovar a opção E (código de instalação como segredo).
-2. Confirmar os campos do cadastro: como prefere ser chamado, e-mail, senha,
+1. Aprovada a opção E (código de instalação como segredo).
+2. Confirmados os campos do cadastro: como prefere ser chamado, e-mail, senha,
    idioma e fuso. Nome completo, foto ou telefone ficam de fora, a não ser que
    ele queira.
-3. Confirmar que o segundo passo (2FA ou passkey) é obrigatório já no
+3. Confirmado que o segundo passo (2FA ou passkey) é obrigatório já no
    cadastro.
