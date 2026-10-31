@@ -160,6 +160,30 @@ describe("signing in with a passkey", () => {
     });
   });
 
+  it("QA-4-04: after a wrong answer, a right answer to the same request is refused (the request went with it)", async () => {
+    await withAuth("pk-request-once", async (h) => {
+      const { row } = await turnOn(h);
+      const { key } = await addPasskey(h.service, row);
+      const pending = await challenge(h);
+      const options = await h.service.passkeyOptions(pending.token);
+      const bad = await key.assert(options, TEST_RP.origin, { wrongKey: true });
+      expect(await outcome(h.service.completePasskey(pending.token, bad, client(NET), noCookies))).toBe("INVALID_CREDENTIALS");
+      const good = await key.assert(options, TEST_RP.origin);
+      expect(await outcome(h.service.completePasskey(pending.token, good, client(NET), noCookies))).toBe("INVALID_CREDENTIALS");
+    });
+  });
+
+  it("a passkey's name loses control characters, and a name of only those is refused", async () => {
+    await withAuth("pk-name", async (h) => {
+      const { row } = await turnOn(h);
+      const key = await softPasskey();
+      const options = await h.service.passkeyRegistrationOptions(row);
+      const info = await h.service.addPasskey(row, { name: "Cel\u0007ular\u2028", response: await key.register(options, TEST_RP.origin) }, client(NET));
+      expect(info.name).toBe("Celular");
+      expect(() => h.service.renamePasskey(row, info.id, "\u0001\u0002")).toThrow(expect.objectContaining({ code: "VALIDATION_FAILED" }));
+    });
+  });
+
   it("without a request sent first, any answer is refused", async () => {
     await withAuth("pk-no-request", async (h) => {
       const { row } = await turnOn(h);

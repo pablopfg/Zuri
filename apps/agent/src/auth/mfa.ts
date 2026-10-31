@@ -272,16 +272,33 @@ export class TwoStep {
     return Array.isArray(times) ? times.filter((t): t is number => typeof t === "number" && t > since && t <= this.clock()) : [];
   }
 
-  noteWrongCode(): void {
-    const times = [...this.wrongCodeTimes(), this.clock()].slice(-MFA_WRONG_CODES_GLOBAL);
+  /**
+   * Counts an answer as wrong before it is checked, in the same synchronous
+   * step as the pause check, so answers sent together can't all slip under the
+   * pause while the slow check runs. A right answer gives it back (`release`).
+   */
+  reserveWrongCode(): number {
+    const at = this.clock();
+    // A burst may leave more than 10 in the window; past 100 the oldest add nothing.
+    const times = [...this.wrongCodeTimes(), at].slice(-100);
+    this.state.set("auth_mfa_wrong_codes", JSON.stringify(times));
+    return at;
+  }
+
+  releaseWrongCode(at: number): void {
+    const times = this.wrongCodeTimes();
+    const index = times.lastIndexOf(at);
+    if (index === -1) return;
+    times.splice(index, 1);
     this.state.set("auth_mfa_wrong_codes", JSON.stringify(times));
   }
 
   /** Until when networks that aren't the owner's must wait to try a code; null when they may now. */
   pausedUntil(): number | null {
     const times = this.wrongCodeTimes();
-    const oldest = times[0];
-    return times.length >= MFA_WRONG_CODES_GLOBAL && oldest !== undefined ? oldest + MFA_WRONG_CODES_WINDOW_MS : null;
+    // Paused until the window holds fewer than the limit again.
+    const oldest = times[times.length - MFA_WRONG_CODES_GLOBAL];
+    return oldest !== undefined ? oldest + MFA_WRONG_CODES_WINDOW_MS : null;
   }
 
   // ---------- Sign-in challenges ----------

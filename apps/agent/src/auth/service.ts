@@ -372,9 +372,8 @@ export class AuthService {
     throw new AppError("RATE_LIMITED", undefined, { retryAfter: Math.max(1, Math.ceil((until - this.#clock()) / 1000)) });
   }
 
-  /** A wrong second step, wherever it was given: the shared pause, the activity, and the alert at three in a row. */
+  /** A wrong second step, wherever it was given (already counted for the pause): the activity, and the alert at three in a row. */
   private noteWrongSecondStep(client: ClientInfo, reason: string): void {
-    this.twoStep.noteWrongCode();
     const failures = this.twoStep.consecutiveFailures();
     this.events.record("mfa_failure", client, { reason, alert: failures === MFA_FAILURES_ALERT });
   }
@@ -395,7 +394,9 @@ export class AuthService {
       this.events.record("mfa_failure", client, { reason: "expired" });
       throw this.challengeExpired();
     }
+    const reserved = this.twoStep.reserveWrongCode();
     const factor = await check(row);
+    if (factor) this.twoStep.releaseWrongCode(reserved);
     if (!factor) {
       this.noteWrongSecondStep(client, reason);
       const left = Math.max(0, MFA_MAX_ATTEMPTS - attempts);
@@ -660,7 +661,9 @@ export class AuthService {
     // The shared pause first: a paused network spends none of its own tries.
     this.assertCodesAllowed(client, reason);
     const attempt = this.beginChecked(client, "mfa_failure");
+    const reserved = this.twoStep.reserveWrongCode();
     const factor = await this.twoStep.verify(code, options);
+    if (factor) this.twoStep.releaseWrongCode(reserved);
     if (!factor) {
       this.noteWrongSecondStep(client, reason);
       throw new AppError("INVALID_CREDENTIALS", "auth.mfa.wrongCode");

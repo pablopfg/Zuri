@@ -274,6 +274,53 @@ describe("signing in with the second step on", () => {
   });
 });
 
+describe("second steps sent together", () => {
+  it("QA-4-01: a burst of wrong codes from unknown networks can't slip under the pause while the codes are checked", async () => {
+    await withAuth("mfa-burst", async (h) => {
+      const { secret } = await turnOn(h);
+      const wrong = await wrongCode(h, secret);
+      for (let i = 0; i < 9; i++) {
+        const net = `203.0.113.${10 + i}`;
+        await outcome(h.service.completeMfa(await challenge(h, net), wrong, client(net), noCookies));
+      }
+      const nets = [0, 1, 2, 3, 4].map((i) => `203.0.113.${40 + i}`);
+      const tokens = await Promise.all(nets.map((net) => challenge(h, net)));
+      const results = await Promise.all(
+        tokens.flatMap((token, i) => [0, 1, 2, 3, 4].map(() => outcome(h.service.completeMfa(token, wrong, client(nets[i] ?? ""), noCookies)))),
+      );
+      // Only the 10th wrong code is checked; every other answer of the burst waits.
+      expect(results.filter((r) => r === "INVALID_CREDENTIALS")).toHaveLength(1);
+      expect(results.filter((r) => r === "RATE_LIMITED")).toHaveLength(24);
+    });
+  });
+
+  it("the same right code twice on one cookie opens one session; the same recovery code on two challenges, one", async () => {
+    await withAuth("mfa-concurrent", async (h) => {
+      const { secret, codes } = await turnOn(h);
+      const token = await challenge(h, OWN);
+      const right = await code(h, secret);
+      const twice = await Promise.all([0, 1].map(() => outcome(h.service.completeMfa(token, right, client(OWN), noCookies))));
+      expect(twice.filter((r) => r === "ok")).toHaveLength(1);
+
+      const [a, b] = await Promise.all([challenge(h, OWN), challenge(h, OWN)]);
+      const both = await Promise.all([a, b].map((t) => outcome(h.service.completeMfa(t, codes[5] ?? "", client(OWN), noCookies))));
+      expect(both.filter((r) => r === "ok")).toHaveLength(1);
+      expect(h.service.twoStep.status().recoveryCodesLeft).toBe(9);
+    });
+  });
+
+  it("a weak password that got through the second step must still be changed", async () => {
+    await withAuth("mfa-weak", async (h) => {
+      const { secret } = await turnOn(h);
+      const plain = "senha123senha123senha";
+      const service = rawRebuild(h, { passwordHash: undefined, plainPassword: plain });
+      const pending = (await service.login({ email: "dono@exemplo.com.br", password: plain }, client(OWN), noCookies)) as MfaPending;
+      await service.completeMfa(pending.mfa.token, await code(h, secret), client(OWN), noCookies);
+      expect(service.passwordChangeRequired()).toBe(true);
+    });
+  });
+});
+
 describe("the code in a signed-in session", () => {
   it("confirm takes a current code (not twice, never a recovery code) and opens the 15 minutes", async () => {
     await withAuth("mfa-confirm", async (h) => {
