@@ -1,7 +1,8 @@
 import { runInDurableObject } from "cloudflare:test";
 import type { ZuriAgent } from "../src/agent/zuri-agent.ts";
 import type { ClientInfo } from "../src/auth/client.ts";
-import { type AuthSecrets, AuthService } from "../src/auth/service.ts";
+import type { RelyingParty } from "../src/auth/passkeys.ts";
+import { type AuthSecrets, AuthService, type SignedIn } from "../src/auth/service.ts";
 import type { Turnstile, TurnstileResult } from "../src/auth/turnstile.ts";
 import { Database } from "../src/db/database.ts";
 import { InternalState } from "../src/db/internal-state.ts";
@@ -48,8 +49,31 @@ export function fakeTurnstile(answer: TurnstileResult = "ok") {
   return turnstile;
 }
 
+/**
+ * The service as the password-only tests see it: `login` always opens a session.
+ * If the second step is on, it fails the test instead of handing back a challenge.
+ */
+export type PasswordAuth = { login(...args: Parameters<AuthService["login"]>): Promise<SignedIn> } & AuthService;
+
+export function passwordOnly(auth: AuthService): PasswordAuth {
+  const login = async (...args: Parameters<AuthService["login"]>): Promise<SignedIn> => {
+    const result = await auth.login(...args);
+    if ("mfa" in result) throw new Error("unexpected second step: use h.service for two-step tests");
+    return result;
+  };
+  return new Proxy(auth, {
+    get(target, property) {
+      if (property === "login") return login;
+      const value: unknown = Reflect.get(target, property, target);
+      return typeof value === "function" ? value.bind(target) : value;
+    },
+  }) as PasswordAuth;
+}
+
 export interface Harness {
-  auth: AuthService;
+  auth: PasswordAuth;
+  /** The same service, whose `login` may answer with a second-step challenge. */
+  service: AuthService;
   db: Database;
   state: InternalState;
   settings: SettingsRepository;
@@ -59,7 +83,11 @@ export interface Harness {
   events: () => { kind: string; reason: string; network: string; alert_pending: number; count: number; known_device: number }[];
 }
 
+/** The host and origin of TEST_ENV.PUBLIC_URL. */
+export const TEST_RP: RelyingParty = { rpId: "zuri.exemplo.com.br", origin: "https://zuri.exemplo.com.br" };
+
 export interface HarnessOptions {
+  relyingParty?: RelyingParty;
   secrets?: Partial<AuthSecrets>;
   turnstile?: Turnstile | null;
   clock?: FakeClock;
@@ -99,14 +127,21 @@ export function withAuth<T>(name: string, fn: (h: Harness) => Promise<T> | T, op
           breached.calls++;
           return breached.answer;
         },
+        relyingParty: options.relyingParty ?? TEST_RP,
       });
     const events = () => db.all<ReturnType<Harness["events"]>[number]>(`SELECT * FROM zur_auth_events ORDER BY id`);
-    return fn({ auth: build(), db, state, settings, clock, breached, events });
+    const service = build();
+    return fn({ auth: passwordOnly(service), service, db, state, settings, clock, breached, events });
   });
 }
 
 /** Builds another service over the same database, as a new deploy with other secrets would. */
-export function rebuild(h: Harness, secrets: Partial<AuthSecrets>, turnstile: Turnstile | null = null): AuthService {
+export function rebuild(h: Harness, secrets: Partial<AuthSecrets>, turnstile: Turnstile | null = null): PasswordAuth {
+  return passwordOnly(rawRebuild(h, secrets, turnstile));
+}
+
+/** Like rebuild, with the second step's challenges handed back as they are. */
+export function rawRebuild(h: Harness, secrets: Partial<AuthSecrets>, turnstile: Turnstile | null = null): AuthService {
   return new AuthService({
     db: h.db,
     state: h.state,
@@ -118,6 +153,7 @@ export function rebuild(h: Harness, secrets: Partial<AuthSecrets>, turnstile: Tu
       h.breached.calls++;
       return h.breached.answer;
     },
+    relyingParty: TEST_RP,
   });
 }
 

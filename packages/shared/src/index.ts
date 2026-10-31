@@ -55,3 +55,21 @@ export {
   passwordProblem,
   unpredictableLength,
 } from "./password.ts";
+export * from "./passkeys.ts";
+export {
+  base32Decode,
+  base32Encode,
+  hashRecoveryCode,
+  matchTotp,
+  newRecoveryCode,
+  newTotpSecret,
+  normalizeRecoveryCode,
+  normalizeTotp,
+  otpauthUri,
+  RECOVERY_CODE_COUNT,
+  TOTP_DIGITS,
+  TOTP_DRIFT_STEPS,
+  TOTP_PERIOD_S,
+  totpCode,
+  totpStep,
+} from "./totp.ts";

@@ -13,7 +13,10 @@ export type InternalKey =
   | "auth_first_sign_in_at"
   | "auth_attack_alerted_at"
   | "auth_events_pruned_at"
-  | "auth_events_cap_mark";
+  | "auth_events_cap_mark"
+  | "auth_mfa_wrong_codes"
+  | "auth_passkey_pending"
+  | "auth_passkey_user";
 
 export class InternalState {
   constructor(private readonly db: Database) {}

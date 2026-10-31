@@ -19,8 +19,18 @@ etapas ficam detalhadas; as mais antigas viram uma linha na tabela.
 | 1 | mesclada (31/10/2026) | #6 | Worker único, Durable Object `ZuriAgent` e os seis portões |
 | 2 | mesclada (31/10/2026) | #7 | Migration 1, configurações (idioma e fuso), erros no idioma do dono, lint de i18n |
 | 3 | mesclada (31/10/2026) | #8 | Login, sessões, CSRF, força bruta, Turnstile adaptativo, atividade de acesso |
+| 4 | mesclada (31/10/2026) | #9 | 2FA TOTP, códigos de recuperação, desafio em cookie, passkeys reutilizáveis |
 
 ## Últimas etapas (detalhe)
+
+### Etapa 4 · 2FA e passkeys
+- Entregou: `packages/shared/src/{totp,passkeys}.ts`, `apps/agent/src/auth/{mfa,passkeys}.ts` (`TwoStep`, `Passkeys`), fluxo em `service.ts` (`login` devolve `SignedIn | MfaPending`; `completeMfa`, `completePasskey`, gestão), rotas `/api/auth/mfa*` e `/api/auth/passkeys*`, cookie `__Host-zuri_mfa`. Docs: `docs/seguranca.md`.
+- Migrations: versão 3 (`zur_mfa_secrets`, `zur_recovery_codes`, `zur_passkeys`, `zur_mfa_challenges`).
+- Decisões técnicas: `@simplewebauthn/server` 14.0.3; rpId e origem sempre do `PUBLIC_URL`; segredo TOTP selado com chave HKDF do `PASSWORD_PEPPER` (pepper novo desliga o 2FA); `confirm` aceita `{totp}`; recusa pela pausa vira `login_rate_limited` dobrado (motivo `mfa_code`/`mfa_passkey`).
+- Reutilizável na etapa 16: `Passkeys.authenticationOptions(rp, "required")` e `verifyAssertion(response, { challenge, rp, userVerification: "required" })`; quem chama guarda o desafio (`zur_telegram_approvals.webauthn_challenge`).
+- Ficou para depois: tela de 2FA/passkeys e `@simplewebauthn/browser` (etapa 5); entrega dos alertas (etapa 11).
+- Perguntas abertas para o Pablo (não travam): ligar o 2FA e adicionar passkey devem pedir a senha digitada de novo, em vez de valer o login dos últimos 15 min? Repetir o alerta de ataque lento ao TOTP?
+- Atenção para a próxima: no DO, todo `await` abre a porta para outro pedido; reserve estado antes do `await` e reconfira dentro de `transactionSync` (veja `armadilhas.md`). A tela trata `200 {mfaRequired}` no login e `details.mfa` (`retry`/`expired`).
 
 ### Etapa 3 · Login e sessões
 - Entregou: `packages/shared/src/{crypto,password,auth}.ts`, `apps/agent/src/auth/` (`service`, `sessions`, `login-limiter`, `events`, `client`, `turnstile`), `src/api/{app,http}.ts` (rotas `/api/auth/*`, CSRF, trava `PASSWORD_CHANGE_REQUIRED`), `src/db/internal-state.ts`. Doc: `docs/seguranca.md`.
@@ -34,13 +44,6 @@ etapas ficam detalhadas; as mais antigas viram uma linha na tabela.
 - Migrations: versão 1 (`zur_settings` chave/valor JSON, `zur_activity`); `zur_schema_version` criada pelo `migrate()`. Teste fixa o sha256 de cada migration mesclada: migration nova = linha nova em `PINNED`.
 - Decisões técnicas: parser do lint é `rolldown/parseAst` (TypeScript 7 não tem API JS; rolldown 1.2.16 já vinha com o Vite, agora devDependency explícita); fuso padrão vem de `DEFAULT_TIMEZONE` se válido; recusas dos portões do Worker ficam em pt-BR (não acordam o DO); sem rota de configurações ainda (precisa de sessão, etapa 3/5); limite do plano Free conferido em 31/10/2026: 1 GB por DO, 5 GB por conta, teto de 900 MB mantido.
 - Atenção para a próxima: erros dentro do DO já saem no idioma das configurações via `errorResponse(error, locale)`; `Database.run` devolve `rowsWritten` (conta índices, não use como "linhas afetadas"); a checagem de 900 MB e a retenção de `zur_activity` ainda não existem (etapa 23, ou antes se uma rota gravar muito); a allowlist do backup de `zur_settings` deve ser positiva.
-
-### Etapa 1 · Worker, Durable Object e portões
-- Entregou: `apps/agent/wrangler.jsonc`, `src/index.ts` (portões 1 a 4 e 6), `src/gates/` (Access, cabeçalhos, segredo do webhook do Telegram), `src/agent/zuri-agent.ts`, `src/api/app.ts` (Hono no DO, portão 5 fechado: só `GET /api/health` é pública), `apps/web/public/_headers`, códigos de erro em `packages/shared/src/errors.ts`. Doc: `docs/arquitetura.md`.
-- Decisões técnicas: agents 0.30.1, hono 4.13.14, wrangler 4.153.0, @cloudflare/vitest-plugin 1.4.8 (o antigo vitest-pool-workers foi renomeado); `compatibility_date` 2026-10-23 (máximo do workerd fixado); tipos por `wrangler types` (o typecheck falha se desatualizados); `INTERNAL_ERROR` 500 para falha sem código; erros com o texto pt-BR do catálogo; repasse com `env.AGENT.getByName` (sem RPC extra); traces desligados (cota a partir de 1/12/2026); `send_metrics: false`.
-- `PUBLIC_URL`, `ACCESS_*` documentados como **segredo** no painel: o `wrangler deploy` apaga variáveis do painel que não estão no `wrangler.jsonc`. A etapa 24 confirma isso no deploy.
-- e2e sobe o Worker real (`wrangler dev` com `tests/e2e/worker.env`). `npm run dev` exige `apps/agent/.dev.vars` só com os segredos.
-- Atenção para a próxima: o catálogo exige que toda chave seja usada; erros vêm de `DEFAULT_ERROR_MESSAGE` em `packages/shared`. A etapa 2 trocou `DEFAULT_LOCALE` em `http/errors.ts` pelo idioma das configurações. Armadilhas novas do Agents SDK em `armadilhas.md`.
 
 <!-- Modelo, até 10 linhas por etapa:
 ### Etapa NN · <nome>
@@ -60,6 +63,6 @@ etapas ficam detalhadas; as mais antigas viram uma linha na tabela.
 
 ## Próxima etapa
 
-- Número e nome: 4 · 2FA e passkeys
-- Dependências mescladas: sim (etapa 3, #8)
+- Número e nome: 5 · Casca da interface (fecha a fase A: mandar resumo de fase)
+- Dependências mescladas: sim (etapa 4, #9)
 - Precisa de algo do Pablo antes: não

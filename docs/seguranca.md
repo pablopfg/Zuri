@@ -35,8 +35,11 @@ documento cresce a cada etapa. Os portões de toda requisição estão em
   nada. A redefinição vale já na primeira requisição depois do deploy, mesmo
   que seja um login com a senha antiga. Trocar só o `PASSWORD_PEPPER` também
   apaga a senha do banco: defina junto um `OWNER_PASSWORD` ou
-  `OWNER_PASSWORD_HASH`, ou o login fica em 503 `NOT_CONFIGURED`. A recuperação
-  por e-mail chega na etapa 11.
+  `OWNER_PASSWORD_HASH`, ou o login fica em 503 `NOT_CONFIGURED`. Um segredo de
+  senha novo mantém a verificação em duas etapas; um `PASSWORD_PEPPER` novo é a
+  redefinição completa (perdeu a senha **e** o celular) e desliga a verificação
+  em duas etapas e as passkeys, com um evento `mfa_disabled` marcado para alerta.
+  A recuperação por e-mail chega na etapa 11.
 - Não existe rota de cadastro, de configuração inicial nem de "assumir o dono".
 
 ## Política de senha
@@ -96,9 +99,75 @@ Ações sensíveis (regra 7 da especificação) pedem a senha digitada nos últi
 15 minutos **nesta sessão**: o login conta, e `POST /api/auth/confirm` abre a
 janela de novo, com o mesmo limite de tentativas do login. Fora da janela, 403
 `RECENT_AUTH_REQUIRED`. A sessão diz até quando a janela vale
-(`recentAuthUntil`). O código TOTP no lugar da senha chega com a verificação
-em duas etapas (etapa 4); até lá, um código recebe 400 `VALIDATION_FAILED` sem
-gastar tentativa da rede.
+(`recentAuthUntil`). Com a verificação em duas etapas ligada, um código atual do
+aplicativo (`{totp}`) vale no lugar da senha, com os mesmos limites dos códigos
+do login; nunca um código de recuperação. Com ela desligada, um código recebe
+401 `INVALID_CREDENTIALS` sem gastar tentativa da rede.
+
+## Verificação em duas etapas
+
+Opcional no código e ligada pelo dono em Configurações → Segurança (a tela
+chega na etapa 5). Recomendado ligar logo depois do primeiro login.
+
+- **Aplicativo autenticador (TOTP, RFC 6238).** HMAC-SHA-1, 6 dígitos, passos
+  de 30 segundos, segredo de 160 bits. Vale o passo atual e um de cada lado
+  (relógio do celular um pouco fora). Um passo já aceito, e qualquer anterior,
+  nunca vale de novo: o mesmo código não entra duas vezes. O link `otpauth://`
+  leva o nome do agente, nunca o e-mail.
+- **Segredo cifrado.** Só o texto cifrado (AES-256-GCM, chave derivada por HKDF
+  do `PASSWORD_PEPPER`) fica em `zur_mfa_secrets`: uma cópia do banco sozinha
+  não gera códigos. A configuração mostra o segredo uma vez e só liga depois de
+  um código feito com ele, em até 10 minutos.
+- **Códigos de recuperação.** 10 códigos de 80 bits (`ABCD-EFGH-JKLM-NPQR`),
+  mostrados uma vez e guardados só como SHA-256. Cada um vale uma vez e some ao
+  ser usado; usar um gera evento com alerta. Gerar novos invalida os antigos e
+  pede um código do aplicativo.
+- **Desafio do login.** Com a verificação ligada, a senha certa não abre
+  sessão: responde 200 `{mfaRequired: true, passkey, expiresAt}` e grava o
+  cookie `__Host-zuri_mfa` (`HttpOnly`, `Secure`, `SameSite=Strict`, 5 min). O
+  banco guarda só `HMAC(SESSION_SECRET, cookie)`. O desafio vale 5 minutos,
+  aceita 5 respostas erradas e abre uma sessão só; depois disso, a senha é
+  pedida de novo e o cookie é apagado. A tentativa de senha continua contando
+  como falha da rede até o segundo passo dar certo. Trocar a senha ou
+  redefini-la pelo painel encerra os desafios pendentes.
+- **Pausa global.** 10 respostas erradas (códigos ou passkeys) em 15 minutos,
+  somando todos os desafios e redes, pausam as redes desconhecidas (sem login
+  nos últimos 30 dias) com 429 `RATE_LIMITED` até a janela passar. Quem tem a
+  senha não compra mais chutes espalhando pedidos. As redes do dono seguem.
+  Os pedidos recusados pela pausa viram uma linha só na atividade por rede e
+  janela, e pedir de novo as opções de passkey devolve o mesmo pedido ainda
+  válido: insistir não gasta a cota de gravações do plano gratuito.
+- **Alertas.** 3 segundos passos errados seguidos, ligar ou desligar a
+  verificação, gerar códigos novos, usar um código de recuperação, adicionar ou
+  remover uma passkey: eventos com alerta (entregues na etapa 11). Ligar ou
+  desligar encerra todas as outras sessões.
+- **Mexer na verificação** pede sessão e senha recente (15 min). Desligar pede
+  também um código atual ou de recuperação, e apaga segredo, códigos, passkeys e
+  desafios pendentes. Os códigos digitados numa sessão gastam as 3 tentativas da
+  rede, como a senha.
+
+## Passkeys
+
+- **Segundo passo, não substituto da senha.** Uma passkey (WebAuthn) responde
+  ao desafio do login no lugar do código. Ela só pode ser criada com a
+  verificação em duas etapas ligada: os códigos de recuperação são o caminho de
+  volta se todas as passkeys se perderem. Até 10.
+- **Do host onde nasceu.** O `rpId` e a origem vêm sempre do `PUBLIC_URL`,
+  nunca do pedido. Uma passkey criada em outro endereço (por exemplo, no
+  `workers.dev` antes do domínio próprio) aparece na lista com
+  `usableHere: false`, nunca é oferecida e a resposta dela é recusada.
+- **Desafio.** 32 bytes aleatórios do servidor (o WebAuthn pede pelo menos
+  16), válido por 2 minutos e usado uma vez, certo ou errado. O contador de
+  assinatura precisa avançar, para um clone aparecer. Só a chave pública fica
+  guardada.
+- **Verificação do usuário.** No login, `userVerification: "preferred"`: a
+  senha já veio antes, então uma chave de segurança sem PIN também serve. A
+  verificação fica em `Passkeys.verifyAssertion`, que recebe o desafio guardado
+  por quem chama; as aprovações pelo bot (etapa 16) usam a mesma função com
+  `"required"`, e uma resposta sem a marca de verificação (digital, rosto ou
+  PIN) é recusada.
+- Biblioteca: `@simplewebauthn/server` 14.0.3, atestação `none`, algoritmos
+  EdDSA, ES256 e RS256.
 
 ## Força bruta
 

@@ -65,6 +65,8 @@ export class ZuriAgent extends Agent<WorkerEnv> {
         },
         turnstile: createTurnstile(env.TURNSTILE_SITE_KEY, env.TURNSTILE_SECRET_KEY, this.publicUrl().hostname),
         breached: (password) => isBreachedPassword(password),
+        // Passkeys belong to the host they were made on: always PUBLIC_URL's, never the request's.
+        relyingParty: { rpId: this.publicUrl().hostname, origin: this.publicUrl().origin },
       });
       this.#store = { db, settings, auth };
     }

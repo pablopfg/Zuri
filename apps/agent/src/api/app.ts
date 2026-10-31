@@ -5,14 +5,19 @@ import {
   heartbeatRequestSchema,
   type Locale,
   loginRequestSchema,
+  type MfaRequired,
+  mfaCodeRequestSchema,
+  passkeyAssertionSchema,
+  passkeyRegistrationSchema,
+  passkeyRenameSchema,
 } from "@zuri/shared";
 import { type Context, Hono } from "hono";
 import { type ClientInfo, clientInfo } from "../auth/client.ts";
-import type { AuthService } from "../auth/service.ts";
+import type { AuthService, SignedIn } from "../auth/service.ts";
 import type { SessionRow } from "../auth/sessions.ts";
 import type { WorkerEnv } from "../env.ts";
 import { AppError, errorResponse } from "../http/errors.ts";
-import { checkCsrf, deviceCookie, readDeviceCookie, readJson, readSessionCookie, sessionCookie } from "./http.ts";
+import { checkCsrf, deviceCookie, mfaCookie, readDeviceCookie, readJson, readMfaCookie, readSessionCookie, sessionCookie } from "./http.ts";
 
 export interface ApiEnv {
   Bindings: WorkerEnv;
@@ -67,18 +72,65 @@ export function createApi(deps: ApiDeps) {
 
   const client = (c: Context<ApiEnv>): ClientInfo => clientInfo(c.req.raw, deps.development());
 
-  app.post("/auth/login", async (c) => {
-    const input = await readJson(c.req.raw, loginRequestSchema, 8 * 1024);
-    const auth = deps.auth();
-    const signed = await auth.login(input, client(c), {
-      session: readSessionCookie(c.req.raw),
-      device: readDeviceCookie(c.req.raw),
-    });
-    const response = Response.json(auth.state(signed.session));
+  const signInCookies = (c: Context<ApiEnv>) => ({ session: readSessionCookie(c.req.raw), device: readDeviceCookie(c.req.raw) });
+
+  /** A finished sign-in: the session and device cookies, and the second-step cookie gone. */
+  const signedInResponse = (c: Context<ApiEnv>, signed: SignedIn) => {
+    const response = Response.json(deps.auth().state(signed.session));
     response.headers.append("set-cookie", sessionCookie(c.req.raw, signed.token));
     response.headers.append("set-cookie", deviceCookie(c.req.raw, signed.deviceToken));
+    if (readMfaCookie(c.req.raw) !== null) response.headers.append("set-cookie", mfaCookie(c.req.raw, null));
     return response;
+  };
+
+  /**
+   * Runs a second-step route. Once its challenge is over (expired, too many
+   * tries), the cookie goes too: the next try starts from the password.
+   */
+  const secondStep = async (c: Context<ApiEnv>, work: () => Promise<Response>) => {
+    try {
+      return await work();
+    } catch (error) {
+      if (!(error instanceof AppError) || error.details?.mfa !== "expired") throw error;
+      const response = errorResponse(error, deps.locale());
+      response.headers.append("set-cookie", mfaCookie(c.req.raw, null));
+      return response;
+    }
+  };
+
+  app.post("/auth/login", async (c) => {
+    const input = await readJson(c.req.raw, loginRequestSchema, 8 * 1024);
+    const result = await deps.auth().login(input, client(c), signInCookies(c));
+    if ("mfa" in result) {
+      // The password was right; no session until the second step.
+      const body: MfaRequired = { mfaRequired: true, passkey: result.mfa.passkey, expiresAt: new Date(result.mfa.expiresAt).toISOString() };
+      const response = Response.json(body);
+      response.headers.append("set-cookie", mfaCookie(c.req.raw, result.mfa.token));
+      return response;
+    }
+    return signedInResponse(c, result);
   });
+
+  // The second step of a sign-in: only the challenge cookie, no session yet.
+  app.post("/auth/mfa", (c) =>
+    secondStep(c, async () => {
+      const { code } = await readJson(c.req.raw, mfaCodeRequestSchema, 1024);
+      const signed = await deps.auth().completeMfa(readMfaCookie(c.req.raw), code, client(c), signInCookies(c));
+      return signedInResponse(c, signed);
+    }),
+  );
+
+  app.post("/auth/mfa/passkey/options", (c) =>
+    secondStep(c, async () => Response.json({ options: await deps.auth().passkeyOptions(readMfaCookie(c.req.raw), client(c)) })),
+  );
+
+  app.post("/auth/mfa/passkey", (c) =>
+    secondStep(c, async () => {
+      const { response } = await readJson(c.req.raw, passkeyAssertionSchema, 32 * 1024);
+      const signed = await deps.auth().completePasskey(readMfaCookie(c.req.raw), response, client(c), signInCookies(c));
+      return signedInResponse(c, signed);
+    }),
+  );
 
   app.use("*", async (c, next) => {
     const token = readSessionCookie(c.req.raw);
@@ -132,5 +184,56 @@ export function createApi(deps: ApiDeps) {
     return response;
   });
 
+  // ---------- Two-step sign-in, signed in (sensitive: the password typed recently) ----------
+
+  app.get("/auth/mfa", () => Response.json(deps.auth().twoStep.status()));
+
+  app.post("/auth/mfa/setup", async (c) => Response.json(await deps.auth().mfaSetup(c.get("session"))));
+
+  app.post("/auth/mfa/enable", async (c) => {
+    const { code } = await readJson(c.req.raw, mfaCodeRequestSchema, 1024);
+    return Response.json({ recoveryCodes: await deps.auth().mfaEnable(c.get("session"), code, client(c)) });
+  });
+
+  app.post("/auth/mfa/disable", async (c) => {
+    const { code } = await readJson(c.req.raw, mfaCodeRequestSchema, 1024);
+    await deps.auth().mfaDisable(c.get("session"), code, client(c));
+    return new Response(null, { status: 204 });
+  });
+
+  app.post("/auth/mfa/recovery-codes", async (c) => {
+    const { code } = await readJson(c.req.raw, mfaCodeRequestSchema, 1024);
+    return Response.json({ recoveryCodes: await deps.auth().regenerateRecoveryCodes(c.get("session"), code, client(c)) });
+  });
+
+  // ---------- Passkeys ----------
+
+  app.get("/auth/passkeys", () => Response.json({ passkeys: deps.auth().listPasskeys() }));
+
+  app.post("/auth/passkeys/options", async (c) => Response.json({ options: await deps.auth().passkeyRegistrationOptions(c.get("session")) }));
+
+  app.post("/auth/passkeys", async (c) => {
+    const input = await readJson(c.req.raw, passkeyRegistrationSchema, 48 * 1024);
+    return Response.json({ passkey: await deps.auth().addPasskey(c.get("session"), input, client(c)) }, { status: 201 });
+  });
+
+  app.patch("/auth/passkeys/:id", async (c) => {
+    const id = passkeyId(c.req.param("id"));
+    const { name } = await readJson(c.req.raw, passkeyRenameSchema, 1024);
+    deps.auth().renamePasskey(c.get("session"), id, name);
+    return new Response(null, { status: 204 });
+  });
+
+  app.delete("/auth/passkeys/:id", (c) => {
+    deps.auth().removePasskey(c.get("session"), passkeyId(c.req.param("id")), client(c));
+    return new Response(null, { status: 204 });
+  });
+
   return app;
+}
+
+/** A passkey's id as WebAuthn hands it out (base64url); anything else is not one. */
+function passkeyId(value: string): string {
+  if (!/^[A-Za-z0-9_-]{1,1400}$/.test(value)) throw new AppError("NOT_FOUND");
+  return value;
 }

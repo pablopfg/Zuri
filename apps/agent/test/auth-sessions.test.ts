@@ -171,8 +171,8 @@ describe("password typed recently (15 minutes)", () => {
       expect(auth.state(row).recentAuthUntil).toBeNull();
 
       expect(await outcome(auth.confirm(row, { password: "errada errada errada" }, client(NET)))).toBe("INVALID_CREDENTIALS");
-      // A code proves nothing until two-step sign-in exists (step 4).
-      expect(await outcome(auth.confirm(row, { totp: "123456" }, client(NET)))).toBe("VALIDATION_FAILED");
+      // A code proves nothing while two-step sign-in is off.
+      expect(await outcome(auth.confirm(row, { totp: "123456" }, client(NET)))).toBe("INVALID_CREDENTIALS");
       await auth.confirm(row, { password: TEST_PASSWORD }, client(NET));
       row = await live(auth, token);
       expect(() => auth.requireRecentAuth(row)).not.toThrow();
@@ -180,11 +180,11 @@ describe("password typed recently (15 minutes)", () => {
     });
   });
 
-  it("refuses a code without spending the network's tries while two-step sign-in doesn't exist", async () => {
+  it("refuses a code without spending the network's tries while two-step sign-in is off", async () => {
     await withAuth("step-up-totp", async ({ auth, db }) => {
       const { token } = await auth.login(right(), client(NET), noCookies);
       const row = await live(auth, token);
-      for (let i = 0; i < 4; i++) expect(await outcome(auth.confirm(row, { totp: "123456" }, client(NET)))).toBe("VALIDATION_FAILED");
+      for (let i = 0; i < 4; i++) expect(await outcome(auth.confirm(row, { totp: "123456" }, client(NET)))).toBe("INVALID_CREDENTIALS");
       expect(db.one<{ n: number }>(`SELECT count(*) AS n FROM zur_login_attempts WHERE outcome = 0`)?.n).toBe(0);
       expect(await outcome(auth.login(right(), client(NET), noCookies))).toBe("ok");
     });

@@ -58,6 +58,7 @@ export const DEFAULT_ERROR_MESSAGE: Partial<Record<ApiErrorCode, MessageKey>> = 
   FORBIDDEN: "error.forbidden",
   HOST_NOT_ALLOWED: "error.hostNotAllowed",
   NOT_FOUND: "error.notFound",
+  CONFLICT: "error.conflict",
   NOT_CONFIGURED: "error.notConfigured",
   VALIDATION_FAILED: "error.validationFailed",
   INTERNAL_ERROR: "error.internal",

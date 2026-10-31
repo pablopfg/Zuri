@@ -36,6 +36,13 @@ o [SemVer](https://semver.org/lang/pt-BR/). Cada PR escreve a sua entrada em
   total.
 - Atividade de acesso por 90 dias (depois, contagens diárias por um ano), com
   os eventos que viram alerta guardados para a central de avisos.
+- Verificação em duas etapas opcional com aplicativo autenticador (TOTP) e 10
+  códigos de recuperação, ligada pelo dono (`/api/auth/mfa/*`). Com ela
+  ligada, o login pede o código depois da senha, e a confirmação para ações
+  sensíveis aceita um código atual no lugar da senha.
+- Passkeys como segundo passo do login (`/api/auth/passkeys`,
+  `/api/auth/mfa/passkey`). A lista marca as passkeys criadas em outro
+  endereço, que não funcionam no atual.
 
 ### Segurança
 
@@ -55,6 +62,11 @@ o [SemVer](https://semver.org/lang/pt-BR/). Cada PR escreve a sua entrada em
   total, sempre antes do PBKDF2 e com falha fechada.
 - Redefinir a senha pelo painel da Cloudflare vale já na primeira requisição
   depois do deploy: a senha antiga não entra nem uma vez.
+- Segundo passo do login: segredo TOTP cifrado, códigos de recuperação só como
+  hash, código usado uma vez só, desafio de 5 minutos em cookie `__Host-` com
+  5 respostas, e pausa para redes desconhecidas depois de 10 respostas erradas
+  em 15 minutos. Passkeys presas ao host do `PUBLIC_URL`, com desafio de uso
+  único e contador de assinatura conferido.
 - Durante um ataque distribuído, cada recusa custa quase nenhuma leitura ou
   gravação no banco, para o atacante não esgotar as cotas diárias do plano
   Free. Navegadores que já entraram continuam podendo entrar. Recomendado:
@@ -78,3 +90,7 @@ o [SemVer](https://semver.org/lang/pt-BR/). Cada PR escreve a sua entrada em
 - Migration 2 do banco (`zur_sessions`, `zur_login_attempts`,
   `zur_auth_events`, `zur_auth_events_daily` e `zur_devices`), aplicada
   sozinha. Nada a fazer.
+- Migration 3 do banco (`zur_mfa_secrets`, `zur_recovery_codes`,
+  `zur_passkeys` e `zur_mfa_challenges`), aplicada sozinha. Nada a fazer. Um
+  `PASSWORD_PEPPER` novo agora também desliga a verificação em duas etapas
+  (redefinição completa); um segredo de senha novo, não.

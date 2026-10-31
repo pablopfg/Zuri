@@ -5,6 +5,14 @@ import {
   hmacSha256Hex,
   isPasswordHash,
   type LoginRequest,
+  type MessageKey,
+  MAX_PASSKEYS,
+  MFA_FAILURES_ALERT,
+  MFA_MAX_ATTEMPTS,
+  type MfaSetup,
+  type PasskeyAssertion,
+  type PasskeyInfo,
+  type PasskeyRegistration,
   PASSWORD_PROBLEM_MESSAGE,
   passwordProblem,
   randomToken,
@@ -18,11 +26,16 @@ import type { Database } from "../db/database.ts";
 import type { InternalState } from "../db/internal-state.ts";
 import type { SettingsRepository } from "../db/settings.ts";
 import { AppError } from "../http/errors.ts";
-import type { ClientInfo } from "./client.ts";
+import { type ClientInfo, stripControl } from "./client.ts";
 import { AuthEvents } from "./events.ts";
 import { LoginLimiter } from "./login-limiter.ts";
+import { type ChallengeRow, type MfaFactor, TwoStep } from "./mfa.ts";
+import { Passkeys, type RelyingParty } from "./passkeys.ts";
 import { type SessionRow, Sessions } from "./sessions.ts";
 import type { Turnstile } from "./turnstile.ts";
+
+/** What a wrong second step says, by kind. */
+const WRONG_SECOND_STEP = { code: "auth.mfa.wrongCode", passkey: "auth.passkey.notAccepted" } as const satisfies Record<string, MessageKey>;
 
 /** While a distributed guess goes on, the owner hears about it at most this often. */
 const ATTACK_ALERT_INTERVAL_MS = 6 * 3600_000;
@@ -49,6 +62,8 @@ export interface AuthDeps {
   turnstile?: Turnstile | null;
   /** Have I Been Pwned: true breached, false not found, null no answer (refused: fail closed). */
   breached: (password: string) => Promise<boolean | null>;
+  /** The owner's host and origin (PUBLIC_URL): the only ones a passkey is made for or accepted from. */
+  relyingParty: RelyingParty;
 }
 
 /** A finished sign-in: what the route turns into cookies. */
@@ -59,6 +74,22 @@ export interface SignedIn {
   deviceToken: string;
 }
 
+/** A right password with the second step on: no session yet, a challenge cookie instead. */
+export interface MfaPending {
+  mfa: {
+    token: string;
+    expiresAt: number;
+    /** A passkey made for this host exists, so the browser may offer it. */
+    passkey: boolean;
+  };
+}
+
+/** The browser's cookies a sign-in looks at. */
+export interface SignInCookies {
+  session: string | null;
+  device: string | null;
+}
+
 /** A device cookie that names a browser seen at an earlier sign-in, or nothing. */
 type KnownDevice = { known: true; token: string; id: string } | { known: false; token: null; id: null };
 
@@ -67,6 +98,13 @@ type PasswordSource = { kind: "stored" | "hash"; hash: string } | { kind: "plain
 function sameSource(a: PasswordSource, b: PasswordSource | null): boolean {
   if (!b || a.kind !== b.kind) return false;
   return a.kind === "plain" ? b.kind === "plain" && a.password === b.password : b.kind !== "plain" && a.hash === b.hash;
+}
+
+/** A passkey's name without control characters (it shows in lists and, later, in the bot). */
+function passkeyName(name: string): string {
+  const clean = stripControl(name).trim();
+  if (!clean) throw new AppError("VALIDATION_FAILED", undefined, { fields: ["name"] });
+  return clean;
 }
 
 /** E-mail addresses compare without case or surrounding spaces. */
@@ -88,6 +126,8 @@ export class AuthService {
   readonly sessions: Sessions;
   readonly limiter: LoginLimiter;
   readonly events: AuthEvents;
+  readonly twoStep: TwoStep;
+  readonly passkeys: Passkeys;
   readonly #clock: () => number;
   #synced: Promise<void> | undefined;
 
@@ -100,6 +140,12 @@ export class AuthService {
     });
     this.limiter = new LoginLimiter(deps.db, this.#clock);
     this.events = new AuthEvents(deps.db, deps.state, this.#clock);
+    this.twoStep = new TwoStep(deps.db, deps.state, { pepper: deps.secrets.pepper, sessionSecret: deps.secrets.sessionSecret }, this.#clock);
+    this.passkeys = new Passkeys(deps.db, deps.state, this.#clock);
+  }
+
+  get relyingParty(): RelyingParty {
+    return this.deps.relyingParty;
   }
 
   private get turnstile(): Turnstile | null {
@@ -159,15 +205,25 @@ export class AuthService {
     const [storedPassword = "", storedPepper = ""] = typeof raw === "string" ? raw.split("|") : [];
     const value = `${current.password}|${current.pepper}`;
     if (raw === value) return;
-    const reset = typeof raw === "string" && (current.pepper !== storedPepper || (current.password !== "" && current.password !== storedPassword));
+    const known = typeof raw === "string";
+    const newPepper = known && current.pepper !== storedPepper;
+    const reset = newPepper || (known && current.password !== "" && current.password !== storedPassword);
     this.deps.db.transaction(() => {
       if (reset) {
         this.deps.state.delete("auth_password_hash");
         this.deps.state.delete("auth_password_change_required");
         this.sessions.revokeAll();
+        this.twoStep.dropChallenges();
         // Browsers known to the old password stop being trusted with the new one.
         this.events.forgetDevices();
-        this.events.record("credentials_reset", null, { alert: true });
+        this.events.record("credentials_reset", null, { alert: true, reason: newPepper ? "pepper" : "password" });
+        // A new pepper is the full reset (lost password and phone): the sealed
+        // secret can't be opened with it anyway, so the second step goes too.
+        // A new password secret alone keeps it.
+        if (newPepper && this.twoStep.enabled()) {
+          this.twoStep.disable();
+          this.events.record("mfa_disabled", null, { alert: true, reason: "pepper" });
+        }
       }
       this.deps.state.set("auth_secret_fingerprint", value);
     });
@@ -210,7 +266,7 @@ export class AuthService {
    * failure, and only then PBKDF2 over the password together with the HMAC of
    * the e-mail (both always run, and a refusal never says which was wrong).
    */
-  async login(input: LoginRequest, client: ClientInfo, cookies: { session: string | null; device: string | null }): Promise<SignedIn> {
+  async login(input: LoginRequest, client: ClientInfo, cookies: SignInCookies): Promise<SignedIn | MfaPending> {
     // Sync first: a reset from the panel must drop the old password before it is read.
     await this.sync();
     const source = this.requireConfigured();
@@ -242,11 +298,129 @@ export class AuthService {
       this.alertIfUnderAttack();
       throw new AppError("INVALID_CREDENTIALS", undefined, this.turnstile ? { turnstileSiteKey: this.turnstile.siteKey } : undefined);
     }
+    const weak = this.weakPassword(source, input.password);
+    if (this.twoStep.enabled()) {
+      // The password was right; the code comes next. The try stays a failure until then.
+      const challenge = await this.twoStep.createChallenge({ loginAttempt: attempt, weakPassword: weak, network: client.network }, () => {
+        if (!sameSource(source, this.passwordSource()) || !this.twoStep.enabled()) throw new AppError("INVALID_CREDENTIALS");
+      });
+      this.events.record("mfa_challenge", client);
+      return { mfa: { ...challenge, passkey: this.passkeys.usableHere(this.relyingParty.rpId) } };
+    }
     // Before the success is written, or this very sign-in would make the network look known.
     const newNetwork = this.limiter.isNewNetwork(client.network);
-    const signedIn = await this.openSession(client, cookies.session, device, source, input.password, newNetwork);
+    const signedIn = await this.openSession(client, cookies.session, device, () => sameSource(source, this.passwordSource()), weak, newNetwork, "password");
     // Only now: a password replaced meanwhile leaves the try a failure, and the network unknown.
     this.limiter.succeed(attempt);
+    return signedIn;
+  }
+
+  // ---------- The second step of a sign-in ----------
+
+  /**
+   * An authenticator code or a recovery code for the challenge in the cookie.
+   * Five wrong answers end the challenge (the password is asked again); three
+   * in a row, across challenges, tell the owner; ten in 15 minutes across all
+   * networks pause every network that isn't the owner's.
+   */
+  completeMfa(token: string | null, code: string, client: ClientInfo, cookies: SignInCookies): Promise<SignedIn> {
+    return this.completeSecondStep(token, client, cookies, "code", async () => this.twoStep.verify(code, { recovery: true }));
+  }
+
+  /** The second step with a passkey: its signed answer to the request sent for this challenge. Wrong answers count like wrong codes. */
+  completePasskey(token: string | null, response: PasskeyAssertion["response"], client: ClientInfo, cookies: SignInCookies): Promise<SignedIn> {
+    return this.completeSecondStep(token, client, cookies, "passkey", async (row) => {
+      const challenge = this.twoStep.takeWebauthnChallenge(row.id);
+      const ok =
+        challenge !== null &&
+        (await this.passkeys.verifyAssertion(response, { challenge, rp: this.relyingParty, userVerification: "preferred" })) !== null;
+      this.twoStep.noteResult(ok);
+      return ok ? "passkey" : null;
+    });
+  }
+
+  /**
+   * The passkey request for the sign-in waiting for its second step. NOT_FOUND
+   * when no passkey fits this host. A request still live is sent again rather
+   * than replaced, so asking over and over costs no writes.
+   */
+  async passkeyOptions(token: string | null, client: ClientInfo) {
+    await this.sync();
+    this.requireConfigured();
+    const row = await this.liveChallenge(token, null);
+    this.assertCodesAllowed(client, "passkey");
+    const live = row.webauthn_challenge !== null && (row.webauthn_expires_at ?? 0) > this.#clock() ? row.webauthn_challenge : undefined;
+    const request = await this.passkeys.authenticationOptions(this.relyingParty, "preferred", live);
+    if (!request) throw new AppError("NOT_FOUND", "auth.passkey.noneHere");
+    if (live === undefined) this.twoStep.saveWebauthnChallenge(row.id, request.challenge, request.expiresAt);
+    return request.options;
+  }
+
+  private async liveChallenge(token: string | null, client: ClientInfo | null): Promise<ChallengeRow> {
+    const row = await this.twoStep.findChallenge(token);
+    if (row === null || row === "expired") {
+      // Only a challenge that existed is worth a line in the activity; a made-up cookie isn't.
+      if (row === "expired" && client) this.events.record("mfa_failure", client, { reason: "expired" });
+      throw this.challengeExpired();
+    }
+    return row;
+  }
+
+  private challengeExpired(): AppError {
+    return new AppError("UNAUTHORIZED", "auth.mfa.expired", { mfa: "expired" });
+  }
+
+  /** RATE_LIMITED while wrong codes pile up across networks, unless this network is one of the owner's. */
+  private assertCodesAllowed(client: ClientInfo, reason: string): void {
+    const until = this.twoStep.pausedUntil();
+    if (until === null || this.limiter.isTrusted(client.network)) return;
+    // A refusal like a blocked sign-in: folded per network, so hammering a pause costs no writes.
+    this.recordRefusal("login_rate_limited", client, `mfa_${reason}`);
+    throw new AppError("RATE_LIMITED", undefined, { retryAfter: Math.max(1, Math.ceil((until - this.#clock()) / 1000)) });
+  }
+
+  /** A wrong second step, wherever it was given (already counted for the pause): the activity, and the alert at three in a row. */
+  private noteWrongSecondStep(client: ClientInfo, reason: string): void {
+    const failures = this.twoStep.consecutiveFailures();
+    this.events.record("mfa_failure", client, { reason, alert: failures === MFA_FAILURES_ALERT });
+  }
+
+  private async completeSecondStep(
+    token: string | null,
+    client: ClientInfo,
+    cookies: SignInCookies,
+    reason: "code" | "passkey",
+    check: (row: ChallengeRow) => Promise<MfaFactor | null>,
+  ): Promise<SignedIn> {
+    await this.sync();
+    const source = this.requireConfigured();
+    const row = await this.liveChallenge(token, client);
+    this.assertCodesAllowed(client, reason);
+    const attempts = this.twoStep.reserveAttempt(row.id);
+    if (attempts === null) {
+      this.events.record("mfa_failure", client, { reason: "expired" });
+      throw this.challengeExpired();
+    }
+    const reserved = this.twoStep.reserveWrongCode();
+    const factor = await check(row);
+    if (factor) this.twoStep.releaseWrongCode(reserved);
+    if (!factor) {
+      this.noteWrongSecondStep(client, reason);
+      const left = Math.max(0, MFA_MAX_ATTEMPTS - attempts);
+      if (left === 0) {
+        this.twoStep.deleteChallenge(row.id);
+        throw new AppError("UNAUTHORIZED", "auth.mfa.tooMany", { mfa: "expired" });
+      }
+      throw new AppError("INVALID_CREDENTIALS", WRONG_SECOND_STEP[reason], { mfa: "retry", attemptsLeft: left });
+    }
+    // Gone before anything else: the same challenge never opens two sessions.
+    if (!this.twoStep.takeChallenge(row.id)) throw this.challengeExpired();
+    const device = await this.knownDevice(cookies.device);
+    const newNetwork = this.limiter.isNewNetwork(client.network);
+    // A password change drops the challenges; one that lands during the awaits below must still win.
+    const stillValid = () => this.twoStep.enabled() && sameSource(source, this.passwordSource());
+    const signedIn = await this.openSession(client, cookies.session, device, stillValid, row.weak_password === 1, newNetwork, factor);
+    if (row.login_attempt !== null) this.limiter.succeed(row.login_attempt);
     return signedIn;
   }
 
@@ -300,14 +474,20 @@ export class AuthService {
     this.events.record("login_attack", null, { alert: true });
   }
 
-  /** Everything after a right password: the old session ends, the device is noted, a new session opens. */
+  /**
+   * Everything after a complete sign-in: the old session ends, the device is
+   * noted, a new session opens. `stillValid` is asked again after the awaits:
+   * the password checked may have been replaced meanwhile (a change in another
+   * tab, a reset from the panel), or the second step turned off.
+   */
   private async openSession(
     client: ClientInfo,
     sessionCookie: string | null,
     device: KnownDevice,
-    source: PasswordSource,
-    password: string,
+    stillValid: () => boolean,
+    weak: boolean,
     newNetwork: boolean,
+    factor: "password" | MfaFactor,
   ): Promise<SignedIn> {
     // A session cookie this browser already had ends here, so a planted one can't ride along.
     const previous = await this.sessions.find(sessionCookie);
@@ -316,23 +496,24 @@ export class AuthService {
     const deviceId = device.id ?? (await this.deviceId(deviceToken));
     const { token, row } = await this.sessions.create(client);
     const current = this.deps.db.transaction(() => {
-      // The password checked may have been replaced while PBKDF2 ran (a change in
-      // another tab): a session opened by the old one must not outlive it.
-      if (!sameSource(source, this.passwordSource())) {
+      if (!stillValid()) {
         this.sessions.revoke(row.id);
         return false;
       }
       if (previous) this.sessions.revoke(previous.id);
-      this.notePasswordStrength(source, password);
+      if (weak) this.deps.state.set("auth_password_change_required", true);
+      else this.deps.state.delete("auth_password_change_required");
       const first = this.deps.state.get<number>("auth_first_sign_in_at") === undefined;
       if (first) this.deps.state.set("auth_first_sign_in_at", row.created_at);
       this.events.rememberDevice(deviceId);
       // The very first sign-in has nothing to compare with; later, a new browser or network is worth an alert.
+      const recovery = factor === "recovery_code";
       this.events.record("login_success", client, {
         session: row.id.slice(0, 16),
         knownDevice: known,
-        reason: !known ? "new_device" : newNetwork ? "new_network" : "",
-        alert: !first && (!known || newNetwork),
+        reason: [factor === "password" ? "" : factor, !known ? "new_device" : newNetwork ? "new_network" : ""].filter(Boolean).join(","),
+        // A used recovery code is always worth telling: it may mean the phone is in other hands.
+        alert: recovery || (!first && (!known || newNetwork)),
       });
       return true;
     });
@@ -344,10 +525,8 @@ export class AuthService {
    * The plain OWNER_PASSWORD always has to be replaced; any other password that
    * fails the current rules too. Until then only the password change works.
    */
-  private notePasswordStrength(source: PasswordSource, password: string): void {
-    const weak = source.kind === "plain" || passwordProblem(password, this.personalWords()) !== null;
-    if (weak) this.deps.state.set("auth_password_change_required", true);
-    else this.deps.state.delete("auth_password_change_required");
+  private weakPassword(source: PasswordSource, password: string): boolean {
+    return source.kind === "plain" || passwordProblem(password, this.personalWords()) !== null;
   }
 
   passwordChangeRequired(): boolean {
@@ -408,21 +587,26 @@ export class AuthService {
     // Sync first: a reset from the panel must drop the old password before it is read.
     await this.sync();
     const source = this.requireConfigured();
-    // Two-step codes arrive in step 4. Until then a code is a malformed request,
-    // refused before the limiter: it must not spend the network's three tries.
-    if (!("password" in proof)) throw new AppError("VALIDATION_FAILED", undefined, { fields: ["totp"] });
-    const attempt = this.beginChecked(client, "confirm_failure");
-    if (!(await this.checkPassword(source, proof.password))) {
-      this.events.record("confirm_failure", client, { reason: "password", session: row.id.slice(0, 16) });
-      throw new AppError("INVALID_CREDENTIALS", "auth.password.wrong");
+    if ("totp" in proof) {
+      // A current code proves the owner as well as the password does, under the
+      // same limits as the sign-in's codes: six digits must not be guessable from a
+      // stolen session. Never a recovery code: those are for a lost phone.
+      if (!this.twoStep.enabled()) throw new AppError("INVALID_CREDENTIALS", "auth.mfa.wrongCode");
+      await this.checkCode(row, proof.totp, client, { recovery: false }, "confirm");
+    } else {
+      const attempt = this.beginChecked(client, "confirm_failure");
+      if (!(await this.checkPassword(source, proof.password))) {
+        this.events.record("confirm_failure", client, { reason: "password", session: row.id.slice(0, 16) });
+        throw new AppError("INVALID_CREDENTIALS", "auth.password.wrong");
+      }
+      this.limiter.succeed(attempt);
     }
-    this.limiter.succeed(attempt);
     this.sessions.confirm(row.id);
     this.events.record("confirm_success", client, { session: row.id.slice(0, 16) });
   }
 
   /** Behind a live session: the network's own 3 tries apply, the distributed-guess locks don't. */
-  private beginChecked(client: ClientInfo, kind: "confirm_failure" | "password_change_failure"): number {
+  private beginChecked(client: ClientInfo, kind: "confirm_failure" | "password_change_failure" | "mfa_failure"): number {
     try {
       return this.limiter.begin(client.network, { trusted: true });
     } catch (error) {
@@ -465,10 +649,133 @@ export class AuthService {
       this.deps.state.set("auth_password_hash", hash);
       this.deps.state.delete("auth_password_change_required");
       this.deps.db.run(`DELETE FROM zur_sessions WHERE id != ?`, next.row.id);
+      // A sign-in that got the old password right and waits for its code ends too.
+      this.twoStep.dropChallenges();
       // A browser that knew the old password is new again (its next sign-in is an alert).
       this.events.forgetDevices();
       this.events.record("password_changed", client, { session: next.row.id.slice(0, 16), alert: true });
     });
     return { token: next.token, session: next.row };
+  }
+
+  // ---------- Managing the second step (signed in, password typed recently) ----------
+
+  /**
+   * A current code from a signed-in session, under the network's limit and the
+   * shared pause. INVALID_CREDENTIALS when wrong; the session stays.
+   */
+  async checkCode(row: SessionRow, code: string, client: ClientInfo, options: { recovery: boolean }, reason: string): Promise<MfaFactor> {
+    // The shared pause first: a paused network spends none of its own tries.
+    this.assertCodesAllowed(client, reason);
+    const attempt = this.beginChecked(client, "mfa_failure");
+    const reserved = this.twoStep.reserveWrongCode();
+    const factor = await this.twoStep.verify(code, options);
+    if (factor) this.twoStep.releaseWrongCode(reserved);
+    if (!factor) {
+      this.noteWrongSecondStep(client, reason);
+      throw new AppError("INVALID_CREDENTIALS", "auth.mfa.wrongCode");
+    }
+    this.limiter.succeed(attempt);
+    if (factor === "recovery_code") this.events.record("recovery_code_used", client, { reason, session: row.id.slice(0, 16), alert: true });
+    return factor;
+  }
+
+  /** A new secret to scan. CONFLICT while the second step is on: turn it off first to use another app. */
+  async mfaSetup(row: SessionRow): Promise<MfaSetup> {
+    this.requireRecentAuth(row);
+    if (this.twoStep.enabled()) throw new AppError("CONFLICT", "auth.mfa.alreadyOn");
+    return this.twoStep.beginSetup(this.deps.secrets.agentName?.trim() || "Zuri");
+  }
+
+  /** Turns it on with a code from the new secret. The recovery codes come back once, here. Other sessions end. */
+  async mfaEnable(row: SessionRow, code: string, client: ClientInfo): Promise<string[]> {
+    this.assertStillRecent(row);
+    if (this.twoStep.enabled()) throw new AppError("CONFLICT", "auth.mfa.alreadyOn");
+    // Same limit as any other code: a stolen session can't try a million of them here either.
+    const attempt = this.beginChecked(client, "mfa_failure");
+    const codes = await this.twoStep.enable(code, () => this.assertStillRecent(row));
+    if (!codes) {
+      this.events.record("mfa_failure", client, { reason: "enable", session: row.id.slice(0, 16) });
+      throw new AppError("VALIDATION_FAILED", "auth.mfa.setupWrongCode", { fields: ["code"] });
+    }
+    this.limiter.succeed(attempt);
+    this.afterMfaChange(row, client, "mfa_enabled");
+    return codes;
+  }
+
+  /** Turns it off: the password typed recently and a current code (or a recovery code). */
+  async mfaDisable(row: SessionRow, code: string, client: ClientInfo): Promise<void> {
+    this.assertStillRecent(row);
+    if (!this.twoStep.enabled()) return;
+    await this.checkCode(row, code, client, { recovery: true }, "disable");
+    this.twoStep.disable(() => this.assertStillRecent(row));
+    this.afterMfaChange(row, client, "mfa_disabled");
+  }
+
+  /** New recovery codes, with a current code from the app (a recovery code can't make more of itself). */
+  async regenerateRecoveryCodes(row: SessionRow, code: string, client: ClientInfo): Promise<string[]> {
+    this.assertStillRecent(row);
+    if (!this.twoStep.enabled()) throw new AppError("CONFLICT", "auth.mfa.off");
+    await this.checkCode(row, code, client, { recovery: false }, "recovery_codes");
+    const codes = await this.twoStep.regenerateCodes(() => this.assertStillRecent(row));
+    this.events.record("mfa_codes_regenerated", client, { session: row.id.slice(0, 16), alert: true });
+    return codes;
+  }
+
+  /**
+   * Read again after the awaits: another tab may have ended this session (a
+   * password change) or its 15 minutes may have run out meanwhile.
+   */
+  private assertStillRecent(row: SessionRow): void {
+    const current = this.sessions.get(row.id);
+    if (!current) throw new AppError("UNAUTHORIZED");
+    this.requireRecentAuth(current);
+  }
+
+  /** Turning the second step on or off ends every other session, and the owner is told. */
+  private afterMfaChange(row: SessionRow, client: ClientInfo, kind: "mfa_enabled" | "mfa_disabled"): void {
+    this.deps.db.transaction(() => {
+      this.deps.db.run(`DELETE FROM zur_sessions WHERE id != ?`, row.id);
+      this.events.record(kind, client, { session: row.id.slice(0, 16), alert: true });
+    });
+  }
+
+  // ---------- Passkeys (signed in, password typed recently) ----------
+
+  listPasskeys(): PasskeyInfo[] {
+    return this.passkeys.list(this.relyingParty.rpId);
+  }
+
+  private assertPasskeysAllowed(): void {
+    // The recovery codes are the way back in if every passkey is lost.
+    if (!this.twoStep.enabled()) throw new AppError("CONFLICT", "auth.passkey.needsMfa");
+  }
+
+  async passkeyRegistrationOptions(row: SessionRow) {
+    this.requireRecentAuth(row);
+    this.assertPasskeysAllowed();
+    if (this.passkeys.count() >= MAX_PASSKEYS) throw new AppError("CONFLICT", "auth.passkey.limit");
+    const name = this.deps.secrets.agentName?.trim() || "Zuri";
+    return this.passkeys.registrationOptions(this.relyingParty, { rpName: name, userName: name });
+  }
+
+  async addPasskey(row: SessionRow, input: PasskeyRegistration, client: ClientInfo): Promise<PasskeyInfo> {
+    this.requireRecentAuth(row);
+    this.assertPasskeysAllowed();
+    const passkey = await this.passkeys.register(passkeyName(input.name), input.response, this.relyingParty, () => this.twoStep.enabled());
+    if (!passkey) throw new AppError("VALIDATION_FAILED", "auth.passkey.notAccepted", { fields: ["response"] });
+    this.events.record("passkey_added", client, { session: row.id.slice(0, 16), alert: true });
+    return passkey;
+  }
+
+  renamePasskey(row: SessionRow, id: string, name: string): void {
+    this.requireRecentAuth(row);
+    if (!this.passkeys.rename(id, passkeyName(name))) throw new AppError("NOT_FOUND");
+  }
+
+  removePasskey(row: SessionRow, id: string, client: ClientInfo): void {
+    this.requireRecentAuth(row);
+    if (!this.passkeys.remove(id)) throw new AppError("NOT_FOUND");
+    this.events.record("passkey_removed", client, { session: row.id.slice(0, 16), alert: true });
   }
 }

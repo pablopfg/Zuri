@@ -116,3 +116,18 @@ acrescente aqui cada armadilha nova que encontrar (sem dados pessoais).
   um serviço novo.
 - Leia o estado do banco (`sync`) **antes** de ler a fonte da senha; ler antes
   deixou a senha antiga entrar uma vez depois de uma redefinição (SEC-3-01).
+
+## Concorrência no Durable Object
+
+- Um `await` (WebCrypto, verificação de passkey) deixa outro pedido entrar.
+  Contagens que limitam tentativas precisam ser reservadas **antes** do
+  `await` e devolvidas depois, e o que foi checado antes (senha, sessão)
+  reconferido dentro do `transactionSync` (QA-4-01, CF-4-01, CF-4-02).
+- Pedido recusado por limite não pode gravar uma linha a cada vez: dobre na
+  atividade (`FOLDED_KINDS`) ou devolva o estado já guardado (SEC-4-01, cota de
+  gravações do plano Free).
+
+## Git com subagentes
+
+- Nunca `git add -A`: os auditores deixam testes `tmp-audit-*.test.ts` no
+  worktree. Adicione caminhos explícitos.
