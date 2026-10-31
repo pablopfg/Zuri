@@ -67,6 +67,25 @@ describe("api", () => {
     expect(heard).toHaveBeenCalledTimes(1);
   });
 
+  it("a wrong password or code on a signed-in route keeps the session: only UNAUTHORIZED ends it", async () => {
+    const heard = vi.fn();
+    const stop = onUnauthorized(heard);
+    stubFetch(
+      json(401, { code: "INVALID_CREDENTIALS", message: "Senha incorreta." }),
+      json(401, { code: "INVALID_CREDENTIALS", message: "Senha incorreta." }),
+      json(401, { code: "INVALID_CREDENTIALS", message: "Código incorreto." }),
+      new Response("not json", { status: 401 }),
+    );
+    await expect(api("/auth/mfa/setup", { method: "POST", body: { password: "x" } })).rejects.toMatchObject({ code: "INVALID_CREDENTIALS" });
+    await expect(api("/auth/passkeys/options", { method: "POST", body: { password: "x" } })).rejects.toMatchObject({ code: "INVALID_CREDENTIALS" });
+    await expect(api("/auth/confirm", { method: "POST", body: { totp: "000000" } })).rejects.toMatchObject({ code: "INVALID_CREDENTIALS" });
+    expect(heard).not.toHaveBeenCalled();
+    // A 401 without a readable body still means the session is gone.
+    await expect(api("/settings")).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+    stop();
+    expect(heard).toHaveBeenCalledTimes(1);
+  });
+
   it("asks for the password once on RECENT_AUTH_REQUIRED and repeats the action after", async () => {
     const fetch = stubFetch(json(403, { code: "RECENT_AUTH_REQUIRED", message: "x" }), json(200, { done: true }));
     const ask = vi.fn(async () => true);

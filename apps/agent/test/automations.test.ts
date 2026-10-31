@@ -251,7 +251,7 @@ describe("the alarm", () => {
       expect(runRows(world)[0]).toMatchObject({ status: "error", problem: "failed" });
       expect(row(world, a.id)?.next_run).toBe("2026-11-01T13:00:00.000Z");
       const line = String(logged.mock.calls[0]?.[0]);
-      expect(JSON.parse(line)).toEqual({ level: "error", event: "automation.failed", code: "AUTOMATION_FAILED", kind: "reminder", error: "TypeError" });
+      expect(JSON.parse(line)).toEqual({ level: "error", event: "automation_failed", kind: "reminder", error: "TypeError" });
       expect(line).not.toContain("remédio");
       logged.mockRestore();
     });

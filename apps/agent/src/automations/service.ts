@@ -1,3 +1,4 @@
+import { log } from "../log.ts";
 import {
   AUTOMATION_CATCH_UP_MS,
   AUTOMATION_LIMITS,
@@ -490,9 +491,7 @@ export class AutomationService {
       outcome = await execute(automation, { id: runId, trigger });
     } catch (error) {
       // Only the error's name: its message may quote stored text.
-      console.error(
-        JSON.stringify({ level: "error", event: "automation.failed", code: "AUTOMATION_FAILED", kind: automation.kind, error: error instanceof Error ? error.name : typeof error }),
-      );
+      log("error", "automation_failed", { kind: automation.kind, error });
       outcome = { status: "error", result: null, problem: "failed" };
     } finally {
       this.#inFlight.delete(runId);

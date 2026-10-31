@@ -12,6 +12,8 @@ const session = {
   authenticated: true,
   passwordChangeRequired: false,
   removePlainPasswordSecret: false,
+  secondStepRequired: false,
+  removeSetupCodeSecret: false,
   recentAuthUntil: null,
   deadlines,
 };

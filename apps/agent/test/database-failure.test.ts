@@ -21,7 +21,7 @@ describe("a migration that fails on first use", () => {
     const first = await call(`${ORIGIN}/api/tasks`, { headers: CSRF });
     expect(first.status).toBe(401);
     expect(await errorBody(first)).toEqual({ code: "UNAUTHORIZED", message: "Entre para continuar." });
-    expect(log).toHaveBeenCalledWith(JSON.stringify({ message: "settings unreadable", error: "Error" }));
+    expect(log).toHaveBeenCalledWith(JSON.stringify({ level: "error", event: "settings_unreadable", error: "Error" }));
     expect(await inOwner(schemaVersion)).toBe(0);
     expect(await inOwner((db) => db.one(`SELECT name FROM sqlite_master WHERE name = 'zur_settings'`))).toBeNull();
 

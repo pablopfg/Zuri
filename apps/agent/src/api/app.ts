@@ -11,9 +11,14 @@ import {
   mfaCodeRequestSchema,
   passkeyAssertionSchema,
   passkeyRegistrationSchema,
+  passwordProofSchema,
   passkeyRenameSchema,
   SESSION_TIMEOUT_RANGES,
   settingsUpdateSchema,
+  setupCodeRequestSchema,
+  setupOwnerRequestSchema,
+  setupRecoverRequestSchema,
+  type SetupTicket,
   type UsageReport,
 } from "@zuri/shared";
 import { type Context, Hono } from "hono";
@@ -25,11 +30,23 @@ import type { WorkerEnv } from "../env.ts";
 import { AppError, errorResponse } from "../http/errors.ts";
 import type { MemoryService } from "../memory/service.ts";
 import type { Productivity } from "../productivity/index.ts";
-import { checkCsrf, deviceCookie, mfaCookie, readDeviceCookie, readJson, readMfaCookie, readSessionCookie, sessionCookie } from "./http.ts";
+import {
+  checkCsrf,
+  deviceCookie,
+  mfaCookie,
+  readDeviceCookie,
+  readJson,
+  readMfaCookie,
+  readSessionCookie,
+  readSetupCookie,
+  sessionCookie,
+  setupCookie,
+} from "./http.ts";
 import { type AutomationDeps, registerAutomationRoutes } from "./automations.ts";
 import { type ChatDeps, registerChatRoutes } from "./chat.ts";
 import { registerMemoryRoutes } from "./memory.ts";
 import { registerProductivityRoutes } from "./productivity.ts";
+import { log } from "../log.ts";
 
 export interface ApiEnv {
   Bindings: WorkerEnv;
@@ -56,6 +73,8 @@ export interface ApiDeps {
   chat(): ChatDeps;
   /** True when a password secret is set, so the health check can answer without opening the database. */
   passwordSecretSet(): boolean;
+  /** True when a usable SETUP_CODE is set: the first access can still be done. Absent is false. */
+  setupCodeSet?(): boolean;
   /** The owner's origin (PUBLIC_URL): the only Origin accepted. */
   origin(): string;
   /** Loopback http (local development): the only case a request may lack CF-Connecting-IP. */
@@ -64,6 +83,18 @@ export interface ApiDeps {
 
 /** Signed-in routes that still work while the password must be changed. */
 const WHILE_PASSWORD_CHANGE = new Set(["GET /api/auth/session", "POST /api/auth/logout", "POST /api/auth/heartbeat", "POST /api/auth/password"]);
+
+/** Signed-in routes that work right after the first access, until two-step sign-in is on. */
+const WHILE_SECOND_STEP_SETUP = new Set([
+  "GET /api/auth/session",
+  "POST /api/auth/logout",
+  "POST /api/auth/heartbeat",
+  "POST /api/auth/confirm",
+  "GET /api/auth/mfa",
+  "POST /api/auth/mfa/setup",
+  "POST /api/auth/mfa/enable",
+  "GET /api/settings",
+]);
 
 /**
  * The private API. It runs inside the Durable Object, next to the database, and
@@ -76,14 +107,15 @@ const WHILE_PASSWORD_CHANGE = new Set(["GET /api/auth/session", "POST /api/auth/
 export function createApi(deps: ApiDeps) {
   const app = new Hono<ApiEnv>().basePath("/api");
 
-  app.onError((error) => errorResponse(error, deps.locale()));
+  app.onError((error, c) => errorResponse(error, deps.locale(), c.req.raw));
   app.notFound(() => errorResponse(new AppError("NOT_FOUND"), deps.locale()));
 
   // Public: says only whether the Worker is up and configured. Never data, never
   // which setting is missing (the Worker's log says that).
   app.get("/health", () => {
-    if (!deps.passwordSecretSet() && !deps.auth().passwordConfigured()) {
-      console.warn(JSON.stringify({ message: "not configured: set OWNER_PASSWORD or OWNER_PASSWORD_HASH" }));
+    // Configured: a password exists, or the first access can still be done with the code.
+    if (!deps.passwordSecretSet() && deps.setupCodeSet?.() !== true && !deps.auth().passwordConfigured()) {
+      log("warn", "not_configured", { secrets: ["SETUP_CODE"] });
       throw new AppError("NOT_CONFIGURED");
     }
     return Response.json({ ok: true });
@@ -156,6 +188,53 @@ export function createApi(deps: ApiDeps) {
     }),
   );
 
+  // ---------- First access and recovery with the installation code (no session) ----------
+
+  app.get("/setup", async () => Response.json(await deps.auth().setupStatus()));
+
+  app.post("/setup/code", async (c) => {
+    const input = await readJson(c.req.raw, setupCodeRequestSchema, 4 * 1024);
+    const ticket = await deps.auth().setupCheckCode(input, client(c));
+    const body: SetupTicket = { mode: ticket.mode, expiresAt: new Date(ticket.expiresAt).toISOString() };
+    const response = Response.json(body);
+    response.headers.append("set-cookie", setupCookie(c.req.raw, ticket.token, (ticket.expiresAt - Date.now()) / 1000));
+    return response;
+  });
+
+  /** Runs a form behind the ticket; once the ticket is over, its cookie goes too. */
+  const withTicket = async (c: Context<ApiEnv>, work: (token: string | null) => Promise<Response>) => {
+    try {
+      const response = await work(readSetupCookie(c.req.raw));
+      response.headers.append("set-cookie", setupCookie(c.req.raw, null));
+      return response;
+    } catch (error) {
+      if (!(error instanceof AppError) || (error.details?.setup !== "expired" && error.code !== "CONFLICT")) throw error;
+      const response = errorResponse(error, deps.locale());
+      response.headers.append("set-cookie", setupCookie(c.req.raw, null));
+      return response;
+    }
+  };
+
+  app.post("/setup/owner", (c) =>
+    withTicket(c, async (token) => {
+      const input = await readJson(c.req.raw, setupOwnerRequestSchema, 8 * 1024);
+      const signed = await deps.auth().setupOwner(token, input, client(c), signInCookies(c));
+      const response = signedInResponse(c, signed);
+      return new Response(response.body, { status: 201, headers: response.headers });
+    }),
+  );
+
+  app.post("/setup/recover", (c) =>
+    withTicket(c, async (token) => {
+      const input = await readJson(c.req.raw, setupRecoverRequestSchema, 8 * 1024);
+      await deps.auth().setupRecover(token, input, client(c));
+      const response = new Response(null, { status: 204 });
+      // Every session ended: this browser's cookie opens nothing any more.
+      response.headers.append("set-cookie", sessionCookie(c.req.raw, null));
+      return response;
+    }),
+  );
+
   app.use("*", async (c, next) => {
     const token = readSessionCookie(c.req.raw);
     // Without a cookie there is nothing to look up: the database is not needed to say no.
@@ -172,6 +251,9 @@ export function createApi(deps: ApiDeps) {
     const method = c.req.method === "HEAD" ? "GET" : c.req.method;
     const route = `${method} ${c.req.path.replace(/\/+$/, "")}`;
     if (auth.passwordChangeRequired() && !WHILE_PASSWORD_CHANGE.has(route)) throw new AppError("PASSWORD_CHANGE_REQUIRED");
+    if (auth.secondStepRequired() && !WHILE_SECOND_STEP_SETUP.has(route)) {
+      throw new AppError("FORBIDDEN", "auth.setup.secondStepRequired", { secondStepRequired: true });
+    }
     c.set("session", session);
     await next();
   });
@@ -239,7 +321,11 @@ export function createApi(deps: ApiDeps) {
 
   app.get("/auth/mfa", () => Response.json(deps.auth().twoStep.status()));
 
-  app.post("/auth/mfa/setup", async (c) => Response.json(await deps.auth().mfaSetup(c.get("session"))));
+  // Adding a way in asks for the password typed right now, not the 15-minute window.
+  app.post("/auth/mfa/setup", async (c) => {
+    const proof = await readJson(c.req.raw, passwordProofSchema, 4 * 1024);
+    return Response.json(await deps.auth().mfaSetup(c.get("session"), proof, client(c)));
+  });
 
   app.post("/auth/mfa/enable", async (c) => {
     const { code } = await readJson(c.req.raw, mfaCodeRequestSchema, 1024);
@@ -261,7 +347,10 @@ export function createApi(deps: ApiDeps) {
 
   app.get("/auth/passkeys", () => Response.json({ passkeys: deps.auth().listPasskeys() }));
 
-  app.post("/auth/passkeys/options", async (c) => Response.json({ options: await deps.auth().passkeyRegistrationOptions(c.get("session")) }));
+  app.post("/auth/passkeys/options", async (c) => {
+    const proof = await readJson(c.req.raw, passwordProofSchema, 4 * 1024);
+    return Response.json({ options: await deps.auth().passkeyRegistrationOptions(c.get("session"), proof, client(c)) });
+  });
 
   app.post("/auth/passkeys", async (c) => {
     const input = await readJson(c.req.raw, passkeyRegistrationSchema, 48 * 1024);

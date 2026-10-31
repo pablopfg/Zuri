@@ -17,6 +17,13 @@ export type InternalKey =
   | "auth_mfa_wrong_codes"
   | "auth_passkey_pending"
   | "auth_passkey_user"
+  | "owner_email"
+  | "setup_code"
+  | "setup_salt"
+  | "setup_seen"
+  | "setup_tries"
+  | "setup_alerted_at"
+  | "setup_second_step_required"
   // The one alarm of the automations: "<UTC ISO>|<schedule id>" (step 10).
   | "automation_alarm";
 

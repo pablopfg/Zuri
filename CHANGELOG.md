@@ -9,6 +9,17 @@ o [SemVer](https://semver.org/lang/pt-BR/). Cada PR escreve a sua entrada em
 
 ### Adicionado
 
+- Primeiro acesso protegido por um código de instalação (servidor). Enquanto
+  não existe dono, `GET /api/setup`, `POST /api/setup/code` e
+  `POST /api/setup/owner` criam o dono uma vez só. O código é um segredo de 32
+  caracteres ou mais, vale 1 hora a partir da primeira vez que é digitado
+  certo e é gasto no cadastro. Cada tentativa passa pela verificação contra
+  robôs, e os limites valem por rede: 5 erros em 15 minutos pausam e 20 em 24
+  horas bloqueiam aquela rede pelo resto do dia. Logo depois do cadastro, a
+  verificação em duas etapas é obrigatória antes de qualquer outra tela. Um código novo, depois, só recupera o acesso
+  (`POST /api/setup/recover`), mantendo os dados e o 2FA. Os quatro eventos
+  novos aparecem em Acessos. A tela vem no próximo PR.
+
 - Paleta de comandos com Ctrl/⌘ K, ou pelo botão Buscar na barra lateral e no
   topo do celular. Ela leva a qualquer página ou seção das configurações, cria
   uma tarefa ou nota e busca tarefas, notas e memórias (a partir de 2 letras,
@@ -154,6 +165,12 @@ o [SemVer](https://semver.org/lang/pt-BR/). Cada PR escreve a sua entrada em
 
 ### Alterado
 
+- Os logs do servidor têm agora um formato único (`level`, `event`, `code`,
+  `route`, `requestId`, `error`, `secrets`), com o `cf-ray` da requisição para
+  achar o erro no painel da Cloudflare. Tudo passa por um só módulo, que
+  descarta qualquer valor fora do formato esperado, e um teste impede escrever
+  no log por outro caminho. Primeira parte do plano de monitoramento em
+  `docs/planos/observabilidade.md`.
 - Os textos que só o servidor diz (recusas e erros da API) saíram do pacote
   inicial da interface, que já recebe essas mensagens prontas na resposta. O
   JS inicial caiu de 139,9 para 139,4 KB, já com a paleta, e o teto da CI desceu
@@ -223,6 +240,8 @@ o [SemVer](https://semver.org/lang/pt-BR/). Cada PR escreve a sua entrada em
 
 ### Corrigido
 
+- Errar a senha ou o código num diálogo de confirmação não encerra mais a
+  sessão: a mensagem aparece no diálogo e você tenta de novo.
 - A busca de tarefas e a busca literal de notas não achavam "Água" ao digitar
   "água" (o SQLite só ignora maiúsculas de A a Z). Agora as maiúsculas
   acentuadas também são ignoradas, nos dois sentidos.
@@ -232,6 +251,11 @@ o [SemVer](https://semver.org/lang/pt-BR/). Cada PR escreve a sua entrada em
 
 ### Segurança
 
+- Ligar a verificação em duas etapas e adicionar uma passkey agora pedem a sua
+  senha na hora, mesmo logo depois de entrar. Um código do aplicativo não
+  serve no lugar dela. A senha errada conta no mesmo limite do login (3 erros
+  em 15 minutos por rede), e a passkey só pode ser concluída no navegador que
+  digitou a senha.
 - Conteúdo guardado (notas, memórias, resultados de ferramentas, resumos e
   conversas importadas) entra no prompt só como dado. Mesmo que o modelo
   obedeça a um texto injetado, nada é apagado ou reescrito sem a aprovação do
@@ -324,6 +348,11 @@ o [SemVer](https://semver.org/lang/pt-BR/). Cada PR escreve a sua entrada em
   conversas e mensagens, e acrescenta a coluna `author` em `zur_memories`
   (todas as memórias que já existem ficam como suas). Nada mais muda nos dados
   que já existem.
+- Segredo novo `SETUP_CODE` para instalações novas (32+ caracteres
+  aleatórios). O `OWNER_EMAIL` deixou de ser obrigatório: só é preciso junto
+  com `OWNER_PASSWORD` ou `OWNER_PASSWORD_HASH`, nas instalações antigas, que
+  continuam funcionando sem mudança. Sem migration: o e-mail do primeiro acesso
+  fica nas configurações internas do banco. Nada disso gera custo.
 - Migration 7 cria `zur_usage_daily` e `zur_model_usage_daily`, só com
   contadores de uso da IA (nenhum texto), guardados por 90 dias. Nada muda nos
   dados que já existem. O Worker passa a declarar o binding `AI` (Workers AI,

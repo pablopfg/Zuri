@@ -21,6 +21,7 @@ import { AppError } from "../http/errors.ts";
 import { ALL_TOOLS, runApprovedAction, type ToolContext } from "../tools/index.ts";
 import type { ApiEnv } from "./app.ts";
 import { readJson } from "./http.ts";
+import { log } from "../log.ts";
 
 /** Most turns running at once (several tabs): each one holds the object and spends AI. */
 export const MAX_ACTIVE_TURNS = 2;
@@ -153,7 +154,7 @@ export function registerChatRoutes(app: Hono<ApiEnv>, deps: () => ChatDeps): voi
       } catch (error) {
         // Before the turn started (the conversation is full, say): the reason, in the owner's language.
         const appError = error instanceof AppError ? error : new AppError("INTERNAL_ERROR");
-        if (!(error instanceof AppError)) console.error(JSON.stringify({ message: "chat stream failed", error: error instanceof Error ? error.name : typeof error }));
+        if (!(error instanceof AppError)) log("error", "chat_stream_failed", { error });
         await send({ type: "error", code: appError.code, message: t(deps().locale(), appError.messageKey), ...(appError.details ? { details: appError.details } : {}) });
       } finally {
         // Nothing keeps the object busy after the turn (rule P5).

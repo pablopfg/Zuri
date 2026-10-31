@@ -33,6 +33,8 @@ export type UserVerification = "preferred" | "required";
 
 interface PendingRegistration {
   challenge: string;
+  /** The session that typed the password for this ceremony: only its answer counts. */
+  session: string;
   rpId: string;
   origin: string;
   expiresAt: number;
@@ -120,7 +122,7 @@ export class Passkeys {
   // ---------- Adding a passkey ----------
 
   /** What the browser needs to create a passkey. Nothing is stored until `register` gets its answer. */
-  async registrationOptions(rp: RelyingParty, names: { rpName: string; userName: string }): Promise<PublicKeyCredentialCreationOptionsJSON> {
+  async registrationOptions(rp: RelyingParty, names: { rpName: string; userName: string }, session: string): Promise<PublicKeyCredentialCreationOptionsJSON> {
     const options = await generateRegistrationOptions({
       rpName: names.rpName,
       rpID: rp.rpId,
@@ -135,32 +137,45 @@ export class Passkeys {
         .map((r) => ({ id: r.id, transports: transportsOf(r) })),
       authenticatorSelection: { residentKey: "preferred", userVerification: "preferred" },
     });
-    const pending: PendingRegistration = { challenge: options.challenge, rpId: rp.rpId, origin: rp.origin, expiresAt: this.clock() + PASSKEY_TIMEOUT_MS };
+    const pending: PendingRegistration = { challenge: options.challenge, session, rpId: rp.rpId, origin: rp.origin, expiresAt: this.clock() + PASSKEY_TIMEOUT_MS };
     this.state.set("auth_passkey_pending", JSON.stringify(pending));
     return options;
   }
 
-  private takePending(): PendingRegistration | null {
+  /**
+   * The pending ceremony of `session`, used up. Another session's answer leaves
+   * it in place: a session that never typed the password can't spend it.
+   */
+  private takePending(session: string): PendingRegistration | null {
     const raw = this.state.get<string>("auth_passkey_pending");
-    this.state.delete("auth_passkey_pending");
+    let value: Partial<PendingRegistration> | null = null;
     try {
-      const value = typeof raw === "string" ? (JSON.parse(raw) as Partial<PendingRegistration>) : null;
-      if (!value || typeof value.challenge !== "string" || typeof value.rpId !== "string" || typeof value.origin !== "string") return null;
-      if (typeof value.expiresAt !== "number" || value.expiresAt <= this.clock()) return null;
-      return value as PendingRegistration;
+      value = typeof raw === "string" ? (JSON.parse(raw) as Partial<PendingRegistration>) : null;
     } catch {
-      return null;
+      value = null;
     }
+    // Broken or from before sessions were kept: gone. Another session's: kept for it.
+    if (!value || typeof value.session !== "string" || value.session === session) this.state.delete("auth_passkey_pending");
+    if (!value || typeof value.challenge !== "string" || typeof value.session !== "string" || typeof value.rpId !== "string" || typeof value.origin !== "string") return null;
+    if (value.session !== session) return null;
+    if (typeof value.expiresAt !== "number" || value.expiresAt <= this.clock()) return null;
+    return value as PendingRegistration;
   }
 
   /**
-   * Checks the browser's answer against the pending challenge (used up either
-   * way) and stores the new passkey. Null when it doesn't check out.
+   * Checks the browser's answer against this session's pending challenge (used
+   * up either way) and stores the new passkey. Null when it doesn't check out.
    * `stillAllowed` is asked again after the slow check (two-step sign-in may
    * have been turned off meanwhile).
    */
-  async register(name: string, response: PasskeyRegistration["response"], rp: RelyingParty, stillAllowed: () => boolean): Promise<PasskeyInfo | null> {
-    const pending = this.takePending();
+  async register(
+    name: string,
+    response: PasskeyRegistration["response"],
+    rp: RelyingParty,
+    session: string,
+    stillAllowed: () => boolean,
+  ): Promise<PasskeyInfo | null> {
+    const pending = this.takePending(session);
     if (!pending || pending.rpId !== rp.rpId || pending.origin !== rp.origin) return null;
     let verified: VerifiedRegistrationResponse;
     try {

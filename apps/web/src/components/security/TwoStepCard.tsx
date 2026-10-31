@@ -1,10 +1,11 @@
 import { useQueryClient } from "@tanstack/react-query";
 import type { MfaSetup } from "@zuri/shared";
-import { type FormEvent, type ReactNode, useState } from "react";
+import { type FormEvent, type ReactNode, useEffect, useRef, useState } from "react";
 import { MFA_KEY, useMfaStatus } from "../../hooks/mfa.ts";
 import { api, errorMessage } from "../../lib/api.ts";
 import { useI18n } from "../../lib/i18n.tsx";
 import { Button, Card, ErrorNotice, Notice, Spinner, TextField } from "../ui.tsx";
+import { PasswordNowDialog } from "./PasswordNowDialog.tsx";
 import { QrCode } from "./QrCode.tsx";
 import { RecoveryCodes } from "./RecoveryCodes.tsx";
 
@@ -19,6 +20,15 @@ export function TwoStepCard() {
   const [code, setCode] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  const [askPassword, setAskPassword] = useState(false);
+  const codeField = useRef<HTMLInputElement>(null);
+  // The dialog gives focus back to the button that opened it, which the QR code
+  // replaced: this runs after it closes (a parent's effects run after its
+  // children's) and takes focus to the code the next step asks for.
+  const setupShown = mode.kind === "setup" && !askPassword;
+  useEffect(() => {
+    if (setupShown) codeField.current?.focus();
+  }, [setupShown]);
 
   const reset = (next: Mode = { kind: "idle" }) => {
     setMode(next);
@@ -39,10 +49,12 @@ export function TwoStepCard() {
     }
   }
 
-  const start = () =>
-    run(async () => {
-      reset({ kind: "setup", setup: await api<MfaSetup>("/auth/mfa/setup", { method: "POST" }) });
-    });
+  // Turning it on starts with the password typed right now (owner's decision): the dialog sends it with the request.
+  const start = async (password: string) => {
+    const setup = await api<MfaSetup>("/auth/mfa/setup", { method: "POST", body: { password } });
+    setAskPassword(false);
+    reset({ kind: "setup", setup });
+  };
 
   const submit = (e: FormEvent) => {
     e.preventDefault();
@@ -67,6 +79,7 @@ export function TwoStepCard() {
   const codeForm = (label: string, submitLabel: string, danger = false, hint?: string) => (
     <form onSubmit={submit} className="space-y-3" noValidate>
       <TextField
+        ref={codeField}
         label={label}
         autoComplete="one-time-code"
         inputMode={mode.kind === "setup" ? "numeric" : "text"}
@@ -137,14 +150,14 @@ export function TwoStepCard() {
     body = (
       <div className="space-y-3">
         <Notice tone="warning">{t("web.mfa.off")}</Notice>
-        <Button loading={pending} onClick={() => void start()}>
+        <Button
+          onClick={() => {
+            setError(null);
+            setAskPassword(true);
+          }}
+        >
           {t("web.mfa.start")}
         </Button>
-        {error && (
-          <p role="alert" className="text-sm text-danger">
-            {error}
-          </p>
-        )}
       </div>
     );
   }
@@ -152,6 +165,13 @@ export function TwoStepCard() {
   return (
     <Card title={t("web.mfa.title")} description={t("web.mfa.description")}>
       {body}
+      <PasswordNowDialog
+        open={askPassword}
+        title={t("web.passwordNow.mfaTitle")}
+        body={t("web.passwordNow.mfaBody")}
+        onConfirm={start}
+        onCancel={() => setAskPassword(false)}
+      />
     </Card>
   );
 }

@@ -1,4 +1,4 @@
-import { DEFAULT_LOCALE, isBreachedPassword, isPasswordHash, type Locale } from "@zuri/shared";
+import { DEFAULT_LOCALE, isBreachedPassword, isPasswordHash, isUsableSetupCode, type Locale } from "@zuri/shared";
 import { Agent } from "agents";
 import { chooseProvider, MeteredAI, UsageMeter } from "../ai/index.ts";
 import type { AIProvider } from "../ai/provider.ts";
@@ -22,6 +22,7 @@ import { ConversationRepository } from "../chat/conversations.ts";
 import { TaskPlanService } from "../chat/plans.ts";
 import { MemoryService } from "../memory/service.ts";
 import { Productivity } from "../productivity/index.ts";
+import { log } from "../log.ts";
 import type { ToolContext } from "../tools/registry.ts";
 import { AgentRunner } from "./runner.ts";
 
@@ -89,6 +90,7 @@ export class ZuriAgent extends Agent<WorkerEnv> {
     aiUsage: () => this.store.usage.report(this.aiLimits(), this.development() ? "mock" : "workers-ai", this.store.settings.field("aiModel")),
     passwordSecretSet: () =>
       isPasswordHash(this.env.OWNER_PASSWORD_HASH) || (this.env.OWNER_PASSWORD?.length ?? 0) >= MIN_OWNER_PASSWORD_LENGTH,
+    setupCodeSet: () => isUsableSetupCode(this.env.SETUP_CODE),
     origin: () => this.publicUrl().origin,
     development: () => this.development(),
     chat: () => ({
@@ -132,9 +134,9 @@ export class ZuriAgent extends Agent<WorkerEnv> {
     if (!opened) return;
     try {
       const { interrupted } = await this.store.automations.reconcile();
-      if (interrupted > 0) console.warn(JSON.stringify({ level: "warn", event: "automation.interrupted", code: "AUTOMATION_INTERRUPTED", count: interrupted }));
+      if (interrupted > 0) log("warn", "automation_interrupted", { count: interrupted });
     } catch (error) {
-      console.error(JSON.stringify({ level: "error", event: "automation.reconcile_failed", code: "AUTOMATION_RECONCILE_FAILED", error: error instanceof Error ? error.name : typeof error }));
+      log("error", "automation_reconcile_failed", { error });
     }
   }
 
@@ -226,6 +228,7 @@ export class ZuriAgent extends Agent<WorkerEnv> {
           ownerEmail: env.OWNER_EMAIL,
           passwordHash: env.OWNER_PASSWORD_HASH,
           plainPassword: env.OWNER_PASSWORD,
+          setupCode: env.SETUP_CODE,
           agentName: env.AGENT_NAME,
         },
         ...signInTurnstile(env),
@@ -262,7 +265,7 @@ export class ZuriAgent extends Agent<WorkerEnv> {
     } catch (error) {
       // Only the name: the message may quote SQL or data. Without this line a
       // broken migration would hide behind answers that still look normal.
-      console.error(JSON.stringify({ message: "settings unreadable", error: error instanceof Error ? error.name : typeof error }));
+      log("error", "settings_unreadable", { error });
       return DEFAULT_LOCALE;
     }
   }

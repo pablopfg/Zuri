@@ -8,6 +8,7 @@ import {
   type MessageKey,
   t,
 } from "@zuri/shared";
+import { log } from "../log.ts";
 
 /** An expected refusal: it becomes `{ code, message, details? }` with the code's status. */
 export class AppError extends Error {
@@ -28,7 +29,8 @@ export class AppError extends Error {
 /**
  * The JSON answer for any error. Anything that is not an AppError becomes the
  * generic INTERNAL_ERROR: a stack trace or an internal message never reaches
- * the client, and only the error's name is logged (its message may quote data).
+ * the client, and only the error's name is logged (its message may quote data),
+ * with the route and the cf-ray when the caller passes the request.
  *
  * The message is in the owner's language when the caller knows it (inside the
  * Durable Object, from the settings). The Worker's gates answer before the object
@@ -36,10 +38,10 @@ export class AppError extends Error {
  * read a setting for an unknown host or an unauthenticated probe would cost more
  * than it is worth.
  */
-export function errorResponse(error: unknown, locale: Locale = DEFAULT_LOCALE): Response {
+export function errorResponse(error: unknown, locale: Locale = DEFAULT_LOCALE, request?: Request): Response {
   const appError = error instanceof AppError ? error : new AppError("INTERNAL_ERROR");
   if (!(error instanceof AppError)) {
-    console.error(JSON.stringify({ message: "unhandled error", error: error instanceof Error ? error.name : typeof error }));
+    log("error", "unhandled_error", { code: "INTERNAL_ERROR", error, ...(request ? { request } : {}) });
   }
   const body: ApiError = {
     code: appError.code,
