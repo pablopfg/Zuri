@@ -134,6 +134,8 @@ test("a note: write Markdown, preview it safely, search, delete and restore @mob
     await page.getByRole("link", { name: "Nova nota" }).click();
     await expect(leave).toBeVisible();
     await leave.getByRole("button", { name: "Continuar editando" }).click();
+    // Until the modal dialog closes, the page behind it is inert and would swallow the shortcut.
+    await expect(leave).toBeHidden();
   }
   await page.getByLabel("Texto da nota").press("ControlOrMeta+s");
   await expect(page.getByText("Alterações não salvas")).toBeHidden();
