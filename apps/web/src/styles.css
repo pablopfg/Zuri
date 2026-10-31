@@ -84,6 +84,12 @@ body {
   outline-offset: 2px;
 }
 
+/* Edge draws its own eye in password fields; PasswordField already has one. */
+input::-ms-reveal,
+input::-ms-clear {
+  display: none;
+}
+
 dialog::backdrop {
   background: rgb(0 0 0 / 0.5);
 }

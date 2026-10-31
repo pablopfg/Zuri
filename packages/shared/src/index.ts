@@ -1,3 +1,6 @@
+// First: settles Zod's configuration before any schema below is built.
+import "./zod-config.ts";
+
 export {
   createTranslator,
   DEFAULT_LOCALE,

@@ -143,7 +143,19 @@ function NotesList({ activeId }: { activeId: string | undefined }) {
         <ErrorNotice error={notes.error} onRetry={() => void notes.refetch()} />
       ) : notes.data.notes.length === 0 ? (
         <EmptyState icon={<NotebookPen className="h-6 w-6" />} title={q ? t("web.notes.emptySearch") : t("web.notes.empty")}>
-          {!q && <p>{t("web.notes.emptyBody")}</p>}
+          {!q && (
+            <>
+              <p>{t("web.notes.emptyBody")}</p>
+              {/* The way out of an empty list sits in the list itself, not only in the header's "+". */}
+              <Link
+                to="/notas/nova"
+                className="mt-4 inline-flex min-h-11 items-center gap-2 rounded-xl bg-accent px-4 text-sm font-semibold text-accent-fg hover:bg-accent-hover"
+              >
+                <Plus className="h-4 w-4" aria-hidden />
+                {t("web.notes.new")}
+              </Link>
+            </>
+          )}
         </EmptyState>
       ) : (
         <ul aria-label={t("web.notes.listLabel")} className="space-y-0.5">

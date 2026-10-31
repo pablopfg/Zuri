@@ -1,12 +1,12 @@
 import { startRegistration } from "@simplewebauthn/browser";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { type MfaStatus, PASSKEY_NAME_MAX, type PasskeyInfo } from "@zuri/shared";
+import { PASSKEY_NAME_MAX, type PasskeyInfo } from "@zuri/shared";
 import { Fingerprint, KeyRound } from "lucide-react";
 import { type FormEvent, useState } from "react";
+import { useMfaStatus } from "../../hooks/mfa.ts";
 import { api, errorMessage } from "../../lib/api.ts";
 import { useI18n } from "../../lib/i18n.tsx";
 import { Button, Card, EmptyState, ErrorNotice, Notice, Spinner, TextField } from "../ui.tsx";
-import { MFA_KEY } from "./TwoStepCard.tsx";
 
 const PASSKEYS_KEY = ["passkeys"] as const;
 
@@ -17,7 +17,7 @@ export function PasskeysCard() {
   const { t, dateTime } = useI18n();
   const qc = useQueryClient();
   const list = useQuery({ queryKey: PASSKEYS_KEY, queryFn: () => api<{ passkeys: PasskeyInfo[] }>("/auth/passkeys") });
-  const mfa = useQuery({ queryKey: MFA_KEY, queryFn: () => api<MfaStatus>("/auth/mfa") });
+  const mfa = useMfaStatus();
   const [mode, setMode] = useState<Mode>({ kind: "idle" });
   const [name, setName] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -96,7 +96,8 @@ export function PasskeysCard() {
         <ErrorNotice error={list.error} onRetry={() => void list.refetch()} />
       ) : (
         <div className="space-y-4">
-          {passkeys.length === 0 ? (
+          {/* With two-step off nothing can be added yet: the notice below says why, without an empty list inviting it. */}
+          {passkeys.length === 0 && mfaOff ? null : passkeys.length === 0 ? (
             <EmptyState icon={<KeyRound className="h-6 w-6" />} title={t("web.passkeys.emptyTitle")}>
               {t("web.passkeys.emptyBody")}
             </EmptyState>
