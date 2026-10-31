@@ -1,4 +1,4 @@
-import { formatDateTime, type Locale, zonedParts, zonedTimeToUtc } from "@zuri/shared";
+import { type Locale, zonedParts, zonedTimeToUtc } from "@zuri/shared";
 
 /** A deadline with only a day means "by the end of that day": 23:59 in the owner's zone. */
 const END_OF_DAY = { hour: 23, minute: 59 };
@@ -45,10 +45,14 @@ export function quickAddDue(date: string, time: string, forToday: boolean, now: 
   return forToday ? dueFromInputs(dueInputs(now.toISOString(), timeZone).date, "", timeZone) : "";
 }
 
-/** "05/11/2026" for a day-only deadline, "05/11/2026 às 18:00" with a time. */
-export function formatDue(iso: string, locale: Locale, timeZone: string): string {
+/**
+ * "05/11/2026" for a day-only deadline, "05/11/2026 às 18:00" with a time. The
+ * timed form comes from `dateTime` (useI18n's), which joins the halves with the
+ * loaded catalog.
+ */
+export function formatDue(iso: string, locale: Locale, timeZone: string, dateTime: (iso: string) => string): string {
   if (dueInputs(iso, timeZone).time === "") {
     return new Intl.DateTimeFormat(locale, { timeZone, day: "2-digit", month: "2-digit", year: "numeric" }).format(new Date(iso));
   }
-  return formatDateTime(iso, locale, timeZone);
+  return dateTime(iso);
 }

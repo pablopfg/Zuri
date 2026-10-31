@@ -1,16 +1,18 @@
 import {
+  createTranslator,
   DEFAULT_LOCALE,
   DEFAULT_TIME_ZONE,
-  formatDateTime,
+  formatDateTimeParts,
   isLocale,
   isTimeZone,
   type Locale,
+  loadCatalog,
   type MessageKey,
+  type Messages,
   type PluralBase,
-  plural as pluralFor,
-  t as translate,
+  ptBR,
 } from "@zuri/shared";
-import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { setFallbackMessages } from "./api.ts";
 
 type Params = Record<string, string | number>;
@@ -50,39 +52,79 @@ interface I18nValue {
 
 const I18nContext = createContext<I18nValue | null>(null);
 
+/**
+ * Only pt-BR travels in the first bundle (.claude/rules/performance.md, P11).
+ * Another language loads on demand: before the first render when the browser
+ * already chose it, and before switching when the owner's settings ask for it,
+ * so the screen never shows a key or flips language twice.
+ */
 export function I18nProvider({ children }: { children: ReactNode }) {
   const [locale, setLocale] = useState<Locale>(() => initialLocale(readStored(), navigator.languages ?? [navigator.language]));
+  const [loaded, setLoaded] = useState<Partial<Record<Locale, Messages>>>({ "pt-BR": ptBR });
   const [timeZone, setTimeZone] = useState<string>(() => {
     const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
     return isTimeZone(zone) ? zone : DEFAULT_TIME_ZONE;
   });
+  // The language the owner asked for last, so a slow download can't override a newer choice.
+  const wanted = useRef(locale);
+
+  const ensure = useCallback(async (next: Locale) => {
+    const messages = await loadCatalog(next).catch(() => null);
+    // Without the catalog (offline, an old tab after a deploy) the app stays in pt-BR.
+    if (messages) setLoaded((current) => (current[next] ? current : { ...current, [next]: messages }));
+    return messages !== null;
+  }, []);
 
   useEffect(() => {
+    if (!loaded[locale]) {
+      void ensure(locale).then((ok) => {
+        if (!ok && wanted.current === locale) setLocale(DEFAULT_LOCALE);
+      });
+    }
+  }, [locale, loaded, ensure]);
+
+  const ready = Boolean(loaded[locale]);
+  const translator = useMemo(() => {
+    const sources: Record<Locale, Messages> = { "pt-BR": ptBR, en: loaded.en ?? ptBR };
+    return createTranslator<MessageKey>(sources);
+  }, [loaded]);
+
+  useEffect(() => {
+    if (!ready) return;
     document.documentElement.lang = locale;
     try {
       localStorage.setItem(KEY, locale);
     } catch {
       // Without storage, the next sign-in screen guesses from the browser again.
     }
-    setFallbackMessages((kind) => translate(locale, kind === "network" ? "web.error.network" : "error.internal"));
-  }, [locale]);
+    setFallbackMessages((kind) => translator.t(locale, kind === "network" ? "web.error.network" : "error.internal"));
+  }, [locale, ready, translator]);
 
-  const adoptSettings = useCallback((settings: { language: Locale; timeZone: string }) => {
-    setLocale(settings.language);
-    if (isTimeZone(settings.timeZone)) setTimeZone(settings.timeZone);
-  }, []);
+  const adoptSettings = useCallback(
+    (settings: { language: Locale; timeZone: string }) => {
+      wanted.current = settings.language;
+      // The current language stays until the new catalog is here.
+      void ensure(settings.language).then((ok) => {
+        if (ok && wanted.current === settings.language) setLocale(settings.language);
+      });
+      if (isTimeZone(settings.timeZone)) setTimeZone(settings.timeZone);
+    },
+    [ensure],
+  );
 
   const value = useMemo<I18nValue>(
     () => ({
       locale,
       timeZone,
-      t: (key, params) => translate(locale, key, params),
-      plural: (base, count, params) => pluralFor(locale, base, count, params),
-      dateTime: (date) => formatDateTime(date, locale, timeZone),
+      t: (key, params) => translator.t(locale, key, params),
+      plural: (base, count, params) => translator.plural(locale, base, count, params),
+      dateTime: (date) => translator.t(locale, "format.dateTime", formatDateTimeParts(date, locale, timeZone)),
       adoptSettings,
     }),
-    [locale, timeZone, adoptSettings],
+    [locale, timeZone, adoptSettings, translator],
   );
+  // Only the very first render can wait here: later switches keep the old language until loaded.
+  if (!ready) return null;
   return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>;
 }
 

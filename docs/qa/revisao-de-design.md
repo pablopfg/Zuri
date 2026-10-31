@@ -19,7 +19,7 @@ Telas revistas: entrar (senha e segundo passo), início, configurações (Conta,
 | JS inicial (index), minificado, antes do PR #12 | 488,1 KB | 456,0 KB |
 | JS inicial, gzip, antes do PR #12 | 151,1 KB | 140,2 KB |
 | JS inicial, gzip, com Tarefas e Notas (develop `cbb093c`) | 156,3 KB | 145,0 KB |
-| JS inicial, gzip, com o menu recolhível (develop `28da556`) | 174,8 KB | 163,7 KB |
+| JS inicial, gzip, com o menu recolhível (develop `28da556`) | 174,8 KB | 159,3 KB (com D4) |
 | Peso total da tela de entrar | 158 KB | 147 KB |
 | JS não usado na tela de entrar (Lighthouse) | 80 KiB | 70 KiB |
 | Lighthouse celular: performance | 96 a 98 | 97 a 98 |
@@ -32,7 +32,7 @@ Telas revistas: entrar (senha e segundo passo), início, configurações (Conta,
 
 A nota de SEO caiu de 91 para 63 de propósito: a página agora pede `noindex`. É um assistente privado de um dono só, e nada dele deve aparecer em buscador.
 
-A regra P11 (`.claude/rules/performance.md`) põe o teto do JS inicial em 160 KB gzip, com meta de 150. A `develop` atual passou do teto (174,8 KB) com os últimos PRs, e este PR a traz para 163,7 KB: ainda 3,7 KB acima. O que pesa, pelo código-fonte antes da minificação: `react-dom` (620 KB), `zod` (362 KB), `react-router` (357 KB), `@tanstack/query-core` (140 KB) e os dois catálogos de idioma (21 e 20 KB). Testei separar a tela de entrar e a casca em chunks próprios: o Vite juntou React, zod e a UI num chunk comum que a primeira tela baixa de qualquer jeito, e a soma caiu só uns 3 KB, com uma dúzia de requisições a mais. Não compensou. As alavancas reais são D3 (`zod/mini`) e D4 (só o idioma em uso), que juntas devem levar abaixo de 160.
+A regra P11 (`.claude/rules/performance.md`) põe o teto do JS inicial em 160 KB gzip, com meta de 150. A `develop` atual passou do teto (174,8 KB) com os últimos PRs, e este PR a traz para 159,3 KB, abaixo do teto: 11 KB das correções e mais 4,4 KB do D4, que deixou o inglês fora do pacote inicial. O que pesa, pelo código-fonte antes da minificação: `react-dom` (620 KB), `zod` (362 KB), `react-router` (357 KB), `@tanstack/query-core` (140 KB) e os dois catálogos de idioma (21 e 20 KB). Testei separar a tela de entrar e a casca em chunks próprios: o Vite juntou React, zod e a UI num chunk comum que a primeira tela baixa de qualquer jeito, e a soma caiu só uns 3 KB, com uma dúzia de requisições a mais. Não compensou. A alavanca que falta para a meta de 150 é D3 (`zod/mini`).
 
 ## Achados por critério
 
@@ -101,8 +101,8 @@ Cada item traz a recomendação. Nenhum foi feito porque muda o que você vê ou
 
 1. **D1 · Paleta de comandos (Ctrl/⌘ K) com busca global e atalhos.** Recomendo fazer quando Tarefas e Notas entrarem: buscar tarefas, notas e configurações e criar uma tarefa sem tirar a mão do teclado. Carrega sob demanda, sem peso no bundle inicial.
 2. **D2 · Casca estática no `index.html`.** Desenhar logo e fundo em HTML/CSS puros antes do JS, para o primeiro desenho no celular não esperar os 140 KB de JS (hoje 1,7 s; o ganho é estimativa, ainda não medido). Recomendo: é barato, não muda o visual e respeita a CSP (CSS externo, sem script inline).
-3. **D3 · `zod/mini` no navegador.** O zod é a segunda maior dependência do bundle inicial. Recomendo fazer com a thread de performance, que cuida de `packages/shared`.
-4. **D4 · Carregar só o idioma em uso.** O inglês vai para um chunk sob demanda, e quem usa pt-BR deixa de baixar os dois catálogos (estimativa de 6 KB gzip hoje, crescendo a cada etapa). Mexe no módulo de i18n compartilhado com o Worker. Recomendo fazer logo, junto com o D3, porque a `develop` está acima do teto da P11.
+3. **D3 · `zod/mini`.** O zod é a segunda maior dependência do pacote inicial. Trocar exige reescrever todos os schemas de `packages/shared` na API do mini (que o Worker também usa), então vai num PR próprio, com os testes de contrato da API como rede de segurança. É o caminho para a meta de 150 KB.
+4. **D4 · Carregar só o idioma em uso.** ✅ Feito neste PR, com o aval do coordenador dentro do pedido de velocidade do Pablo. O inglês virou um chunk de 6,1 KB gzip que só baixa quando o navegador ou as configurações pedem inglês. A troca de idioma espera o catálogo chegar, sem piscar chaves. Sem rede, o app fica em pt-BR. O Worker continua com os dois catálogos.
 5. **D5 · Tela de entrar mais marcante.** Entrada suave (respeitando "reduzir movimento"), ícones nos campos e o sinal verde pulsando enquanto confere. Recomendo, porque é a primeira impressão.
 6. **D6 · Botão de entrar sempre ativo.** Com campo vazio, mostrar o erro no próprio campo em vez de travar o botão. Recomendo.
 7. **D7 · Toasts para confirmações** ("Salvo", "Passkey criada"), como no Talorys, no lugar das linhas fixas. Recomendo, num componente único.

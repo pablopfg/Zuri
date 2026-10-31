@@ -145,7 +145,7 @@ export function TasksPage() {
  * (date, time, project, priority) sits behind "More options".
  */
 function NewTask({ projects, forToday }: { projects: Project[]; forToday: boolean }) {
-  const { t, locale, timeZone } = useI18n();
+  const { t, locale, timeZone, dateTime } = useI18n();
   const qc = useQueryClient();
   const [title, setTitle] = useState("");
   const [more, setMore] = useState(false);
@@ -188,7 +188,7 @@ function NewTask({ projects, forToday }: { projects: Project[]; forToday: boolea
   const dueAtChosen = date ? dueFromInputs(date, time, timeZone) : "";
   const chosen = [
     // A date the browser accepts but the deadline can't be (a 5-digit year) is left out, not formatted (SEC-6R-03).
-    dueAtChosen && formatDue(dueAtChosen, locale, timeZone),
+    dueAtChosen && formatDue(dueAtChosen, locale, timeZone, dateTime),
     projects.find((project) => project.id === projectId)?.name,
     priority !== "medium" && t(PRIORITY_LABEL[priority]),
   ].filter(Boolean);
@@ -250,7 +250,7 @@ function NewTask({ projects, forToday }: { projects: Project[]; forToday: boolea
 }
 
 function TaskRow({ task, projects, onOpen }: { task: Task; projects: Project[]; onOpen: () => void }) {
-  const { t, locale, timeZone } = useI18n();
+  const { t, locale, timeZone, dateTime } = useI18n();
   const qc = useQueryClient();
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -299,7 +299,7 @@ function TaskRow({ task, projects, onOpen }: { task: Task; projects: Project[]; 
           {task.dueAt && (
             <span className={cn("inline-flex items-center gap-1", overdue && "font-medium text-danger")}>
               <CalendarDays className="h-3 w-3" aria-hidden />
-              {overdue ? t("web.tasks.overdueAt", { date: formatDue(task.dueAt, locale, timeZone) }) : t("web.tasks.dueAt", { date: formatDue(task.dueAt, locale, timeZone) })}
+              {overdue ? t("web.tasks.overdueAt", { date: formatDue(task.dueAt, locale, timeZone, dateTime) }) : t("web.tasks.dueAt", { date: formatDue(task.dueAt, locale, timeZone, dateTime) })}
             </span>
           )}
           {project && <span>{project.name}</span>}

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { catalogs, createTranslator, DEFAULT_LOCALE, isLocale, LOCALES, t } from "../i18n/index.ts";
+import { catalogs, createTranslator, DEFAULT_LOCALE, isLocale, LOCALES, loadCatalog, ptBR, t } from "../i18n/index.ts";
 
 const placeholders = (text: string) => [...text.matchAll(/\{(\w+)\}/g)].map((m) => m[1]).sort();
 
@@ -57,6 +57,11 @@ describe("t", () => {
 });
 
 describe("isLocale", () => {
+  it("loads each catalog on demand, the same one the Worker holds", async () => {
+    expect(await loadCatalog("en")).toEqual(catalogs.en);
+    expect(await loadCatalog("pt-BR")).toBe(ptBR);
+  });
+
   it("knows only the shipped locales", () => {
     expect(isLocale("pt-BR")).toBe(true);
     expect(isLocale("en")).toBe(true);

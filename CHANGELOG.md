@@ -89,8 +89,9 @@ o [SemVer](https://semver.org/lang/pt-BR/). Cada PR escreve a sua entrada em
 ### Alterado
 
 - Abertura mais leve: o código do QR e das passkeys saiu do pacote inicial,
-  que cai cerca de 11 KB (gzip). A biblioteca de passkey só baixa quando o
-  segundo passo oferece passkey.
+  que cai cerca de 15 KB (gzip). A biblioteca de passkey só baixa quando o
+  segundo passo oferece passkey, e o catálogo em inglês só baixa para quem usa
+  inglês.
 - No celular, "Sair" no topo pede confirmação, e o lembrete da verificação em
   duas etapas cabe numa linha.
 - Os textos de "em breve" não citam mais números internos de etapa.

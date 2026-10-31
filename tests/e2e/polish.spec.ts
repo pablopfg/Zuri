@@ -161,3 +161,31 @@ test("with two-step off, passkeys show only why they can't be added yet", async 
   await expect(card).not.toContainText("Nenhuma passkey");
   await expect(card.getByRole("button", { name: "Adicionar passkey" })).toHaveCount(0);
 });
+
+test.describe("only the language in use is downloaded", () => {
+  test("a pt-BR visit never fetches the English catalog", async ({ page }) => {
+    const english: string[] = [];
+    page.on("request", (request) => {
+      if (/\/assets\/en-[\w-]+\.js$/.test(request.url())) english.push(request.url());
+    });
+    await page.goto("/entrar");
+    await signIn(page);
+    await expect(page).toHaveTitle("Início · Zuri");
+    await page.goto("/configuracoes/conta");
+    await expect(page.getByRole("heading", { level: 1, name: "Configurações" })).toBeVisible();
+    expect(english).toEqual([]);
+  });
+
+  test.describe("with an English browser", () => {
+    test.use({ locale: "en-US" });
+
+    test("the sign-in opens straight in English", async ({ page }) => {
+      const english = page.waitForRequest((request) => /\/assets\/en-[\w-]+\.js$/.test(request.url()));
+      await page.goto("/entrar");
+      await english;
+      await expect(page.getByRole("button", { name: "Sign in" })).toBeVisible();
+      await expect(page.locator("html")).toHaveAttribute("lang", "en");
+      await expect(page).toHaveTitle("Sign in · Zuri");
+    });
+  });
+});
