@@ -8,7 +8,7 @@ implementação segue os três PRs do passo a passo.
 
 Depois da instalação, o sistema abre uma tela de cadastro do administrador
 (o dono), onde ele informa os próprios dados. O cadastro tem de ser seguro:
-ninguém além do dono pode conseguir usar essa tela para tomar o controle do
+ninguém além do dono pode conseguir usar essa tela para tomar o controle da
 Zuri.
 
 ## Como é hoje
