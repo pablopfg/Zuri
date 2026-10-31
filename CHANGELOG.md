@@ -123,6 +123,14 @@ o [SemVer](https://semver.org/lang/pt-BR/). Cada PR escreve a sua entrada em
 - Rota `GET /api/usage` (detalhes em `docs/ia.md`).
 
 ### Alterado
+- Confirmações em toasts: "Salvo." nas Configurações, a senha trocada, o
+  que volta da lixeira e o que se guarda na memória aparecem por alguns
+  segundos no pé da tela, com botão de fechar. O toast fica parado enquanto o
+  ponteiro ou o foco estão nele, e o leitor de tela lê uma vez. O código só
+  vem com as telas que o usam.
+- No celular e em telas estreitas, Configurações virou uma lista de seções
+  (com o que cada uma guarda) que abre cada seção numa tela, com o caminho de
+  volta. No computador, as abas continuam.
 
 - O logo do README e o `CONTRIBUTING.md` usam a identidade Sinal; o
   `CONTRIBUTING.md` explica como manter o README e as capturas em dia.

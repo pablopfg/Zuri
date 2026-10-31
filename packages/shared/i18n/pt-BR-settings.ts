@@ -2,6 +2,12 @@
 // tabs still to come) and the second step's refusals, which only the server says. Part of the
 // pt-BR catalog, kept apart so the interface downloads them with that screen (rule P11).
 export const ptBRSettings = {
+  "web.settings.back": "Todas as configurações",
+  "web.settings.hint.account": "Idioma, fuso horário, aparência e senha",
+  "web.settings.hint.security": "Duas etapas, passkeys e saída automática",
+  "web.settings.hint.ai": "Modelo e limites de uso",
+  "web.settings.hint.data": "Lixeira, backup e armazenamento",
+  "web.settings.hint.later": "Em breve",
   "web.mfa.title": "Verificação em duas etapas",
   "web.mfa.description": "Depois da senha, o Zuri pede um código do aplicativo autenticador (ou uma passkey).",
   "web.mfa.off": "Desligada. Ligue para proteger a conta mesmo se a senha vazar.",

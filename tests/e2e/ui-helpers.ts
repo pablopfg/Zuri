@@ -44,3 +44,16 @@ export function tooSmallControls(page: Page) {
       .filter((el) => el.height < 44),
   );
 }
+
+/** True where settings shows tabs (a computer); a phone gets a list of sections, each on its own screen. */
+export function settingsHasTabs(page: Page) {
+  return (page.viewportSize()?.width ?? 0) >= 1024;
+}
+
+/** Opens a settings section the way the owner does: the tab on a computer, the list on a phone. */
+export async function openSettingsSection(page: Page, name: string) {
+  const sections = page.getByRole("navigation", { name: "Seções das configurações" });
+  if (!settingsHasTabs(page) && (await sections.count()) === 0) await page.getByRole("link", { name: "Todas as configurações" }).click();
+  // On the phone list the link's name also carries its hint ("Conta Idioma, fuso…").
+  await sections.getByRole("link", { name: new RegExp(`^${name}`) }).click();
+}

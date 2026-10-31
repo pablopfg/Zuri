@@ -7,6 +7,7 @@ import { useSession } from "../../hooks/session.tsx";
 import { useSettings, useSettingsMutation } from "../../hooks/settings.ts";
 import { errorMessage } from "../../lib/api.ts";
 import { useI18n } from "../../lib/i18n.tsx";
+import { useToast } from "../../lib/toast.tsx";
 
 /** Each language by its own name, as people look for it. */
 const LANGUAGE_NAMES: Record<Locale, string> = { "pt-BR": "Português (Brasil)", en: "English" };
@@ -21,6 +22,8 @@ export function AccountTab() {
   const { signOut } = useSession();
   const settings = useSettings();
   const save = useSettingsMutation();
+  const toast = useToast();
+  const saved = { onSuccess: () => toast(t("web.saved")) };
   const zones = useMemo(() => timeZones(settings.data?.timeZone ?? ""), [settings.data?.timeZone]);
 
   return (
@@ -36,7 +39,7 @@ export function AccountTab() {
               label={t("web.account.language")}
               value={settings.data.language}
               disabled={save.isPending}
-              onChange={(e) => isLocale(e.target.value) && save.mutate({ language: e.target.value })}
+              onChange={(e) => isLocale(e.target.value) && save.mutate({ language: e.target.value }, saved)}
             >
               {LOCALES.map((code) => (
                 <option key={code} value={code} lang={code}>
@@ -49,7 +52,7 @@ export function AccountTab() {
               hint={t("web.account.timeZoneHint")}
               value={settings.data.timeZone}
               disabled={save.isPending}
-              onChange={(e) => save.mutate({ timeZone: e.target.value })}
+              onChange={(e) => save.mutate({ timeZone: e.target.value }, saved)}
             >
               {zones.map((zone) => (
                 <option key={zone} value={zone}>
@@ -61,7 +64,6 @@ export function AccountTab() {
         )}
         <div aria-live="polite" className="mt-3 text-sm">
           {save.isError && <p className="text-danger">{errorMessage(save.error)}</p>}
-          {save.isSuccess && <p className="text-success">{t("web.saved")}</p>}
         </div>
       </Card>
 
@@ -70,7 +72,7 @@ export function AccountTab() {
       </Card>
 
       <Card title={t("web.password.title")} description={t("web.password.hint")}>
-        <ChangePasswordForm />
+        <ChangePasswordForm onChanged={() => toast(t("web.password.changed"))} />
       </Card>
 
       <Card title={t("web.account.signOutTitle")} description={t("web.account.signOutHint")}>

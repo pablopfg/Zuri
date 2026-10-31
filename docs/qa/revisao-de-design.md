@@ -105,8 +105,8 @@ Cada item traz a recomendação. Nenhum foi feito porque muda o que você vê ou
 4. **D4 · Carregar só o idioma em uso.** ✅ Feito neste PR, com o aval do coordenador dentro do pedido de velocidade do Pablo. O inglês virou um chunk de 6,1 KB gzip que só baixa quando o navegador ou as configurações pedem inglês. A troca de idioma espera o catálogo chegar, sem piscar chaves. Sem rede, o app fica em pt-BR. O Worker continua com os dois catálogos.
 5. **D5 · Tela de entrar mais marcante.** ✅ Aprovado; primeira versão (cartão, ícones, brilho, entrada suave) no PR seguinte ao #20, e o Pablo pediu 3 modelos para escolher o visual final; escolheu o B · Painel (marca à esquerda, formulário à direita; no celular, marca no topo), aplicado no PR #24. Entrada suave (respeitando "reduzir movimento"), ícones nos campos e o sinal verde pulsando enquanto confere. Recomendo, porque é a primeira impressão.
 6. **D6 · Botão de entrar sempre ativo.** ✅ Aprovado e feito no PR seguinte ao #20. Com campo vazio, mostrar o erro no próprio campo em vez de travar o botão. Recomendo.
-7. **D7 · ✅ aprovado pelo Pablo, em andamento · Toasts para confirmações** ("Salvo", "Passkey criada"), como no Talorys, no lugar das linhas fixas. Recomendo, num componente único.
-8. **D8 · ✅ aprovado pelo Pablo, em andamento · Abas de configurações no celular.** Opção A: uma lista de seções que abre cada uma numa tela (padrão de app). Opção B: manter as abas com uma sombra na borda que indica rolagem. Recomendo a A.
+7. **D7 · ✅ aprovado pelo Pablo, feito no PR seguinte ao #24 · Toasts para confirmações** ("Salvo", "Passkey criada"), como no Talorys, no lugar das linhas fixas. Recomendo, num componente único.
+8. **D8 · ✅ aprovado pelo Pablo, feito (opção A) no PR seguinte ao #24 · Abas de configurações no celular.** Opção A: uma lista de seções que abre cada uma numa tela (padrão de app). Opção B: manter as abas com uma sombra na borda que indica rolagem. Recomendo a A.
 
 ## Achados nas áreas com PR aberto (enviados às threads donas)
 

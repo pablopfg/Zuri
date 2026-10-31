@@ -6,6 +6,7 @@ import { Button, Card, Dialog, EmptyState, ErrorNotice, Notice, Spinner } from "
 import { useTrash } from "../../hooks/productivity.ts";
 import { api, errorMessage } from "../../lib/api.ts";
 import { useI18n } from "../../lib/i18n.tsx";
+import { useToast } from "../../lib/toast.tsx";
 import { refreshAfterTrash, TRASH_KIND_LABEL } from "../productivity/shared.tsx";
 import { LaterTab } from "./LaterTab.tsx";
 
@@ -26,15 +27,14 @@ function TrashCard() {
   const trash = useTrash();
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [done, setDone] = useState<string | null>(null);
+  const toast = useToast();
   const [confirm, setConfirm] = useState<{ kind: "purge"; item: TrashItem } | { kind: "empty" } | null>(null);
 
   async function run(key: string, work: () => Promise<string>) {
     setBusy(key);
     setError(null);
-    setDone(null);
     try {
-      setDone(await work());
+      toast(await work());
       setConfirm(null);
       await refreshAfterTrash(qc);
     } catch (err) {
@@ -77,7 +77,6 @@ function TrashCard() {
       }
     >
       <div className="space-y-3">
-        {done && <Notice tone="success">{done}</Notice>}
         {error && (
           <p role="alert" className="text-sm text-danger">
             {error}
