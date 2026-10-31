@@ -75,7 +75,10 @@ documento cresce a cada etapa. Os portões de toda requisição estão em
 - O servidor encerra a sessão no que vier primeiro:
   - **30 minutos sem uso.** Só conta como uso a requisição que o dono iniciou,
     marcada com `x-zuri-activity: 1`; o polling em segundo plano não segura a
-    sessão.
+    sessão. A interface põe o cabeçalho só em mudanças (POST, PATCH, DELETE)
+    feitas até 10 s depois de um toque ou tecla, e no heartbeat com
+    `active: true`; leituras nunca o levam, porque o cache de consultas busca
+    de novo sozinho (foco da janela, dado vencido).
   - **5 minutos sem aba aberta.** Qualquer requisição de uma aba conta como
     presença; a interface manda `POST /api/auth/heartbeat` uma vez por minuto.
   - **6 horas** no total, com uso ou sem.
@@ -211,6 +214,14 @@ qualquer PBKDF2. Precisa vir da ação `login` e do host do `PUBLIC_URL`. Sem
 resposta do `siteverify`, o login é recusado com 503 `SERVICE_UNAVAILABLE`
 (falha fechada). Cada verificação recusada conta por rede; com 10 na janela, a
 rede espera como uma bloqueada, sem nova chamada ao `siteverify`.
+
+Com o Turnstile ligado, a CSP de **todas** as páginas da interface acrescenta
+`https://challenges.cloudflare.com` em `script-src` e `frame-src`, e não só a
+de `/entrar`. A interface é uma SPA: a CSP vale para o documento carregado
+primeiro, e o login também abre por navegação interna (sessão que terminou,
+sair). Restringir a origem ao `/entrar` quebraria o widget nesses casos. O
+risco aceito é pequeno: a origem é da própria Cloudflare, e a interface não
+tem HTML vindo de fora (`dangerouslySetInnerHTML` não é usado).
 
 ## CSRF
 

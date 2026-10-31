@@ -54,8 +54,9 @@ export interface RequestOptions {
 
 /**
  * Same-origin JSON call to /api. The cookie carries the session; the CSRF header
- * goes on every call, and the activity header only on calls the owner's own
- * input started (a background refresh never keeps the session alive). A
+ * goes on every call, and the activity header only on changes made right after
+ * the owner's input. A read never carries it: the query cache refetches on its
+ * own (focus, stale data), and that must not keep the session alive. A
  * sensitive action that needs the password again asks once, then repeats.
  */
 export async function api<T>(path: string, options: RequestOptions = {}): Promise<T> {
@@ -76,7 +77,7 @@ export function setFallbackMessages(fn: (kind: "network" | "server") => string):
 
 async function request<T>(path: string, { method = "GET", body, signal }: RequestOptions): Promise<T> {
   const headers: Record<string, string> = { [CSRF_HEADER]: "1" };
-  if (recentlyUsed()) {
+  if (method !== "GET" && recentlyUsed()) {
     headers[ACTIVITY_HEADER] = "1";
     noteReported();
   }

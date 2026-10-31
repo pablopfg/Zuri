@@ -31,6 +31,15 @@ describe("api", () => {
     expect(headers["content-type"]).toBe("application/json");
   });
 
+  it("never marks a read as the owner's use, even right after input", async () => {
+    const fetch = stubFetch(json(200, { ok: 1 }));
+    markUse();
+    // A background refetch (window focus, stale data) can land in the input window.
+    await api("/auth/session");
+    const headers = fetch.mock.calls[0]?.[1].headers as Record<string, string>;
+    expect(headers["x-zuri-activity"]).toBeUndefined();
+  });
+
   it("turns { code, message, details } into an ApiError, and anything else into a generic one", async () => {
     setFallbackMessages((kind) => `fallback ${kind}`);
     stubFetch(json(429, { code: "RATE_LIMITED", message: "Muitas tentativas.", details: { retryAfter: 30 } }), new Response("<html>", { status: 502 }));

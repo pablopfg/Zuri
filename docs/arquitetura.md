@@ -171,6 +171,27 @@ visível escrito fora do catálogo: texto JSX, os atributos `title`,
 Exceções ficam em `i18n-ignore.json`, cada uma com arquivo, texto e motivo; uma
 exceção que não corresponde a mais nada também faz o lint falhar.
 
+## Orçamento de duração do Durable Object
+
+O plano Free dá 13.000 GB-s de duração de Durable Object por dia. Um objeto
+fora de hibernação conta 128 MB enquanto está na memória, e só sai dela depois
+de um a dois minutos sem requisição. O heartbeat da interface (uma batida por
+minuto, de uma aba só, mesmo com várias abertas) mantém o objeto carregado
+enquanto houver sessão aberta:
+
+| Situação | Tempo carregado | Duração estimada |
+| --- | --- | --- |
+| Aba aberta sem uso (limite padrão de 30 min) | até 30 min | cerca de 225 GB-s |
+| Uso contínuo até o máximo padrão (6 h) | 6 h | cerca de 2.700 GB-s (21%) |
+| Uso contínuo até o máximo permitido (24 h) | 24 h | cerca de 11.000 GB-s (85%) |
+
+O pior caso só acontece com o dono usando o app o dia inteiro e o máximo da
+sessão em 24 h. O intervalo da batida não pode passar do limite mínimo de
+presença (3 min), e um intervalo maior que o tempo de despejo economizaria
+pouco. As etapas com Workflows e alarmes devem conferir a duração real no
+painel da Cloudflare antes de somar carga. Se apertar, a saída é diminuir o
+máximo da sessão, não espaçar a batida.
+
 ## Observabilidade
 
 Os Workers Logs ficam ligados, sem corpo de requisição e com a query string

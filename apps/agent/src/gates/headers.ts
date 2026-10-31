@@ -42,9 +42,11 @@ export function webCacheControl(pathname: string, contentType: string | null, ok
 }
 
 /**
- * The interface's CSP. With Turnstile on, the sign-in loads Cloudflare's widget
- * script and its frame from that one origin; with it off (the default) nothing
- * outside the Worker's own origin may load, exactly as in _headers.
+ * The interface's CSP. With Turnstile on, every page allows Cloudflare's widget
+ * script and its frame from that one origin: the app is an SPA, so the sign-in
+ * also opens by in-app navigation under the first page's CSP. With it off (the
+ * default) nothing outside the Worker's own origin may load, exactly as in
+ * _headers, which holds only that default.
  */
 export function webCsp(turnstileOrigin: string | null): string {
   const base = WEB_HEADERS["content-security-policy"];

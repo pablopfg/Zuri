@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import type { AuthActivity, AuthEventKind, MessageKey } from "@zuri/shared";
+import { type AuthEventKind, authActivitySchema, type MessageKey } from "@zuri/shared";
 import { History } from "lucide-react";
 import { api } from "../../lib/api.ts";
 import { useI18n } from "../../lib/i18n.tsx";
@@ -45,7 +45,7 @@ const WARNING_KINDS = new Set<AuthEventKind>([
 /** The newest access events: who signed in, from where and with what, and what was refused. */
 export function ActivityCard() {
   const { t, dateTime, plural } = useI18n();
-  const activity = useQuery({ queryKey: ["auth-activity"], queryFn: () => api<AuthActivity>("/auth/activity") });
+  const activity = useQuery({ queryKey: ["auth-activity"], queryFn: async () => authActivitySchema.parse(await api<unknown>("/auth/activity")) });
 
   return (
     <Card title={t("web.activity.title")} description={t("web.activity.description")}>

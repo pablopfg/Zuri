@@ -1,5 +1,6 @@
 # Mirrors apps/agent/src/gates/headers.ts (WEB_HEADERS and webCacheControl).
-# A test keeps the two equal: change both together.
+# A test keeps the two equal: change both together. With run_worker_first the
+# Worker's headers win; this file holds only the default (Turnstile off) CSP.
 /*
   Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self'; manifest-src 'self'; worker-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'; object-src 'none'
   X-Content-Type-Options: nosniff

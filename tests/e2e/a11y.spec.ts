@@ -25,12 +25,16 @@ for (const scheme of ["light", "dark"] as const) {
       await expectAccessible(page, "avisos");
       await page.keyboard.press("Escape");
 
-      for (const tab of ["conta", "seguranca", "ia", "dados"]) {
+      for (const tab of ["conta", "seguranca", "ia", "avisos", "integracoes", "dados"]) {
         await page.goto(`/configuracoes/${tab}`);
         await expect(page.getByRole("heading", { level: 1, name: "Configurações" })).toBeVisible();
         await expect(page.getByRole("status").filter({ hasText: "Carregando" })).toHaveCount(0);
         await expectAccessible(page, tab);
       }
+
+      await page.goto("/nada-aqui");
+      await expect(page.getByRole("heading", { name: "Página não encontrada" })).toBeVisible();
+      await expectAccessible(page, "404");
     });
   });
 }
@@ -45,16 +49,25 @@ test("the two-step setup and the confirmation dialog have no serious violation",
 });
 
 test("every control is at least 44 px tall on a phone @mobile", async ({ page }) => {
+  const tooSmall = () =>
+    page.evaluate(() =>
+      [...document.querySelectorAll<HTMLElement>("button, a[href], select, input:not([type=radio])")]
+        // Visible ones only; the skip link is 1 px until focused, then a full-size target.
+        .filter((el) => el.offsetParent !== null && !el.classList.contains("sr-only"))
+        .map((el) => ({ text: el.textContent?.trim() || el.getAttribute("aria-label") || el.tagName, height: el.getBoundingClientRect().height }))
+        .filter((el) => el.height < 44),
+    );
   await page.goto("/entrar");
+  await expect(page.getByRole("button", { name: "Entrar" })).toBeVisible();
+  expect(await tooSmall()).toEqual([]);
   await signIn(page);
+  await expect(page.getByRole("heading", { level: 1, name: "Olá!" })).toBeVisible();
+  expect(await tooSmall()).toEqual([]);
   await page.goto("/configuracoes/conta");
   await expect(page.getByLabel("Idioma", { exact: true })).toBeVisible();
-  const small = await page.evaluate(() =>
-    [...document.querySelectorAll<HTMLElement>("button, a[href], select, input:not([type=radio])")]
-      // Visible ones only; the skip link is 1 px until focused, then a full-size target.
-      .filter((el) => el.offsetParent !== null && !el.classList.contains("sr-only"))
-      .map((el) => ({ text: el.textContent?.trim() || el.getAttribute("aria-label") || el.tagName, height: el.getBoundingClientRect().height }))
-      .filter((el) => el.height < 44),
-  );
-  expect(small).toEqual([]);
+  expect(await tooSmall()).toEqual([]);
+  await page.goto("/configuracoes/seguranca");
+  await expect(page.getByRole("heading", { name: "Atividade de acesso" })).toBeVisible();
+  await expect(page.getByRole("status").filter({ hasText: "Carregando" })).toHaveCount(0);
+  expect(await tooSmall()).toEqual([]);
 });
