@@ -7,6 +7,13 @@ import { expectAccessible, signIn } from "./ui-helpers.ts";
 
 test.use({ locale: "pt-BR", timezoneId: "America/Sao_Paulo" });
 
+// A rewritten answer can still be in flight when the test ends (a heartbeat or
+// the session check after sign-out); without this, fulfilling it after the page
+// closed fails the test in teardown.
+test.afterEach(async ({ page }) => {
+  await page.unrouteAll({ behavior: "ignoreErrors" });
+});
+
 /** Rewrites each session state the page receives (sign-in, session, heartbeat). */
 async function rewriteSessionState(page: Page, change: (state: Record<string, unknown>) => void) {
   await page.route(/\/api\/auth\/(login|session|heartbeat)$/, async (route) => {
@@ -85,12 +92,12 @@ test("the theme choice applies at once and stays after a reload", async ({ page 
   const theme = page.getByRole("group", { name: "Tema" });
   await theme.getByText("Escuro").click();
   await expect(page.locator("html")).toHaveClass(/dark/);
-  await expect(page.locator('meta[name="theme-color"]')).toHaveAttribute("content", "#0a1413");
+  await expect(page.locator('meta[name="theme-color"]')).toHaveAttribute("content", "#0b0f19");
   await page.reload();
   await expect(page.getByRole("heading", { level: 1, name: "Configurações" })).toBeVisible();
   await expect(page.locator("html")).toHaveClass(/dark/);
   await expect(theme.getByRole("radio", { name: "Escuro" })).toBeChecked();
   await theme.getByText("Claro").click();
   await expect(page.locator("html")).not.toHaveClass(/dark/);
-  await expect(page.locator('meta[name="theme-color"]')).toHaveAttribute("content", "#f5f9f8");
+  await expect(page.locator('meta[name="theme-color"]')).toHaveAttribute("content", "#f6f7f9");
 });

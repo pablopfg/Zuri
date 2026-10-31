@@ -56,13 +56,33 @@ instalável e que, offline, a API falha em vez de responder do cache. Toda
 resposta de `/api/*` sai com `Cache-Control: no-store`, e o cliente pede com
 `cache: "no-store"`.
 
+## Casca depois do login
+
+Segue a UI do Talorys (decisão do Pablo, 31/10/2026):
+
+- **Computador:** barra lateral de altura total (`AppShell`), com a marca e o
+  sino de avisos no topo, as seções do app no meio e Configurações e Sair no
+  pé. Uma seção nova é um item a mais em `sections`.
+- **Celular:** barra superior com a marca, os avisos e Sair; navegação inferior
+  com as seções e Configurações.
+- **Páginas:** começam com `PageHeader` (título, uma linha de contexto e ações
+  à direita), numa coluna de até 5xl.
+- **Lembrete de 2FA:** enquanto a verificação em duas etapas estiver
+  desligada, uma faixa acima do conteúdo chama para ligar. "Lembrar depois"
+  esconde por 3 dias, só neste navegador; nas Configurações ela não aparece.
+
 ## Identidade visual
 
-Opção "Brisa": Z em um traço só, verde-água (`#5eead4`) sobre um quadrado
-verde-azulado escuro (`#0f3b3a`), com uma faísca âmbar (`#fbbf24`). Todas as
-cores da interface são variáveis em `apps/web/src/styles.css`; trocar a
-identidade é trocar esse bloco, o `Logo.tsx`, o `public/favicon.svg` e gerar os
-ícones de novo com `node scripts/gerar-icones.ts`.
+Opção "Sinal", escolhida pelo Pablo: um "i" claro sobre um quadrado cor de
+tinta (`#0b0f19`), com o pingo do i como uma luz verde (`#22c55e`). O verde
+quer dizer "trabalhando" na interface toda, por isso é o único destaque. O
+`Logo` aceita `working`, que faz a luz pulsar (só com movimento permitido); a
+tela "Conferindo a sua sessão" já usa. O desenho passou no recorte redondo do
+avatar do Telegram, no favicon de 16 px e em uma cor só (ícone de notificação).
+
+Todas as cores da interface são variáveis em `apps/web/src/styles.css`; trocar
+a identidade é trocar esse bloco, o `Logo.tsx`, o `public/favicon.svg` e gerar
+os ícones de novo com `node scripts/gerar-icones.ts`.
 
 ## Acessibilidade
 

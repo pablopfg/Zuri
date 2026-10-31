@@ -1,6 +1,6 @@
 import { Bell, Bot, Database, Plug, Shield, User } from "lucide-react";
 import { NavLink, Navigate, useParams } from "react-router";
-import { cn } from "../components/ui.tsx";
+import { cn, PageHeader } from "../components/ui.tsx";
 import { useI18n } from "../lib/i18n.tsx";
 import { AccountTab } from "./settings/AccountTab.tsx";
 import { DataTab } from "./settings/DataTab.tsx";
@@ -30,7 +30,7 @@ export function SettingsPage() {
 
   return (
     <>
-      <h1 className="text-2xl font-bold tracking-tight">{t("web.settings.title")}</h1>
+      <PageHeader title={t("web.settings.title")} description={t("web.settings.description")} />
       <nav aria-label={t("web.settings.sections")} className="-mx-4 overflow-x-auto px-4">
         <ul className="flex min-w-max gap-1 border-b border-border">
           {tabs.map(({ id, label, icon: Icon }) => (

@@ -4,7 +4,7 @@ import { ArrowLeft, NotebookPen, Plus, Search, Trash2 } from "lucide-react";
 import { type FormEvent, type MouseEvent, useEffect, useState } from "react";
 import { Link, useLocation, useNavigate, useParams } from "react-router";
 import { Markdown } from "../../components/Markdown.tsx";
-import { Button, cn, Dialog, EmptyState, ErrorNotice, fieldClass, SelectField, Spinner, TextField } from "../../components/ui.tsx";
+import { Button, cn, Dialog, EmptyState, ErrorNotice, fieldClass, PageHeader, SelectField, Spinner, TextField } from "../../components/ui.tsx";
 import { NOTES_KEY, PROJECTS_KEY, useNote, useNotes, useProjects } from "../../hooks/productivity.ts";
 import { api, errorMessage } from "../../lib/api.ts";
 import { useDebounced } from "../../lib/debounce.ts";
@@ -106,29 +106,31 @@ function NotesList({ activeId, guard }: { activeId: string | undefined; guard: (
 
   return (
     <>
-      <div className="flex items-center justify-between gap-2">
-        <h1 className="text-2xl font-semibold tracking-tight">{t("web.notes.title")}</h1>
-        <div className="flex gap-1">
-          <Link
-            to="/configuracoes/dados"
-            onClick={guard("/configuracoes/dados")}
-            aria-label={t("web.trash.open")}
-            title={t("web.trash.open")}
-            className="inline-flex h-11 w-11 items-center justify-center rounded-xl text-fg-muted hover:bg-raised hover:text-fg"
-          >
-            <Trash2 className="h-4 w-4" aria-hidden />
-          </Link>
-          <Link
-            to="/notas/nova"
-            onClick={guard("/notas/nova")}
-            aria-label={t("web.notes.new")}
-            title={t("web.notes.new")}
-            className="inline-flex h-11 w-11 items-center justify-center rounded-xl bg-accent text-accent-fg hover:bg-accent-hover"
-          >
-            <Plus className="h-4 w-4" aria-hidden />
-          </Link>
-        </div>
-      </div>
+      <PageHeader
+        title={t("web.notes.title")}
+        actions={
+          <>
+            <Link
+              to="/configuracoes/dados"
+              onClick={guard("/configuracoes/dados")}
+              aria-label={t("web.trash.open")}
+              title={t("web.trash.open")}
+              className="inline-flex h-11 w-11 items-center justify-center rounded-xl text-fg-muted hover:bg-raised hover:text-fg"
+            >
+              <Trash2 className="h-4 w-4" aria-hidden />
+            </Link>
+            <Link
+              to="/notas/nova"
+              onClick={guard("/notas/nova")}
+              aria-label={t("web.notes.new")}
+              title={t("web.notes.new")}
+              className="inline-flex h-11 w-11 items-center justify-center rounded-xl bg-accent text-accent-fg hover:bg-accent-hover"
+            >
+              <Plus className="h-4 w-4" aria-hidden />
+            </Link>
+          </>
+        }
+      />
       {trashed && <TrashedNotice item={trashed} message={t("web.notes.trashed")} onDone={() => setTrashed(null)} />}
       <div className="space-y-1.5">
         <div className="relative">

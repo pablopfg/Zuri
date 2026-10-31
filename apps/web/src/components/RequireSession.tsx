@@ -23,7 +23,7 @@ export function RequireSession({ children }: { children: ReactNode }) {
   if (loading) {
     return (
       <FullScreen>
-        <Logo className="h-12 w-12" />
+        <Logo className="h-12 w-12" working />
         <Spinner label={t("web.session.checking")} />
       </FullScreen>
     );

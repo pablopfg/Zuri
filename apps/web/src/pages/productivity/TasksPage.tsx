@@ -15,7 +15,7 @@ import {
 import { CalendarDays, CheckCircle2, ChevronDown, Circle, CircleDot, Flag, FolderKanban, Plus, Search, Trash2 } from "lucide-react";
 import { type FormEvent, useId, useState } from "react";
 import { Link } from "react-router";
-import { Button, cn, Dialog, EmptyState, ErrorNotice, fieldClass, SelectField, Spinner, TextAreaField, TextField } from "../../components/ui.tsx";
+import { Button, cn, Dialog, EmptyState, ErrorNotice, fieldClass, PageHeader, SelectField, Spinner, TextAreaField, TextField } from "../../components/ui.tsx";
 import { PROJECTS_KEY, TASKS_KEY, useProjects, useTasks } from "../../hooks/productivity.ts";
 import { api, errorMessage } from "../../lib/api.ts";
 import { useDebounced } from "../../lib/debounce.ts";
@@ -40,22 +40,22 @@ export function TasksPage() {
 
   return (
     <>
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0 space-y-1">
-          <h1 className="text-2xl font-semibold tracking-tight">{t("web.tasks.title")}</h1>
-          <p className="text-sm leading-6 text-fg-muted">{t("web.tasks.description")}</p>
-        </div>
-        <div className="flex flex-wrap gap-1">
-          <Button variant="ghost" onClick={() => setProjectsOpen(true)}>
-            <FolderKanban className="h-4 w-4" aria-hidden />
-            {t("web.projects.manage")}
-          </Button>
-          <Link to="/configuracoes/dados" className="inline-flex min-h-11 items-center gap-2 rounded-xl px-3 text-sm font-medium hover:bg-raised">
-            <Trash2 className="h-4 w-4" aria-hidden />
-            {t("web.trash.open")}
-          </Link>
-        </div>
-      </div>
+      <PageHeader
+        title={t("web.tasks.title")}
+        description={t("web.tasks.description")}
+        actions={
+          <>
+            <Button variant="ghost" onClick={() => setProjectsOpen(true)}>
+              <FolderKanban className="h-4 w-4" aria-hidden />
+              {t("web.projects.manage")}
+            </Button>
+            <Link to="/configuracoes/dados" className="inline-flex min-h-11 items-center gap-2 rounded-xl px-3 text-sm font-medium hover:bg-raised">
+              <Trash2 className="h-4 w-4" aria-hidden />
+              {t("web.trash.open")}
+            </Link>
+          </>
+        }
+      />
 
       {trashed && <TrashedNotice item={trashed} message={t("web.tasks.trashed")} onDone={() => setTrashed(null)} />}
 
