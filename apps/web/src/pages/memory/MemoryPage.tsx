@@ -283,6 +283,11 @@ function MemoryRow({
           <span className={cn("rounded-full px-2 py-0.5 font-medium", STATUS_TONE[memory.status])}>{t(STATUS_LABEL[memory.status])}</span>
           <span className="rounded-full border border-border px-2 py-0.5 text-fg-muted">{t(CATEGORY_LABEL[memory.category])}</span>
           {memory.origin !== "app" && <span className="rounded-full border border-border px-2 py-0.5 text-fg-muted">{t(ORIGIN_LABEL[memory.origin])}</span>}
+          {memory.author === "agent" && (
+            <span className="rounded-full border border-dashed border-border px-2 py-0.5 text-fg-muted" title={t("web.memory.author.agentHint")}>
+              {t("web.memory.author.agent")}
+            </span>
+          )}
           {memory.validFrom && <span className="text-fg-muted">{t("web.memory.since", { date: memory.validFrom })}</span>}
           <span className="text-fg-muted">{t("web.memory.savedAt", { time: dateTime(memory.updatedAt) })}</span>
         </div>

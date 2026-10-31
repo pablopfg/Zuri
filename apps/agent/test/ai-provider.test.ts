@@ -310,6 +310,21 @@ describe("the mock provider", () => {
     });
   });
 
+  it("a `slow ` message comes back a word every 200 ms, and stops at once when the turn is stopped", async () => {
+    const stop = new AbortController();
+    const words: string[] = [];
+    const started = Date.now();
+    for await (const event of new MockAIProvider().generateWithTools({ ...ask("slow um dois três quatro cinco seis"), tools: [], maxIterations: 1, toolBudgetExhausted: () => true, signal: stop.signal })) {
+      if (event.type !== "text") continue;
+      words.push(event.delta);
+      if (words.length === 2) stop.abort();
+    }
+    expect(words).toHaveLength(2);
+    // Two pauses of 200 ms, and the third cut short by the stop.
+    expect(Date.now() - started).toBeGreaterThanOrEqual(390);
+    expect(Date.now() - started).toBeLessThan(1_000);
+  });
+
   it("repeats at most 500 characters of the message", async () => {
     const text = (await new MockAIProvider().generate(ask("a".repeat(5_000)))).text;
     expect(text).toContain("a".repeat(500));

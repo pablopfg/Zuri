@@ -14,6 +14,7 @@ export {
   plural,
   ptBR,
   ptBRAi,
+  ptBRChat,
   ptBRCore,
   ptBRMemory,
   ptBRProductivity,
@@ -103,3 +104,4 @@ export {
 export * from "./productivity.ts";
 export * from "./memory.ts";
 export * from "./ai.ts";
+export * from "./chat.ts";

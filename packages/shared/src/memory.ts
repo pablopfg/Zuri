@@ -15,6 +15,8 @@ export const MEMORY_CATEGORIES = ["preference", "fact", "goal", "project", "habi
 export const MEMORY_STATUSES = ["active", "uncertain", "historical"] as const;
 /** Where a memory came from ("Tabelas do Telegram": the `origin` column). */
 export const MEMORY_ORIGINS = ["app", "telegram", "import"] as const;
+/** Who wrote it: the owner, or the assistant from a conversation (`remember`, `update_memory`). */
+export const MEMORY_AUTHORS = ["owner", "agent"] as const;
 /** List filters: "current" is everything but past facts. */
 export const MEMORY_FILTERS = ["all", "active", "current", "uncertain", "historical"] as const;
 export const MEMORY_REVIEW_RELATIONSHIPS = ["contradiction", "possible_update"] as const;
@@ -32,6 +34,7 @@ export const MEMORY_REVIEW_ACTIONS = ["keep_both", "mark_historical", "replace",
 export type MemoryCategory = (typeof MEMORY_CATEGORIES)[number];
 export type MemoryStatus = (typeof MEMORY_STATUSES)[number];
 export type MemoryOrigin = (typeof MEMORY_ORIGINS)[number];
+export type MemoryAuthor = (typeof MEMORY_AUTHORS)[number];
 export type MemoryFilter = (typeof MEMORY_FILTERS)[number];
 export type MemoryReviewRelationship = (typeof MEMORY_REVIEW_RELATIONSHIPS)[number];
 export type MemoryReviewReason = (typeof MEMORY_REVIEW_REASONS)[number];
@@ -54,6 +57,8 @@ export interface Memory {
   content: string;
   category: MemoryCategory;
   origin: MemoryOrigin;
+  /** "agent" until the owner saves, edits or repeats it themselves. */
+  author: MemoryAuthor;
   status: MemoryStatus;
   /** The newer memory that replaced this one, when it is a past fact. */
   supersededBy: string | null;

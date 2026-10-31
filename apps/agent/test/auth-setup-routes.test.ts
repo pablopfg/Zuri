@@ -26,6 +26,7 @@ function api(auth: AuthService, settings: SettingsRepository, setupCodeSet = tru
     productivity: unused,
     memories: unused,
     aiUsage: unused,
+    chat: unused,
     passwordSecretSet: () => false,
     setupCodeSet: () => setupCodeSet,
     origin: () => ORIGIN,

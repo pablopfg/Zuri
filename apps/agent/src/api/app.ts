@@ -41,6 +41,7 @@ import {
   sessionCookie,
   setupCookie,
 } from "./http.ts";
+import { type ChatDeps, registerChatRoutes } from "./chat.ts";
 import { registerMemoryRoutes } from "./memory.ts";
 import { registerProductivityRoutes } from "./productivity.ts";
 
@@ -63,6 +64,8 @@ export interface ApiDeps {
   memories(): MemoryService;
   /** Today's AI use against the limits (step 8). */
   aiUsage(): UsageReport;
+  /** The chat, its proposals and voice input (step 9). */
+  chat(): ChatDeps;
   /** True when a password secret is set, so the health check can answer without opening the database. */
   passwordSecretSet(): boolean;
   /** True when a usable SETUP_CODE is set: the first access can still be done. Absent is false. */
@@ -352,6 +355,7 @@ export function createApi(deps: ApiDeps) {
 
   registerProductivityRoutes(app, deps.productivity);
   registerMemoryRoutes(app, deps.memories);
+  registerChatRoutes(app, deps.chat);
 
   // Step 8: what the AI used today and the last 7 days. Read only: the limits change through /settings.
   app.get("/usage", () => Response.json(deps.aiUsage()));
