@@ -195,6 +195,11 @@ export class AuthEvents {
     return deviceId !== null && this.db.one(`SELECT 1 AS found FROM zur_devices WHERE id = ?`, deviceId) !== null;
   }
 
+  /** After a password change or reset from the panel: no browser is known any more. */
+  forgetDevices(): void {
+    this.db.run(`DELETE FROM zur_devices`);
+  }
+
   /** Remembers a browser seen at a sign-in; past MAX_DEVICES the one unseen the longest goes. */
   rememberDevice(deviceId: string): void {
     const now = this.clock();

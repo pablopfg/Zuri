@@ -193,6 +193,72 @@ describe("brute force: 3 failures per network in 15 minutes", () => {
     });
   });
 
+  it("SEC-3-N2: cookie trust has its own 3 wrong passwords across all networks", async () => {
+    await withAuth("limit-trust-budget", async (h) => {
+      const owner = await h.auth.login(right(), client(OTHER), noCookies);
+      const at = h.clock.now();
+      for (let i = 0; i < 100; i++) h.db.run(`INSERT INTO zur_login_attempts (network, outcome, at) VALUES (?, 0, ?)`, `10.6.${i}.1`, at);
+      const fresh = rebuild(h, {});
+      const known = { session: null, device: owner.deviceToken };
+      // A stolen cookie spread over a botnet: 3 guesses in all, not 3 per network.
+      for (let i = 0; i < 3; i++) expect(await outcome(fresh.login(wrong(), client(`192.0.2.${160 + i}`), known))).toBe("INVALID_CREDENTIALS");
+      expect(await outcome(fresh.login(right(), client("192.0.2.170"), known))).toBe("RATE_LIMITED");
+      // The owner's own network still has its 3.
+      expect(await outcome(fresh.login(right(), client(OTHER), known))).toBe("ok");
+    });
+  });
+
+  it("SEC-3-N2: a password change makes every browser unknown again", async () => {
+    await withAuth("limit-trust-change", async (h) => {
+      const owner = await h.auth.login(right(), client(OTHER), noCookies);
+      const row = await live(h.auth, owner.token);
+      await h.auth.changePassword(row, { currentPassword: TEST_PASSWORD, newPassword: "lontra bússola ventania arquipélago" }, client(OTHER));
+      const at = h.clock.now();
+      for (let i = 0; i < 100; i++) h.db.run(`INSERT INTO zur_login_attempts (network, outcome, at) VALUES (?, 0, ?)`, `10.7.${i}.1`, at);
+      const fresh = rebuild(h, {});
+      expect(await outcome(fresh.login(wrong(), client("192.0.2.180"), { session: null, device: owner.deviceToken }))).toBe("RATE_LIMITED");
+    });
+  });
+
+  it("SEC-3-N4: past the hard limit, a robot check refused late writes no row", async () => {
+    await withAuth("limit-robot-late", async (h) => {
+      const at = h.clock.now();
+      for (let i = 0; i < 100; i++) h.db.run(`INSERT INTO zur_login_attempts (network, outcome, at) VALUES (?, 0, ?)`, `10.8.${i}.1`, at);
+      h.auth.limiter.noteTurnstileFailure("192.0.2.190");
+      expect(h.db.one<{ n: number }>(`SELECT count(*) AS n FROM zur_login_attempts WHERE outcome = 2`)?.n).toBe(0);
+    });
+  });
+
+  it("SEC-3-02: a refused request reads no window of all networks and runs no cleanup within the minute", async () => {
+    await withAuth("limit-reads", async (h) => {
+      const at = h.clock.now();
+      for (let i = 0; i < 100; i++) h.db.run(`INSERT INTO zur_login_attempts (network, outcome, at) VALUES (?, 0, ?)`, `10.9.${i}.1`, at);
+      // Warm up: the object reads the window once.
+      expect(await outcome(h.auth.login(right(), client("192.0.2.200"), noCookies))).toBe("RATE_LIMITED");
+      const queries: string[] = [];
+      for (const method of ["one", "all", "run"] as const) {
+        const original = h.db[method].bind(h.db) as (...args: unknown[]) => unknown;
+        vi.spyOn(h.db, method).mockImplementation(((sql: string, ...args: unknown[]) => {
+          queries.push(sql);
+          return original(sql, ...args);
+        }) as never);
+      }
+      for (let i = 0; i < 50; i++) {
+        h.clock.advance(100);
+        expect(await outcome(h.auth.login(right(), client(`2001:db8:${(0x100 + i).toString(16)}::`), noCookies))).toBe("RATE_LIMITED");
+      }
+      vi.restoreAllMocks();
+      const attempts = queries.filter((q) => q.includes("zur_login_attempts"));
+      // Each lookup is by network (indexed, a handful of rows), never the whole window.
+      expect(attempts.every((q) => /network = \?/.test(q))).toBe(true);
+      expect(queries.some((q) => q.startsWith("DELETE FROM zur_login_attempts"))).toBe(false);
+      // No write but the folded event (at most once a minute).
+      // A dozen statements per request at most, each reading one key or a few indexed rows.
+      expect(queries.length / 50).toBeLessThanOrEqual(12);
+      expect(queries.filter((q) => /^\s*(INSERT|UPDATE|DELETE)/.test(q)).length).toBeLessThanOrEqual(1);
+    });
+  });
+
   it("SEC-3-03: a live session confirms its password through a distributed guess", async () => {
     await withAuth("limit-session-trusted", async (h) => {
       const { token } = await h.auth.login(right(), client("192.0.2.150"), noCookies);
@@ -338,6 +404,23 @@ describe("adaptive Turnstile", () => {
         expect(db.one<{ n: number }>(`SELECT count(*) AS n FROM zur_login_attempts`)?.n).toBe(0);
         required.mockRestore();
         derive.mockRestore();
+      },
+      { turnstile },
+    );
+  });
+
+  it("SEC-3-N1: while every network must pass the check, refusals from thousands of networks fold into one row", async () => {
+    const turnstile = fakeTurnstile();
+    await withAuth(
+      "turnstile-flood-networks",
+      async ({ auth, events }) => {
+        for (let i = 0; i < 10; i++) await outcome(auth.login(wrong(), client(`192.0.2.${i}`), noCookies));
+        for (let i = 0; i < 300; i++) {
+          expect(await outcome(auth.login(right(), client(`2001:db8:${i.toString(16)}::`), noCookies))).toBe("TURNSTILE_REQUIRED");
+        }
+        const rows = events().filter((e) => e.kind === "login_turnstile");
+        expect(rows).toHaveLength(1);
+        expect(rows[0]).toMatchObject({ network: "", reason: "missing" });
       },
       { turnstile },
     );

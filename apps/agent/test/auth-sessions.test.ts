@@ -263,6 +263,8 @@ describe("changing the password", () => {
       const row = await signedIn(auth);
       const next = await auth.changePassword(row, { currentPassword: TEST_PASSWORD, newPassword: NEW_PASSWORD }, client(NET));
       expect(isPasswordHash(state.get("auth_password_hash"))).toBe(true);
+      // SEC-3-N2: no browser stays trusted across a password change.
+      expect(auth.events.isKnownDevice(null)).toBe(false);
       expect(await auth.validate(other.token, true)).toBeNull();
       expect(auth.sessions.get(row.id)).toBeNull();
       expect(await auth.validate(next.token, true)).not.toBeNull();
@@ -287,6 +289,8 @@ describe("installation without the installer (OWNER_PASSWORD)", () => {
         const next = await auth.changePassword(row, { currentPassword: PLAIN, newPassword: NEW_PASSWORD }, client(NET));
         expect(auth.passwordChangeRequired()).toBe(false);
         expect(isPasswordHash(state.get("auth_password_hash"))).toBe(true);
+      // SEC-3-N2: no browser stays trusted across a password change.
+      expect(auth.events.isKnownDevice(null)).toBe(false);
         // The secret is still set: the app asks the owner to delete it.
         expect(auth.state(next.session).removePlainPasswordSecret).toBe(true);
         expect(await outcome(auth.login(right({ password: PLAIN }), client("198.51.100.4"), noCookies))).toBe("INVALID_CREDENTIALS");
@@ -390,6 +394,10 @@ describe("reset from the Cloudflare panel", () => {
       // Nothing else ran on the new object first: no validate to sync it.
       expect(await outcome(after.login(right({ password: NEW_PASSWORD }), client("198.51.100.5"), noCookies))).toBe("INVALID_CREDENTIALS");
       expect(h.db.one<{ n: number }>(`SELECT count(*) AS n FROM zur_sessions`)?.n).toBe(0);
+      // The old password was checked against nothing: the try stays a failure, the network unknown.
+      expect(h.db.all(`SELECT outcome FROM zur_login_attempts WHERE network = '198.51.100.5'`)).toEqual([{ outcome: 0 }]);
+      // Browsers that knew the old password are not known any more.
+      expect(h.db.one<{ n: number }>(`SELECT count(*) AS n FROM zur_devices`)?.n).toBe(0);
     });
   });
 

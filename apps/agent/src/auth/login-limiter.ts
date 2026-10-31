@@ -15,6 +15,16 @@ import { AppError } from "../http/errors.ts";
 const FAILURE = 0;
 const SUCCESS = 1;
 const TURNSTILE_FAILED = 2;
+/** A wrong password from a browser trusted by its cookie (device or session): a failure that also spends that trust. */
+const TRUSTED_FAILURE = 3;
+/** Both kinds of wrong password. */
+const FAILURES = [FAILURE, TRUSTED_FAILURE] as const;
+/**
+ * Wrong passwords under cookie trust, across all networks, after which cookies
+ * stop exempting anyone from the distributed-guess locks for the window: a
+ * stolen device or session cookie gets no more guesses than one network.
+ */
+const MAX_TRUSTED_FAILURES = MAX_FAILURES_PER_NETWORK;
 /** Failures and refused checks matter for a day; successes as long as they mark one of the owner's networks. */
 const FAILURE_KEEP_MS = 24 * 3600_000;
 
@@ -32,7 +42,8 @@ interface Refusal {
 export interface LimitContext {
   /**
    * A browser that signed in before (its device cookie), or a live session:
-   * the distributed-guess locks don't apply, the network's own 3 still do.
+   * the distributed-guess locks don't apply, the network's own 3 still do,
+   * and only until MAX_TRUSTED_FAILURES wrong passwords under such trust.
    */
   trusted?: boolean;
 }
@@ -86,17 +97,17 @@ export class LoginLimiter {
     return list;
   }
 
-  private countGlobal(outcome?: number): number {
+  private countGlobal(outcomes?: readonly number[]): number {
     const list = this.refusals();
-    return outcome === undefined ? list.length : list.filter((r) => r.outcome === outcome).length;
+    return outcomes === undefined ? list.length : list.filter((r) => outcomes.includes(r.outcome)).length;
   }
 
-  private count(outcome: number, network: string): number {
+  private count(outcomes: readonly number[], network: string): number {
     const row = this.db.one<{ n: number }>(
-      `SELECT count(*) AS n FROM zur_login_attempts WHERE network = ? AND at > ? AND outcome = ?`,
+      `SELECT count(*) AS n FROM zur_login_attempts WHERE network = ? AND at > ? AND outcome IN (${outcomes.map(() => "?").join(", ")})`,
       network,
       this.clock() - LOGIN_WINDOW_MS,
-      outcome,
+      ...outcomes,
     );
     return row?.n ?? 0;
   }
@@ -116,7 +127,7 @@ export class LoginLimiter {
 
   /** Wrong passwords in the window, from one network or from all. */
   failures(network?: string): number {
-    return network === undefined ? this.countGlobal(FAILURE) : this.count(FAILURE, network);
+    return network === undefined ? this.countGlobal(FAILURES) : this.count(FAILURES, network);
   }
 
   /** True when this network signed in within TRUSTED_NETWORK_MS: one of the owner's own. */
@@ -135,19 +146,29 @@ export class LoginLimiter {
     return this.countGlobal() >= GLOBAL_FAILURES_SOFT;
   }
 
+  /** True while every network must pass the robot check, or worse: refusals then fold into one row for all. */
+  underPressure(): boolean {
+    return this.failures() >= TURNSTILE_AFTER_GLOBAL_FAILURES || this.underAttack();
+  }
+
   /** Throws RATE_LIMITED, with the seconds until the network may try again, when it must wait. */
   assertAllowed(network: string, context: LimitContext = {}): void {
     this.cleanup();
     const failures = this.failures(network);
-    if (failures >= MAX_FAILURES_PER_NETWORK) throw this.wait(FAILURE, network);
-    const robots = this.count(TURNSTILE_FAILED, network);
-    if (robots >= MAX_TURNSTILE_FAILURES_PER_NETWORK) throw this.wait(TURNSTILE_FAILED, network);
+    if (failures >= MAX_FAILURES_PER_NETWORK) throw this.wait(FAILURES, network);
+    const robots = this.count([TURNSTILE_FAILED], network);
+    if (robots >= MAX_TURNSTILE_FAILURES_PER_NETWORK) throw this.wait([TURNSTILE_FAILED], network);
     const total = this.countGlobal();
-    if (total < GLOBAL_FAILURES_SOFT || context.trusted || this.isTrusted(network)) return;
+    if (total < GLOBAL_FAILURES_SOFT || this.cookieTrusted(context) || this.isTrusted(network)) return;
     if (total >= GLOBAL_FAILURES_HARD) throw this.waitGlobal();
     // One try per window, whether it was spent on the password or on the robot check.
-    if (failures >= 1) throw this.wait(FAILURE, network);
-    if (robots >= 1) throw this.wait(TURNSTILE_FAILED, network);
+    if (failures >= 1) throw this.wait(FAILURES, network);
+    if (robots >= 1) throw this.wait([TURNSTILE_FAILED], network);
+  }
+
+  /** Cookie trust holds while its wrong passwords, across all networks, stay under MAX_TRUSTED_FAILURES. */
+  private cookieTrusted(context: LimitContext): boolean {
+    return context.trusted === true && this.countGlobal([TRUSTED_FAILURE]) < MAX_TRUSTED_FAILURES;
   }
 
   /** Failures go after a day; successes once they no longer mark one of the owner's networks. */
@@ -170,13 +191,16 @@ export class LoginLimiter {
 
   /** Counts a refused robot check (never a password guess), so a network can't send them without end. */
   noteTurnstileFailure(network: string): void {
+    // Requests that passed the limit together come back from siteverify after it
+    // closed: past the hard limit there is nothing left to learn from another row.
+    if (this.countGlobal() >= GLOBAL_FAILURES_HARD) return;
     this.insert(network, TURNSTILE_FAILED);
   }
 
   /** Checks the limit again and records the try as a failure, in one synchronous step. Returns its id. */
   begin(network: string, context: LimitContext = {}): number {
     this.assertAllowed(network, context);
-    return this.insert(network, FAILURE);
+    return this.insert(network, this.cookieTrusted(context) ? TRUSTED_FAILURE : FAILURE);
   }
 
   succeed(attemptId: number): void {
@@ -187,13 +211,13 @@ export class LoginLimiter {
   }
 
   /** RATE_LIMITED until the network's oldest counted row of this kind leaves the window. */
-  private wait(outcome: number, network: string): AppError {
+  private wait(outcomes: readonly number[], network: string): AppError {
     const now = this.clock();
     const oldest = this.db.one<{ at: number | null }>(
-      `SELECT min(at) AS at FROM zur_login_attempts WHERE network = ? AND at > ? AND outcome = ?`,
+      `SELECT min(at) AS at FROM zur_login_attempts WHERE network = ? AND at > ? AND outcome IN (${outcomes.map(() => "?").join(", ")})`,
       network,
       now - LOGIN_WINDOW_MS,
-      outcome,
+      ...outcomes,
     );
     return this.retryAt(oldest?.at ?? now);
   }

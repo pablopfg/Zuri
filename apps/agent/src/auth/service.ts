@@ -165,6 +165,8 @@ export class AuthService {
         this.deps.state.delete("auth_password_hash");
         this.deps.state.delete("auth_password_change_required");
         this.sessions.revokeAll();
+        // Browsers known to the old password stop being trusted with the new one.
+        this.events.forgetDevices();
         this.events.record("credentials_reset", null, { alert: true });
       }
       this.deps.state.set("auth_secret_fingerprint", value);
@@ -242,8 +244,10 @@ export class AuthService {
     }
     // Before the success is written, or this very sign-in would make the network look known.
     const newNetwork = this.limiter.isNewNetwork(client.network);
+    const signedIn = await this.openSession(client, cookies.session, device, source, input.password, newNetwork);
+    // Only now: a password replaced meanwhile leaves the try a failure, and the network unknown.
     this.limiter.succeed(attempt);
-    return this.openSession(client, cookies.session, device, source, input.password, newNetwork);
+    return signedIn;
   }
 
   /** The browser's device cookie, when it names one that signed in before. */
@@ -255,11 +259,12 @@ export class AuthService {
 
   /**
    * Refusals that repeat (a blocked network, a robot check) fold into one row per
-   * network and window; during a distributed guess, into one row for all, so a
-   * flood from thousands of networks costs no write per request.
+   * network and window; while every network must pass the robot check, or during
+   * a distributed guess, into one row for all, so a flood from thousands of
+   * networks costs no write per request.
    */
   private recordRefusal(kind: "login_rate_limited" | "login_turnstile", client: ClientInfo, reason = ""): void {
-    this.events.record(kind, client, { reason, everyNetwork: this.limiter.underAttack() });
+    this.events.record(kind, client, { reason, everyNetwork: this.limiter.underPressure() });
   }
 
   /** Runs before the try is counted and before any PBKDF2. True when a token was confirmed. */
@@ -460,6 +465,8 @@ export class AuthService {
       this.deps.state.set("auth_password_hash", hash);
       this.deps.state.delete("auth_password_change_required");
       this.deps.db.run(`DELETE FROM zur_sessions WHERE id != ?`, next.row.id);
+      // A browser that knew the old password is new again (its next sign-in is an alert).
+      this.events.forgetDevices();
       this.events.record("password_changed", client, { session: next.row.id.slice(0, 16), alert: true });
     });
     return { token: next.token, session: next.row };

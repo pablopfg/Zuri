@@ -118,7 +118,9 @@ gastar tentativa da rede.
   Turnstile; com 100, nenhuma até a janela esvaziar. As redes do dono, os
   navegadores que já entraram (cookie de aparelho) e as sessões abertas
   (confirmação e troca de senha) ficam fora dessas duas travas e mantêm as 3 da
-  rede. O dono recebe um evento com alerta, no máximo a cada 6 horas.
+  rede. Essa confiança por cookie tem um orçamento próprio: 3 senhas erradas na
+  janela, somando todas as redes, e ela deixa de valer até a janela passar
+  (um cookie roubado não ganha 3 chutes por rede de uma botnet). O dono recebe um evento com alerta, no máximo a cada 6 horas.
 - **A ordem importa.** O limite vem antes de tudo (uma rede bloqueada ouve
   "espere", e não custa PBKDF2 nem Turnstile). Depois vem o Turnstile, quando
   exigido. Só então a tentativa é contada como falha e a senha é conferida; um
@@ -174,8 +176,9 @@ IP, o país, a região, a cidade, o ASN e o data center da borda, o user agent
   dono: uma enxurrada de recusas nunca empurra para fora o registro de quem
   entrou. Passou do teto, a limpeza corta até 45.000, para não contar todas as
   linhas de novo a cada hora. Cada motivo de recusa tem a sua linha.
-- **Durante um ataque distribuído**, as recusas repetidas de todas as redes
-  viram uma linha só por janela, sem IP nem localização: milhares de redes não
+- **Enquanto toda rede precisa do Turnstile (10 falhas no total) ou durante um
+  ataque distribuído**, as recusas repetidas de todas as redes viram uma linha
+  só por janela, sem IP nem localização: milhares de redes não
   custam uma gravação cada.
 - **Retenção (LGPD).** Os detalhes ficam 90 dias e viram contagens diárias por
   tipo e país, sem IP nem user agent, guardadas por um ano. Base legal:
@@ -184,7 +187,8 @@ IP, o país, a região, a cidade, o ASN e o data center da borda, o user agent
 - **Cookie de aparelho.** O login define `__Host-zuri_device` (aleatório, 180
   dias, `HttpOnly`, `Secure`, `SameSite=Strict`). O banco guarda só o HMAC,
   para até 50 navegadores. Ele distingue um navegador conhecido de um novo e o
-  deixa fora das travas de ataque distribuído: nunca autentica, nunca dispensa
+  deixa fora das travas de ataque distribuído (com o orçamento acima). Trocar a
+  senha ou redefini-la pelo painel esquece todos os navegadores. Nunca autentica, nunca dispensa
   senha nem segundo fator e nunca afrouxa o limite de 3 tentativas da rede.
 - **Alertas.** Um login de navegador novo ou de rede sem login nos últimos 30
   dias (menos o primeiro login de todos), a troca de senha, a redefinição pelo
@@ -205,6 +209,8 @@ custa quase nada:
   ele acorda), e não é relida a cada pedido;
 - a limpeza das tentativas antigas roda no máximo uma vez por minuto, e a da
   atividade no máximo uma vez por hora;
+- passado o limite de 100, uma verificação Turnstile recusada que volta
+  atrasada não grava mais nada;
 - as recusas repetidas são agrupadas, como descrito acima.
 
 Recomendado na instalação, sem custo: uma regra de rate limiting do WAF da
