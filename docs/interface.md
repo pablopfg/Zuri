@@ -63,6 +63,11 @@ Segue a UI do Talorys (decisão do Pablo, 31/10/2026):
 - **Computador:** barra lateral de altura total (`AppShell`), com a marca e o
   sino de avisos no topo, as seções do app no meio e Configurações e Sair no
   pé. Uma seção nova é um item a mais em `sections`.
+  "Recolher menu", no pé, troca a barra por uma coluna só de ícones. Cada
+  ícone mostra o nome numa dica ao passar o mouse ou focar pelo teclado (Esc
+  esconde a dica); o nome continua no controle para leitores de tela. A
+  escolha fica em `localStorage` (`zuri.sidebar`), só neste navegador, e as
+  outras abas acompanham. No celular a barra não existe, então nada muda.
 - **Celular:** barra superior com a marca, os avisos e Sair; navegação inferior
   com as seções e Configurações.
 - **Páginas:** começam com `PageHeader` (título, uma linha de contexto e ações

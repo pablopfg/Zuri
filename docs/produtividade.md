@@ -133,12 +133,14 @@ abrindo em outra aba com `noopener noreferrer`. Nenhum
   adicionar, tudo volta ao padrão. Concluídas e Atrasadas não têm adição
   rápida, porque a tarefa nova não apareceria nelas.
 - **Notas** (`/notas`): em telas largas a lista fica ao lado do editor; no
-  celular, uma de cada vez. Sair de uma nota com alterações não salvas pela
-  lista, por "Nova nota", pela lixeira ou por "Todas as notas" pede
-  confirmação, e fechar a aba avisa. Limitação conhecida: os links da casca
-  (menu lateral, barra de baixo, Sair) e o voltar do navegador ainda não
-  perguntam, porque o app usa `BrowserRouter`, sem o `useBlocker` do React
-  Router.
+  celular, uma de cada vez. Sair de uma nota com alterações não salvas por
+  qualquer caminho (lista, "Nova nota", lixeira, "Todas as notas", menu
+  lateral, barra de baixo ou o voltar do navegador) pede confirmação, e
+  fechar a aba avisa. O app usa um roteador de dados (`createBrowserRouter`)
+  só para ter o `useBlocker`; a regra fica em `lib/leave-guard.ts`. Não
+  perguntam: a mesma nota (SEC-6R-01), os movimentos do próprio editor
+  (salvar uma nota nova, apagar) e a tela de entrada, porque Sair e o fim da
+  sessão sempre vencem.
 
 ## Backup
 

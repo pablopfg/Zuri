@@ -68,7 +68,11 @@ o [SemVer](https://semver.org/lang/pt-BR/). Cada PR escreve a sua entrada em
 - Notas em Markdown, com editor e visualização (sem HTML, sem imagens de
   fora e só links `http`, `https` e `mailto`), e busca em texto completo que
   acha palavras com ou sem acento. No computador a lista fica ao lado do
-  editor, e sair com alterações não salvas pede confirmação.
+  editor, e sair com alterações não salvas pede confirmação, inclusive pelo
+  menu lateral e pelo voltar do navegador.
+- Menu lateral recolhível no computador: o botão "Recolher menu" deixa só os
+  ícones, cada um com o nome ao passar o mouse ou focar pelo teclado. A
+  escolha fica guardada neste navegador e vale para todas as abas.
 - Projetos para agrupar tarefas e notas. Apagar um projeto não apaga o que
   está nele.
 - Lixeira em Configurações › Dados: tarefas, notas e projetos apagados ficam

@@ -134,6 +134,8 @@ test("a note: write Markdown, preview it safely, search, delete and restore @mob
     await page.getByRole("link", { name: "Nova nota" }).click();
     await expect(leave).toBeVisible();
     await leave.getByRole("button", { name: "Continuar editando" }).click();
+    // Until the modal dialog closes, the page behind it is inert and would swallow the shortcut.
+    await expect(leave).toBeHidden();
   }
   await page.getByLabel("Texto da nota").press("ControlOrMeta+s");
   await expect(page.getByText("Alterações não salvas")).toBeHidden();
@@ -190,4 +192,92 @@ test("the API refuses an impossible deadline even with an explicit zone", async 
     expect(res.status()).toBe(400);
     expect(await res.json()).toMatchObject({ code: "VALIDATION_FAILED", details: { fields: ["dueAt"] } });
   }
+});
+
+test("unsaved note text: the sidebar and the browser's back ask first, discarding leaves", async ({ page }) => {
+  const title = `Rascunho ${test.info().project.name}`;
+  await openSignedIn(page, "/notas");
+  await page.getByRole("link", { name: "Nova nota" }).click();
+  await page.getByLabel("Título").fill(title);
+  await page.getByRole("button", { name: "Salvar" }).click();
+  // Saving a new note moves to its address without asking: the editor's own move.
+  await expect(page).toHaveURL(/\/notas\/[0-9a-f-]{36}$/);
+  await expect(page.getByRole("dialog", { name: "Sair sem salvar?" })).toHaveCount(0);
+  const noteUrl = page.url();
+
+  await page.getByLabel("Texto da nota").fill("ideia que ainda não foi salva");
+  await expect(page.getByText("Alterações não salvas")).toBeVisible();
+  const leave = page.getByRole("dialog", { name: "Sair sem salvar?" });
+
+  // The sidebar: staying keeps the text and the address.
+  await page.locator("aside").getByRole("link", { name: "Tarefas" }).click();
+  await expect(leave).toBeVisible();
+  await leave.getByRole("button", { name: "Continuar editando" }).click();
+  await expect(leave).toBeHidden();
+  expect(page.url()).toBe(noteUrl);
+  await expect(page.getByLabel("Texto da nota")).toHaveValue("ideia que ainda não foi salva");
+
+  // The browser's back: Escape also means stay.
+  await page.goBack();
+  await expect(leave).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(leave).toBeHidden();
+  expect(page.url()).toBe(noteUrl);
+  await expect(page.getByLabel("Texto da nota")).toHaveValue("ideia que ainda não foi salva");
+
+  // Discarding goes where the owner clicked; the server kept the saved version.
+  await page.locator("aside").getByRole("link", { name: "Tarefas" }).click();
+  await leave.getByRole("button", { name: "Sair sem salvar" }).click();
+  await expect(page).toHaveURL(/\/tarefas$/);
+  await expect(page.getByRole("heading", { level: 1, name: "Tarefas" })).toBeVisible();
+  await page.goto(noteUrl);
+  await expect(page.getByLabel("Título")).toHaveValue(title);
+  await expect(page.getByLabel("Texto da nota")).toHaveValue("");
+});
+
+test("unsaved note text never holds back signing out", async ({ page }) => {
+  await openSignedIn(page, "/notas/nova");
+  await page.getByLabel("Título").fill("texto que vai embora com a sessão");
+  await expect(page.getByText("Alterações não salvas")).toBeVisible();
+  await page.locator("aside").getByRole("button", { name: "Sair" }).click();
+  await expect(page).toHaveURL(/\/entrar/);
+  await expect(page.getByRole("dialog", { name: "Sair sem salvar?" })).toHaveCount(0);
+});
+
+test("unsaved note text: the main navigation and the browser's back ask first on any screen @mobile", async ({ page }) => {
+  const title = `Rascunho móvel ${test.info().project.name}`;
+  // From the list, so the browser's back has an app page to return to.
+  await openSignedIn(page, "/notas");
+  await page.getByRole("link", { name: "Nova nota" }).click();
+  await page.getByLabel("Título").fill(title);
+  await page.getByRole("button", { name: "Salvar" }).click();
+  await expect(page).toHaveURL(/\/notas\/[0-9a-f-]{36}$/);
+  const noteUrl = page.url();
+  const leave = page.getByRole("dialog", { name: "Sair sem salvar?" });
+
+  // Sidebar on a computer, bottom navigation on a phone: whichever shows.
+  await page.getByLabel("Texto da nota").fill("ainda não salvo");
+  await page.getByRole("link", { name: "Início" }).filter({ visible: true }).last().click();
+  await expect(leave).toBeVisible();
+  await leave.getByRole("button", { name: "Continuar editando" }).click();
+  expect(page.url()).toBe(noteUrl);
+
+  // The browser's back, then leaving anyway: the previous page opens.
+  await page.goBack();
+  await expect(leave).toBeVisible();
+  await leave.getByRole("button", { name: "Sair sem salvar" }).click();
+  await expect(page).toHaveURL(/\/notas$/);
+  await expect(leave).toBeHidden();
+});
+
+test("moving a note with unsaved text to the trash does not ask about leaving", async ({ page }) => {
+  await openSignedIn(page, "/notas/nova");
+  await page.getByLabel("Título").fill(`Para a lixeira ${test.info().project.name}`);
+  await page.getByRole("button", { name: "Salvar" }).click();
+  await expect(page).toHaveURL(/\/notas\/[0-9a-f-]{36}$/);
+  await page.getByLabel("Texto da nota").fill("texto que vai junto");
+  await page.getByRole("button", { name: "Mover para a lixeira" }).click();
+  await expect(page).toHaveURL(/\/notas$/);
+  await expect(page.getByText("Nota movida para a lixeira.")).toBeVisible();
+  await expect(page.getByRole("dialog", { name: "Sair sem salvar?" })).toHaveCount(0);
 });
