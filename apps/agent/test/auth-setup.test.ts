@@ -354,7 +354,7 @@ describe("first access: two-step sign-in is mandatory", () => {
       const signed = await createOwner(h);
       const row = await live(h.service, signed.token);
       expect(h.service.secondStepRequired()).toBe(true);
-      const setup = await h.service.mfaSetup(row);
+      const setup = await h.service.mfaSetup(row, { password: OWNER_PASSWORD }, client(NET));
       await h.service.mfaEnable(row, await totpCode(setup.secret, totpStep(h.clock.now())), client(NET));
       expect(h.service.secondStepRequired()).toBe(false);
       expect(h.state.get("setup_second_step_required")).toBeUndefined();
@@ -409,7 +409,7 @@ describe("recovering the access with a new code", () => {
     await withAuth("setup-recover-mfa", async (h) => {
       const signed = await createOwner(h);
       const row = await live(h.service, signed.token);
-      const setup = await h.service.mfaSetup(row);
+      const setup = await h.service.mfaSetup(row, { password: OWNER_PASSWORD }, client(NET));
       await h.service.mfaEnable(row, await totpCode(setup.secret, totpStep(h.clock.now())), client(NET));
       const next = rawRebuild(h, fresh({ setupCode: OTHER_CODE }).secrets);
       const t = await next.setupCheckCode({ code: OTHER_CODE }, client(NET));
@@ -450,7 +450,7 @@ describe("recovering the access with a new code", () => {
     await withAuth("setup-recover-effects", async (h) => {
       const signed = await createOwner(h);
       const row = await live(h.service, signed.token);
-      const setup = await h.service.mfaSetup(row);
+      const setup = await h.service.mfaSetup(row, { password: OWNER_PASSWORD }, client(NET));
       await h.service.mfaEnable(row, await totpCode(setup.secret, totpStep(h.clock.now())), client(NET));
       const pending = await h.service.login({ email: OWNER_EMAIL, password: OWNER_PASSWORD }, client(NET), { session: null, device: signed.deviceToken });
       expect("mfa" in pending).toBe(true);
