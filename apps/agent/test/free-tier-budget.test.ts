@@ -74,7 +74,7 @@ beforeAll(async () => {
       }
       // Memories through the repository (no conflict check, to load fast), half of them past facts.
       for (let i = 0; i < MEMORIES; i++) {
-        agent.store.memories.repo.insert({ content: `memória ${i} sobre tema${i % 40}`, category: i % 5 === 0 ? "preference" : "fact", origin: "app", validFrom: null });
+        agent.store.memories.repo.insert({ content: `memória ${i} sobre tema${i % 40}`, category: i % 5 === 0 ? "preference" : "fact", origin: "app", author: "owner", validFrom: null });
       }
       db.run(`UPDATE zur_memories SET status = 'historical' WHERE rowid % 2 = 0`);
       for (let i = 0; i < NOTES; i++) {

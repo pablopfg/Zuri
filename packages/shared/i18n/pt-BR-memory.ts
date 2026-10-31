@@ -42,6 +42,8 @@ export const ptBRMemory = {
   "web.memory.origin.app": "App",
   "web.memory.origin.telegram": "Telegram",
   "web.memory.origin.import": "Backup",
+  "web.memory.author.agent": "Anotada pelo assistente",
+  "web.memory.author.agentHint": "O assistente guardou isto numa conversa. Quando você edita, ela passa a ser sua.",
   "web.memory.since": "desde {date}",
   "web.memory.savedAt": "guardada em {time}",
   "web.memory.correct": "Atualizar este fato",

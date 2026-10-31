@@ -384,6 +384,7 @@ limite real está no servidor:
 | Renomear e propor apagar no mesmo turno | `chat-runner.test.ts`, "SEC-09-01 renaming an item and then proposing to destroy it" |
 | Áudio de bitrate baixo para fugir do limite | `ai-transcription.test.ts`, "SEC-09-02 a low-bitrate file" |
 | Conversa apagada durante a resposta | `chat-routes.test.ts`, "SEC-09-04 deleting the conversation while its answer is written" |
+| Memória plantada pelo assistente passando por fato dito pelo dono | `chat-tools-edges.test.ts`, "who wrote a memory (SEC-09-07)"; `tests/e2e/chat.spec.ts`, "a memory the assistant saves is marked as its own" |
 | Link de resposta para outro site | `tests/e2e/chat.spec.ts`, "a link in an answer shows where it really goes" |
 | Modelo diz que fez o que não fez | `chat-runner.test.ts`, "past proposals reach the model with their real outcome" |
 | Nota com `</data>` e ordens | `chat-tools.test.ts`, "read_note hands back a stored injection as inert data" |

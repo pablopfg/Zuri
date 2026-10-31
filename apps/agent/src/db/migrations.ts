@@ -474,6 +474,9 @@ export const MIGRATIONS: readonly Migration[] = [
       `CREATE TRIGGER IF NOT EXISTS zur_counts_conversations_delete AFTER DELETE ON zur_conversations BEGIN UPDATE zur_counts SET n = n - 1 WHERE kind = 'conversations'; END`,
       `CREATE TRIGGER IF NOT EXISTS zur_counts_messages_insert AFTER INSERT ON zur_messages BEGIN UPDATE zur_counts SET n = n + 1 WHERE kind = 'messages'; END`,
       `CREATE TRIGGER IF NOT EXISTS zur_counts_messages_delete AFTER DELETE ON zur_messages BEGIN UPDATE zur_counts SET n = n - 1 WHERE kind = 'messages'; END`,
+      // Who wrote a memory: the owner, or the assistant from a conversation (SEC-09-07).
+      // Everything saved before this version was saved by the owner.
+      `ALTER TABLE zur_memories ADD COLUMN author TEXT NOT NULL DEFAULT 'owner' CHECK (author IN ('owner', 'agent'))`,
     ],
   },
 ];

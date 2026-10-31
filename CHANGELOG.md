@@ -233,6 +233,10 @@ o [SemVer](https://semver.org/lang/pt-BR/). Cada PR escreve a sua entrada em
   injeção de prompt viraram testes (`docs/seguranca.md`).
 - A `Permissions-Policy` libera o microfone só para o próprio Zuri
   (`microphone=(self)`), para a voz da conversa.
+- Uma memória que o assistente guarda numa conversa aparece como **Anotada
+  pelo assistente** na tela de Memória, e o modelo sabe que ela não foi
+  confirmada por você. Assim, um texto injetado que o leve a guardar um "fato"
+  não passa por algo que você disse. Ao editar a memória, ela passa a ser sua.
 - O agente não pode renomear um item e, no mesmo turno, propor apagá-lo ou
   reescrevê-lo. O cartão de aprovação nunca mostra um nome que o próprio
   agente acabou de dar.
@@ -311,7 +315,9 @@ o [SemVer](https://semver.org/lang/pt-BR/). Cada PR escreve a sua entrada em
 
 - Migration 8 cria `zur_conversations`, `zur_messages`,
   `zur_pending_actions` e `zur_task_plan_drafts`, com os contadores de
-  conversas e mensagens. Nada muda nos dados que já existem.
+  conversas e mensagens, e acrescenta a coluna `author` em `zur_memories`
+  (todas as memórias que já existem ficam como suas). Nada mais muda nos dados
+  que já existem.
 - Migration 7 cria `zur_usage_daily` e `zur_model_usage_daily`, só com
   contadores de uso da IA (nenhum texto), guardados por 90 dias. Nada muda nos
   dados que já existem. O Worker passa a declarar o binding `AI` (Workers AI,

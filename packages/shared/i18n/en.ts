@@ -485,6 +485,8 @@ export const en: Messages = {
   "web.memory.origin.app": "App",
   "web.memory.origin.telegram": "Telegram",
   "web.memory.origin.import": "Backup",
+  "web.memory.author.agent": "Noted by the assistant",
+  "web.memory.author.agentHint": "The assistant saved this in a conversation. Once you edit it, it's yours.",
   "web.memory.since": "since {date}",
   "web.memory.savedAt": "saved {time}",
   "web.memory.correct": "Update this fact",

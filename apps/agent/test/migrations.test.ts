@@ -88,7 +88,7 @@ describe("the migration list", () => {
       5: "8c5284cbf1f107f27133133552387e56029c61885b3bc0d9940c2f8bd648fbf1",
       6: "fcebcd8e24cdf35cfa227b8e884e5a8fef72dd5858b886054fa7dade848e5730",
       7: "975245f3b1af6fcdea2793c1cc14adf75da337311943fffb54de586f2ae81701",
-      8: "3a4d991d471e05c298ff80f2c84e6b5b8046f2150b86af3b716e06ff4f611d90",
+      8: "2c9dc9a7347e9929d8e8e517201b749352f14e8dfc44cf1d306bdfa16b4f49fd",
     };
     for (const m of MIGRATIONS) {
       const digest = createHash("sha256").update(statementText(m).replace(/\r\n/g, "\n")).digest("hex");
@@ -207,7 +207,13 @@ describe("migrate", () => {
     await withEmptyDatabase("replay", (db) => {
       migrate(db);
       db.run(`INSERT INTO zur_activity (at, kind) VALUES ('2026-10-31T00:00:00Z', 'settings.updated')`);
-      for (const m of MIGRATIONS) for (const statement of m.statements) db.run(statement);
+      for (const m of MIGRATIONS) {
+        for (const statement of m.statements) {
+          // ADD COLUMN has no IF NOT EXISTS in SQLite: run again, it refuses and changes nothing.
+          if (/^ALTER TABLE \w+ ADD COLUMN /.test(statement)) expect(() => db.run(statement)).toThrow(/duplicate column/);
+          else db.run(statement);
+        }
+      }
       expect(db.one<{ n: number }>(`SELECT count(*) AS n FROM zur_activity`)?.n).toBe(1);
     });
   });
@@ -280,8 +286,12 @@ describe("migrate", () => {
     await withEmptyDatabase("from-7", (db) => {
       expect(migrate(db, MIGRATIONS.slice(0, 7))).toBe(7);
       db.run(`INSERT INTO zur_tasks (id, title, created_at, updated_at) VALUES ('t1', 'Pagar a luz', 'x', 'x')`);
+      db.run(`INSERT INTO zur_memories (id, content, dedupe_key, created_at, updated_at) VALUES ('mem1', 'Mora em BH', 1, 'x', 'x')`);
       expect(migrate(db)).toBe(8);
       expect(db.one(`SELECT title FROM zur_tasks WHERE id = 't1'`)).toEqual({ title: "Pagar a luz" });
+      // A memory saved before version 8 was the owner's: nothing else could save one.
+      expect(db.one(`SELECT content, author FROM zur_memories WHERE id = 'mem1'`)).toEqual({ content: "Mora em BH", author: "owner" });
+      expect(() => db.run(`UPDATE zur_memories SET author = 'system' WHERE id = 'mem1'`)).toThrow();
       const count = (kind: string) => db.one<{ n: number }>(`SELECT n FROM zur_counts WHERE kind = ?`, kind)?.n;
       expect([count("conversations"), count("messages")]).toEqual([0, 0]);
 

@@ -30,9 +30,10 @@ etapas ficam detalhadas; as mais antigas viram uma linha na tabela.
 
 ### Etapa 9 · Chat com ferramentas
 - Entregou: `packages/shared/src/chat.ts` (schemas, limites, eventos do SSE), `apps/agent/src/agent/{prompt,context,runner}.ts`, `apps/agent/src/tools/` (registro, executor, 20 ferramentas), `apps/agent/src/chat/` (`conversations`, `actions`, `plans`, `local-due`), `apps/agent/src/ai/transcription.ts`, rotas em `api/chat.ts`, tela `/conversa` (`apps/web/src/pages/chat/`). Doc: `docs/chat.md`; segurança em `docs/seguranca.md` ("Ferramentas do agente e injeção de prompt").
-- Migrations: versão 8 (`zur_conversations`, `zur_messages`, `zur_pending_actions`, `zur_task_plan_drafts`, contadores `conversations` e `messages`).
+- Migrations: versão 8 (`zur_conversations`, `zur_messages`, `zur_pending_actions`, `zur_task_plan_drafts`, contadores `conversations` e `messages`, coluna `author` em `zur_memories`).
 - Decisões técnicas: proposta destrutiva com hash SHA-256 do alvo, reivindicada por `UPDATE … RETURNING` e conferida de novo na transação; plano é rascunho e a confirmação recusa tarefa nova; chamada que chega à ferramenta conta no turno mesmo se falhar, mas devolve a vaga do limite por ferramenta; repetição exata recusada; resultado de ferramenta em `<data source="tool">` cortado em 8.000 caracteres; orçamento de contexto = menor entre o do dono e a janela do modelo; resumo quando 8+ mensagens não cabem; textos pt-BR das Configurações viraram `pt-BR-settings.ts` sob demanda (JS inicial 139,0 kB).
 - Ficou para depois: execução agendada usa só ferramentas `read` (`context: "scheduled"`, etapa 10); origem `telegram` das mensagens (etapa 14); sem atualização ao vivo entre duas abas abertas na mesma conversa.
+- SEC-09-07 (pedido do Pablo): memória que o assistente guarda tem `author = 'agent'`, marca "Anotada pelo assistente" e `saved_by="assistant"` no prompt; vira do dono quando ele edita ou repete. O Telegram (etapa 14) passa `origin: telegram` e `author: agent` em `remember`.
 - Atenção para a próxima: a etapa 10 chama o runner com `context: "scheduled"` e sem dono presente (nada destrutivo, nenhum plano); toda IA continua por `agent.ai()`. O mock entende `call <ferramenta> {json}`.
 
 ### Etapa 8 · Provedor de IA e medição de uso
