@@ -79,8 +79,8 @@ export function hasControlCharacter(value: string, singleLine: boolean): boolean
  */
 // String.isWellFormed() is ES2024; the interface targets ES2023. In a /u regex a
 // paired surrogate is one astral code point, so only a lone one matches \p{Cs}.
-const wellFormed = (value: string) => !/\p{Cs}/u.test(value);
-const nfc = (value: string) => value.normalize("NFC");
+export const wellFormed = (value: string) => !/\p{Cs}/u.test(value);
+export const nfc = (value: string) => value.normalize("NFC");
 
 /** One line: no control character at all (a title may end up in a Telegram message or an e-mail subject). */
 const line = (max: number) =>

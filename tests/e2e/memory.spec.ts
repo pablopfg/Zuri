@@ -1,4 +1,4 @@
-import { expect, type Page, test } from "@playwright/test";
+import { expect, type Page, test } from "./fixtures.ts";
 import { CSRF, expectAccessible, signIn, tooSmallControls } from "./ui-helpers.ts";
 
 // Memory and its history against the real Worker (step 7): save, duplicate,

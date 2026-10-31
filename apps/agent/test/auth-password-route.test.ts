@@ -76,7 +76,7 @@ function registeredRoutes(): string[] {
   const unused = () => {
     throw new Error("not used");
   };
-  const app = createApi({ locale: () => "pt-BR", auth: unused, settings: unused, productivity: unused, passwordSecretSet: () => true, origin: () => ORIGIN, development: () => false });
+  const app = createApi({ locale: () => "pt-BR", auth: unused, settings: unused, productivity: unused, memories: unused, passwordSecretSet: () => true, origin: () => ORIGIN, development: () => false });
   return [...new Set(app.routes.filter((r) => r.method !== "ALL").map((r) => `${r.method} ${r.path}`))];
 }
 

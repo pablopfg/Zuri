@@ -59,6 +59,8 @@ describe("t", () => {
 describe("isLocale", () => {
   it("loads each catalog on demand, the same one the Worker holds", async () => {
     expect(await loadCatalog("en")).toEqual(catalogs.en);
+    // pt-BR is never fetched: it is in every bundle already.
+    await expect(loadCatalog("pt-BR" as "en")).rejects.toThrow("no catalog for pt-BR");
     // The whole pt-BR catalog is its core plus each screen's part, nothing more and nothing less.
     expect({ ...ptBRCore, ...ptBRMemory }).toEqual(ptBR);
     expect(Object.keys(ptBRCore).some((key) => key.startsWith("web.memory."))).toBe(false);

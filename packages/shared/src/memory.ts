@@ -2,7 +2,7 @@
 import "./zod-config.ts";
 
 import { z } from "zod";
-import { hasControlCharacter, LIST_LIMIT_MAX, RECORD_ID, SEARCH_MAX } from "./productivity.ts";
+import { hasControlCharacter, LIST_LIMIT_MAX, nfc, SEARCH_MAX, wellFormed } from "./productivity.ts";
 
 /**
  * Memories with history (step 7): durable facts about the owner, which may
@@ -102,13 +102,19 @@ export interface MemoryWriteResult {
   reviews: number;
 }
 
-/** One fact, one paragraph: line breaks and tabs are fine, other control characters are not. */
+/**
+ * One fact, one paragraph: line breaks and tabs are fine, other control
+ * characters are not. Like every stored text, a lone surrogate is refused and
+ * the text is kept in NFC (see productivity.ts).
+ */
 const content = z
   .string()
   .trim()
   .min(1)
   .max(MEMORY_CONTENT_MAX)
-  .refine((value) => !hasControlCharacter(value, false));
+  .refine((value) => !hasControlCharacter(value, false))
+  .refine(wellFormed)
+  .transform(nfc);
 
 export const memoryCreateSchema = z
   .object({ content, category: z.enum(MEMORY_CATEGORIES).default("other") })
@@ -132,13 +138,10 @@ export const memoryReviewResolveSchema = z.object({ action: z.enum(MEMORY_REVIEW
 
 export const memoryListQuerySchema = z
   .object({
-    q: z.string().trim().max(SEARCH_MAX).optional(),
+    q: z.string().trim().max(SEARCH_MAX).refine(wellFormed).optional(),
     status: z.enum(MEMORY_FILTERS).default("all"),
     category: z.enum(MEMORY_CATEGORIES).optional(),
     limit: z.coerce.number().int().min(1).max(LIST_LIMIT_MAX).default(200),
   })
   .strict();
 export type MemoryListQuery = z.input<typeof memoryListQuerySchema>;
-
-/** True for a memory id (one of the server's UUIDs). */
-export const isMemoryId = (value: unknown): value is string => typeof value === "string" && RECORD_ID.test(value);

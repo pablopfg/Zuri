@@ -124,6 +124,9 @@ describe("saving memories", () => {
         [{ content: "   " }, "content"],
         [{ content: "x".repeat(2001) }, "content"],
         [{ content: "a\u0000b" }, "content"],
+        // A lone surrogate would reach SQLite as U+FFFD: refused, never stored changed.
+        [{ content: "a\ud800b" }, "content"],
+        [{ content: "\udc00" }, "content"],
         [{ content: "ok", category: "secret" }, "category"],
         [{ content: "ok", status: "historical" }, "_body"],
         [{ content: "ok", origin: "import" }, "_body"],
@@ -134,8 +137,27 @@ describe("saving memories", () => {
         expect(JSON.stringify(error.details)).not.toContain("secret");
         expect((error.details as { fields: string[] }).fields[0]).toBe(field);
       }
-      // Exactly 2,000 characters fit.
+      // Exactly 2,000 characters fit (n), 1,999 too (n-1); 2,001 was refused above (n+1).
       expect(w.m.create({ content: "y".repeat(2000) }).memory.content).toHaveLength(2000);
+      expect(w.m.create({ content: "z".repeat(1999) }).memory.content).toHaveLength(1999);
+      // An emoji is a pair, not a lone surrogate.
+      expect(w.m.create({ content: "Gosto de 🎷" }).memory.content).toBe("Gosto de 🎷");
+      // A search with a lone surrogate is refused too.
+      expect(refusal(() => w.m.list({ q: "x\ud800" })).details).toEqual({ fields: ["q"] });
+    });
+  });
+
+  it("keep the text in NFC: an accent typed as two code points is the same fact as the composed one", async () => {
+    await withWorld((w) => {
+      const decomposed = "Moro em Sa\u0303o Paulo";
+      const saved = w.m.create({ content: decomposed }).memory;
+      expect(saved.content).toBe("Moro em São Paulo");
+      expect(saved.content).toBe(saved.content.normalize("NFC"));
+      expect(w.m.create({ content: "Moro em São Paulo" })).toMatchObject({ duplicate: true, memory: { id: saved.id } });
+      // Upper-case accented letters find lower-case ones and back.
+      w.m.create({ content: "Água com gás" });
+      expect(w.m.list({ q: "água" }).memories.map((m) => m.content)).toEqual(["Água com gás"]);
+      expect(w.m.list({ q: "ÁGUA" }).memories.map((m) => m.content)).toEqual(["Água com gás"]);
     });
   });
 });

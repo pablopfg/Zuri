@@ -27,6 +27,7 @@ test("no page breaks the Content Security Policy @mobile", async ({ page }) => {
   for (const [path, heading] of [
     ["/tarefas", "Tarefas"],
     ["/notas", "Notas"],
+    ["/memoria", "Memória"],
     ["/configuracoes/seguranca", "Configurações"],
     ["/configuracoes/dados", "Configurações"],
   ] as const) {

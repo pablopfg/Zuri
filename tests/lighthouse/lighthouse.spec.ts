@@ -19,6 +19,7 @@ const PAGES = [
   { name: "inicio", path: "/", signedIn: true },
   { name: "tarefas", path: "/tarefas", signedIn: true },
   { name: "notas", path: "/notas", signedIn: true },
+  { name: "memoria", path: "/memoria", signedIn: true },
   { name: "configuracoes", path: "/configuracoes/seguranca", signedIn: true },
 ] as const;
 
