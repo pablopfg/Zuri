@@ -259,6 +259,7 @@ Valores conferidos em `packages/shared/src/constants.ts` e `storage.ts` do Talor
 
 | Constante | Padrão | Faixa |
 | --- | --- | --- |
+| Neurons do Workers AI por dia (teto único de chat, voz e embeddings) | 9.000 | 1.000 a 9.000 |
 | Pedidos de IA por dia | 200 | até 2.000 |
 | Execuções de IA agendadas por dia | 6 | até 48 |
 | Chamadas de ferramenta por turno | 6 | até 20 |
@@ -280,7 +281,7 @@ Valores conferidos em `packages/shared/src/constants.ts` e `storage.ts` do Talor
 
 ### Modelos do Workers AI
 
-Chat: `@cf/zai-org/glm-4.7-flash`. Transcrição: `@cf/openai/whisper-large-v3-turbo`. Embeddings: `@cf/baai/bge-m3`. São os padrões do Talorys em 30/10/2026; o agente confere os ids e os preços em Neurons no catálogo atual da Cloudflare antes da etapa 8 e grava a tabela de preços com a data. O plano Free dá 10.000 Neurons por dia.
+Chat: `@cf/zai-org/glm-4.7-flash`. Transcrição: `@cf/openai/whisper-large-v3-turbo`. Embeddings: `@cf/baai/bge-m3`. São os padrões do Talorys em 30/10/2026; o agente confere os ids e os preços em Neurons no catálogo atual da Cloudflare antes da etapa 8 e grava a tabela de preços com a data. O plano Free dá 10.000 Neurons por dia. Decisão do Pablo (31/10/2026): um teto único de 9.000 Neurons por dia vale para chat, voz e embeddings juntos. Cada chamada estima os Neurons antes e é recusada, com aviso claro, se passar do teto; os limites por recurso (pedidos, áudio, embeddings) continuam valendo abaixo dele. O teto zera às 00:00 UTC, junto com a cota da Cloudflare.
 
 ### Prompt de sistema
 

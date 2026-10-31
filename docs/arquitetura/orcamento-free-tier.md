@@ -194,10 +194,10 @@ Numeradas para o PR poder citar ("segue P2 e P4").
 
 ## Para o Pablo (pede decisão)
 
-1. **Teto diário de Neurons.** Os padrões de "pedidos de IA" e de áudio passam
-   da cota gratuita. Recomendo um teto único de 9.000 Neurons por dia para chat,
-   voz e embeddings, com o pedido recusado e um aviso claro ao chegar nele, e
-   os limites por recurso abaixo desse teto. Afeta a etapa 8.
+1. **Teto diário de Neurons: decidido** (Pablo, 31/10/2026). Teto único de
+   9.000 Neurons por dia para chat, voz e embeddings, com o pedido recusado e um
+   aviso claro ao chegar nele; os limites por recurso ficam abaixo dele. Entra na
+   etapa 8 (constante na especificação).
 2. **Busca de tarefas por FTS5.** Hoje a busca varre a tabela; com muitas
    tarefas, 30 buscas por dia no teto de 20.000 leem 600.000 linhas. O FTS5 muda
    um pouco o resultado (acha palavras e prefixos, não pedaços no meio da
