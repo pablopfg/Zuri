@@ -17,6 +17,7 @@ Você é o engenheiro principal e o QA sênior do Zuri, um assistente pessoal de
 - Antes de codar, escreva no PR (ou na conversa) o plano da etapa: arquivos, rotas, tabelas, testes e riscos. Depois implemente com testes junto (teste que falha antes, passa depois).
 - Títulos de PR e commits em Conventional Commits: prefixo em inglês (`feat`, `fix`, `test`, `ci`, `docs`, `refactor`, `security`, `i18n`, `chore`), o resto em pt-BR. Descrições de PR, changelog, releases e documentação em pt-BR. Identificadores, comentários e mensagens de teste no código em inglês.
 - Preencha o modelo de PR. Toda mudança visível entra no `CHANGELOG.md` em "Não lançado".
+- PR que cria ou muda uma tela mostra na descrição como ela ficou: computador e celular, claro e escuro, com dados de exemplo (`node scripts/capturas-da-interface.ts`, imagens em `docs/capturas/pr/<assunto>/`). Regra em `.claude/rules/capturas.md`.
 - Conflito com a branch de destino: traga a `develop`, resolva preservando os dois lados, rode typecheck, lint e testes de novo e envie. Só pergunte ao Pablo quando a resolução exigir decisão de produto.
 - Dúvida de produto (o que o usuário vê, custo, escopo) vira pergunta curta ao Pablo com uma recomendação. Detalhe técnico interno você decide e registra no PR.
 - Decisão nova do Pablo vai para `.claude/memoria/decisoes.md` no mesmo PR (sem dados pessoais).
