@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { type BrowserContext, chromium, expect, test } from "@playwright/test";
 import lighthouse from "lighthouse";
+import { routeFakeTurnstile } from "../e2e/fixtures.ts";
 import { signIn } from "../e2e/ui-helpers.ts";
 
 // The scores the specification asks for (stage 5: accessibility ≥ 90), checked
@@ -33,6 +34,8 @@ test.beforeAll(async () => {
     ...(process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE ? { executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE } : {}),
     locale: "pt-BR",
   });
+  // The sign-in asks Turnstile: the same stand-in widget as the e2e suite.
+  await routeFakeTurnstile(context);
 });
 
 test.afterAll(async () => {

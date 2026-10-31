@@ -1,4 +1,4 @@
-import { expect, type Page, test } from "@playwright/test";
+import { expect, type Page, test } from "./fixtures.ts";
 import { signIn } from "./ui-helpers.ts";
 
 // The CSP is strict (no inline script, no eval). A violation means code that

@@ -1,4 +1,4 @@
-import { expect, type Page, test } from "@playwright/test";
+import { expect, type Page, test } from "./fixtures.ts";
 import { CSRF, signIn } from "./ui-helpers.ts";
 
 // A tab that comes back from the background counts the session from stale news:

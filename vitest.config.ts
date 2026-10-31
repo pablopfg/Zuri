@@ -19,7 +19,7 @@ export default defineConfig({
       thresholds: {
         "apps/agent/src/**": { lines: 97, statements: 95, branches: 88, functions: 95 },
         "packages/shared/**": { lines: 97, statements: 97, branches: 85, functions: 98 },
-        "apps/web/src/lib/**": { lines: 68, statements: 64, branches: 64, functions: 55 },
+        "apps/web/src/lib/**": { lines: 78, statements: 72, branches: 68, functions: 60 },
       },
     },
     projects: [
