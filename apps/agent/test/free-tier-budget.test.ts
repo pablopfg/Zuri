@@ -107,6 +107,32 @@ describe("the Free plan budget of each route", () => {
     expect(upcoming.read).toBeLessThan(TASKS / 2);
   });
 
+  it("reads only the tasks that Today and Overdue show, through the open-tasks index", async () => {
+    // Here about 1,000 open tasks are overdue, so both views match them all;
+    // a plan that walked the whole board instead would read every task.
+    for (const view of ["today", "overdue"]) {
+      const res = await cost("GET", `/tasks?view=${view}`);
+      expect(res.status, view).toBe(200);
+      expect(res.read, view).toBeLessThanOrEqual(1100);
+    }
+  });
+
+  it("reads only the project's own tasks for a project's list", async () => {
+    const projectId = await runInDurableObject(owner(), (agent: ZuriAgent) => {
+      const { db } = agent.store;
+      const id = crypto.randomUUID();
+      const at = new Date().toISOString();
+      db.run(`INSERT INTO zur_projects (id, name, created_at, updated_at) VALUES (?, 'Casa', ?, ?)`, id, at, at);
+      for (let i = 0; i < 50; i++) {
+        db.run(`INSERT INTO zur_tasks (id, title, project_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?)`, crypto.randomUUID(), `casa ${i}`, id, at, at);
+      }
+      return id;
+    });
+    const res = await cost("GET", `/tasks?view=all&projectId=${projectId}`);
+    expect(res.status).toBe(200);
+    expect(res.read).toBeLessThanOrEqual(2 * 50 + 5);
+  });
+
   it("reads one page of notes, twice at most (the index, then the row)", async () => {
     const notes = await cost("GET", "/notes");
     expect(notes.status).toBe(200);
