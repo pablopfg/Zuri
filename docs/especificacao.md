@@ -365,7 +365,7 @@ O agente executor pode começar a fase A sem nenhuma destas respostas; cada linh
 | N10 | Trava de leitura do bot (destravar por passkey ou e-mail depois de um período sem uso) | Ligada, 12 h | Etapa 15 |
 | N11 | TELEGRAM\_ADMIN\_ID obrigatório para comandos de segurança e aprovações | Sim | Etapa 12 |
 | N12 | Teto do banco | 900 MB (confirmar o limite vigente do plano Free) | Etapa 2 |
-| N13 | Cadastro inicial do dono por uma tela de primeiro acesso | Decidido pelo Pablo em 31/10/2026: código de instalação como segredo, uso único, 24 h, 2FA ou passkey obrigatórios (`docs/planos/cadastro-inicial-do-dono.md`) | Trabalho paralelo, antes da etapa 24 |
+| N13 | Cadastro inicial do dono por uma tela de primeiro acesso | Decidido pelo Pablo em 31/10/2026: código de instalação como segredo, uso único, 1 h de validade, 2FA ou passkey obrigatórios (`docs/planos/cadastro-inicial-do-dono.md`) | Trabalho paralelo, antes da etapa 24 |
 
 ## Etapas de implementação
 

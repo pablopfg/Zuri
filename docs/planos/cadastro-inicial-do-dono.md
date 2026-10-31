@@ -78,12 +78,14 @@ ao mesmo tempo: o segundo recebe 409 `CONFLICT`.
 - Comparação por HMAC das duas partes, em tempo constante.
 - **Uso único:** depois do cadastro, a impressão digital do código fica
   marcada como gasta. O mesmo código nunca abre nada de novo.
-- **Validade:** 24 horas contadas da primeira vez que o sistema vê aquele
-  código. Passou disso sem cadastro, a tela diz que o código venceu e o dono
-  grava outro no painel.
+- **Validade:** 1 hora contada da primeira vez que o sistema vê aquele
+  código (decisão do Pablo, 31/10/2026; antes eram 24 h). Passou disso sem
+  cadastro, a tela diz que o código venceu e o dono grava outro no painel.
+  Por isso o guia manda gravar o código só na hora de abrir o primeiro acesso.
+  O cookie de cadastro nunca passa do fim dessa hora.
 - **Tentativas:** Turnstile em cada tentativa (validado antes do código,
   falha fechado) e limite próprio: 5 erros em 15 minutos pausam a tela por 15
-  minutos; 20 erros em 24 horas travam o código, e só um código novo destrava.
+  minutos; 20 erros com o mesmo código o travam, e só um código novo destrava.
   Com 32 caracteres aleatórios, adivinhar é impossível na prática; o limite
   existe para não gastar cota e para gerar aviso.
 - Nunca vai para log, URL de consulta, `localStorage` ou resposta da API. O
@@ -200,7 +202,7 @@ auditoria completa (a área é autenticação).
      limitador e Turnstile, eventos novos, trava de rotas em
      `falta_segundo_passo`, e-mail vindo do banco no login, `SETUP_CODE` na
      configuração e no health check.
-   - Testes no workerd: código certo, errado, vencido (23h59 e 24h01), gasto,
+   - Testes no workerd: código certo, errado, vencido (59min59s e 1h00min01s), gasto,
      trocado; limites exatos (4, 5 e 6 erros; 19, 20 e 21); dois cadastros
      simultâneos; cookie de cadastro vencido, adulterado, de outra origem;
      corpo enorme, vazio, JSON malformado, e-mail com maiúsculas e espaços,
@@ -232,8 +234,8 @@ Os PRs 1 e 2 também atualizam README e CHANGELOG no que mudam.
 | Risco | Cobertura |
 | --- | --- |
 | Alguém chega antes do dono | Sem o código, a tela não passa do primeiro campo |
-| Código vaza (print, histórico) | Uso único, vale 24 h, e o Início lembra de apagar o segredo |
-| Força bruta no código | 32+ caracteres aleatórios, Turnstile, 5/15 min e 20/24 h com trava |
+| Código vaza (print, histórico) | Uso único, vale 1 h, e o Início lembra de apagar o segredo |
+| Força bruta no código | 32+ caracteres aleatórios, Turnstile, 5/15 min e trava em 20 erros por código |
 | Sessão de cadastro roubada | Cookie `__Host-`, `HttpOnly`, `SameSite=Strict`, 15 min, só para `/api/setup/owner` |
 | Dono para no meio e alguém usa a sessão | Sem 2FA ou passkey nada abre; sessão segue os limites normais |
 | Cadastro duplo ou corrida | Transação no Durable Object e 409 |
