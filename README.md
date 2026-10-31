@@ -62,9 +62,9 @@ As capturas abaixo acompanham o tema do seu GitHub (claro ou escuro) e saem da `
     <td width="50%" valign="top">
       <picture>
         <source media="(prefers-color-scheme: dark)" srcset="docs/capturas/inicio-computador-escuro.png">
-        <img src="docs/capturas/inicio-computador-claro.png" alt="Início do Zuri no computador: barra lateral com Início, Tarefas, Notas, Memória e Acessos, e cartões de Segurança e Sessão">
+        <img src="docs/capturas/inicio-computador-claro.png" alt="Início do Zuri no computador: cumprimento pelo horário com o nome do dono, barra lateral com Início, Tarefas, Notas, Memória e Acessos, e cartões de Segurança e Sessão">
       </picture>
-      <p align="center"><b>Início</b>: segurança da conta e sessão num relance</p>
+      <p align="center"><b>Início</b>: cumprimento pelo horário, segurança da conta e sessão num relance</p>
     </td>
     <td width="50%" valign="top">
       <picture>
@@ -140,6 +140,7 @@ O que está na `develop` hoje, etapa por etapa. "extra" marca melhorias feitas f
 | 🔑 | **Login e sessões** | Senha forte, sessão que termina por inatividade, proteção contra força bruta e Cloudflare Turnstile em toda tentativa de entrar. | 3 |
 | 📱 | **2FA e passkeys** | Aplicativo autenticador (TOTP), 10 códigos de recuperação e passkeys no segundo passo. Alerta a cada 3 códigos errados seguidos; com 30 erros em 24 h, o segundo passo fica suspenso para redes desconhecidas. | 4 |
 | 🧭 | **Interface web (PWA)** | Barra lateral recolhível, navegação inferior no celular, tema claro, escuro ou do sistema, instalável no celular e no computador. | 5 |
+| 👋 | **Cumprimento no Início** | Bom dia, boa tarde ou boa noite pelo seu fuso, com o seu nome (Configurações > Conta) e uma frase curta da Zuri que muda a cada dia. | extra |
 | ⌨️ | **Paleta de comandos** | Ctrl/⌘ K (ou o botão Buscar) abre a busca de tarefas, notas e memórias e o caminho para qualquer página ou seção das configurações, tudo pelo teclado. | extra |
 | 👀 | **Acessos** | Cada tentativa de entrar, com IP, cidade, país, rede, navegador e resultado, filtrável por período e tipo. | extra |
 | ✅ | **Tarefas e projetos** | Hoje, próximas, atrasadas e concluídas, com prioridade, prazo no seu fuso e projetos. | 6 |

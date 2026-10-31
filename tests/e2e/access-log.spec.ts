@@ -13,7 +13,7 @@ test("the sign-in form runs the robot check quietly and sends its token with the
   const sent = page.waitForRequest((r) => r.url().endsWith("/api/auth/login"));
   await signIn(page);
   expect((await sent).postDataJSON()).toMatchObject({ turnstileToken: HUMAN_TOKEN });
-  await expect(page.getByRole("heading", { level: 1, name: "Olá!" })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: /^(Bom dia|Boa tarde|Boa noite)/ })).toBeVisible();
 });
 
 test("the API refuses a sign-in without the robot check, or with a token it didn't issue, before the password", async ({ request }) => {
@@ -30,7 +30,7 @@ test("the API refuses a sign-in without the robot check, or with a token it didn
 test("the access log lists each try with its IP and filters by type and IP @mobile", async ({ page, isMobile }) => {
   await page.goto("/entrar");
   await signIn(page);
-  await expect(page.getByRole("heading", { level: 1, name: "Olá!" })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: /^(Bom dia|Boa tarde|Boa noite)/ })).toBeVisible();
 
   if (isMobile) {
     // The phone's bar keeps four places: the log is reached from Settings > Security.
@@ -95,7 +95,7 @@ test("the robot check that fails to load says so and loads again on request", as
   // Once the new widget answers, the line about the check goes away.
   await expect(page.locator("p").filter({ hasText: "Confirme que é você para continuar." })).toHaveCount(0);
   await page.getByRole("button", { name: "Entrar" }).click();
-  await expect(page.getByRole("heading", { level: 1, name: "Olá!" })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: /^(Bom dia|Boa tarde|Boa noite)/ })).toBeVisible();
 });
 
 test("without the form's options the server's refusal brings the robot check", async ({ page }) => {
@@ -123,7 +123,7 @@ test("without the form's options the server's refusal brings the robot check", a
   await page.getByLabel("Senha", { exact: true }).fill(PASSWORD);
   await page.locator('[data-testid="turnstile"][data-solved="true"]').waitFor();
   await page.getByRole("button", { name: "Entrar" }).click();
-  await expect(page.getByRole("heading", { level: 1, name: "Olá!" })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: /^(Bom dia|Boa tarde|Boa noite)/ })).toBeVisible();
 });
 
 test("the access log needs a session: signed out it opens the sign-in and comes back after", async ({ page, request }) => {
@@ -137,7 +137,7 @@ test("the access log needs a session: signed out it opens the sign-in and comes 
 test("the access log shows an error with a retry, and loads more pages", async ({ page }) => {
   await page.goto("/entrar");
   await signIn(page);
-  await expect(page.getByRole("heading", { level: 1, name: "Olá!" })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: /^(Bom dia|Boa tarde|Boa noite)/ })).toBeVisible();
   // Failing until the test says otherwise (the query may retry on its own first).
   let failing = true;
   await page.route("**/api/auth/activity?*", async (route) => {

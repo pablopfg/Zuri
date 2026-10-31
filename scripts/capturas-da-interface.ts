@@ -29,7 +29,7 @@ for (const [device, options] of [
     await page.getByLabel("E-mail").fill("dono@exemplo.com.br");
     await page.getByLabel("Senha", { exact: true }).fill("e2e girafa trombone neblina");
     await page.getByRole("button", { name: "Entrar" }).click();
-    await page.getByRole("heading", { level: 1, name: "Olá!" }).waitFor();
+    await page.getByRole("heading", { level: 1, name: /^(Bom dia|Boa tarde|Boa noite)/ }).waitFor();
     await shot("inicio");
     await page.goto(`${BASE}/configuracoes/seguranca`);
     await page.getByRole("heading", { name: "Atividade de acesso" }).waitFor();

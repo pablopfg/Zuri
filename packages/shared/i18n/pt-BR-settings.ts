@@ -72,4 +72,7 @@ export const ptBRSettings = {
   "web.settings.later.notifications": "Push, e-mail, Telegram e categorias de aviso chegam junto com a central de avisos.",
   "web.settings.later.integrations": "Servidores MCP e Google Agenda chegam numa próxima versão.",
   "web.settings.later.data": "Backup e uso do armazenamento chegam numa próxima versão.",
+  "web.account.ownerName": "Seu nome",
+  "web.account.ownerNameHint": "Aparece nos cumprimentos da tela inicial. Pode ser um apelido; em branco, o cumprimento sai sem nome.",
+  "web.account.ownerNameSave": "Salvar nome",
 } as const;

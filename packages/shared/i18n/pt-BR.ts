@@ -5,6 +5,7 @@ import { ptBRAi } from "./pt-BR-ai.ts";
 import { ptBRSecurity } from "./pt-BR-security.ts";
 import { ptBRServer } from "./pt-BR-server.ts";
 import { ptBRSettings } from "./pt-BR-settings.ts";
+import { ptBRGreeting } from "./pt-BR-greeting.ts";
 
 // Default and fallback catalog. Every key must also exist in en.ts and be used in the code (npm run lint).
 // The texts of the lazy screens live in their own files (pt-BR-memory.ts, pt-BR-productivity.ts,
@@ -78,8 +79,6 @@ export const ptBRCore = {
   "web.notifications.title": "Avisos",
   "web.notifications.emptyTitle": "Nenhum aviso por enquanto",
   "web.notifications.emptyBody": "Lembretes, alertas de segurança e mensagens do Zuri vão aparecer aqui.",
-  "web.home.title": "Olá!",
-  "web.home.subtitle": "Este é o seu Zuri.",
   "web.home.emptyTitle": "A conversa com o Zuri chega em breve",
   "web.home.emptyBody": "O chat com o assistente entra numa próxima etapa. Enquanto isso, deixe a sua conta protegida.",
   "web.home.securityLink": "Revisar a segurança da conta",
@@ -142,7 +141,7 @@ export const ptBRCore = {
 } as const;
 
 /** Joins catalog parts. Marked pure so a bundle that never uses the whole catalog drops the call. */
-function join<A extends object, B extends object, C extends object, D extends object, E extends object, F extends object, G extends object, H extends object>(
+function join<A extends object, B extends object, C extends object, D extends object, E extends object, F extends object, G extends object, H extends object, I extends object>(
   a: A,
   b: B,
   c: C,
@@ -151,9 +150,10 @@ function join<A extends object, B extends object, C extends object, D extends ob
   f: F,
   g: G,
   h: H,
-): A & B & C & D & E & F & G & H {
-  return { ...a, ...b, ...c, ...d, ...e, ...f, ...g, ...h };
+  i: I,
+): A & B & C & D & E & F & G & H & I {
+  return { ...a, ...b, ...c, ...d, ...e, ...f, ...g, ...h, ...i };
 }
 
 /** The whole pt-BR catalog: what the server, the tests and the lint use. */
-export const ptBR = /* @__PURE__ */ join(ptBRCore, ptBRMemory, ptBRProductivity, ptBRSecurity, ptBRAi, ptBRSettings, ptBRServer, ptBRPalette);
+export const ptBR = /* @__PURE__ */ join(ptBRCore, ptBRMemory, ptBRProductivity, ptBRSecurity, ptBRAi, ptBRSettings, ptBRServer, ptBRPalette, ptBRGreeting);

@@ -1,8 +1,16 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_SETTINGS, DEFAULT_TIME_ZONE, isTimeZone, settingsSchema, settingsUpdateSchema } from "../src/index.ts";
+import {
+  DEFAULT_SETTINGS,
+  DEFAULT_TIME_ZONE,
+  isTimeZone,
+  normalizeOwnerName,
+  OWNER_NAME_MAX,
+  settingsSchema,
+  settingsUpdateSchema,
+} from "../src/index.ts";
 
 describe("default settings", () => {
-  it("start in pt-BR, in the São Paulo time zone, with sign-out after 30 min idle, 5 min without a tab or 6 h, memory conflict review on and the AI limits of the specification", () => {
+  it("start in pt-BR, in the São Paulo time zone, with sign-out after 30 min idle, 5 min without a tab or 6 h, memory conflict review on and the AI limits of the specification, and no owner name yet", () => {
     expect(DEFAULT_SETTINGS).toEqual({
       language: "pt-BR",
       timeZone: "America/Sao_Paulo",
@@ -14,6 +22,7 @@ describe("default settings", () => {
       aiRequestsPerDay: 200,
       aiNeuronsPerDay: 9_000,
       aiMaxOutputTokens: 1_024,
+      ownerName: "",
     });
     expect(DEFAULT_TIME_ZONE).toBe("America/Sao_Paulo");
     expect(settingsSchema.parse(DEFAULT_SETTINGS)).toEqual(DEFAULT_SETTINGS);
@@ -76,4 +85,44 @@ describe("settingsUpdateSchema", () => {
     { theme: "dark" },
     { language: "en", __proto__: { admin: true }, extra: 1 },
   ])("refuses %j", (patch) => expect(settingsUpdateSchema.safeParse(patch).success).toBe(false));
+});
+
+describe("owner name", () => {
+  const parse = (ownerName: unknown) => settingsUpdateSchema.safeParse({ ownerName });
+
+  it("keeps up to 40 characters after tidying the spaces, and an empty name means none", () => {
+    expect(OWNER_NAME_MAX).toBe(40);
+    expect(parse("").data).toEqual({ ownerName: "" });
+    expect(parse("Pablo").data).toEqual({ ownerName: "Pablo" });
+    expect(parse("   Ana \t  Clara\n ").data).toEqual({ ownerName: "Ana Clara" });
+    expect(parse("   ").data).toEqual({ ownerName: "" });
+    expect(parse("a".repeat(39)).success).toBe(true);
+    expect(parse("a".repeat(40)).success).toBe(true);
+    expect(parse("a".repeat(41)).success).toBe(false);
+    // Spaces around don't count toward the limit; letters outside the BMP count once each.
+    expect(parse(`  ${"a".repeat(40)}  `).success).toBe(true);
+    expect(parse("𝒜".repeat(40)).success).toBe(true);
+    expect(parse("𝒜".repeat(41)).success).toBe(false);
+  });
+
+  it("stores accents in one form, so the same name typed twice is the same", () => {
+    expect(normalizeOwnerName("Jose\u0301")).toBe("José");
+    expect(parse("Jose\u0301").data).toEqual({ ownerName: "José" });
+  });
+
+  it.each([
+    "<b>Pablo</b>",
+    "Pablo>",
+    "Pa\u0000blo",
+    "Pa\u0007blo",
+    "Pa\u200Bblo",
+    "Pablo\u202E",
+    "a".repeat(1_000),
+  ])("refuses %j", (name) => expect(parse(name).success).toBe(false));
+
+  it.each([3, null, ["Pablo"], { name: "Pablo" }, true])("refuses the non-text %j", (name) => expect(parse(name).success).toBe(false));
+
+  it("accepts names from any language, with apostrophes and hyphens", () => {
+    for (const name of ["Maria-José", "D'Ávila", "Zoë", "李小龙", "Ольга", "José da Silva Júnior"]) expect(parse(name).success, name).toBe(true);
+  });
 });

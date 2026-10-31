@@ -55,7 +55,7 @@ for (const page of PAGES) {
         const tab = context.pages()[0] ?? (await context.newPage());
         await tab.goto(`${baseURL}/entrar`);
         await signIn(tab);
-        await expect(tab.getByRole("heading", { level: 1, name: "Olá!" })).toBeVisible();
+        await expect(tab.getByRole("heading", { level: 1, name: /^(Bom dia|Boa tarde|Boa noite)/ })).toBeVisible();
       }
     }
     const result = await lighthouse(`${baseURL}${page.path}`, {

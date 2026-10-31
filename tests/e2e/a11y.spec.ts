@@ -17,7 +17,7 @@ for (const scheme of ["light", "dark"] as const) {
       await expectAccessible(page, "entrar");
 
       await signIn(page);
-      await expect(page.getByRole("heading", { level: 1, name: "Olá!" })).toBeVisible();
+      await expect(page.getByRole("heading", { level: 1, name: /^(Bom dia|Boa tarde|Boa noite)/ })).toBeVisible();
       await expectAccessible(page, "inicio");
 
       await page.getByRole("button", { name: "Abrir avisos" }).click();
@@ -74,7 +74,7 @@ test("every control is at least 44 px tall on a phone @mobile", async ({ page })
   await expect(page.getByRole("button", { name: "Entrar" })).toBeVisible();
   expect(await tooSmall()).toEqual([]);
   await signIn(page);
-  await expect(page.getByRole("heading", { level: 1, name: "Olá!" })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: /^(Bom dia|Boa tarde|Boa noite)/ })).toBeVisible();
   expect(await tooSmall()).toEqual([]);
   await page.goto("/configuracoes/conta");
   await expect(page.getByLabel("Idioma", { exact: true })).toBeVisible();

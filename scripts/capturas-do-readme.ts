@@ -34,6 +34,9 @@ async function seed(page: Page) {
     if (!res.ok()) throw new Error(`${path}: ${res.status()} ${await res.text()}`);
     return (await res.json()) as Record<string, { id: string } | undefined> & { id?: string };
   };
+  // A sample name for the greeting on the home page (never the owner's real one).
+  const named = await page.request.patch(`${BASE}/api/settings`, { headers: CSRF, data: { ownerName: "Ana" } });
+  if (!named.ok()) throw new Error(`/api/settings: ${named.status()}`);
   const created = await post("/api/projects", { name: "Mudança de apartamento", description: "Tudo o que falta até a entrega das chaves." });
   const projectId = created.project?.id ?? created.id;
   await post("/api/projects", { name: "Curso de fotografia" });
@@ -109,12 +112,12 @@ for (const [device, options] of [
       await seed(page);
       seeded = true;
     }
-    const visit = async (path: string, name: string, ready: string) => {
+    const visit = async (path: string, name: string, ready: string | RegExp) => {
       await page.goto(BASE + path);
       await page.getByText(ready).first().waitFor();
       await shot(name);
     };
-    await visit("/", "inicio", "Olá!");
+    await visit("/", "inicio", /^(Bom dia|Boa tarde|Boa noite)/);
     await visit("/tarefas", "tarefas", "Pagar a conta de luz");
     await visit("/notas", "notas", "Ideias para a sala nova");
     await page.getByText("Ideias para a sala nova").first().click();

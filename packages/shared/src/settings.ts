@@ -19,6 +19,26 @@ export const SESSION_TIMEOUT_RANGES = {
   sessionMaxHours: { min: 1, max: 24, default: 6 },
 } as const;
 
+/** The longest name the owner may give, in characters (code points) after tidying. */
+export const OWNER_NAME_MAX = 40;
+
+/** One form for accents (NFC) and one plain space for any run of spaces or line breaks. */
+export function normalizeOwnerName(value: string): string {
+  return value.normalize("NFC").replace(/\s+/g, " ").trim();
+}
+
+/**
+ * How the owner likes to be called (the greeting, and later the agent). Empty
+ * means no name. Control and invisible format characters (bidi overrides,
+ * zero-width spaces) and angle brackets are refused: the name is shown on
+ * screen and goes into the agent's prompt, where it must read as plain text.
+ */
+const ownerName = /* @__PURE__ */ z
+  .string()
+  .max(OWNER_NAME_MAX * 10)
+  .transform(normalizeOwnerName)
+  .refine((name) => [...name].length <= OWNER_NAME_MAX && !/[\p{Cc}\p{Cf}<>]/u.test(name));
+
 const range = (r: { min: number; max: number }) => z.number().int().min(r.min).max(r.max);
 
 /** The settings of steps 2 and 3. Later steps add fields here, each with its default. */
@@ -36,6 +56,8 @@ export const settingsSchema = /* @__PURE__ */ z
     aiRequestsPerDay: range(AI_LIMIT_RANGES.aiRequestsPerDay),
     aiNeuronsPerDay: range(AI_LIMIT_RANGES.aiNeuronsPerDay),
     aiMaxOutputTokens: range(AI_LIMIT_RANGES.aiMaxOutputTokens),
+    /** How the owner likes to be called; "" until they say. */
+    ownerName,
   })
   .strict();
 
@@ -60,4 +82,5 @@ export const DEFAULT_SETTINGS: Settings = /* @__PURE__ */ Object.freeze({
   aiRequestsPerDay: AI_LIMIT_RANGES.aiRequestsPerDay.default,
   aiNeuronsPerDay: AI_LIMIT_RANGES.aiNeuronsPerDay.default,
   aiMaxOutputTokens: AI_LIMIT_RANGES.aiMaxOutputTokens.default,
+  ownerName: "",
 });

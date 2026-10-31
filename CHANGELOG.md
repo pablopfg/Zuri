@@ -9,6 +9,13 @@ o [SemVer](https://semver.org/lang/pt-BR/). Cada PR escreve a sua entrada em
 
 ### Adicionado
 
+- Cumprimento no Início: bom dia, boa tarde ou boa noite pelo horário do seu
+  fuso (o das configurações, não o do aparelho), com o seu nome e uma frase
+  curta que muda a cada dia. A frase troca sozinha quando o período vira,
+  mesmo com a tela aberta, e de madrugada tem frases próprias.
+- Campo "Seu nome" em Configurações > Conta. Aceita apelido, até 40
+  caracteres; em branco, o cumprimento sai sem nome.
+
 - Paleta de comandos com Ctrl/⌘ K, ou pelo botão Buscar na barra lateral e no
   topo do celular. Ela leva a qualquer página ou seção das configurações, cria
   uma tarefa ou nota e busca tarefas, notas e memórias (a partir de 2 letras,

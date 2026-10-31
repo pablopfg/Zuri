@@ -23,6 +23,7 @@ const STORAGE_KEYS = {
   aiRequestsPerDay: "ai_requests_per_day",
   aiNeuronsPerDay: "ai_neurons_per_day",
   aiMaxOutputTokens: "ai_max_output_tokens",
+  ownerName: "owner_name",
 } as const satisfies Record<keyof Settings, string>;
 
 type Field = keyof Settings;
