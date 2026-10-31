@@ -26,6 +26,7 @@ Fatos e decisões já tomados pelo Pablo. O agente não pergunta de novo nada da
 | 31/10/2026 | Identidade visual "Sinal": um i cujo pingo é uma luz verde (`#22c55e`) sobre tinta (`#0b0f19`); o verde é o único destaque e significa "trabalhando". Escolhida entre 17 opções. |
 | 31/10/2026 | Telas depois do login seguem a UI do Talorys como referência: barra lateral de altura total (marca e avisos no topo, seções no meio, Configurações e Sair no pé), barra superior e navegação inferior no celular, `PageHeader` em cada página, lembrete de 2FA enquanto estiver desligada. Telas novas entram como seção da barra lateral. A identidade continua a "Sinal". |
 | 31/10/2026 | Padrão de qualidade da interface: UI/UX moderna, funcional, muito bonita e sem erros. Toda tela nova passa por revisão de UX (vazio, carregando, erro, teclado, leitor de tela, celular e computador, claro e escuro), tem capturas antes de fechar e e2e dos fluxos. |
+| 31/10/2026 | Performance e cotas do plano Free em toda etapa: o sistema deve ser o mais rápido possível e caber com folga nas cotas gratuitas (Workers, Durable Objects com SQLite, Workers AI). Toda etapa segue `.claude/rules/performance.md` (regras P1 a P14), mede o custo das rotas em `free-tier-budget.test.ts` e traz no PR a tabela "Custo no plano Free". Orçamento em `docs/arquitetura/orcamento-free-tier.md`. |
 
 ## Padrões em vigor até o Pablo dizer outra coisa
 

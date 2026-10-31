@@ -129,6 +129,7 @@ fixa o hash de cada migration já mesclada, para ninguém editar uma antiga.
 | 4 | `zur_notes` | Notas em Markdown, com o índice de texto completo `zur_notes_fts` (FTS5, mantido por gatilhos) | sim (etapa 23) |
 | 4 | `zur_trash` | Cópia em JSON do que foi apagado, por 30 dias, com quem apagou e o tamanho | não |
 | 4 | `zur_counts` | Contagem de linhas por tipo, mantida por gatilhos, para conferir limites lendo uma linha só | não |
+| 5 | índice `zur_tasks_board` | A ordem da lista de tarefas, para "Todas" e "Próximas" lerem uma página e não a tabela inteira | — |
 
 Valores internos do servidor também ficam em `zur_settings`, com chaves
 `auth_*` (o hash da senha trocada no app, a impressão digital dos segredos,
@@ -178,24 +179,29 @@ exceção que não corresponde a mais nada também faz o lint falhar.
 
 ## Orçamento de duração do Durable Object
 
-O plano Free dá 13.000 GB-s de duração de Durable Object por dia. Um objeto
-fora de hibernação conta 128 MB enquanto está na memória, e só sai dela depois
-de um a dois minutos sem requisição. O heartbeat da interface (uma batida por
-minuto, de uma aba só, mesmo com várias abertas) mantém o objeto carregado
-enquanto houver sessão aberta:
+O plano Free dá 13.000 GB-s de duração de Durable Object por dia, a 128 MB por
+objeto. Pela documentação da Cloudflare, um objeto sem requisição entra em
+hibernação depois de 10 s e, enquanto hibernável, não conta duração. Só fica na
+memória (e cobrando) quem tem `setTimeout`/`setInterval` pendente, `fetch` ou
+`waitUntil` sem terminar ou WebSocket padrão; o Zuri não usa nada disso (regra
+P5 de `.claude/rules/performance.md`). A conta real é o tempo de trabalho: uns
+50 ms por requisição e o tempo de cada turno de chat em streaming.
 
-| Situação | Tempo carregado | Duração estimada |
+O heartbeat da interface (uma batida por minuto, de uma aba só, mesmo com
+várias abertas) acorda o objeto uma vez por minuto. Com hibernação, 12 h de app
+aberto custam menos de 10 GB-s de batidas. Se algo impedir a hibernação, o
+objeto fica carregado a sessão inteira:
+
+| Situação sem hibernação | Tempo carregado | Duração estimada |
 | --- | --- | --- |
-| Aba aberta sem uso (limite padrão de 30 min) | até 30 min | cerca de 225 GB-s |
 | Uso contínuo até o máximo padrão (6 h) | 6 h | cerca de 2.700 GB-s (21%) |
 | Uso contínuo até o máximo permitido (24 h) | 24 h | cerca de 11.000 GB-s (85%) |
 
-O pior caso só acontece com o dono usando o app o dia inteiro e o máximo da
-sessão em 24 h. O intervalo da batida não pode passar do limite mínimo de
-presença (3 min), e um intervalo maior que o tempo de despejo economizaria
-pouco. As etapas com Workflows e alarmes devem conferir a duração real no
-painel da Cloudflare antes de somar carga. Se apertar, a saída é diminuir o
-máximo da sessão, não espaçar a batida.
+O intervalo da batida não pode passar do limite mínimo de presença (3 min).
+Confira a duração real no painel da Cloudflare depois do primeiro deploy e de
+cada etapa com Workflows ou alarmes. Se apertar, a saída é diminuir o máximo da
+sessão, não espaçar a batida. O orçamento de todas as cotas fica em
+[arquitetura/orcamento-free-tier.md](arquitetura/orcamento-free-tier.md).
 
 ## Observabilidade
 

@@ -261,6 +261,25 @@ export const MIGRATIONS: readonly Migration[] = [
       END`,
     ],
   },
+  {
+    version: 5,
+    name: "task_board_order",
+    statements: [
+      // The task list's default order as an index, expression for expression
+      // (PRIORITY_ORDER in productivity/tasks.ts must stay identical). "All" and
+      // "Upcoming" then read about LIMIT rows instead of every task and a sort:
+      // rows read are billed (5 million a day on the Free plan), and with 20,000
+      // tasks one "All" list read 40,000 of them.
+      `CREATE INDEX IF NOT EXISTS zur_tasks_board ON zur_tasks (
+        status = 'done',
+        due_at IS NULL,
+        due_at,
+        CASE priority WHEN 'urgent' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END,
+        created_at,
+        id
+      )`,
+    ],
+  },
 ];
 
 export const LATEST_SCHEMA_VERSION = MIGRATIONS.at(-1)?.version ?? 0;
@@ -279,7 +298,9 @@ export function migrate(db: Database, migrations: readonly Migration[] = MIGRATI
     version INTEGER NOT NULL,
     updated_at TEXT NOT NULL
   )`);
-  let version = schemaVersion(db);
+  // The table exists by now: no need for schemaVersion's look at sqlite_master,
+  // which reads one row per table and index on every wake of the object.
+  let version = storedVersion(db);
   for (const migration of migrations) {
     if (migration.version <= version) continue;
     db.transaction(() => {
@@ -300,5 +321,9 @@ export function migrate(db: Database, migrations: readonly Migration[] = MIGRATI
 export function schemaVersion(db: Database): number {
   const hasTable = db.one(`SELECT 1 AS found FROM sqlite_master WHERE type = 'table' AND name = 'zur_schema_version'`);
   if (!hasTable) return 0;
+  return storedVersion(db);
+}
+
+function storedVersion(db: Database): number {
   return db.one<{ version: number }>(`SELECT version FROM zur_schema_version WHERE id = 1`)?.version ?? 0;
 }
