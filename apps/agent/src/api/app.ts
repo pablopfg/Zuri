@@ -1,9 +1,16 @@
+import type { Locale } from "@zuri/shared";
 import { Hono } from "hono";
 import type { WorkerEnv } from "../env.ts";
 import { AppError, errorResponse } from "../http/errors.ts";
 
 export interface ApiEnv {
   Bindings: WorkerEnv;
+}
+
+/** What the API needs from the Durable Object that runs it. */
+export interface ApiDeps {
+  /** The owner's language, for error messages. Must not throw. */
+  locale(): Locale;
 }
 
 /**
@@ -14,11 +21,11 @@ export interface ApiEnv {
  * public ones; everything after it needs a credential. Until sessions exist
  * (step 3) no credential is accepted, so every other route answers 401.
  */
-export function createApi() {
+export function createApi(deps: ApiDeps) {
   const app = new Hono<ApiEnv>().basePath("/api");
 
-  app.onError((error) => errorResponse(error));
-  app.notFound(() => errorResponse(new AppError("NOT_FOUND")));
+  app.onError((error) => errorResponse(error, deps.locale()));
+  app.notFound(() => errorResponse(new AppError("NOT_FOUND"), deps.locale()));
 
   // Public: says only whether the Worker is up and configured (the Worker already
   // answered NOT_CONFIGURED if not). Never data, never which setting is missing.

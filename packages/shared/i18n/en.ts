@@ -13,4 +13,6 @@ export const en: Messages = {
   "error.notFound": "Not found.",
   "error.notConfigured": "Zuri is not fully set up yet.",
   "error.internal": "Something went wrong. Your data is safe; please try again.",
+  "error.validationFailed": "Check the data you sent.",
+  "format.dateTime": "{date} at {time}",
 };

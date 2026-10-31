@@ -81,6 +81,59 @@ O que acontece quando falta algo:
   inclusive `GET /api/health`, responde 503 `NOT_CONFIGURED`, sem dizer qual
   valor falta.
 
+## Modelo de dados
+
+O banco é o SQLite do Durable Object `ZuriAgent`. As tabelas do Zuri começam
+com `zur_` e nunca encostam nas `cf_agents_*` do Agents SDK. O banco é criado
+sob demanda: a primeira requisição que precisa dele aplica as migrations
+pendentes. `GET /api/health` não abre o banco.
+
+As migrations ficam em `apps/agent/src/db/migrations.ts` e só crescem. Cada uma
+roda numa transação junto com o aumento de versão em `zur_schema_version`; se
+falhar, nada dela fica gravado e a próxima requisição tenta de novo. Um teste
+recusa `DROP`, `DELETE FROM`, `RENAME` e qualquer menção a `cf_agents_`, e outro
+fixa o hash de cada migration já mesclada, para ninguém editar uma antiga.
+
+| Versão | Tabela | Para quê | Backup |
+| --- | --- | --- | --- |
+| — | `zur_schema_version` | Versão aplicada (uma linha) | não |
+| 1 | `zur_settings` | Uma linha por configuração alterada, valor em JSON | só as chaves não sensíveis (etapa 23) |
+| 1 | `zur_activity` | Registro de atividade: quando, o quê e detalhes sem segredos | não |
+
+### Configurações
+
+`SettingsRepository` (`apps/agent/src/db/settings.ts`) devolve as
+configurações com os padrões preenchidos: idioma `pt-BR` e o fuso de
+`DEFAULT_TIMEZONE` (`America/Sao_Paulo` se a variável faltar ou for inválida).
+Só os campos alterados viram linha no banco. Um valor guardado que deixou de
+ser válido é lido como o padrão. Mudança inválida volta como
+`VALIDATION_FAILED`, com o nome dos campos e nunca o valor enviado, e cada
+mudança real fica no registro de atividade (só os nomes dos campos).
+
+Teto do banco: 900 MB, abaixo do limite de 1 GB por Durable Object com SQLite
+no plano Free (FAQ de limites da Cloudflare, conferido em 31/10/2026; a conta
+inteira tem 5 GB). `Database.size()` lê o tamanho; a recusa com
+`STORAGE_LIMIT_REACHED` chega com os limites por tipo (etapa 23).
+
+## Idiomas
+
+Todo texto visível sai do catálogo em `packages/shared/i18n/{pt-BR,en}.ts`.
+`t(locale, chave, params)` interpola `{nome}`; `plural(locale, base, n)` usa
+`Intl.PluralRules` e as chaves `<base>.one` e `<base>.other`. Datas e valores
+usam `formatDateTime` e `formatUsd` (`30/10/2026 às 15:16`, `US$ 1,25`).
+
+Os erros da API saem no idioma das configurações quando passam pelo Durable
+Object. As recusas dos portões do Worker (host, HTTPS, Access, configuração)
+saem em pt-BR: elas acontecem antes de o objeto acordar, e acordá-lo só para
+ler o idioma de uma requisição recusada não vale o custo.
+
+O lint de i18n (`scripts/lint-i18n.ts`, roda no `npm run lint` e no job `i18n`)
+falha com chave faltando num idioma, tradução vazia, chave sem uso e texto
+visível escrito fora do catálogo: texto JSX, os atributos `title`,
+`aria-label`, `placeholder` e `alt`, e os argumentos de `new AppError(...)`.
+Exceções ficam em `i18n-ignore.json`, cada uma com arquivo, texto e motivo; uma
+exceção que não corresponde a mais nada também faz o lint falhar.
+
 ## Observabilidade
 
 Os Workers Logs ficam ligados, sem corpo de requisição e com a query string
