@@ -44,6 +44,7 @@ import {
 import { type ChatDeps, registerChatRoutes } from "./chat.ts";
 import { registerMemoryRoutes } from "./memory.ts";
 import { registerProductivityRoutes } from "./productivity.ts";
+import { log } from "../log.ts";
 
 export interface ApiEnv {
   Bindings: WorkerEnv;
@@ -102,7 +103,7 @@ const WHILE_SECOND_STEP_SETUP = new Set([
 export function createApi(deps: ApiDeps) {
   const app = new Hono<ApiEnv>().basePath("/api");
 
-  app.onError((error) => errorResponse(error, deps.locale()));
+  app.onError((error, c) => errorResponse(error, deps.locale(), c.req.raw));
   app.notFound(() => errorResponse(new AppError("NOT_FOUND"), deps.locale()));
 
   // Public: says only whether the Worker is up and configured. Never data, never
@@ -110,7 +111,7 @@ export function createApi(deps: ApiDeps) {
   app.get("/health", () => {
     // Configured: a password exists, or the first access can still be done with the code.
     if (!deps.passwordSecretSet() && deps.setupCodeSet?.() !== true && !deps.auth().passwordConfigured()) {
-      console.warn(JSON.stringify({ message: "not configured: set SETUP_CODE for the first access" }));
+      log("warn", "not_configured", { secrets: ["SETUP_CODE"] });
       throw new AppError("NOT_CONFIGURED");
     }
     return Response.json({ ok: true });

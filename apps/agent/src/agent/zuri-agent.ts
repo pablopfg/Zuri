@@ -20,6 +20,7 @@ import { ConversationRepository } from "../chat/conversations.ts";
 import { TaskPlanService } from "../chat/plans.ts";
 import { MemoryService } from "../memory/service.ts";
 import { Productivity } from "../productivity/index.ts";
+import { log } from "../log.ts";
 import type { ToolContext } from "../tools/registry.ts";
 import { AgentRunner } from "./runner.ts";
 
@@ -213,7 +214,7 @@ export class ZuriAgent extends Agent<WorkerEnv> {
     } catch (error) {
       // Only the name: the message may quote SQL or data. Without this line a
       // broken migration would hide behind answers that still look normal.
-      console.error(JSON.stringify({ message: "settings unreadable", error: error instanceof Error ? error.name : typeof error }));
+      log("error", "settings_unreadable", { error });
       return DEFAULT_LOCALE;
     }
   }

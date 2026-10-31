@@ -138,7 +138,7 @@ describe("API errors in the owner's language", () => {
     expect((await errorBody(res)).message).toBe("Entre para continuar.");
     // Put the table back so a test added after this one finds a whole database.
     await inOwner((_agent, db) => db.run(`ALTER TABLE zur_settings_gone RENAME TO zur_settings`));
-    expect(log).toHaveBeenCalledWith(JSON.stringify({ message: "settings unreadable", error: "Error" }));
+    expect(log).toHaveBeenCalledWith(JSON.stringify({ level: "error", event: "settings_unreadable", error: "Error" }));
     expect(JSON.stringify(log.mock.calls)).not.toMatch(/zur_settings|SELECT/);
     log.mockRestore();
   });

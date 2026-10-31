@@ -1,4 +1,5 @@
 import { MAX_TURNSTILE_TOKEN_LENGTH } from "@zuri/shared";
+import { log } from "../log.ts";
 
 /**
  * Cloudflare Turnstile, the "not a robot" check on every sign-in (the owner's
@@ -81,7 +82,8 @@ export function createTurnstile(
   if (!keys) {
     // Names only, never values. Outside development this means the sign-in is closed.
     if (siteKey?.trim() || secretKey?.trim()) {
-      console.warn(JSON.stringify({ message: "turnstile off: set both keys (10-128 letters, digits, - or _), never Cloudflare's test keys in production" }));
+      // Both keys: 10-128 letters, digits, - or _, never Cloudflare's test keys in production.
+      log("warn", "turnstile_misconfigured", { secrets: ["TURNSTILE_SITE_KEY", "TURNSTILE_SECRET_KEY"] });
     }
     return null;
   }
