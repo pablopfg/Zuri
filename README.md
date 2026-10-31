@@ -176,6 +176,8 @@ npm ci
 npm run dev        # agente + interface com IA simulada
 ```
 
+Antes do primeiro `npm run dev`, crie o `apps/agent/.dev.vars` com valores locais, como explica [docs/arquitetura.md](docs/arquitetura.md#desenvolvimento-local).
+
 | Comando | Para quê |
 | --- | --- |
 | `npm run typecheck` | TypeScript em todos os pacotes |

@@ -39,3 +39,11 @@ SOFTWARE.
 A configuração da CI, dos rulesets e do Dependabot segue o desenho do Talorys
 (`.github/workflows/ci.yml`, `.github/workflows/branch-policy.yml`,
 `.github/rulesets/` e `.github/dependabot.yml`), adaptado às regras do Zuri.
+
+## Etapa 1
+
+Adaptados do Talorys: a verificação do token do Cloudflare Access
+(`apps/agent/src/auth/access.ts` → `apps/agent/src/gates/access.ts`), os
+cabeçalhos da interface e as regras de cache (`apps/agent/src/web-headers.ts` →
+`apps/agent/src/gates/headers.ts`) e o desenho dos portões da entrada do Worker
+(`apps/agent/src/index.ts`).
