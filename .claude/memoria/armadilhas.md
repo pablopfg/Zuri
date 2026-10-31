@@ -169,6 +169,14 @@ acrescente aqui cada armadilha nova que encontrar (sem dados pessoais).
   `strictExecutionOrder`, `preserveEntrySignatures`, grupos em
   `codeSplitting`) não resolveram. Rode `npm run size` a cada import novo e
   compare a lista de arquivos com a da develop.
+- O bundler põe cada módulo inteiro num pedaço só. Um módulo de
+  `packages/shared` que o pacote inicial importa (como `settings.ts`, por causa
+  de `isTimeZone`) leva para o primeiro carregamento tudo o que uma tela sob
+  demanda usar dele ou dos módulos que ele importa. Na etapa 8, isso pôs 0,7 KB
+  da aba IA no `ui-*.js`. A saída foi separar: `time-zone.ts` (o que o
+  início precisa), `ai-limits.ts` (o mínimo das configurações) e `ai.ts` (o
+  resto, só na tela). Também `formatUsd` de `format.ts` entrou no inicial ao
+  ser usado só pela aba: formate na própria tela.
 
 ## Navegador e CSP
 
@@ -185,6 +193,10 @@ acrescente aqui cada armadilha nova que encontrar (sem dados pessoais).
 
 ## Ambiente de nuvem
 
+- Com o binding `ai` no `wrangler.jsonc`, `wrangler dev` sem `--local` tenta
+  abrir uma sessão remota e falha sem `CLOUDFLARE_API_TOKEN`. `npm run dev` e o
+  servidor do e2e usam `--local`: o binding fica "not supported" e o agente usa
+  a IA simulada (PUBLIC_URL de loopback).
 - O e2e e o Lighthouse precisam de Node 26 e de
   `PLAYWRIGHT_CHROMIUM_EXECUTABLE=/opt/pw-browsers/chromium-*/chrome-linux*/chrome`.
 - O Biome lê a pasta `coverage/` se ela existir; ela está fora do lint em

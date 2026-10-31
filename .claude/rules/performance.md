@@ -17,7 +17,7 @@ Vale para todo código. Números, medidas e o porquê de cada regra: `docs/arqui
 - **P4.** Escrita custa: cada índice e gatilho soma uma linha. Não grave o que não mudou; rota frequente escreve no máximo uma vez por minuto; agrupe em transação. `setAlarm` conta uma escrita.
 - **P5.** O Durable Object precisa poder hibernar: nada de `setTimeout`, `setInterval`, WebSocket padrão ou `fetch`/`waitUntil` sem fim (I/O travado segura o objeto até 15 min; toda chamada externa tem prazo). Espera é `this.schedule`; `keepAliveWhile` só durante o trabalho.
 - **P6.** Worker fino (10 ms de CPU): portões e um repasse ao objeto por requisição, sem RPC extra. Hash, cifra, Markdown e JSON grande rodam no objeto.
-- **P7.** Workers AI: estime os Neurons pela tabela de preços datada e confira o teto diário antes de chamar (cota: 10.000/dia). Sem nova tentativa automática; embedding de um texto só uma vez.
+- **P7.** Workers AI: estime os Neurons pela tabela de preços datada e confira o teto diário único de 9.000 Neurons antes de chamar (cota: 10.000/dia; decisão do Pablo). Sem nova tentativa automática; embedding de um texto só uma vez.
 - **P8.** Tarefas periódicas dividem um agendamento; nunca um alarme por item (cada disparo do SDK grava 4 a 5 linhas; `keepAliveWhile` bate a cada 30 s). Passo de Workflow abaixo de 10 ms de CPU.
 - **P9.** Subrequisições contadas por turno, parada antes de 45; até 6 conexões simultâneas.
 - **P10.** O log de invocação já é o evento da requisição: nada de `console.log` no caminho comum nem em laço; traces desligados.

@@ -30,6 +30,9 @@ describe("GET /api/health", () => {
       memories: () => {
         throw new Error("not used");
       },
+      aiUsage: () => {
+        throw new Error("not used");
+      },
       passwordSecretSet: () => false,
       origin: () => ORIGIN,
       development: () => false,

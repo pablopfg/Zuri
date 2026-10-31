@@ -19,6 +19,10 @@ const STORAGE_KEYS = {
   sessionPresenceMinutes: "session_presence_minutes",
   sessionMaxHours: "session_max_hours",
   memoryConflictReview: "memory_conflict_review",
+  aiModel: "ai_model",
+  aiRequestsPerDay: "ai_requests_per_day",
+  aiNeuronsPerDay: "ai_neurons_per_day",
+  aiMaxOutputTokens: "ai_max_output_tokens",
 } as const satisfies Record<keyof Settings, string>;
 
 type Field = keyof Settings;

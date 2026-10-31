@@ -99,6 +99,19 @@ o [SemVer](https://semver.org/lang/pt-BR/). Cada PR escreve a sua entrada em
 - Cada página dá nome à aba do navegador, como "Segurança · Configurações ·
   Zuri".
 - A lista de notas vazia tem o próprio botão "Nova nota".
+- Provedor de IA com medição de uso (etapa 8): o Zuri chama o Workers AI
+  (modelo padrão `@cf/zai-org/glm-4.7-flash`, raciocínio desligado, sem novas
+  tentativas) e conta cada chamada antes de fazê-la. Com o teto diário único
+  de 9.000 Neurons (conversa, voz e busca juntas), o pedido é recusado com um
+  aviso claro antes de gastar, e a conta fica dentro da cota grátis de 10.000.
+  Chamadas que falham ou são interrompidas no meio também entram na conta.
+  Uma resposta que passa de 120 s é cancelada com aviso, e depois do botão
+  Parar nenhuma chamada nova ao modelo começa. No desenvolvimento local, uma IA simulada responde sem gastar nada.
+- Aba **IA** nas Configurações: uso de hoje (Neurons, pedidos e áudio contra
+  os limites, custo estimado, falhas e interrupções), uso por modelo, os
+  últimos 7 dias e a hora em que a cota renova. Ali se escolhe o modelo e se
+  mudam os limites de pedidos, de Neurons e o tamanho da resposta.
+- Rota `GET /api/usage` (detalhes em `docs/ia.md`).
 
 ### Alterado
 
@@ -209,6 +222,10 @@ o [SemVer](https://semver.org/lang/pt-BR/). Cada PR escreve a sua entrada em
 
 ### Atualização
 
+- Migration 7 cria `zur_usage_daily` e `zur_model_usage_daily`, só com
+  contadores de uso da IA (nenhum texto), guardados por 90 dias. Nada muda nos
+  dados que já existem. O Worker passa a declarar o binding `AI` (Workers AI,
+  já previsto na especificação e dentro do plano gratuito).
 - ⚠️ **Ação necessária antes do próximo deploy:** crie um widget do Turnstile
   (gratuito) e grave `TURNSTILE_SITE_KEY` e `TURNSTILE_SECRET_KEY` como
   segredos do Worker. Sem eles o login responde "falta configurar a

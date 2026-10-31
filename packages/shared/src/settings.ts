@@ -3,23 +3,11 @@ import "./zod-config.ts";
 
 import { z } from "zod";
 import { DEFAULT_LOCALE, LOCALES } from "../i18n/index.ts";
+import { AI_LIMIT_RANGES, CHAT_MODEL_IDS, DEFAULT_CHAT_MODEL } from "./ai-limits.ts";
 
-/** The owner's time zone until changed in Settings. */
-export const DEFAULT_TIME_ZONE = "America/Sao_Paulo";
+import { DEFAULT_TIME_ZONE, isTimeZone } from "./time-zone.ts";
 
-/** IANA names are short ASCII paths ("America/Sao_Paulo", "Etc/GMT+3", "UTC"). */
-const TIME_ZONE_SHAPE = /^[A-Za-z][A-Za-z0-9_+-]*(\/[A-Za-z0-9_+-]+){0,2}$/;
-
-/** True when the runtime's Intl knows the zone; a typo would otherwise throw on every formatted date. */
-export function isTimeZone(value: string): boolean {
-  if (value.length > 64 || !TIME_ZONE_SHAPE.test(value)) return false;
-  try {
-    new Intl.DateTimeFormat("en-US", { timeZone: value });
-    return true;
-  } catch {
-    return false;
-  }
-}
+export { DEFAULT_TIME_ZONE, isTimeZone };
 
 /**
  * Automatic sign-out (step 3): minutes without use, minutes without any open
@@ -43,6 +31,11 @@ export const settingsSchema = /* @__PURE__ */ z
     sessionMaxHours: range(SESSION_TIMEOUT_RANGES.sessionMaxHours),
     /** Step 7: look for older memories a new one may replace or contradict (rules only, no AI). */
     memoryConflictReview: z.boolean(),
+    /** Step 8: the chat model and the daily AI limits, counted before every call. */
+    aiModel: z.enum(CHAT_MODEL_IDS),
+    aiRequestsPerDay: range(AI_LIMIT_RANGES.aiRequestsPerDay),
+    aiNeuronsPerDay: range(AI_LIMIT_RANGES.aiNeuronsPerDay),
+    aiMaxOutputTokens: range(AI_LIMIT_RANGES.aiMaxOutputTokens),
   })
   .strict();
 
@@ -56,11 +49,15 @@ export const settingsUpdateSchema = /* @__PURE__ */ settingsSchema
 
 export type SettingsUpdate = z.infer<typeof settingsUpdateSchema>;
 
-export const DEFAULT_SETTINGS: Settings = Object.freeze({
+export const DEFAULT_SETTINGS: Settings = /* @__PURE__ */ Object.freeze({
   language: DEFAULT_LOCALE,
   timeZone: DEFAULT_TIME_ZONE,
   sessionIdleMinutes: SESSION_TIMEOUT_RANGES.sessionIdleMinutes.default,
   sessionPresenceMinutes: SESSION_TIMEOUT_RANGES.sessionPresenceMinutes.default,
   sessionMaxHours: SESSION_TIMEOUT_RANGES.sessionMaxHours.default,
   memoryConflictReview: true,
+  aiModel: DEFAULT_CHAT_MODEL,
+  aiRequestsPerDay: AI_LIMIT_RANGES.aiRequestsPerDay.default,
+  aiNeuronsPerDay: AI_LIMIT_RANGES.aiNeuronsPerDay.default,
+  aiMaxOutputTokens: AI_LIMIT_RANGES.aiMaxOutputTokens.default,
 });

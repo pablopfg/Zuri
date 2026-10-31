@@ -22,9 +22,17 @@ etapas ficam detalhadas; as mais antigas viram uma linha na tabela.
 | 4 | mesclada (31/10/2026) | #9 | 2FA TOTP, códigos de recuperação, desafio em cookie, passkeys reutilizáveis |
 | 5 | mesclada (31/10/2026) | #10 | Casca da interface: login com 2FA, guarda de sessão, configurações, PWA (fecha a fase A) |
 | 6 | mesclada (31/10/2026) | #12 | Tarefas, notas (Markdown, FTS5), projetos, lixeira de 30 dias, limites por tipo |
-| 7 | PR aberto (31/10/2026) | ver PR da branch `feat/etapa-07-memoria-historico` | Memória com estados atual/incerta/passada, substituição sem ciclos, fila de revisão, recordação em `<data>` |
+| 7 | mesclada (31/10/2026) | #21 | Memória com estados atual/incerta/passada, substituição sem ciclos, fila de revisão, recordação em `<data>` |
+| 8 | mesclada (31/10/2026) | ver PR da branch `feat/etapa-08-provedor-ia` | Provedor Workers AI e IA simulada, medição por passo, teto de 9.000 Neurons/dia, aba IA |
 
 ## Últimas etapas (detalhe)
+
+### Etapa 8 · Provedor de IA e medição de uso
+- Entregou: `packages/shared/src/{ai,ai-limits,time-zone}.ts` (modelos, preços datados de 31/10/2026, `usageReportSchema`), `apps/agent/src/ai/` (`provider`, `workers-ai`, `workers-ai-usage`, `mock`, `usage`, `metered`, `index`), `GET /api/usage`, aba `/configuracoes/ia` (`AiTab.tsx`, `hooks/usage.ts`), binding `AI` no `wrangler.jsonc`. Doc: `docs/ia.md`.
+- Migrations: versão 7 (`zur_usage_daily`, `zur_model_usage_daily`, só contadores, 90 dias).
+- Decisões técnicas: todo uso de IA passa por `MeteredAI` (reserva o máximo antes, acerta por passo com os tokens da Cloudflare, devolve o que não começou); dias UTC; `maxRetries: 0`; prazo de 120 s por vez; ao fim da vez o medidor fecha e nenhuma chamada nova começa; `enable_thinking: false` só em GLM e Qwen3; IA simulada quando `PUBLIC_URL` é loopback, e `wrangler dev --local` em dev e e2e.
+- Ficou para depois: janela de contexto por modelo (Llama 3.3 70B tem 24 mil tokens); limitar o tamanho do resultado de ferramenta; transcrição e embeddings usam `reserveAudio`/`stepNeurons` quando chegarem (etapas da voz e da busca).
+- Atenção para a próxima: a etapa 9 chama `agent.ai()` (sempre `MeteredAI`, nunca o provedor cru), passa `signal` do botão Parar e trata `AI_LIMIT_REACHED` e `SERVICE_UNAVAILABLE` (`error.ai*`) no SSE. Senha recente para trocar modelo só na etapa 21 (`aiModel` em `SESSION_FIELDS`).
 
 ### Etapa 7 · Memória e histórico
 - Entregou: `packages/shared/src/memory.ts` (schemas e limites), `apps/agent/src/memory/` (`text`, `conflict`, `intent`, `dates`, `repository`, `lifecycle`, `service`, `recall`), `apps/agent/src/agent/data.ts` (`dataLine`, `neutralize`), rotas `/api/memories*`, tela `/memoria` com fila "Para revisar", chave `memoryConflictReview` nas configurações. Doc: `docs/memoria.md`.
@@ -32,13 +40,6 @@ etapas ficam detalhadas; as mais antigas viram uma linha na tabela.
 - Decisões técnicas: conflito só por regras (sem IA/Clef); regras nunca aposentam memória, só abrem revisão (máx. 500 pendentes); apagar é definitivo (sem lixeira, sem log); fato que vira passado leva as revisões; editar/restaurar para texto de outra atual = 409; busca ranqueia nas 200 ocorrências mais novas (conflito: 50); `fold` só tira acentos latinos.
 - Ficou para depois: verificação de conflito por IA; paginação além de 200 por filtro (o resto aparece na busca); importar backup usa `cleanImportedLinks` e precisa `rebuild` do FTS (etapa 23).
 - Atenção para a próxima: etapa 9 liga `selectRelevantMemories` + `memoryPromptSection` (orçamento `memoryTokenBudget`) ao runner; `remember` → `create`, `update_memory` → `correct`; `update` sem histórico e revisão `replace`/`cancel` só como `destructive` (`.claude/rules/ferramentas.md`). Todo conteúdo guardado no prompt passa por `dataLine`.
-
-### Etapa 6 · Tarefas, notas e projetos
-- Entregou: `packages/shared/src/{dates,productivity}.ts` (datas checadas campo a campo, `zonedTimeToUtc`, schemas estritos), `apps/agent/src/productivity/` (`TaskRepository`, `NoteRepository`, `ProjectRepository`, `Trash`, `StorageGuard`, `search.ts`), rotas `/api/tasks`, `/api/notes`, `/api/projects`, `/api/trash`; telas `/tarefas`, `/notas/:id?`, lixeira na aba Dados; `components/Markdown.tsx`. Doc: `docs/produtividade.md`.
-- Migrations: versão 4 (`zur_projects`, `zur_tasks`, `zur_notes` + `zur_notes_fts`, `zur_trash`, `zur_counts` com gatilhos).
-- Decisões técnicas: busca de tarefas por `instr(lower(col), ?)` e não `LIKE` (o DO recusa padrão de LIKE acima de 50 bytes; CF-6-01); limite por tipo lido de `zur_counts`; edição que cresce em bytes respeita o teto de 900 MB; lixeira guarda cópia JSON e restaura por lista fixa de colunas; prazo só com dia vale 23:59 no fuso do dono; Markdown com react-markdown 10.1.0 + remark-gfm 4.0.1, sem HTML, links só http/https/mailto.
-- Ficou para depois: a busca de tarefas ainda varre a tabela (Todas e Próximas ganharam índice na migration 5, PR de performance).
-- Atenção para a próxima: as ferramentas da etapa 9 chamam os repositórios (que validam de novo com Zod); conteúdo de notas e tarefas entra no prompt em `<data>`; memória (etapa 7) pode reusar `search.ts` (`ftsQuery`, `asciiLower`) e o padrão de `zur_counts`.
 
 <!-- Modelo, até 10 linhas por etapa:
 ### Etapa NN · <nome>
@@ -63,7 +64,7 @@ etapas ficam detalhadas; as mais antigas viram uma linha na tabela.
 
 <!-- Itens "▶ Antes, você fornece" das próximas etapas e perguntas abertas. -->
 
-- Não travam: teto diário único de Neurons (os padrões de IA e áudio passam da cota de 10.000; afeta a etapa 8) e busca de tarefas por FTS5. Ver `docs/arquitetura/orcamento-free-tier.md`, "Para o Pablo".
+- Feito na etapa 8: teto único de 9.000 Neurons/dia. Não trava: busca de tarefas por FTS5. Ver `docs/arquitetura/orcamento-free-tier.md`, "Para o Pablo".
 - Toda etapa segue `.claude/rules/performance.md` (P1 a P14) e preenche "Custo no plano Free" no PR.
 
 - ⚠️ Antes do próximo deploy: criar o widget do Turnstile e gravar `TURNSTILE_SITE_KEY` e `TURNSTILE_SECRET_KEY` (docs/configuracao-cloudflare.md); sem eles o login fica fechado.
@@ -72,6 +73,6 @@ etapas ficam detalhadas; as mais antigas viram uma linha na tabela.
 
 ## Próxima etapa
 
-- Número e nome: 8 · Provedor de IA e medição de uso
-- Dependências mescladas: sim (etapas 6 e 7)
+- Número e nome: 9 · Chat com ferramentas
+- Dependências mescladas: sim (etapas 7 e 8)
 - Precisa de algo do Pablo antes: não

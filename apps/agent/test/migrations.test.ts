@@ -87,6 +87,7 @@ describe("the migration list", () => {
       4: "c66593e92a8fc765ad8096be69f544cac424de2a815e8eb3776dd4a98cc95ef7",
       5: "8c5284cbf1f107f27133133552387e56029c61885b3bc0d9940c2f8bd648fbf1",
       6: "fcebcd8e24cdf35cfa227b8e884e5a8fef72dd5858b886054fa7dade848e5730",
+      7: "975245f3b1af6fcdea2793c1cc14adf75da337311943fffb54de586f2ae81701",
     };
     for (const m of MIGRATIONS) {
       const digest = createHash("sha256").update(statementText(m).replace(/\r\n/g, "\n")).digest("hex");
@@ -102,7 +103,7 @@ describe("migrate", () => {
       expect(zurObjects(db)).toEqual([]);
 
       expect(migrate(db)).toBe(LATEST_SCHEMA_VERSION);
-      expect(schemaVersion(db)).toBe(6);
+      expect(schemaVersion(db)).toBe(7);
       // FTS5 keeps shadow tables of its own (zur_notes_fts_data and others): only ours are listed.
       expect(zurObjects(db).filter((name) => !/^table:zur_(notes|memories)_fts_/.test(name))).toEqual([
         "table:zur_activity",
@@ -146,6 +147,7 @@ describe("migrate", () => {
         "index:zur_memory_reviews_other",
         "table:zur_mfa_challenges",
         "table:zur_mfa_secrets",
+        "table:zur_model_usage_daily",
         "table:zur_notes",
         "table:zur_notes_fts",
         "trigger:zur_notes_fts_delete",
@@ -169,6 +171,7 @@ describe("migrate", () => {
         "table:zur_trash",
         "index:zur_trash_deleted",
         "index:zur_trash_expires",
+        "table:zur_usage_daily",
       ]);
     });
   });
@@ -258,11 +261,34 @@ describe("migrate", () => {
     });
   });
 
+  it("upgrades a database at version 6 to 7: the AI usage counters, the owner's data kept", async () => {
+    await withEmptyDatabase("from-6", (db) => {
+      expect(migrate(db, MIGRATIONS.slice(0, 6))).toBe(6);
+      db.run(`INSERT INTO zur_memories (id, content, dedupe_key, created_at, updated_at) VALUES ('m1', 'Moro em Curitiba', 1, 'x', 'x')`);
+      expect(migrate(db)).toBe(7);
+      expect(db.one(`SELECT content FROM zur_memories WHERE id = 'm1'`)).toEqual({ content: "Moro em Curitiba" });
+      db.run(`INSERT INTO zur_usage_daily (day) VALUES ('2026-10-31')`);
+      expect(db.one(`SELECT ai_requests, ai_errors, ai_aborted, audio_seconds, neurons, cost_usd FROM zur_usage_daily`)).toEqual({
+        ai_requests: 0,
+        ai_errors: 0,
+        ai_aborted: 0,
+        audio_seconds: 0,
+        neurons: 0,
+        cost_usd: 0,
+      });
+      db.run(`INSERT INTO zur_model_usage_daily (day, model, kind, billable) VALUES ('2026-10-31', 'm', 'chat', 1)`);
+      // One row per day, model, kind and billable: a second one is an upsert, never a duplicate.
+      expect(() => db.run(`INSERT INTO zur_model_usage_daily (day, model, kind, billable) VALUES ('2026-10-31', 'm', 'chat', 1)`)).toThrow();
+      expect(() => db.run(`INSERT INTO zur_model_usage_daily (day, model, kind, billable) VALUES ('2026-10-31', 'm', 'chat', 2)`)).toThrow();
+      expect(() => db.run(`INSERT INTO zur_usage_daily (day, neurons) VALUES ('2026-11-01', -0.5)`)).toThrow();
+    });
+  });
+
   it("upgrades a database at version 5 to 6: memories with full-text search, reviews and counters per status", async () => {
     await withEmptyDatabase("from-5", (db) => {
       expect(migrate(db, MIGRATIONS.slice(0, 5))).toBe(5);
       db.run(`INSERT INTO zur_notes (id, title, content, created_at, updated_at) VALUES ('n1', 'Nota', 'texto', 'x', 'x')`);
-      expect(migrate(db)).toBe(6);
+      expect(migrate(db, MIGRATIONS.slice(0, 6))).toBe(6);
       const count = (kind: string) => db.one<{ n: number }>(`SELECT n FROM zur_counts WHERE kind = ?`, kind)?.n;
       expect([count("notes"), count("memories"), count("memories_active"), count("memories_uncertain"), count("memories_historical"), count("memory_reviews")]).toEqual([
         1, 0, 0, 0, 0, 0,

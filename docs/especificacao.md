@@ -212,6 +212,7 @@ Todas as rotas ficam sob `/api`, recebem e devolvem JSON validado por Zod (`pack
 | 4 | POST `/api/auth/mfa`, POST `/api/auth/mfa/passkey/options`, POST `/api/auth/mfa/passkey` | CSRF + cookie MFA (`__Host-zuri_mfa`, 5 min) | `{code}` / — / `{response}` | 200 sessão; 401 `INVALID_CREDENTIALS` com `details.attemptsLeft`; 401 `UNAUTHORIZED` com `details.mfa: "expired"` (cookie apagado); 429 `RATE_LIMITED`; 404 sem passkey deste host |
 | 4 | GET `/api/auth/mfa`; POST `/api/auth/mfa/{setup,enable,disable,recovery-codes}` | sessão + CSRF + senha recente (menos o GET) | — / `{code}` | 200 `{enabled, enabledAt, recoveryCodesLeft}`; 200 `{secret, otpauthUri, expiresAt}`; 200 `{recoveryCodes}`; 204; 409 `CONFLICT` |
 | 4 | GET `/api/auth/passkeys`; POST `/api/auth/passkeys/options`, POST `/api/auth/passkeys`; PATCH e DELETE `/api/auth/passkeys/:id` | sessão + CSRF + senha recente (menos o GET) | — / `{name, response}` / `{name}` | 200 `{passkeys}` com `usableHere`; 201 `{passkey}`; 204; 404; 409 `CONFLICT` |
+| 8 | GET `/api/usage` | sessão + CSRF | — | 200 uso de hoje contra os limites, por modelo, e os últimos 7 dias (`usageReportSchema`) |
 | 9 | POST `/api/chat` (SSE), POST `/api/chat/cancel`, POST `/api/actions/:id/approve`, POST `/api/actions/:id/cancel` | sessão + CSRF | `{conversationId?, message}` | eventos SSE `text`, `tool`, `approval`, `done`, `error` |
 | 11 | POST `/api/auth/recover/request`, POST `/api/auth/recover/confirm` | nenhuma + limitador | `{email}` / `{token, password, totp?}` | 202 sempre no pedido; 204; 410 `RECOVERY_EXPIRED` |
 | 12 | POST `/api/telegram/webhook` | cabeçalho secreto | atualização (máx. 64 KB) | 200 sempre; 403 sem cabeçalho; 413 acima de 64 KB |
@@ -258,6 +259,7 @@ Valores conferidos em `packages/shared/src/constants.ts` e `storage.ts` do Talor
 
 | Constante | Padrão | Faixa |
 | --- | --- | --- |
+| Neurons do Workers AI por dia (teto único de chat, voz e embeddings) | 9.000 | 1.000 a 9.000 |
 | Pedidos de IA por dia | 200 | até 2.000 |
 | Execuções de IA agendadas por dia | 6 | até 48 |
 | Chamadas de ferramenta por turno | 6 | até 20 |
@@ -279,7 +281,7 @@ Valores conferidos em `packages/shared/src/constants.ts` e `storage.ts` do Talor
 
 ### Modelos do Workers AI
 
-Chat: `@cf/zai-org/glm-4.7-flash`. Transcrição: `@cf/openai/whisper-large-v3-turbo`. Embeddings: `@cf/baai/bge-m3`. São os padrões do Talorys em 30/10/2026; o agente confere os ids e os preços em Neurons no catálogo atual da Cloudflare antes da etapa 8 e grava a tabela de preços com a data. O plano Free dá 10.000 Neurons por dia.
+Chat: `@cf/zai-org/glm-4.7-flash`. Transcrição: `@cf/openai/whisper-large-v3-turbo`. Embeddings: `@cf/baai/bge-m3`. São os padrões do Talorys em 30/10/2026; o agente confere os ids e os preços em Neurons no catálogo atual da Cloudflare antes da etapa 8 e grava a tabela de preços com a data. O plano Free dá 10.000 Neurons por dia. Decisão do Pablo (31/10/2026): um teto único de 9.000 Neurons por dia vale para chat, voz e embeddings juntos. Cada chamada estima os Neurons antes e é recusada, com aviso claro, se passar do teto; os limites por recurso (pedidos, áudio, embeddings) continuam valendo abaixo dele. O teto zera às 00:00 UTC, junto com a cota da Cloudflare.
 
 ### Prompt de sistema
 

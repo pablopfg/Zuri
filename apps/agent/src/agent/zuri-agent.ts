@@ -1,5 +1,7 @@
 import { DEFAULT_LOCALE, isBreachedPassword, isPasswordHash, type Locale } from "@zuri/shared";
 import { Agent } from "agents";
+import { chooseProvider, MeteredAI, UsageMeter } from "../ai/index.ts";
+import type { AiLimits } from "../ai/usage.ts";
 import { createApi } from "../api/app.ts";
 import { AuthService } from "../auth/service.ts";
 import { createTurnstile, type Turnstile } from "../auth/turnstile.ts";
@@ -38,6 +40,7 @@ interface Store {
   auth: AuthService;
   productivity: Productivity;
   memories: MemoryService;
+  usage: UsageMeter;
 }
 
 /**
@@ -53,11 +56,41 @@ export class ZuriAgent extends Agent<WorkerEnv> {
     settings: () => this.store.settings,
     productivity: () => this.store.productivity,
     memories: () => this.store.memories,
+    aiUsage: () => this.store.usage.report(this.aiLimits(), this.development() ? "mock" : "workers-ai", this.store.settings.field("aiModel")),
     passwordSecretSet: () =>
       isPasswordHash(this.env.OWNER_PASSWORD_HASH) || (this.env.OWNER_PASSWORD?.length ?? 0) >= MIN_OWNER_PASSWORD_LENGTH,
     origin: () => this.publicUrl().origin,
-    development: () => parsePublicUrl(this.env.PUBLIC_URL)?.allowPlainHttp === true,
+    development: () => this.development(),
   });
+
+  private development(): boolean {
+    return parsePublicUrl(this.env.PUBLIC_URL)?.allowPlainHttp === true;
+  }
+
+  /** The owner's daily AI limits, read when a call is counted, so a change applies to the next one. */
+  aiLimits(): AiLimits {
+    // Three lookups by key, not the whole settings table: this runs before every model call.
+    const { settings } = this.store;
+    return {
+      requestsPerDay: settings.field("aiRequestsPerDay"),
+      neuronsPerDay: settings.field("aiNeuronsPerDay"),
+      maxOutputTokens: settings.field("aiMaxOutputTokens"),
+    };
+  }
+
+  /**
+   * The model, behind the meter: the only way to it (step 9 calls this). Built
+   * per use, so a change of model in the settings applies to the next turn.
+   */
+  ai(): MeteredAI {
+    const provider = chooseProvider({
+      development: this.development(),
+      binding: this.env.AI,
+      model: this.store.settings.field("aiModel"),
+      locale: () => this.locale(),
+    });
+    return new MeteredAI(provider, this.store.usage, () => this.aiLimits());
+  }
 
   /** The Worker refuses every request without a valid PUBLIC_URL, so one is always there by now. */
   private publicUrl(): URL {
@@ -97,7 +130,7 @@ export class ZuriAgent extends Agent<WorkerEnv> {
       // The trash's 30 days also end while nobody opens it: checked each time the object wakes.
       productivity.trash.purgeExpired();
       const memories = new MemoryService(db, productivity.storage, { conflictReview: () => settings.field("memoryConflictReview") });
-      this.#store = { db, settings, auth, productivity, memories };
+      this.#store = { db, settings, auth, productivity, memories, usage: new UsageMeter(db) };
     }
     return this.#store;
   }
