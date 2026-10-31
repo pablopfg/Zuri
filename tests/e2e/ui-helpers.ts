@@ -21,3 +21,14 @@ export async function expectAccessible(page: Page, label: string) {
     .map((v) => `${label}: ${v.id} (${v.nodes.map((n) => n.target.join(" ")).join(", ")})`);
   expect(serious).toEqual([]);
 }
+
+/** Visible controls under 44 px tall (the touch target the interface promises). */
+export function tooSmallControls(page: Page) {
+  return page.evaluate(() =>
+    [...document.querySelectorAll<HTMLElement>("button, a[href], select, input:not([type=radio])")]
+      // Visible ones only; the skip link is 1 px until focused, then a full-size target.
+      .filter((el) => el.offsetParent !== null && !el.classList.contains("sr-only"))
+      .map((el) => ({ text: el.textContent?.trim() || el.getAttribute("aria-label") || el.tagName, height: el.getBoundingClientRect().height }))
+      .filter((el) => el.height < 44),
+  );
+}

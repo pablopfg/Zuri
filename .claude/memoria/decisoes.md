@@ -51,3 +51,4 @@ Fatos e decisões já tomados pelo Pablo. O agente não pergunta de novo nada da
 - Deploy feito pelo GitHub Actions, com o máximo possível pelo navegador (sem terminal para o Pablo).
 - Fuso padrão `America/Sao_Paulo`.
 - Recursos que podem gerar custo só com OK explícito.
+- Lixeira: apagar de vez e esvaziar pedem só a confirmação na tela, sem senha digitada de novo (31/10/2026, etapa 6).

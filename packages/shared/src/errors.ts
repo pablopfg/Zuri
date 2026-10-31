@@ -61,6 +61,7 @@ export const DEFAULT_ERROR_MESSAGE: Partial<Record<ApiErrorCode, MessageKey>> = 
   CONFLICT: "error.conflict",
   NOT_CONFIGURED: "error.notConfigured",
   VALIDATION_FAILED: "error.validationFailed",
+  STORAGE_LIMIT_REACHED: "error.storageFull",
   INTERNAL_ERROR: "error.internal",
 };
 

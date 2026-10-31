@@ -87,7 +87,7 @@ export function Card({ title, description, children, className, actions }: { tit
   );
 }
 
-const fieldClass =
+export const fieldClass =
   "min-h-11 w-full rounded-xl border border-border-strong bg-surface px-3 text-[15px] text-fg placeholder:text-fg-muted focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/30 aria-[invalid=true]:border-danger";
 
 export function TextField({ label, hint, error, className, ...rest }: ComponentProps<"input"> & { label: string; hint?: string; error?: string | null }) {
@@ -109,6 +109,23 @@ export function TextField({ label, hint, error, className, ...rest }: ComponentP
       {error && (
         <p id={errorId} className="text-sm text-danger">
           {error}
+        </p>
+      )}
+    </div>
+  );
+}
+
+export function TextAreaField({ label, hint, className, ...rest }: ComponentProps<"textarea"> & { label: string; hint?: string }) {
+  const id = useId();
+  return (
+    <div className={cn("space-y-1.5", className)}>
+      <label htmlFor={id} className="block text-sm font-medium">
+        {label}
+      </label>
+      <textarea id={id} className={cn(fieldClass, "min-h-28 py-2 leading-6")} aria-describedby={hint ? `${id}-hint` : undefined} {...rest} />
+      {hint && (
+        <p id={`${id}-hint`} className="text-xs leading-5 text-fg-muted">
+          {hint}
         </p>
       )}
     </div>

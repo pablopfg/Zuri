@@ -1,7 +1,8 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import { BrowserRouter } from "react-router";
+import { createBrowserRouter } from "react-router";
+import { RouterProvider } from "react-router/dom";
 import { App } from "./App.tsx";
 import { SessionProvider } from "./hooks/session.tsx";
 import { ApiError } from "./lib/api.ts";
@@ -21,18 +22,27 @@ const queryClient = new QueryClient({
   },
 });
 
+// A data router, though the routes stay in <App />: only it lets a page hold a
+// navigation back (useBlocker), as the note editor does with unsaved text.
+const router = createBrowserRouter([
+  {
+    path: "*",
+    element: (
+      <I18nProvider>
+        <SessionProvider>
+          <App />
+        </SessionProvider>
+      </I18nProvider>
+    ),
+  },
+]);
+
 const root = document.getElementById("root");
 if (root) {
   createRoot(root).render(
     <StrictMode>
       <QueryClientProvider client={queryClient}>
-        <BrowserRouter>
-          <I18nProvider>
-            <SessionProvider>
-              <App />
-            </SessionProvider>
-          </I18nProvider>
-        </BrowserRouter>
+        <RouterProvider router={router} />
       </QueryClientProvider>
     </StrictMode>,
   );

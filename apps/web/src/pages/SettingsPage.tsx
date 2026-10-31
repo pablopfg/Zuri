@@ -3,6 +3,7 @@ import { NavLink, Navigate, useParams } from "react-router";
 import { cn, PageHeader } from "../components/ui.tsx";
 import { useI18n } from "../lib/i18n.tsx";
 import { AccountTab } from "./settings/AccountTab.tsx";
+import { DataTab } from "./settings/DataTab.tsx";
 import { LaterTab } from "./settings/LaterTab.tsx";
 import { SecurityTab } from "./settings/SecurityTab.tsx";
 
@@ -60,7 +61,7 @@ export function SettingsPage() {
         {current === "integracoes" && (
           <LaterTab title={t("web.settings.tab.integrations")} body={t("web.settings.later.integrations")} icon={<Plug className="h-6 w-6" />} />
         )}
-        {current === "dados" && <LaterTab title={t("web.settings.tab.data")} body={t("web.settings.later.data")} icon={<Database className="h-6 w-6" />} />}
+        {current === "dados" && <DataTab />}
       </section>
     </>
   );

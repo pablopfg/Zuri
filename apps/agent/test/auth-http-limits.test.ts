@@ -15,6 +15,9 @@ function api(auth: AuthService) {
     settings: () => {
       throw new Error("not used");
     },
+    productivity: () => {
+      throw new Error("not used");
+    },
     passwordSecretSet: () => true,
     origin: () => ORIGIN,
     development: () => false,
