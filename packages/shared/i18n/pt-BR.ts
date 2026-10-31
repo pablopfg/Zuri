@@ -1,5 +1,6 @@
 import { ptBRMemory } from "./pt-BR-memory.ts";
 import { ptBRProductivity } from "./pt-BR-productivity.ts";
+import { ptBRAi } from "./pt-BR-ai.ts";
 import { ptBRSecurity } from "./pt-BR-security.ts";
 import { ptBRTwoStep } from "./pt-BR-two-step.ts";
 
@@ -162,7 +163,6 @@ export const ptBRCore = {
   "web.settings.tab.notifications": "Avisos",
   "web.settings.tab.integrations": "Integrações",
   "web.settings.tab.data": "Dados",
-  "web.settings.later.ai": "Modelos, limites de uso e memória chegam junto com o provedor de IA.",
   "web.settings.later.notifications": "Push, e-mail, Telegram e categorias de aviso chegam junto com a central de avisos.",
   "web.settings.later.integrations": "Servidores MCP e Google Agenda chegam numa próxima versão.",
   "web.settings.later.data": "Backup e uso do armazenamento chegam numa próxima versão.",
@@ -205,9 +205,9 @@ export const ptBRCore = {
 } as const;
 
 /** Joins catalog parts. Marked pure so a bundle that never uses the whole catalog drops the call. */
-function join<A extends object, B extends object, C extends object, D extends object, E extends object>(a: A, b: B, c: C, d: D, e: E): A & B & C & D & E {
-  return { ...a, ...b, ...c, ...d, ...e };
+function join<A extends object, B extends object, C extends object, D extends object, E extends object, F extends object>(a: A, b: B, c: C, d: D, e: E, f: F): A & B & C & D & E & F {
+  return { ...a, ...b, ...c, ...d, ...e, ...f };
 }
 
 /** The whole pt-BR catalog: what the server, the tests and the lint use. */
-export const ptBR = /* @__PURE__ */ join(ptBRCore, ptBRMemory, ptBRProductivity, ptBRSecurity, ptBRTwoStep);
+export const ptBR = /* @__PURE__ */ join(ptBRCore, ptBRMemory, ptBRProductivity, ptBRSecurity, ptBRAi, ptBRTwoStep);

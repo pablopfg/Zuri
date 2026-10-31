@@ -9,6 +9,15 @@ o [SemVer](https://semver.org/lang/pt-BR/). Cada PR escreve a sua entrada em
 
 ### Adicionado
 
+- README renovado com a identidade visual Sinal: banner que segue o tema
+  claro ou escuro do GitHub, selos da CI, capturas das telas atuais, o que já
+  funciona e o que vem a seguir, mapa das 26 etapas, arquitetura resumida e um
+  resumo em inglês.
+- `scripts/capturas-do-readme.ts` refaz as capturas do README em
+  `docs/capturas/`, com dados de exemplo.
+- Regra permanente `.claude/rules/readme.md`: todo PR que muda
+  funcionalidade, conclui etapa, muda uma tela das capturas ou a arquitetura
+  atualiza o README junto com o changelog.
 - Página **Acessos** na barra lateral: cada tentativa de entrar no Zuri, com
   IP, cidade, país, rede (ASN), navegador e o resultado (login, senha ou código
   errado, bloqueio, verificação contra robôs recusada). Filtros por período,
@@ -99,9 +108,24 @@ o [SemVer](https://semver.org/lang/pt-BR/). Cada PR escreve a sua entrada em
 - Cada página dá nome à aba do navegador, como "Segurança · Configurações ·
   Zuri".
 - A lista de notas vazia tem o próprio botão "Nova nota".
+- Provedor de IA com medição de uso (etapa 8): o Zuri chama o Workers AI
+  (modelo padrão `@cf/zai-org/glm-4.7-flash`, raciocínio desligado, sem novas
+  tentativas) e conta cada chamada antes de fazê-la. Com o teto diário único
+  de 9.000 Neurons (conversa, voz e busca juntas), o pedido é recusado com um
+  aviso claro antes de gastar, e a conta fica dentro da cota grátis de 10.000.
+  Chamadas que falham ou são interrompidas no meio também entram na conta.
+  Uma resposta que passa de 120 s é cancelada com aviso, e depois do botão
+  Parar nenhuma chamada nova ao modelo começa. No desenvolvimento local, uma IA simulada responde sem gastar nada.
+- Aba **IA** nas Configurações: uso de hoje (Neurons, pedidos e áudio contra
+  os limites, custo estimado, falhas e interrupções), uso por modelo, os
+  últimos 7 dias e a hora em que a cota renova. Ali se escolhe o modelo e se
+  mudam os limites de pedidos, de Neurons e o tamanho da resposta.
+- Rota `GET /api/usage` (detalhes em `docs/ia.md`).
 
 ### Alterado
 
+- O logo do README e o `CONTRIBUTING.md` usam a identidade Sinal; o
+  `CONTRIBUTING.md` explica como manter o README e as capturas em dia.
 - Os textos em pt-BR de Tarefas, Notas, Projetos, Lixeira e Acessos chegam
   junto com essas telas, como os da Memória, e não mais no pacote inicial. Com
   isso a tela de Memória entrou sem passar do teto de 140 KB (fica em 139,9 KB).
@@ -221,6 +245,10 @@ o [SemVer](https://semver.org/lang/pt-BR/). Cada PR escreve a sua entrada em
 
 ### Atualização
 
+- Migration 7 cria `zur_usage_daily` e `zur_model_usage_daily`, só com
+  contadores de uso da IA (nenhum texto), guardados por 90 dias. Nada muda nos
+  dados que já existem. O Worker passa a declarar o binding `AI` (Workers AI,
+  já previsto na especificação e dentro do plano gratuito).
 - ⚠️ **Ação necessária antes do próximo deploy:** crie um widget do Turnstile
   (gratuito) e grave `TURNSTILE_SITE_KEY` e `TURNSTILE_SECRET_KEY` como
   segredos do Worker. Sem eles o login responde "falta configurar a

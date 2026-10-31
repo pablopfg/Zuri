@@ -1,5 +1,6 @@
 import { en } from "./en.ts";
 import { ptBR, ptBRCore } from "./pt-BR.ts";
+import { ptBRAi } from "./pt-BR-ai.ts";
 import { ptBRMemory } from "./pt-BR-memory.ts";
 import { ptBRProductivity } from "./pt-BR-productivity.ts";
 import { ptBRSecurity } from "./pt-BR-security.ts";
@@ -16,10 +17,10 @@ export const catalogs: Record<Locale, Messages> = { "pt-BR": ptBR, en };
 
 /**
  * The default catalog. The server carries all of it (`ptBR`); the interface
- * starts with `ptBRCore` and adds a screen's part (`ptBRMemory`,
+ * starts with `ptBRCore` and adds a screen's part (`ptBRAi`, `ptBRMemory`,
  * `ptBRProductivity`, `ptBRSecurity`, `ptBRTwoStep`) when that screen loads.
  */
-export { ptBR, ptBRCore, ptBRMemory, ptBRProductivity, ptBRSecurity, ptBRTwoStep };
+export { ptBR, ptBRAi, ptBRCore, ptBRMemory, ptBRProductivity, ptBRSecurity, ptBRTwoStep };
 
 export type Params = Record<string, string | number>;
 

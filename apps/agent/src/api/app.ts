@@ -14,6 +14,7 @@ import {
   passkeyRenameSchema,
   SESSION_TIMEOUT_RANGES,
   settingsUpdateSchema,
+  type UsageReport,
 } from "@zuri/shared";
 import { type Context, Hono } from "hono";
 import { type ClientInfo, clientInfo } from "../auth/client.ts";
@@ -45,6 +46,8 @@ export interface ApiDeps {
   productivity(): Productivity;
   /** Memories with history, over the same database. */
   memories(): MemoryService;
+  /** Today's AI use against the limits (step 8). */
+  aiUsage(): UsageReport;
   /** True when a password secret is set, so the health check can answer without opening the database. */
   passwordSecretSet(): boolean;
   /** The owner's origin (PUBLIC_URL): the only Origin accepted. */
@@ -269,6 +272,9 @@ export function createApi(deps: ApiDeps) {
 
   registerProductivityRoutes(app, deps.productivity);
   registerMemoryRoutes(app, deps.memories);
+
+  // Step 8: what the AI used today and the last 7 days. Read only: the limits change through /settings.
+  app.get("/usage", () => Response.json(deps.aiUsage()));
 
   return app;
 }

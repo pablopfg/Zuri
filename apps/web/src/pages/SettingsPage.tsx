@@ -3,6 +3,7 @@ import { NavLink, Navigate, useParams } from "react-router";
 import { cn, PageHeader } from "../components/ui.tsx";
 import { useI18n } from "../lib/i18n.tsx";
 import { AccountTab } from "./settings/AccountTab.tsx";
+import { AiTab } from "./settings/AiTab.tsx";
 import { DataTab } from "./settings/DataTab.tsx";
 import { LaterTab } from "./settings/LaterTab.tsx";
 import { SecurityTab } from "./settings/SecurityTab.tsx";
@@ -58,7 +59,7 @@ export function SettingsPage() {
       <section aria-label={active?.label} className="space-y-6">
         {current === "conta" && <AccountTab />}
         {current === "seguranca" && <SecurityTab />}
-        {current === "ia" && <LaterTab title={t("web.settings.tab.ai")} body={t("web.settings.later.ai")} icon={<Bot className="h-6 w-6" />} />}
+        {current === "ia" && <AiTab />}
         {current === "avisos" && (
           <LaterTab title={t("web.settings.tab.notifications")} body={t("web.settings.later.notifications")} icon={<Bell className="h-6 w-6" />} />
         )}

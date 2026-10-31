@@ -25,6 +25,10 @@
     // gates as the API (host, HTTPS, Access, security headers).
     "run_worker_first": true
   },
+  // Workers AI (chat, transcription, embeddings). Every call is metered and
+  // checked against the daily Neuron cap first (rule P7); local development and
+  // the tests use the deterministic mock instead (src/ai/mock.ts).
+  "ai": { "binding": "AI" },
   "durable_objects": {
     "bindings": [{ "name": "AGENT", "class_name": "ZuriAgent" }]
   },
