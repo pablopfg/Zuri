@@ -8,11 +8,12 @@
     "node": ">=24"
   },
   "scripts": {
+    "dev": "npm run build -w @zuri/web && npm run dev -w @zuri/agent",
     "typecheck": "npm run typecheck --workspaces --if-present && tsc --noEmit -p tsconfig.json",
     "lint": "biome lint .",
     "test": "vitest run",
     "i18n": "vitest run --project shared i18n",
-    "build": "npm run build --workspaces --if-present",
+    "build": "npm run build -w @zuri/web && npm run build -w @zuri/agent",
     "test:e2e": "playwright test",
     "audit": "npm audit --audit-level=high"
   },

@@ -1,0 +1,51 @@
+// One Worker serves the web interface and the API, with one Durable Object
+// holding every piece of data in its SQLite (docs/especificacao.md, "Arquitetura
+// na Cloudflare"). Nothing here is secret or personal: the domain (PUBLIC_URL),
+// the secrets and the optional Access settings are set outside the repository.
+{
+  "$schema": "../../node_modules/wrangler/config-schema.json",
+  "name": "zuri",
+  // No usage data sent to Cloudflare by wrangler itself (no telemetry, rule 7).
+  "send_metrics": false,
+  "main": "src/index.ts",
+  // The newest date the pinned workerd (wrangler 4.153.0) supports. Moving it
+  // forward means reading the compatibility changes and running every test.
+  "compatibility_date": "2026-10-23",
+  "compatibility_flags": ["nodejs_compat"],
+  // Uploaded versions must never stay reachable on their own preview URLs.
+  "preview_urls": false,
+  // Off by default: the Worker answers only on the owner's Custom Domain, and
+  // the host gate refuses every other name anyway.
+  "workers_dev": false,
+  "assets": {
+    "directory": "../web/dist",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    // Every request meets the Worker first, so the interface passes the same
+    // gates as the API (host, HTTPS, Access, security headers).
+    "run_worker_first": true
+  },
+  "durable_objects": {
+    "bindings": [{ "name": "AGENT", "class_name": "ZuriAgent" }]
+  },
+  // Append only: never edit or reorder a migration tag.
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["ZuriAgent"] }],
+  "vars": {
+    "DEFAULT_TIMEZONE": "America/Sao_Paulo",
+    "AGENT_NAME": "Zuri"
+  },
+  // Declared for type generation and local warnings; their values are Worker
+  // secrets, never in this file.
+  "secrets": {
+    "required": ["SESSION_SECRET", "OWNER_PASSWORD_HASH", "OWNER_EMAIL", "PASSWORD_PEPPER"]
+  },
+  // Workers Logs only, without request or response bodies (the Worker never
+  // logs them) and without query strings, which may carry one-time tokens.
+  // Traces stay off: they count toward billed usage from 1/12/2026.
+  "observability": {
+    "enabled": true,
+    "redact_query_string": true,
+    "logs": { "enabled": true, "head_sampling_rate": 1, "invocation_logs": true },
+    "traces": { "enabled": false }
+  }
+}
