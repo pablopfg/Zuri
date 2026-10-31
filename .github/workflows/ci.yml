@@ -56,7 +56,8 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
       - run: npm ci
-      - run: npm test
+      # The whole suite with coverage; under the floors in vitest.config.ts it fails.
+      - run: npm run test:coverage
 
   i18n:
     runs-on: ubuntu-latest
@@ -102,6 +103,23 @@ jobs:
       - run: npm ci
       - run: npx playwright install --with-deps chromium
       - run: npm run test:e2e
+
+  # Lighthouse on the sign-in and the main screens, against the same Worker as
+  # e2e. Floors in tests/lighthouse/lighthouse.spec.ts (accessibility >= 95).
+  lighthouse:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:lighthouse
 
   # Reads only package-lock.json, so it needs no install. Fails on any
   # high or critical advisory in the dependency tree.

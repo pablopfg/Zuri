@@ -3,7 +3,11 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
-  "workspaces": ["packages/shared", "apps/agent", "apps/web"],
+  "workspaces": [
+    "packages/shared",
+    "apps/agent",
+    "apps/web"
+  ],
   "engines": {
     "node": ">=24"
   },
@@ -12,10 +16,12 @@
     "typecheck": "npm run typecheck --workspaces --if-present && tsc --noEmit -p tsconfig.json",
     "lint": "biome lint . && node scripts/lint-i18n.ts",
     "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
     "i18n": "node scripts/lint-i18n.ts && vitest run --project shared i18n",
     "build": "npm run build -w @zuri/web && npm run build -w @zuri/agent",
     "size": "node scripts/check-bundle-size.ts",
     "test:e2e": "playwright test",
+    "test:lighthouse": "playwright test -c playwright.lighthouse.config.ts",
     "audit": "npm audit --audit-level=high"
   },
   "devDependencies": {
@@ -23,6 +29,8 @@
     "@biomejs/biome": "2.6.2",
     "@playwright/test": "1.64.1",
     "@types/node": "26.6.5",
+    "@vitest/coverage-istanbul": "5.0.5",
+    "lighthouse": "13.5.0",
     "rolldown": "1.2.16",
     "typescript": "7.0.2",
     "vitest": "5.0.5",
