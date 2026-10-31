@@ -52,8 +52,18 @@ const CODE = /^[A-Z][A-Z_]{0,39}$/;
 // cf-ray: 16 hex digits, optionally followed by the data center (e.g. "-GRU").
 const RAY = /^[0-9a-f]{16}(?:-[A-Z]{3})?$/;
 const METHOD = /^[A-Z]{3,7}$/;
-// A path segment kept as is: a fixed route word ("auth", "memories", "login-options").
-const ROUTE_WORD = /^[a-z][a-z-]{0,29}$/;
+/**
+ * Path segments kept as they are: the words of the Worker's own routes. Any
+ * other segment, even a plain word, becomes ":id", because whoever types a URL
+ * chooses it (a name, something that looks like a password). A test checks that
+ * every route registered under `src/api/` is in this list.
+ */
+export const ROUTE_WORDS: ReadonlySet<string> = new Set([
+  "api", "activity", "actions", "ai", "approve", "auth", "cancel", "chat", "confirm", "correct", "disable",
+  "empty", "enable", "health", "heartbeat", "history", "login", "login-options", "logout", "memories", "mfa",
+  "notes", "options", "passkey", "passkeys", "password", "projects", "recovery-codes", "restore", "reviews",
+  "session", "settings", "setup", "status", "tasks", "telegram", "trash", "usage", "webhook",
+]);
 const MAX_SEGMENTS = 8;
 
 /** Builds the line without writing it (the tests check the shape here). */
@@ -102,7 +112,7 @@ function routeOf(request: Request | { method: string; path: string }): string | 
   // segment that is not a plain route word becomes ":id": ids, file names and
   // anything typed in a URL by someone probing the Worker.
   const segments = path.split("?")[0]?.split("/").filter(Boolean) ?? [];
-  const kept = segments.slice(0, MAX_SEGMENTS).map((segment) => (ROUTE_WORD.test(segment) ? segment : ":id"));
+  const kept = segments.slice(0, MAX_SEGMENTS).map((segment) => (ROUTE_WORDS.has(segment) ? segment : ":id"));
   if (segments.length > MAX_SEGMENTS) kept.push("…");
   return `${method} /${kept.join("/")}`;
 }
