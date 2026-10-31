@@ -11,6 +11,7 @@ import {
   mfaCodeRequestSchema,
   passkeyAssertionSchema,
   passkeyRegistrationSchema,
+  passwordProofSchema,
   passkeyRenameSchema,
   SESSION_TIMEOUT_RANGES,
   settingsUpdateSchema,
@@ -229,7 +230,11 @@ export function createApi(deps: ApiDeps) {
 
   app.get("/auth/mfa", () => Response.json(deps.auth().twoStep.status()));
 
-  app.post("/auth/mfa/setup", async (c) => Response.json(await deps.auth().mfaSetup(c.get("session"))));
+  // Adding a way in asks for the password typed right now, not the 15-minute window.
+  app.post("/auth/mfa/setup", async (c) => {
+    const proof = await readJson(c.req.raw, passwordProofSchema, 4 * 1024);
+    return Response.json(await deps.auth().mfaSetup(c.get("session"), proof, client(c)));
+  });
 
   app.post("/auth/mfa/enable", async (c) => {
     const { code } = await readJson(c.req.raw, mfaCodeRequestSchema, 1024);
@@ -251,7 +256,10 @@ export function createApi(deps: ApiDeps) {
 
   app.get("/auth/passkeys", () => Response.json({ passkeys: deps.auth().listPasskeys() }));
 
-  app.post("/auth/passkeys/options", async (c) => Response.json({ options: await deps.auth().passkeyRegistrationOptions(c.get("session")) }));
+  app.post("/auth/passkeys/options", async (c) => {
+    const proof = await readJson(c.req.raw, passwordProofSchema, 4 * 1024);
+    return Response.json({ options: await deps.auth().passkeyRegistrationOptions(c.get("session"), proof, client(c)) });
+  });
 
   app.post("/auth/passkeys", async (c) => {
     const input = await readJson(c.req.raw, passkeyRegistrationSchema, 48 * 1024);

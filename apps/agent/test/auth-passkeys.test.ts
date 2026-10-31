@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { RelyingParty } from "../src/auth/passkeys.ts";
 import type { AuthService, MfaPending } from "../src/auth/service.ts";
 import type { AppError } from "../src/http/errors.ts";
-import { client, type Harness, live, noCookies, outcome, right, TEST_RP, withAuth } from "./auth-harness.ts";
+import { client, type Harness, live, noCookies, outcome, right, TEST_PASSWORD, TEST_RP, withAuth } from "./auth-harness.ts";
 import { type SoftPasskey, softPasskey } from "./soft-passkey.ts";
 
 const NET = "198.51.100.60";
@@ -12,7 +12,7 @@ const OTHER_RP: RelyingParty = { rpId: "outro.exemplo.com.br", origin: "https://
 async function turnOn(h: Harness) {
   const { token } = await h.auth.login(right(), client(NET), noCookies);
   const row = await live(h.auth, token);
-  const setup = await h.service.mfaSetup(row);
+  const setup = await h.service.mfaSetup(row, { password: TEST_PASSWORD }, client(NET));
   await h.service.mfaEnable(row, await totpCode(setup.secret, totpStep(h.clock.now())), client(NET));
   h.clock.advance(30_000);
   return { row, secret: setup.secret };
@@ -21,7 +21,7 @@ async function turnOn(h: Harness) {
 /** Adds a software passkey for the service's host, as the browser would. */
 async function addPasskey(service: AuthService, row: Awaited<ReturnType<typeof turnOn>>["row"], name = "Celular", rp = TEST_RP) {
   const key = await softPasskey();
-  const options = await service.passkeyRegistrationOptions(row);
+  const options = await service.passkeyRegistrationOptions(row, { password: TEST_PASSWORD }, client(NET));
   const response = await key.register(options, rp.origin);
   const info = await service.addPasskey(row, { name, response }, client(NET));
   return { key, info };
@@ -47,14 +47,90 @@ describe("adding passkeys", () => {
     await withAuth("pk-needs-mfa", async (h) => {
       const { token } = await h.auth.login(right(), client(NET), noCookies);
       const row = await live(h.auth, token);
-      expect(await failure(h.service.passkeyRegistrationOptions(row))).toMatchObject({ code: "CONFLICT", messageKey: "auth.passkey.needsMfa" });
+      expect(await failure(h.service.passkeyRegistrationOptions(row, { password: TEST_PASSWORD }, client(NET)))).toMatchObject({ code: "CONFLICT", messageKey: "auth.passkey.needsMfa" });
+    });
+  });
+
+  it("asks for the password typed right now: a wrong one spends a try and starts nothing", async () => {
+    await withAuth("pk-password", async (h) => {
+      const { row } = await turnOn(h);
+      expect(h.auth.state(row).recentAuthUntil).not.toBeNull();
+      expect(await failure(h.service.passkeyRegistrationOptions(row, { password: "errada errada errada" }, client(NET)))).toMatchObject({
+        code: "INVALID_CREDENTIALS",
+        messageKey: "auth.password.wrong",
+      });
+      expect(h.state.get("auth_passkey_pending")).toBeUndefined();
+      expect(h.events().at(-1)).toMatchObject({ kind: "confirm_failure", reason: "password" });
+      await addPasskey(h.service, row);
+      expect(h.events().map((e) => e.kind)).toEqual(expect.arrayContaining(["confirm_success", "passkey_added"]));
+      expect(h.events().find((e) => e.kind === "confirm_success" && e.reason === "passkey")).toBeDefined();
+    });
+  });
+
+  it("shares the network's 3 tries, also when sent all at once", async () => {
+    await withAuth("pk-password-limit", async (h) => {
+      const { row } = await turnOn(h);
+      const tries = await Promise.all(
+        Array.from({ length: 6 }, () => outcome(h.service.passkeyRegistrationOptions(row, { password: "errada errada errada" }, client(NET)))),
+      );
+      expect(tries.filter((t) => t === "INVALID_CREDENTIALS")).toHaveLength(3);
+      expect(tries.filter((t) => t === "RATE_LIMITED")).toHaveLength(3);
+      expect(await outcome(h.service.passkeyRegistrationOptions(row, { password: TEST_PASSWORD }, client(NET)))).toBe("RATE_LIMITED");
+      expect(h.state.get("auth_passkey_pending")).toBeUndefined();
+    });
+  });
+
+  it("refusals that need no password come first and spend no try", async () => {
+    await withAuth("pk-password-first", async (h) => {
+      const { token } = await h.auth.login(right(), client(NET), noCookies);
+      const row = await live(h.auth, token);
+      for (let i = 0; i < 4; i++) {
+        expect(await failure(h.service.passkeyRegistrationOptions(row, { password: "errada errada errada" }, client(NET)))).toMatchObject({
+          messageKey: "auth.passkey.needsMfa",
+        });
+      }
+      expect(h.events().filter((e) => e.kind === "confirm_failure")).toHaveLength(0);
+    });
+  });
+
+  it("only the session that typed the password can finish, and another one doesn't spend its request", async () => {
+    await withAuth("pk-own-session", async (h) => {
+      const { row, secret } = await turnOn(h);
+      // A second session, signed in with a code and inside its own 15 minutes: still not its request.
+      const pending = await challenge(h);
+      const signed = await h.service.completeMfa(pending.token, await totpCode(secret, totpStep(h.clock.now())), client(NET), noCookies);
+      const other = await live(h.auth, signed.token);
+      expect(h.auth.state(other).recentAuthUntil).not.toBeNull();
+      const key = await softPasskey();
+      const options = await h.service.passkeyRegistrationOptions(row, { password: TEST_PASSWORD }, client(NET));
+      const response = await key.register(options, TEST_RP.origin);
+      expect(await outcome(h.service.addPasskey(other, { name: "Intrusa", response }, client(NET)))).toBe("VALIDATION_FAILED");
+      expect(h.service.passkeys.count()).toBe(0);
+      // The owner's request is still there for the owner.
+      expect((await h.service.addPasskey(row, { name: "Celular", response }, client(NET))).name).toBe("Celular");
+    });
+  });
+
+  it("after the 15 minutes, a right password opens the window again for the browser's answer", async () => {
+    await withAuth("pk-reopens", async (h) => {
+      const { row } = await turnOn(h);
+      h.db.run(`UPDATE zur_sessions SET confirmed_at = ? WHERE id = ?`, h.clock.now() - 16 * 60_000, row.id);
+      const stale = h.service.sessions.get(row.id);
+      if (!stale) throw new Error("expected the session");
+      expect(h.auth.state(stale).recentAuthUntil).toBeNull();
+      const key = await softPasskey();
+      const options = await h.service.passkeyRegistrationOptions(stale, { password: TEST_PASSWORD }, client(NET));
+      const fresh = h.service.sessions.get(row.id);
+      if (!fresh) throw new Error("expected the session");
+      const info = await h.service.addPasskey(fresh, { name: "Notebook", response: await key.register(options, TEST_RP.origin) }, client(NET));
+      expect(info.name).toBe("Notebook");
     });
   });
 
   it("stores only the public key, for this host, and lists it as usable here", async () => {
     await withAuth("pk-add", async (h) => {
       const { row } = await turnOn(h);
-      const options = await h.service.passkeyRegistrationOptions(row);
+      const options = await h.service.passkeyRegistrationOptions(row, { password: TEST_PASSWORD }, client(NET));
       expect(options.rp.id).toBe(TEST_RP.rpId);
       // 32 random bytes (WebAuthn asks for at least 16).
       expect(options.challenge).toMatch(/^[A-Za-z0-9_-]{43}$/);
@@ -75,13 +151,13 @@ describe("adding passkeys", () => {
     await withAuth("pk-add-refusals", async (h) => {
       const { row } = await turnOn(h);
       const key = await softPasskey();
-      const options = await h.service.passkeyRegistrationOptions(row);
+      const options = await h.service.passkeyRegistrationOptions(row, { password: TEST_PASSWORD }, client(NET));
       const response = await key.register(options, TEST_RP.origin);
       await h.service.addPasskey(row, { name: "Um", response }, client(NET));
       // The same answer again: the request is used up.
       expect(await outcome(h.service.addPasskey(row, { name: "De novo", response }, client(NET)))).toBe("VALIDATION_FAILED");
 
-      const late = await h.service.passkeyRegistrationOptions(row);
+      const late = await h.service.passkeyRegistrationOptions(row, { password: TEST_PASSWORD }, client(NET));
       h.clock.advance(PASSKEY_TIMEOUT_MS);
       const lateKey = await softPasskey();
       expect(await outcome(h.service.addPasskey(row, { name: "Tarde", response: await lateKey.register(late, TEST_RP.origin) }, client(NET)))).toBe(
@@ -94,11 +170,11 @@ describe("adding passkeys", () => {
     await withAuth("pk-add-origin", async (h) => {
       const { row } = await turnOn(h);
       const key = await softPasskey();
-      const options = await h.service.passkeyRegistrationOptions(row);
+      const options = await h.service.passkeyRegistrationOptions(row, { password: TEST_PASSWORD }, client(NET));
       expect(await outcome(h.service.addPasskey(row, { name: "X", response: await key.register(options, OTHER_RP.origin) }, client(NET)))).toBe(
         "VALIDATION_FAILED",
       );
-      const again = await h.service.passkeyRegistrationOptions(row);
+      const again = await h.service.passkeyRegistrationOptions(row, { password: TEST_PASSWORD }, client(NET));
       expect(
         await outcome(h.service.addPasskey(row, { name: "X", response: await key.register({ ...again, rp: { id: OTHER_RP.rpId } }, TEST_RP.origin) }, client(NET))),
       ).toBe("VALIDATION_FAILED");
@@ -114,7 +190,7 @@ describe("adding passkeys", () => {
         const { info } = await addPasskey(h.service, row, `Chave ${i}`);
         first ||= info.id;
       }
-      expect(await failure(h.service.passkeyRegistrationOptions(row))).toMatchObject({ code: "CONFLICT", messageKey: "auth.passkey.limit" });
+      expect(await failure(h.service.passkeyRegistrationOptions(row, { password: TEST_PASSWORD }, client(NET)))).toMatchObject({ code: "CONFLICT", messageKey: "auth.passkey.limit" });
       h.service.renamePasskey(row, first, "Notebook");
       expect(h.service.listPasskeys().find((p) => p.id === first)?.name).toBe("Notebook");
       h.service.removePasskey(row, first, client(NET));
@@ -177,7 +253,7 @@ describe("signing in with a passkey", () => {
     await withAuth("pk-name", async (h) => {
       const { row } = await turnOn(h);
       const key = await softPasskey();
-      const options = await h.service.passkeyRegistrationOptions(row);
+      const options = await h.service.passkeyRegistrationOptions(row, { password: TEST_PASSWORD }, client(NET));
       const info = await h.service.addPasskey(row, { name: "Cel\u0007ular\u2028", response: await key.register(options, TEST_RP.origin) }, client(NET));
       expect(info.name).toBe("Celular");
       expect(() => h.service.renamePasskey(row, info.id, "\u0001\u0002")).toThrow(expect.objectContaining({ code: "VALIDATION_FAILED" }));

@@ -200,6 +200,8 @@ o [SemVer](https://semver.org/lang/pt-BR/). Cada PR escreve a sua entrada em
 
 ### Corrigido
 
+- Errar a senha ou o código num diálogo de confirmação não encerra mais a
+  sessão: a mensagem aparece no diálogo e você tenta de novo.
 - A busca de tarefas e a busca literal de notas não achavam "Água" ao digitar
   "água" (o SQLite só ignora maiúsculas de A a Z). Agora as maiúsculas
   acentuadas também são ignoradas, nos dois sentidos.
@@ -208,6 +210,12 @@ o [SemVer](https://semver.org/lang/pt-BR/). Cada PR escreve a sua entrada em
   guardados na forma NFC, então "é" digitado de dois jeitos é o mesmo texto.
 
 ### Segurança
+
+- Ligar a verificação em duas etapas e adicionar uma passkey agora pedem a sua
+  senha na hora, mesmo logo depois de entrar. Um código do aplicativo não
+  serve no lugar dela. A senha errada conta no mesmo limite do login (3 erros
+  em 15 minutos por rede), e a passkey só pode ser concluída no navegador que
+  digitou a senha.
 
 - Teto diário no segundo passo do login: 30 códigos errados em 24 horas
   suspendem o código e a passkey para redes desconhecidas até o mais antigo

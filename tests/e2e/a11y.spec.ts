@@ -1,5 +1,5 @@
 import { expect, test } from "./fixtures.ts";
-import { expectAccessible, signIn, tooSmallControls } from "./ui-helpers.ts";
+import { expectAccessible, PASSWORD, signIn, tooSmallControls } from "./ui-helpers.ts";
 
 // axe (WCAG 2.1 A and AA) on every screen of the shell, in both themes. Serious
 // and critical violations fail; the Lighthouse score is in the PR.
@@ -63,6 +63,11 @@ test("the two-step setup and the confirmation dialog have no serious violation",
   await page.goto("/configuracoes/seguranca");
   await signIn(page);
   await page.getByRole("button", { name: "Ligar a verificação em duas etapas" }).click();
+  const dialog = page.getByRole("dialog", { name: "Antes de ligar, confirme que é você" });
+  await expect(dialog.getByLabel("Senha", { exact: true })).toBeFocused();
+  await expectAccessible(page, "senha antes de ligar o 2FA");
+  await dialog.getByLabel("Senha", { exact: true }).fill(PASSWORD);
+  await dialog.getByRole("button", { name: "Continuar" }).click();
   await expect(page.getByRole("img", { name: "QR code para o aplicativo autenticador" })).toBeVisible();
   await expectAccessible(page, "configurar 2FA");
   await page.getByRole("button", { name: "Cancelar" }).click();

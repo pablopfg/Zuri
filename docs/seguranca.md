@@ -107,6 +107,30 @@ aplicativo (`{totp}`) vale no lugar da senha, com os mesmos limites dos códigos
 do login; nunca um código de recuperação. Com ela desligada, um código recebe
 401 `INVALID_CREDENTIALS` sem gastar tentativa da rede.
 
+### Senha digitada agora
+
+Ligar a verificação em duas etapas (`POST /api/auth/mfa/setup`) e começar a
+adicionar uma passkey (`POST /api/auth/passkeys/options`) pedem `{password}` no
+corpo, sempre, mesmo com a janela aberta (decisão do Pablo, 31/10/2026). Um
+código do aplicativo não vale aqui. O motivo: quem roubasse uma sessão nos
+primeiros 15 minutos, ou soubesse um código, poderia plantar o próprio
+aplicativo autenticador ou a própria passkey e ficar com um acesso que não some
+com a troca de senha.
+
+- A senha passa pelo mesmo limite do login (3 erros por rede em 15 minutos,
+  reservados antes da checagem lenta, então pedidos em paralelo não furam o
+  limite). Senha errada: 401 `INVALID_CREDENTIALS` com "Senha incorreta.", e a
+  sessão continua. No registro de acessos fica um `confirm_failure`.
+- O que não depende da senha responde antes dela, sem gastar tentativa: 2FA já
+  ligado (409) e passkey sem 2FA ou acima do limite (409).
+- Senha certa: abre a janela de 15 minutos (como `confirm`) para o resto da
+  mesma cerimônia (o código do QR, a resposta do navegador) e grava
+  `confirm_success` com o motivo (`mfa_setup` ou `passkey`).
+- O desafio de uma passkey nova fica preso à sessão que digitou a senha. A
+  resposta vinda de outra sessão é recusada e não gasta o desafio do dono.
+- Na interface, um 401 `INVALID_CREDENTIALS` nunca encerra a sessão: só
+  `UNAUTHORIZED` leva ao login.
+
 ## Verificação em duas etapas
 
 Opcional no código e ligada pelo dono em Configurações → Segurança (a tela
