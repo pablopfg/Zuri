@@ -131,3 +131,13 @@ acrescente aqui cada armadilha nova que encontrar (sem dados pessoais).
 
 - Nunca `git add -A`: os auditores deixam testes `tmp-audit-*.test.ts` no
   worktree. Adicione caminhos explícitos.
+
+## SQLite do Durable Object
+
+- Um padrão de `LIKE` ou `GLOB` passa de 50 bytes e a consulta falha (500),
+  mas só quando a tabela tem linhas; em teste com tabela vazia passa. Para
+  busca literal use `instr(lower(coluna), ?)` com o texto dobrado só em A–Z
+  (`asciiLower`), como na etapa 6 (CF-6-01).
+- Sem `ANALYZE`, o planejador prefere um índice `(status, due_at)` a um índice
+  parcial e ordena tudo. Confira `EXPLAIN QUERY PLAN` e `rowsRead` com algumas
+  mil linhas antes de confiar num índice novo (CF-6-03).
