@@ -123,8 +123,6 @@ o [SemVer](https://semver.org/lang/pt-BR/). Cada PR escreve a sua entrada em
 - Um texto com um caractere Unicode quebrado (surrogate solto) era aceito e
   guardado alterado, sem aviso. Agora é recusado. Textos passam a ser
   guardados na forma NFC, então "é" digitado de dois jeitos é o mesmo texto.
-- Toda página registrava uma violação da CSP ao carregar (o validador de
-  dados tentava usar `eval`, que a CSP bloqueia). Não há mais violação.
 
 ### Segurança
 
