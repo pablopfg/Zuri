@@ -60,12 +60,23 @@ Medido dentro do workerd por `apps/agent/test/free-tier-budget.test.ts`, com
 | `POST /api/memories` | 16 (151 com uma palavra presente em todas) | 10 a 22 |
 | `POST /api/memories/:id/correct` | 54 | 34 |
 | Acordar o objeto: só as migrations já aplicadas | 1 (antes: 91) | 0 |
+| `GET /api/conversations` (80 conversas) | 52 | 0 |
+| `GET /api/conversations/:id` (406 mensagens, página de 100) | 103 | 0 |
+| `POST /api/chat` (um turno numa conversa longa, com a busca de memórias) | 726 (teto 860) | 15 (teto 30) |
+| `POST /api/actions/:id/approve` | 19 | 9 |
+| `POST /api/plans/:id/confirm` (3 tarefas) | 19 | 26 |
+| `POST /api/transcribe` | 4 | 4 |
+| `DELETE /api/conversations/:id` | cerca de 3 por mensagem (1.224 com 406) | cerca de 2 por mensagem (816 com 406) |
 
 Os números contam só o SQL do Zuri (`Database.usage`): a cada despertar o
 Agents SDK lê algumas linhas das tabelas `cf_agents_*`, quase vazias hoje. O
 painel da Cloudflare dá o total real depois do deploy.
 
 Pendências técnicas, medidas:
+
+- Apagar uma conversa custa cerca de 2 gravações por mensagem. Uma conversa de
+  2.000 mensagens gasta umas 4.000 das 100.000 gravações do dia. Não há teto de
+  mensagens por conversa; se aparecer uso assim, vale apagar em lotes.
 
 - "Hoje" (a vista padrão) e "Atrasadas" leem todas as tarefas abertas que já
   venceram e ordenam no fim, sem parar no `LIMIT`. Com 5.000 atrasadas

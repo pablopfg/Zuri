@@ -6,6 +6,7 @@ import {
   type MemoryCreate,
   type MemoryHistory,
   type MemoryListQuery,
+  type MemoryAuthor,
   type MemoryOrigin,
   type MemoryReview,
   type MemoryReviewAction,
@@ -97,12 +98,12 @@ export class MemoryService {
   // ---------- Writes ----------
 
   /** A new fact. The same current fact again only refreshes the one already saved. */
-  create(input: MemoryCreate | Untrusted, origin: MemoryOrigin = "app"): MemoryWriteResult {
+  create(input: MemoryCreate | Untrusted, origin: MemoryOrigin = "app", author: MemoryAuthor = "owner"): MemoryWriteResult {
     const data = parse(memoryCreateSchema, input);
     return this.db.transaction(() => {
       const duplicate = this.repo.findCurrentDuplicate(data.content);
-      if (duplicate) return { memory: toMemory(this.repo.touch(duplicate.id)), duplicate: true, superseded: [], reviews: 0 };
-      const row = this.repo.insert({ content: data.content, category: data.category, origin, validFrom: extractStatedDate(data.content) });
+      if (duplicate) return { memory: toMemory(this.repo.touch(duplicate.id, author)), duplicate: true, superseded: [], reviews: 0 };
+      const row = this.repo.insert({ content: data.content, category: data.category, origin, author, validFrom: extractStatedDate(data.content) });
       return this.afterWrite(row);
     });
   }
@@ -130,7 +131,7 @@ export class MemoryService {
    * past fact linked to it. When the newer text already exists as a current
    * memory, that one becomes the replacement (a loop is refused).
    */
-  correct(id: string, input: MemoryCorrect | Untrusted, origin: MemoryOrigin = "app"): MemoryWriteResult {
+  correct(id: string, input: MemoryCorrect | Untrusted, origin: MemoryOrigin = "app", author: MemoryAuthor = "owner"): MemoryWriteResult {
     const data = parse(memoryCorrectSchema, input);
     return this.db.transaction(() => {
       const old = this.repo.require(id);
@@ -138,7 +139,7 @@ export class MemoryService {
       if (existing?.id === old.id) throw new AppError("VALIDATION_FAILED", "error.memorySame", { fields: ["content"] });
       const newer =
         existing ??
-        this.repo.insert({ content: data.content, category: data.category ?? old.category, origin, validFrom: extractStatedDate(data.content) });
+        this.repo.insert({ content: data.content, category: data.category ?? old.category, origin, author, validFrom: extractStatedDate(data.content) });
       const superseded = this.lifecycle.supersede(old.id, newer.id, newer.valid_from);
       const rest = existing ? null : this.afterWrite(this.repo.require(newer.id));
       return {

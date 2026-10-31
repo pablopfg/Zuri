@@ -10,7 +10,7 @@ export const WEB_HEADERS = {
   "x-content-type-options": "nosniff",
   "x-frame-options": "DENY",
   "referrer-policy": "same-origin",
-  "permissions-policy": "camera=(), microphone=(), geolocation=(), payment=(), usb=()",
+  "permissions-policy": "camera=(), microphone=(self), geolocation=(), payment=(), usb=()",
   "cross-origin-opener-policy": "same-origin",
   "strict-transport-security": "max-age=63072000; includeSubDomains",
 } as const satisfies Record<string, string>;

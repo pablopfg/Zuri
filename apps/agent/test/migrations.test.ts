@@ -88,6 +88,7 @@ describe("the migration list", () => {
       5: "8c5284cbf1f107f27133133552387e56029c61885b3bc0d9940c2f8bd648fbf1",
       6: "fcebcd8e24cdf35cfa227b8e884e5a8fef72dd5858b886054fa7dade848e5730",
       7: "975245f3b1af6fcdea2793c1cc14adf75da337311943fffb54de586f2ae81701",
+      8: "2c9dc9a7347e9929d8e8e517201b749352f14e8dfc44cf1d306bdfa16b4f49fd",
     };
     for (const m of MIGRATIONS) {
       const digest = createHash("sha256").update(statementText(m).replace(/\r\n/g, "\n")).digest("hex");
@@ -103,7 +104,7 @@ describe("migrate", () => {
       expect(zurObjects(db)).toEqual([]);
 
       expect(migrate(db)).toBe(LATEST_SCHEMA_VERSION);
-      expect(schemaVersion(db)).toBe(7);
+      expect(schemaVersion(db)).toBe(8);
       // FTS5 keeps shadow tables of its own (zur_notes_fts_data and others): only ours are listed.
       expect(zurObjects(db).filter((name) => !/^table:zur_(notes|memories)_fts_/.test(name))).toEqual([
         "table:zur_activity",
@@ -113,12 +114,18 @@ describe("migrate", () => {
         "index:zur_auth_events_at",
         "table:zur_auth_events_daily",
         "index:zur_auth_events_network",
+        "table:zur_conversations",
+        "index:zur_conversations_updated",
         "table:zur_counts",
+        "trigger:zur_counts_conversations_delete",
+        "trigger:zur_counts_conversations_insert",
         "trigger:zur_counts_memories_delete",
         "trigger:zur_counts_memories_insert",
         "trigger:zur_counts_memories_status",
         "trigger:zur_counts_memory_reviews_delete",
         "trigger:zur_counts_memory_reviews_insert",
+        "trigger:zur_counts_messages_delete",
+        "trigger:zur_counts_messages_insert",
         "trigger:zur_counts_notes_delete",
         "trigger:zur_counts_notes_insert",
         "trigger:zur_counts_projects_delete",
@@ -145,6 +152,8 @@ describe("migrate", () => {
         "table:zur_memory_reviews",
         "index:zur_memory_reviews_created",
         "index:zur_memory_reviews_other",
+        "table:zur_messages",
+        "index:zur_messages_conversation",
         "table:zur_mfa_challenges",
         "table:zur_mfa_secrets",
         "table:zur_model_usage_daily",
@@ -156,12 +165,18 @@ describe("migrate", () => {
         "index:zur_notes_project",
         "index:zur_notes_updated",
         "table:zur_passkeys",
+        "table:zur_pending_actions",
+        "index:zur_pending_actions_conversation",
+        "index:zur_pending_actions_created",
         "table:zur_projects",
         "table:zur_recovery_codes",
         "table:zur_schema_version",
         "table:zur_sessions",
         "index:zur_sessions_last_seen",
         "table:zur_settings",
+        "table:zur_task_plan_drafts",
+        "index:zur_task_plan_drafts_conversation",
+        "index:zur_task_plan_drafts_created",
         "table:zur_tasks",
         "index:zur_tasks_board",
         "index:zur_tasks_done_completed",
@@ -192,7 +207,13 @@ describe("migrate", () => {
     await withEmptyDatabase("replay", (db) => {
       migrate(db);
       db.run(`INSERT INTO zur_activity (at, kind) VALUES ('2026-10-31T00:00:00Z', 'settings.updated')`);
-      for (const m of MIGRATIONS) for (const statement of m.statements) db.run(statement);
+      for (const m of MIGRATIONS) {
+        for (const statement of m.statements) {
+          // ADD COLUMN has no IF NOT EXISTS in SQLite: run again, it refuses and changes nothing.
+          if (/^ALTER TABLE \w+ ADD COLUMN /.test(statement)) expect(() => db.run(statement)).toThrow(/duplicate column/);
+          else db.run(statement);
+        }
+      }
       expect(db.one<{ n: number }>(`SELECT count(*) AS n FROM zur_activity`)?.n).toBe(1);
     });
   });
@@ -261,11 +282,47 @@ describe("migrate", () => {
     });
   });
 
+  it("upgrades a database at version 7 to 8: the chat tables and their counters, the owner's data kept", async () => {
+    await withEmptyDatabase("from-7", (db) => {
+      expect(migrate(db, MIGRATIONS.slice(0, 7))).toBe(7);
+      db.run(`INSERT INTO zur_tasks (id, title, created_at, updated_at) VALUES ('t1', 'Pagar a luz', 'x', 'x')`);
+      db.run(`INSERT INTO zur_memories (id, content, dedupe_key, created_at, updated_at) VALUES ('mem1', 'Mora em BH', 1, 'x', 'x')`);
+      expect(migrate(db)).toBe(8);
+      expect(db.one(`SELECT title FROM zur_tasks WHERE id = 't1'`)).toEqual({ title: "Pagar a luz" });
+      // A memory saved before version 8 was the owner's: nothing else could save one.
+      expect(db.one(`SELECT content, author FROM zur_memories WHERE id = 'mem1'`)).toEqual({ content: "Mora em BH", author: "owner" });
+      expect(() => db.run(`UPDATE zur_memories SET author = 'system' WHERE id = 'mem1'`)).toThrow();
+      const count = (kind: string) => db.one<{ n: number }>(`SELECT n FROM zur_counts WHERE kind = ?`, kind)?.n;
+      expect([count("conversations"), count("messages")]).toEqual([0, 0]);
+
+      db.run(`INSERT INTO zur_conversations (id, title, created_at, updated_at) VALUES ('c1', 'Conversa', 'x', 'x')`);
+      db.run(`INSERT INTO zur_messages (id, conversation_id, role, content, created_at) VALUES ('m1', 'c1', 'user', 'oi', 'x')`);
+      db.run(`INSERT INTO zur_messages (id, conversation_id, role, content, source, created_at) VALUES ('m2', 'c1', 'assistant', 'olá', 'telegram', 'x')`);
+      expect([count("conversations"), count("messages")]).toEqual([1, 2]);
+      db.run(`DELETE FROM zur_messages WHERE id = 'm1'`);
+      db.run(`DELETE FROM zur_conversations WHERE id = 'c1'`);
+      expect([count("conversations"), count("messages")]).toEqual([0, 1]);
+
+      // Values outside the lists are refused by the tables themselves.
+      expect(() => db.run(`INSERT INTO zur_messages (id, conversation_id, role, content, created_at) VALUES ('m3', 'c1', 'system', 'x', 'x')`)).toThrow();
+      expect(() => db.run(`INSERT INTO zur_messages (id, conversation_id, role, content, source, created_at) VALUES ('m4', 'c1', 'user', 'x', 'email', 'x')`)).toThrow();
+      expect(() => db.run(`INSERT INTO zur_messages (id, conversation_id, role, content, status, created_at) VALUES ('m5', 'c1', 'user', 'x', 'done', 'x')`)).toThrow();
+      expect(() =>
+        db.run(
+          `INSERT INTO zur_pending_actions (id, conversation_id, tool, target_id, target_hash, target_label, payload, status, created_at, expires_at) VALUES ('a1', 'c1', 'delete_task', 't1', 'h', 'l', '{}', 'done', 'x', 'y')`,
+        ),
+      ).toThrow();
+      expect(() =>
+        db.run(`INSERT INTO zur_task_plan_drafts (id, conversation_id, payload, status, created_at, expires_at) VALUES ('p1', 'c1', '{}', 'open', 'x', 'y')`),
+      ).toThrow();
+    });
+  });
+
   it("upgrades a database at version 6 to 7: the AI usage counters, the owner's data kept", async () => {
     await withEmptyDatabase("from-6", (db) => {
       expect(migrate(db, MIGRATIONS.slice(0, 6))).toBe(6);
       db.run(`INSERT INTO zur_memories (id, content, dedupe_key, created_at, updated_at) VALUES ('m1', 'Moro em Curitiba', 1, 'x', 'x')`);
-      expect(migrate(db)).toBe(7);
+      expect(migrate(db, MIGRATIONS.slice(0, 7))).toBe(7);
       expect(db.one(`SELECT content FROM zur_memories WHERE id = 'm1'`)).toEqual({ content: "Moro em Curitiba" });
       db.run(`INSERT INTO zur_usage_daily (day) VALUES ('2026-10-31')`);
       expect(db.one(`SELECT ai_requests, ai_errors, ai_aborted, audio_seconds, neurons, cost_usd FROM zur_usage_daily`)).toEqual({
@@ -378,9 +435,9 @@ describe("migrate", () => {
   it("leaves a database newer than the code as it is", async () => {
     await withEmptyDatabase("newer", (db) => {
       migrate(db);
-      db.run(`UPDATE zur_schema_version SET version = 7`);
-      expect(migrate(db)).toBe(7);
-      expect(schemaVersion(db)).toBe(7);
+      db.run(`UPDATE zur_schema_version SET version = 9`);
+      expect(migrate(db)).toBe(9);
+      expect(schemaVersion(db)).toBe(9);
     });
   });
 });

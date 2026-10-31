@@ -22,10 +22,17 @@ test("the AI tab shows today's usage with the simulated AI, accessible and with 
   // São Paulo is UTC−3: the counters start over at 21:00 there.
   await expect(usage.getByText(/recomeçam às 21:00/)).toBeVisible();
   await expect(usage.getByRole("meter", { name: "Neurons" })).toHaveAttribute("max", "9000");
-  await expect(usage.getByRole("meter", { name: "Pedidos à IA" })).toHaveAttribute("value", "0");
-  await expect(usage.getByRole("meter", { name: "Pedidos à IA" })).toHaveAttribute("aria-valuetext", "0 de 200 · 0% usado");
+  // The chat specs share the database and use the simulated AI too, so the
+  // count today is whatever the server reports, never assumed to be zero.
+  const report = (await (await page.request.get("/api/usage", { headers: CSRF })).json()) as { today: { requests: number } };
+  const requests = report.today.requests;
+  await expect(usage.getByRole("meter", { name: "Pedidos à IA" })).toHaveAttribute("value", String(requests));
+  await expect(usage.getByRole("meter", { name: "Pedidos à IA" })).toHaveAttribute(
+    "aria-valuetext",
+    `${requests} de 200 · ${Math.round((requests / 200) * 100)}% usado`,
+  );
   await expect(usage.getByRole("meter", { name: "Áudio transcrito" })).toHaveAttribute("max", "60");
-  await expect(usage.getByText("Nenhuma chamada à IA hoje.")).toBeVisible();
+  await expect(usage.getByText("Nenhuma chamada à IA hoje.")).toHaveCount(requests === 0 ? 1 : 0);
   await expect(usage.getByRole("link", { name: "Tabela de preços do Workers AI" })).toHaveAttribute(
     "href",
     "https://developers.cloudflare.com/workers-ai/platform/pricing/",

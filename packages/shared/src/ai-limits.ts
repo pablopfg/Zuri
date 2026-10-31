@@ -28,4 +28,8 @@ export const AI_LIMIT_RANGES = {
   aiRequestsPerDay: { min: 1, max: 2_000, default: 200 },
   aiNeuronsPerDay: { min: 1_000, max: 9_000, default: 9_000 },
   aiMaxOutputTokens: { min: 256, max: 4_096, default: 1_024 },
+  /** Step 9: one chat turn's tool calls, model calls, and prompt tokens (system, memories and history). */
+  aiMaxToolCalls: { min: 1, max: 20, default: 6 },
+  aiMaxIterations: { min: 1, max: 10, default: 4 },
+  aiMaxContextTokens: { min: 2_000, max: 32_000, default: 6_000 },
 } as const;
