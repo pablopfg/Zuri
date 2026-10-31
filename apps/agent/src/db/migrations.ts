@@ -361,6 +361,41 @@ export const MIGRATIONS: readonly Migration[] = [
       END`,
     ],
   },
+  {
+    version: 7,
+    name: "ai usage",
+    statements: [
+      // One row per UTC day (Cloudflare's allocation resets at 00:00 UTC): the
+      // counters every AI call checks first. Neurons hold what was reserved for
+      // calls still running plus what finished calls used, so concurrent calls
+      // can never pass the cap together.
+      `CREATE TABLE IF NOT EXISTS zur_usage_daily (
+        day TEXT PRIMARY KEY CHECK (length(day) = 10),
+        ai_requests INTEGER NOT NULL DEFAULT 0 CHECK (ai_requests >= 0),
+        ai_errors INTEGER NOT NULL DEFAULT 0 CHECK (ai_errors >= 0),
+        ai_aborted INTEGER NOT NULL DEFAULT 0 CHECK (ai_aborted >= 0),
+        audio_seconds INTEGER NOT NULL DEFAULT 0 CHECK (audio_seconds >= 0),
+        neurons REAL NOT NULL DEFAULT 0 CHECK (neurons >= 0),
+        cost_usd REAL NOT NULL DEFAULT 0 CHECK (cost_usd >= 0)
+      ) WITHOUT ROWID`,
+      // What each model used per day, by Cloudflare's counts or our estimate.
+      `CREATE TABLE IF NOT EXISTS zur_model_usage_daily (
+        day TEXT NOT NULL CHECK (length(day) = 10),
+        model TEXT NOT NULL CHECK (length(model) BETWEEN 1 AND 100),
+        kind TEXT NOT NULL CHECK (kind IN ('chat', 'transcription', 'embedding')),
+        billable INTEGER NOT NULL CHECK (billable IN (0, 1)),
+        calls INTEGER NOT NULL DEFAULT 0,
+        input_reported INTEGER NOT NULL DEFAULT 0,
+        input_estimated INTEGER NOT NULL DEFAULT 0,
+        output_reported INTEGER NOT NULL DEFAULT 0,
+        output_estimated INTEGER NOT NULL DEFAULT 0,
+        audio_seconds INTEGER NOT NULL DEFAULT 0,
+        neurons REAL NOT NULL DEFAULT 0,
+        cost_usd REAL NOT NULL DEFAULT 0,
+        PRIMARY KEY (day, model, kind, billable)
+      ) WITHOUT ROWID`,
+    ],
+  },
 ];
 
 export const LATEST_SCHEMA_VERSION = MIGRATIONS.at(-1)?.version ?? 0;

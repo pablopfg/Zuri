@@ -2,6 +2,8 @@ import { AGENT_INSTANCE_NAME, LIST_LIMIT_DEFAULT } from "@zuri/shared";
 import { runInDurableObject } from "cloudflare:test";
 import { beforeAll, describe, expect, it } from "vitest";
 import type { ZuriAgent } from "../src/agent/zuri-agent.ts";
+import { MeteredAI } from "../src/ai/metered.ts";
+import { MockAIProvider } from "../src/ai/mock.ts";
 import { CSRF, call, HUMAN_TOKEN, ORIGIN, TEST_EMAIL, TEST_PASSWORD, testEnv } from "./helpers.ts";
 
 // What each route costs in the units the Free plan bills: rows read and rows
@@ -265,5 +267,36 @@ describe("the Free plan budget of each route", () => {
     expect(deleted.status).toBe(204);
     expect(deleted.read).toBeLessThan(30);
     expect(deleted.written).toBeLessThanOrEqual(20);
+  });
+
+  it("AI usage: the report reads about a page out of 90 days of history, and writes nothing", async () => {
+    await runInDurableObject(owner(), (agent: ZuriAgent) => {
+      const { db } = agent.store;
+      const now = Date.now();
+      db.transaction(() => {
+        for (let i = 1; i < 90; i++) {
+          const day = new Date(now - i * 86_400_000).toISOString().slice(0, 10);
+          db.run(`INSERT INTO zur_usage_daily (day, ai_requests, neurons) VALUES (?, 10, 100)`, day);
+          for (const model of ["a", "b", "c"]) db.run(`INSERT INTO zur_model_usage_daily (day, model, kind, billable, calls) VALUES (?, ?, 'chat', 1, 3)`, day, model);
+        }
+      });
+    });
+    const report = await cost("GET", "/usage");
+    expect(report.status).toBe(200);
+    expect(report.read).toBeLessThanOrEqual(12);
+    expect(report.written).toBe(0);
+  });
+
+  it("AI usage: counting a model call before it runs and settling it after writes a handful of rows", async () => {
+    const spent = await runInDurableObject(owner(), async (agent: ZuriAgent) => {
+      const { db, usage } = agent.store;
+      const ai = new MeteredAI(new MockAIProvider(), usage, () => agent.aiLimits());
+      const before = { ...db.usage };
+      await ai.generate({ system: "s", messages: [{ role: "user", content: "oi" }], maxOutputTokens: 100 });
+      return { read: db.usage.rowsRead - before.rowsRead, written: db.usage.rowsWritten - before.rowsWritten };
+    });
+    // The limits (3 settings), today's row, then one upsert to reserve and two to settle.
+    expect(spent.read).toBeLessThanOrEqual(8);
+    expect(spent.written).toBeLessThanOrEqual(4);
   });
 });

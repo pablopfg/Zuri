@@ -118,6 +118,7 @@ function api(auth: AuthService) {
     settings: unused,
     productivity: unused,
     memories: unused,
+    aiUsage: unused,
     passwordSecretSet: () => true,
     origin: () => ORIGIN,
     development: () => false,

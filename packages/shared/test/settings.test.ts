@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { DEFAULT_SETTINGS, DEFAULT_TIME_ZONE, isTimeZone, settingsSchema, settingsUpdateSchema } from "../src/index.ts";
 
 describe("default settings", () => {
-  it("start in pt-BR, in the São Paulo time zone, with sign-out after 30 min idle, 5 min without a tab or 6 h, and memory conflict review on", () => {
+  it("start in pt-BR, in the São Paulo time zone, with sign-out after 30 min idle, 5 min without a tab or 6 h, memory conflict review on and the AI limits of the specification", () => {
     expect(DEFAULT_SETTINGS).toEqual({
       language: "pt-BR",
       timeZone: "America/Sao_Paulo",
@@ -10,6 +10,10 @@ describe("default settings", () => {
       sessionPresenceMinutes: 5,
       sessionMaxHours: 6,
       memoryConflictReview: true,
+      aiModel: "@cf/zai-org/glm-4.7-flash",
+      aiRequestsPerDay: 200,
+      aiNeuronsPerDay: 9_000,
+      aiMaxOutputTokens: 1_024,
     });
     expect(DEFAULT_TIME_ZONE).toBe("America/Sao_Paulo");
     expect(settingsSchema.parse(DEFAULT_SETTINGS)).toEqual(DEFAULT_SETTINGS);

@@ -13,6 +13,7 @@ export {
   type PluralBase,
   plural,
   ptBR,
+  ptBRAi,
   ptBRCore,
   ptBRMemory,
   ptBRProductivity,
@@ -97,3 +98,4 @@ export {
 } from "./dates.ts";
 export * from "./productivity.ts";
 export * from "./memory.ts";
+export * from "./ai.ts";

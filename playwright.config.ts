@@ -25,11 +25,13 @@ export default defineConfig({
   webServer: {
     // The real Worker (wrangler dev) serving the built interface, so every test
     // also goes through the gates. Test-only secrets; PUBLIC_URL is loopback http.
+    // --local: the AI binding stays off (it would need the owner's Cloudflare account);
+    // over loopback the agent answers with the mock instead (src/ai/index.ts).
     // Every run starts from an empty database (its own folder, apart from `npm run dev`'s):
     // sign-in limits and settings left by an earlier run would change the results.
     command:
       `node -e "require('node:fs').rmSync('.wrangler/e2e',{recursive:true,force:true})" && ` +
-      "npm run build -w @zuri/web && npm exec -w @zuri/agent -- wrangler dev --ip 127.0.0.1 --persist-to ../../.wrangler/e2e " +
+      "npm run build -w @zuri/web && npm exec -w @zuri/agent -- wrangler dev --local --ip 127.0.0.1 --persist-to ../../.wrangler/e2e " +
       `--port ${port} --env-file ../../tests/e2e/worker.env --var PUBLIC_URL:http://127.0.0.1:${port} ` +
       // Optional secrets don't load from the env file (only those wrangler.jsonc
       // lists as required do): the hash of the e2e password goes as a variable.

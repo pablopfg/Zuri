@@ -37,6 +37,9 @@ function api(auth: AuthService) {
     memories: () => {
       throw new Error("not used");
     },
+    aiUsage: () => {
+      throw new Error("not used");
+    },
     passwordSecretSet: () => true,
     origin: () => ORIGIN,
     development: () => false,

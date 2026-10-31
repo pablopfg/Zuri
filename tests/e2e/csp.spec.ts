@@ -29,6 +29,7 @@ test("no page breaks the Content Security Policy @mobile", async ({ page }) => {
     ["/notas", "Notas"],
     ["/memoria", "Memória"],
     ["/configuracoes/seguranca", "Configurações"],
+    ["/configuracoes/ia", "Configurações"],
     ["/configuracoes/dados", "Configurações"],
   ] as const) {
     await page.goto(path);
