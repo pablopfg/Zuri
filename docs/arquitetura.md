@@ -74,7 +74,7 @@ Segredos sobrevivem ao deploy.
 | `OWNER_EMAIL` | segredo | sim | Um e-mail válido; o login compara por HMAC |
 | `OWNER_PASSWORD` | segredo | até o 1º login* | 20 caracteres ou mais |
 | `OWNER_PASSWORD_HASH` | segredo | não* | `pbkdf2$100000$<sal>$<hash>`, feito com o `PASSWORD_PEPPER` |
-| `TURNSTILE_SITE_KEY`, `TURNSTILE_SECRET_KEY` | segredo | não | Os dois ou nenhum; ligam o Turnstile adaptativo do login |
+| `TURNSTILE_SITE_KEY`, `TURNSTILE_SECRET_KEY` | segredo | sim (fora do local) | Os dois, do widget do Turnstile; sem eles (ou com as chaves de teste) o login fica fechado com `NOT_CONFIGURED`. Passo a passo em `docs/configuracao-cloudflare.md` |
 | `ACCESS_TEAM_DOMAIN`, `ACCESS_AUD` | segredo | não | Os dois ou nenhum |
 | `DEFAULT_TIMEZONE`, `AGENT_NAME` | variável | sim | Já vêm no `wrangler.jsonc` |
 

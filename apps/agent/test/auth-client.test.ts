@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { CLIENT_GEO_HEADER, clientInfo, networkKey } from "../src/auth/client.ts";
-import { createTurnstile, TURNSTILE_VERIFY_URL } from "../src/auth/turnstile.ts";
+import { createTurnstile, TURNSTILE_TEST_TOKEN, TURNSTILE_VERIFY_URL, turnstileSiteKey } from "../src/auth/turnstile.ts";
 import { withClientGeo } from "../src/index.ts";
 
 describe("networkKey", () => {
@@ -75,15 +75,58 @@ describe("Turnstile siteverify", () => {
   const ok = { success: true, action: "login", hostname: "zuri.exemplo.com.br" };
   const make = (answer: () => Promise<Response>) => {
     const fetcher = vi.fn(answer);
-    return { fetcher, turnstile: createTurnstile("0x4AAAAAAAsite", "0x4AAAAAAAsecret", "zuri.exemplo.com.br", fetcher as typeof fetch) };
+    return { fetcher, turnstile: createTurnstile("0x4AAAAAAAsite", "0x4AAAAAAAsecret", "zuri.exemplo.com.br", { development: false, fetcher: fetcher as typeof fetch }) };
   };
 
   it("is off unless both keys are set and well formed", () => {
     vi.spyOn(console, "warn").mockImplementation(() => {});
-    expect(createTurnstile(undefined, undefined, "h")).toBeNull();
-    expect(createTurnstile("0x4AAAAAAAsite", undefined, "h")).toBeNull();
-    expect(createTurnstile("curta", "0x4AAAAAAAsecret", "h")).toBeNull();
-    expect(createTurnstile("0x4AAAAAAAsite", "com espaço no meio", "h")).toBeNull();
+    const prod = { development: false };
+    expect(createTurnstile(undefined, undefined, "h", prod)).toBeNull();
+    expect(createTurnstile("0x4AAAAAAAsite", undefined, "h", prod)).toBeNull();
+    expect(createTurnstile("curta", "0x4AAAAAAAsecret", "h", prod)).toBeNull();
+    expect(createTurnstile("0x4AAAAAAAsite", "com espaço no meio", "h", prod)).toBeNull();
+    expect(turnstileSiteKey("0x4AAAAAAAsite", undefined, false)).toBeNull();
+    expect(turnstileSiteKey(" 0x4AAAAAAAsite ", "0x4AAAAAAAsecret", false)).toBe("0x4AAAAAAAsite");
+  });
+
+  it.each([
+    ["the always-pass secret", "0x4AAAAAAAsite", "1x0000000000000000000000000000000AA"],
+    ["the always-fail secret", "0x4AAAAAAAsite", "2x0000000000000000000000000000000AA"],
+    ["the spent-token secret", "0x4AAAAAAAsite", "3x0000000000000000000000000000000AA"],
+    ["a test site key", "1x00000000000000000000AA", "0x4AAAAAAAsecret"],
+    ["an invisible test site key", "1x00000000000000000000BB", "0x4AAAAAAAsecret"],
+    ["a forced-challenge test site key", "3x00000000000000000000FF", "0x4AAAAAAAsecret"],
+  ])("refuses Cloudflare's test keys outside local development (%s): anyone could send the public test token", (_label, site, secret) => {
+    vi.spyOn(console, "warn").mockImplementation(() => {});
+    expect(createTurnstile(site, secret, "zuri.exemplo.com.br", { development: false })).toBeNull();
+    expect(turnstileSiteKey(site, secret, false)).toBeNull();
+    expect(turnstileSiteKey(site, secret, true)).toBe(site);
+  });
+
+  it("never logs a key's value, only that it is off", () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    createTurnstile("1x00000000000000000000AA", "1x0000000000000000000000000000000AA", "h", { development: false });
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(String(warn.mock.calls[0]?.[0])).not.toContain("1x0000");
+  });
+
+  it("answers Cloudflare's test secrets locally in development, accepting only the public test token", async () => {
+    const fetcher = vi.fn(async () => Response.json({ success: true }));
+    const dev = (secret: string) =>
+      createTurnstile("1x00000000000000000000AA", secret, "127.0.0.1", { development: true, fetcher: fetcher as unknown as typeof fetch });
+    expect(await dev("1x0000000000000000000000000000000AA")?.verify(TURNSTILE_TEST_TOKEN, "")).toBe("ok");
+    expect(await dev("1x0000000000000000000000000000000AA")?.verify("outro-token", "")).toBe("failed");
+    expect(await dev("1x0000000000000000000000000000000AA")?.verify(undefined, "")).toBe("failed");
+    expect(await dev("2x0000000000000000000000000000000AA")?.verify(TURNSTILE_TEST_TOKEN, "")).toBe("failed");
+    expect(await dev("3x0000000000000000000000000000000AA")?.verify(TURNSTILE_TEST_TOKEN, "")).toBe("failed");
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+
+  it("still calls siteverify in development with real keys", async () => {
+    const fetcher = vi.fn(async () => Response.json({ success: true, action: "login", hostname: "127.0.0.1" }));
+    const turnstile = createTurnstile("0x4AAAAAAAsite", "0x4AAAAAAAsecret", "127.0.0.1", { development: true, fetcher: fetcher as unknown as typeof fetch });
+    expect(await turnstile?.verify(TURNSTILE_TEST_TOKEN, "")).toBe("ok");
+    expect(fetcher).toHaveBeenCalledTimes(1);
   });
 
   it("posts the secret, the token and the visitor's IP, never following a redirect", async () => {

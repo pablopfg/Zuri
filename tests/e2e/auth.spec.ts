@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, HUMAN_TOKEN, test } from "./fixtures.ts";
 
 // Sign-in and sessions against the real Worker (wrangler dev, loopback http,
 // so the cookies are the development ones without the __Host- prefix).
@@ -9,7 +9,7 @@ const PASSWORD = "e2e girafa trombone neblina";
 const CSRF = { "x-zuri-request": "1" };
 
 test("signs in, reads the session, signs out, and the cookie opens nothing after", async ({ request }) => {
-  const login = await request.post("/api/auth/login", { headers: CSRF, data: { email: EMAIL, password: PASSWORD } });
+  const login = await request.post("/api/auth/login", { headers: CSRF, data: { email: EMAIL, password: PASSWORD, turnstileToken: HUMAN_TOKEN } });
   expect(login.status()).toBe(200);
   expect((await login.json()).authenticated).toBe(true);
   const cookies = login.headersArray().filter((h) => h.name.toLowerCase() === "set-cookie").map((h) => h.value);
@@ -27,12 +27,12 @@ test("signs in, reads the session, signs out, and the cookie opens nothing after
 });
 
 test("refuses a sign-in without the CSRF header or from another origin", async ({ request }) => {
-  const plain = await request.post("/api/auth/login", { data: { email: EMAIL, password: PASSWORD } });
+  const plain = await request.post("/api/auth/login", { data: { email: EMAIL, password: PASSWORD, turnstileToken: HUMAN_TOKEN } });
   expect(plain.status()).toBe(403);
   expect((await plain.json()).code).toBe("CSRF_FAILED");
   const foreign = await request.post("/api/auth/login", {
     headers: { ...CSRF, origin: "https://atacante.exemplo.com.br" },
-    data: { email: EMAIL, password: PASSWORD },
+    data: { email: EMAIL, password: PASSWORD, turnstileToken: HUMAN_TOKEN },
   });
   expect(foreign.status()).toBe(403);
 });

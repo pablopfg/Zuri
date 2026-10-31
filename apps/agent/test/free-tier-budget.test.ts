@@ -2,7 +2,7 @@ import { AGENT_INSTANCE_NAME, LIST_LIMIT_DEFAULT } from "@zuri/shared";
 import { runInDurableObject } from "cloudflare:test";
 import { beforeAll, describe, expect, it } from "vitest";
 import type { ZuriAgent } from "../src/agent/zuri-agent.ts";
-import { CSRF, call, ORIGIN, TEST_EMAIL, TEST_PASSWORD, testEnv } from "./helpers.ts";
+import { CSRF, call, HUMAN_TOKEN, ORIGIN, TEST_EMAIL, TEST_PASSWORD, testEnv } from "./helpers.ts";
 
 // What each route costs in the units the Free plan bills: rows read and rows
 // written in the object's SQLite (docs/arquitetura/orcamento-free-tier.md). A
@@ -42,7 +42,7 @@ beforeAll(async () => {
   const res = await call(`${ORIGIN}/api/auth/login`, {
     method: "POST",
     headers: { ...headers(), cookie: "" },
-    body: JSON.stringify({ email: TEST_EMAIL, password: TEST_PASSWORD }),
+    body: JSON.stringify({ email: TEST_EMAIL, password: TEST_PASSWORD, turnstileToken: HUMAN_TOKEN }),
   });
   expect(res.status).toBe(200);
   cookie = res.headers.getSetCookie().find((c) => c.startsWith("__Host-zuri_session="))?.split(";")[0] ?? "";
@@ -77,6 +77,42 @@ beforeAll(async () => {
 });
 
 describe("the Free plan budget of each route", () => {
+  it("writes a handful of rows per sign-in try, and a refused robot check writes no more", async () => {
+    // A wrong password: the try, its activity row, their indexes.
+    const failure = await cost("POST", "/auth/login", { email: TEST_EMAIL, password: "senha errada de teste aqui", turnstileToken: HUMAN_TOKEN });
+    expect(failure.status).toBe(401);
+    expect(failure.written).toBeLessThanOrEqual(8);
+    expect(failure.read).toBeLessThanOrEqual(50);
+    const robot = await cost("POST", "/auth/login", { email: TEST_EMAIL, password: TEST_PASSWORD, turnstileToken: "token-de-robo" });
+    expect(robot.status).toBe(400);
+    expect(robot.written).toBeLessThanOrEqual(8);
+    // The same refusal again folds into the row above: no new row within the minute.
+    // The same refusal again folds into the activity row above: only the network's own count grows.
+    const again = await cost("POST", "/auth/login", { email: TEST_EMAIL, password: TEST_PASSWORD, turnstileToken: "token-de-robo" });
+    expect(again.status).toBe(400);
+    expect(again.written).toBeLessThan(robot.written);
+  });
+
+  it("reads about one page of the access log, filtered or not, out of thousands of rows", async () => {
+    await runInDurableObject(owner(), (agent: ZuriAgent) => {
+      const { db } = agent.store;
+      const now = Date.now();
+      db.transaction(() => {
+        for (let i = 0; i < 3000; i++) {
+          const at = now - 60_000 - i * 1000;
+          db.run(`INSERT INTO zur_auth_events (at, last_at, kind, ip) VALUES (?, ?, ?, ?)`, at, at, i % 2 ? "login_failure" : "logout", `198.51.100.${i % 200}`);
+        }
+      });
+    });
+    for (const query of ["", "?days=7", "?days=7&group=failure", "?group=failure&ip=198.51.100.1"]) {
+      const res = await cost("GET", `/auth/activity${query}`);
+      expect(res.status, query).toBe(200);
+      // Session check, one page (51 rows) and what the filter skips on the way.
+      expect(res.read, query).toBeLessThanOrEqual(query.includes("ip=") ? 600 : 160);
+      expect(res.written, query).toBe(0);
+    }
+  });
+
   it("keeps the heartbeat, sent once a minute while the app is open, to a couple of rows", async () => {
     const beat = await cost("POST", "/auth/heartbeat", { active: true });
     expect(beat.status).toBe(200);

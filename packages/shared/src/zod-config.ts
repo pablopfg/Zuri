@@ -4,5 +4,6 @@ import { config } from "zod";
 // probes for it on the first object schema. The interface's CSP (script-src
 // 'self', no 'unsafe-eval') and workerd both refuse eval, so the probe only
 // fails, logs a CSP violation in the browser and leaves the slow path anyway.
-// Must run before any schema is built: index.ts imports this file first.
+// Must run before any schema is built: every module that builds one imports
+// this file first (package.json lists it as the one side effect to keep).
 config({ jitless: true });

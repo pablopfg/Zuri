@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixtures.ts";
 import { expectAccessible, signIn, tooSmallControls } from "./ui-helpers.ts";
 
 // axe (WCAG 2.1 A and AA) on every screen of the shell, in both themes. Serious
@@ -35,6 +35,7 @@ for (const scheme of ["light", "dark"] as const) {
       for (const [path, heading] of [
         ["/tarefas", "Tarefas"],
         ["/notas", "Notas"],
+        ["/acessos", "Acessos"],
       ] as const) {
         await page.goto(path);
         await expect(page.getByRole("heading", { level: 1, name: heading })).toBeVisible();

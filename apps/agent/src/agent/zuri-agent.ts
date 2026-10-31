@@ -2,7 +2,7 @@ import { DEFAULT_LOCALE, isBreachedPassword, isPasswordHash, type Locale } from 
 import { Agent } from "agents";
 import { createApi } from "../api/app.ts";
 import { AuthService } from "../auth/service.ts";
-import { createTurnstile } from "../auth/turnstile.ts";
+import { createTurnstile, type Turnstile } from "../auth/turnstile.ts";
 import { MIN_OWNER_PASSWORD_LENGTH, parsePublicUrl } from "../config.ts";
 import { Database } from "../db/database.ts";
 import { InternalState } from "../db/internal-state.ts";
@@ -11,6 +11,24 @@ import { SettingsRepository } from "../db/settings.ts";
 import type { WorkerEnv } from "../env.ts";
 import { AppError, errorResponse } from "../http/errors.ts";
 import { Productivity } from "../productivity/index.ts";
+
+/**
+ * The sign-in's robot check for this deploy. Loopback http PUBLIC_URL (local
+ * development) is the only place it may be off or use Cloudflare's test keys;
+ * anywhere else it is mandatory, so without usable keys the sign-in is closed.
+ */
+export function signInTurnstile(
+  env: Pick<WorkerEnv, "PUBLIC_URL" | "TURNSTILE_SITE_KEY" | "TURNSTILE_SECRET_KEY">,
+  fetcher?: typeof fetch,
+): { turnstile: Turnstile | null; turnstileMandatory: boolean } {
+  const parsed = parsePublicUrl(env.PUBLIC_URL);
+  if (!parsed) throw new AppError("NOT_CONFIGURED");
+  const development = parsed.allowPlainHttp;
+  return {
+    turnstile: createTurnstile(env.TURNSTILE_SITE_KEY, env.TURNSTILE_SECRET_KEY, parsed.url.hostname, { development, ...(fetcher ? { fetcher } : {}) }),
+    turnstileMandatory: !development,
+  };
+}
 
 /** The object's own storage, opened and migrated on first use. */
 interface Store {
@@ -67,7 +85,7 @@ export class ZuriAgent extends Agent<WorkerEnv> {
           plainPassword: env.OWNER_PASSWORD,
           agentName: env.AGENT_NAME,
         },
-        turnstile: createTurnstile(env.TURNSTILE_SITE_KEY, env.TURNSTILE_SECRET_KEY, this.publicUrl().hostname),
+        ...signInTurnstile(env),
         breached: (password) => isBreachedPassword(password),
         // Passkeys belong to the host they were made on: always PUBLIC_URL's, never the request's.
         relyingParty: { rpId: this.publicUrl().hostname, origin: this.publicUrl().origin },

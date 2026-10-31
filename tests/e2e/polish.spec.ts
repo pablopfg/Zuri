@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixtures.ts";
 import { PASSWORD, signIn } from "./ui-helpers.ts";
 
 // Details from the design review (docs/qa/revisao-de-design.md): tab names,

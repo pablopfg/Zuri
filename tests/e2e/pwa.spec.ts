@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, HUMAN_TOKEN, test } from "./fixtures.ts";
 import { CSRF, EMAIL, PASSWORD } from "./ui-helpers.ts";
 
 // The app installs in Chromium, its service worker caches nothing, and no API
@@ -38,7 +38,7 @@ test("every /api answer says Cache-Control: no-store, success or refusal", async
     await request.get("/api/nada", { headers: CSRF }),
     await request.post("/api/auth/login", { data: {} }),
   ];
-  const login = await request.post("/api/auth/login", { headers: CSRF, data: { email: EMAIL, password: PASSWORD } });
+  const login = await request.post("/api/auth/login", { headers: CSRF, data: { email: EMAIL, password: PASSWORD, turnstileToken: HUMAN_TOKEN } });
   expect(login.status()).toBe(200);
   answers.push(
     login,

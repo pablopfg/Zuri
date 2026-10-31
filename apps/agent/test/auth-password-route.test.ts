@@ -2,9 +2,10 @@ import { AGENT_INSTANCE_NAME, BREACH_API, MIN_BREACH_LINES, sessionStateSchema }
 import { runInDurableObject } from "cloudflare:test";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ZuriAgent } from "../src/agent/zuri-agent.ts";
+import { TURNSTILE_VERIFY_URL } from "../src/auth/turnstile.ts";
 import { InternalState } from "../src/db/internal-state.ts";
 import { Database } from "../src/db/database.ts";
-import { CSRF, call, errorBody, ORIGIN, TEST_EMAIL, TEST_PASSWORD, testEnv } from "./helpers.ts";
+import { call, CSRF, errorBody, HUMAN_TOKEN, ORIGIN, TEST_EMAIL, TEST_PASSWORD, testEnv } from "./helpers.ts";
 
 // Its own file: it changes the owner's password.
 
@@ -28,15 +29,18 @@ const json = (ip: string, token: string | null, body: unknown) => ({
 });
 
 async function signIn(ip: string, password = TEST_PASSWORD): Promise<string> {
-  const res = await call(`${ORIGIN}/api/auth/login`, json(ip, null, { email: TEST_EMAIL, password }));
+  const res = await call(`${ORIGIN}/api/auth/login`, json(ip, null, { email: TEST_EMAIL, password, turnstileToken: HUMAN_TOKEN }));
   expect(res.status).toBe(200);
   return res.headers.getSetCookie()[0]?.split(";")[0]?.split("=")[1] ?? "";
 }
 
 /** Have I Been Pwned, faked: the test says whether the password is in it, or that the network is down. */
 function fakeBreachApi(answer: "clean" | "down") {
-  return vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+  const turnstile = globalThis.fetch;
+  return vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
     const url = String(input instanceof Request ? input.url : input);
+    // The sign-in's robot check stays with test/setup-turnstile.ts.
+    if (url === TURNSTILE_VERIFY_URL) return turnstile(input, init);
     if (!url.startsWith(BREACH_API)) throw new Error(`unexpected fetch ${url}`);
     if (answer === "down") throw new TypeError("Network connection lost.");
     // A padded answer without the new password's suffix.
@@ -109,7 +113,7 @@ describe("POST /api/auth/password", () => {
     expect((await session(token)).status).toBe(401);
     expect((await session(other)).status).toBe(401);
     expect((await session(fresh)).status).toBe(200);
-    expect((await call(`${ORIGIN}/api/auth/login`, json("192.0.2.45", null, { email: TEST_EMAIL, password: TEST_PASSWORD }))).status).toBe(401);
+    expect((await call(`${ORIGIN}/api/auth/login`, json("192.0.2.45", null, { email: TEST_EMAIL, password: TEST_PASSWORD, turnstileToken: HUMAN_TOKEN }))).status).toBe(401);
     await signIn("192.0.2.46", NEW_PASSWORD);
   });
 });
