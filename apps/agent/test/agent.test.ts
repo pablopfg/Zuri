@@ -24,6 +24,9 @@ describe("GET /api/health", () => {
       settings: () => {
         throw new Error("not used");
       },
+      productivity: () => {
+        throw new Error("not used");
+      },
       passwordSecretSet: () => false,
       origin: () => ORIGIN,
       development: () => false,

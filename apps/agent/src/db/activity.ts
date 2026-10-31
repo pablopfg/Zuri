@@ -1,7 +1,7 @@
 import { type Database, now } from "./database.ts";
 
 /** Kinds of activity the owner sees. Later steps add theirs here. */
-export type ActivityKind = "settings.updated";
+export type ActivityKind = "settings.updated" | "trash.restored" | "trash.purged" | "trash.emptied";
 
 /**
  * Records one entry of the activity log. `detail` holds names and ids, never

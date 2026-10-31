@@ -17,3 +17,5 @@
 | Senha recente | Senha (ou, na etapa 4, TOTP) digitada nos últimos 15 minutos nesta sessão; exigida por ações sensíveis. |
 | Presença | Sinal de que há uma aba aberta (qualquer requisição ou o heartbeat). Sem ele por 5 min, a sessão acaba. |
 | Impressão digital dos segredos | HMAC dos segredos de senha e do pepper; muda quando o dono redefine a senha pelo painel. |
+| Lixeira | Onde tarefas, notas e projetos apagados ficam 30 dias, restauráveis, antes de sumirem de vez. |
+| Prazo só com dia | Tarefa com data sem hora: vale até 23:59 daquele dia no fuso do dono. |

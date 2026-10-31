@@ -124,6 +124,11 @@ fixa o hash de cada migration já mesclada, para ninguém editar uma antiga.
 | 3 | `zur_recovery_codes` | SHA-256 dos códigos de recuperação ainda não usados | não |
 | 3 | `zur_passkeys` | Chave pública, contador e host (`rp_id`) de cada passkey | não |
 | 3 | `zur_mfa_challenges` | Logins à espera do segundo passo; id é `HMAC(SESSION_SECRET, cookie)` | não |
+| 4 | `zur_projects` | Projetos: nome, descrição, situação | sim (etapa 23) |
+| 4 | `zur_tasks` | Tarefas: título, descrição, situação, prioridade, prazo em UTC, projeto | sim (etapa 23) |
+| 4 | `zur_notes` | Notas em Markdown, com o índice de texto completo `zur_notes_fts` (FTS5, mantido por gatilhos) | sim (etapa 23) |
+| 4 | `zur_trash` | Cópia em JSON do que foi apagado, por 30 dias, com quem apagou e o tamanho | não |
+| 4 | `zur_counts` | Contagem de linhas por tipo, mantida por gatilhos, para conferir limites lendo uma linha só | não |
 
 Valores internos do servidor também ficam em `zur_settings`, com chaves
 `auth_*` (o hash da senha trocada no app, a impressão digital dos segredos,

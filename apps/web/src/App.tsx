@@ -10,8 +10,10 @@ import { LoginPage } from "./pages/LoginPage.tsx";
 import { NotFoundPage } from "./pages/NotFoundPage.tsx";
 import { PasswordChangePage } from "./pages/PasswordChangePage.tsx";
 
-// Settings carry the QR code and passkey code: loaded only when opened.
+// Settings carry the QR code and passkey code, notes the Markdown renderer: loaded only when opened.
 const SettingsPage = lazy(() => import("./pages/SettingsPage.tsx").then((m) => ({ default: m.SettingsPage })));
+const TasksPage = lazy(() => import("./pages/productivity/TasksPage.tsx").then((m) => ({ default: m.TasksPage })));
+const NotesPage = lazy(() => import("./pages/productivity/NotesPage.tsx").then((m) => ({ default: m.NotesPage })));
 
 /** While the password must change, the server refuses everything else: so does the interface. */
 function SignedIn() {
@@ -37,6 +39,22 @@ export function App() {
           element={
             <Suspense fallback={<Spinner />}>
               <SettingsPage />
+            </Suspense>
+          }
+        />
+        <Route
+          path="tarefas"
+          element={
+            <Suspense fallback={<Spinner />}>
+              <TasksPage />
+            </Suspense>
+          }
+        />
+        <Route
+          path="notas/:id?"
+          element={
+            <Suspense fallback={<Spinner />}>
+              <NotesPage />
             </Suspense>
           }
         />
