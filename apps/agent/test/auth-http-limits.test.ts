@@ -49,7 +49,7 @@ describe("robot check over HTTP", () => {
         expect(missing.status).toBe(400);
         expect(await missing.json()).toEqual({
           code: "TURNSTILE_REQUIRED",
-          message: "Confirme que você não é um robô e tente de novo.",
+          message: "Confirme a verificação de segurança e tente de novo.",
           details: { turnstileSiteKey: turnstile.siteKey },
         });
         const passed = await post(h, "/auth/login", "192.0.2.60", { ...rightBody, turnstileToken: "token-bom" });

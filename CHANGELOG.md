@@ -108,6 +108,10 @@ o [SemVer](https://semver.org/lang/pt-BR/). Cada PR escreve a sua entrada em
 - A tela de entrar ficou em um cartão com ícones nos campos, um brilho verde
   suave atrás do logo, entrada suave (parada com "reduzir movimento") e o
   sinal do logo pulsando enquanto confere a senha.
+- A verificação contra robôs ficou discreta: roda sozinha, sem caixa, e só
+  aparece quando precisa de um clique, com uma linha dizendo por quê.
+- Frases da tela de entrar reescritas, sem citar onde nem em que serviço o
+  Zuri roda (também na descrição da página e em dois erros de antes do login).
 - O botão Entrar não trava mais com campo vazio: ao tocar, o campo que falta
   é marcado logo abaixo dele, e nada é enviado. O mesmo vale para o código do
   segundo passo e para a verificação contra robôs, cuja linha vira o aviso.

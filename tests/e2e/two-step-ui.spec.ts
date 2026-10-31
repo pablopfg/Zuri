@@ -31,9 +31,16 @@ test("turns two-step sign-in on in Settings and asks for the code at the next si
     await expect(page.getByRole("heading", { name: "Verificação em duas etapas" })).toBeVisible();
 
     // An empty code is marked under the field, without a request.
+    let codeTries = 0;
+    await page.route("**/api/auth/mfa", (route) => {
+      codeTries += 1;
+      return route.continue();
+    });
     await page.getByRole("button", { name: "Confirmar" }).click();
-    await expect(page.getByText("Digite o código.")).toBeVisible();
-    await expect(page.getByLabel("Código do aplicativo")).toBeFocused();
+    await expect(page.locator("p", { hasText: "Digite o código." })).toBeVisible();
+    await expect(page.getByLabel("Código do aplicativo")).toHaveAccessibleDescription("Digite o código.");
+    expect(codeTries).toBe(0);
+    await page.unroute("**/api/auth/mfa");
 
     // A wrong code says so and keeps the step; the next code signs in.
     await page.getByLabel("Código do aplicativo").fill("000000");

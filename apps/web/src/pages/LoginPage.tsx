@@ -53,6 +53,9 @@ export function LoginPage() {
   const [humanToken, setHumanToken] = useState<string | null>(null);
   const [humanBroken, setHumanBroken] = useState(false);
   const [humanNudge, setHumanNudge] = useState(false);
+  const [spoken, setSpoken] = useState({ text: "", n: 0 });
+  // Only when Cloudflare asks for a click does the box appear, with a line saying why.
+  const [humanInteractive, setHumanInteractive] = useState(false);
   const [humanRound, setHumanRound] = useState(0);
   // Kept from when the screen opened, so the message doesn't vanish on the first keystroke.
   const [endedReason] = useState(ended);
@@ -73,7 +76,7 @@ export function LoginPage() {
     if (offersPasskey) void import("@simplewebauthn/browser").catch(() => {});
   }, [offersPasskey]);
   const waitSeconds = retryAt ? Math.max(0, Math.ceil((retryAt - now) / 1000)) : 0;
-  // Without its token the server refuses the try anyway: the button waits for the widget.
+  // Without its token the server refuses the try anyway: a try without it is held back here.
   const humanMissing = siteKey !== null && !humanToken;
   // Until the options arrive the form can't know whether the check is on; if they fail, the server's refusal tells.
   const optionsPending = options.isPending && refusedKey === null;
@@ -98,7 +101,13 @@ export function LoginPage() {
     if (typeof details.turnstileSiteKey === "string" && details.turnstileSiteKey && details.turnstileSiteKey !== siteKey) {
       setHumanRound((n) => n + 1);
       setSiteKey(details.turnstileSiteKey);
+      setHumanNudge(false);
     }
+  }
+
+  /** Says a blocked try out loud: a new node each time, so a screen reader repeats it. */
+  function announce(message: string) {
+    setSpoken((last) => ({ text: message, n: last.n + 1 }));
   }
 
   async function submitPassword(e: FormEvent) {
@@ -107,15 +116,19 @@ export function LoginPage() {
     if (!email.trim() || !password) {
       setAttempted(true);
       setError(null);
-      (email.trim() ? passwordRef : emailRef).current?.focus();
+      announce(t(email.trim() ? "web.login.passwordRequired" : "web.login.emailRequired"));
+      // After the render, so the field already carries its message when it takes the focus.
+      requestAnimationFrame(() => (email.trim() ? passwordRef : emailRef).current?.focus());
       return;
     }
     // The robot check comes first: its own line, right above, turns into the alert.
     if (optionsPending || humanMissing) {
       setHumanNudge(true);
+      announce(t(optionsPending ? "web.login.humanLoading" : "web.login.humanHint"));
       return;
     }
     setAttempted(false);
+    setSpoken((last) => ({ text: "", n: last.n }));
     setPending(true);
     setError(null);
     const token = humanToken;
@@ -150,6 +163,8 @@ export function LoginPage() {
   function secondStepFailed(err: unknown) {
     setError(errorMessage(err));
     if (err instanceof ApiError && (err.details as SignInDetails).mfa === "expired") {
+      setAttempted(false);
+      setSpoken((last) => ({ text: "", n: last.n }));
       setStep({ kind: "password" });
       requestAnimationFrame(() => passwordRef.current?.focus());
       return;
@@ -163,10 +178,12 @@ export function LoginPage() {
     if (pending) return;
     if (!code.trim()) {
       setAttempted(true);
-      codeRef.current?.focus();
+      announce(t("web.login.codeRequired"));
+      requestAnimationFrame(() => codeRef.current?.focus());
       return;
     }
     setAttempted(false);
+    setSpoken((last) => ({ text: "", n: last.n }));
     setPending(true);
     setError(null);
     try {
@@ -244,19 +261,22 @@ export function LoginPage() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
             />
-            {optionsPending && (
-              <p className={humanNudge ? "min-h-[65px] text-sm leading-6 text-danger" : "min-h-[65px] text-sm leading-6 text-fg-muted"} role={humanNudge ? "alert" : undefined}>
+            {optionsPending && humanNudge && (
+              <p className="text-sm leading-6 text-danger" role="alert">
                 {t("web.login.humanLoading")}
               </p>
             )}
             {siteKey !== null && (
-              <div className="space-y-1.5">
-                <p
-                  className={humanBroken || humanNudge ? "text-sm leading-6 text-danger" : "text-sm leading-6 text-fg-muted"}
-                  role={humanBroken || humanNudge ? "alert" : undefined}
-                >
-                  {humanBroken ? t("web.login.humanBroken") : t("web.login.humanHint")}
-                </p>
+              // Hidden while the check runs on its own: no gap where nothing shows.
+              <div className={humanBroken || humanNudge || humanInteractive ? "space-y-1.5" : "!mt-0"}>
+                {(humanBroken || humanNudge || humanInteractive) && (
+                  <p
+                    className={humanBroken || humanNudge ? "text-sm leading-6 text-danger" : "text-sm leading-6 text-fg-muted"}
+                    role={humanBroken || humanNudge ? "alert" : undefined}
+                  >
+                    {humanBroken ? t("web.login.humanBroken") : t("web.login.humanHint")}
+                  </p>
+                )}
                 {humanBroken && (
                   <Button
                     variant="secondary"
@@ -282,6 +302,7 @@ export function LoginPage() {
                     }
                   }}
                   onError={() => setHumanBroken(true)}
+                  onInteractive={setHumanInteractive}
                 />
               </div>
             )}
@@ -326,6 +347,7 @@ export function LoginPage() {
                   setStep({ kind: "password" });
                   setError(null);
                   setAttempted(false);
+                  setSpoken((last) => ({ text: "", n: last.n }));
                 }}
               >
                 {t("web.login.back")}
@@ -338,6 +360,7 @@ export function LoginPage() {
                   setCode("");
                   setError(null);
                   setAttempted(false);
+                  setSpoken((last) => ({ text: "", n: last.n }));
                 }}
               >
                 {step.recovery ? t("web.login.useApp") : t("web.login.useRecovery")}
@@ -346,6 +369,15 @@ export function LoginPage() {
           </form>
         )}
         </div>
+        {spoken.text && (
+          <span key={spoken.n} role="alert" className="sr-only">
+            {spoken.text}
+          </span>
+        )}
+        <p className="mt-5 flex items-center justify-center gap-1.5 text-xs text-fg-muted">
+          <LockKeyhole className="h-3.5 w-3.5" aria-hidden />
+          {t("web.login.secure")}
+        </p>
       </div>
     </main>
   );
