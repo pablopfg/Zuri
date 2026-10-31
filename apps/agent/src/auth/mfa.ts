@@ -6,6 +6,8 @@ import {
   MFA_CHALLENGE_TTL_MS,
   MFA_MAX_ATTEMPTS,
   MFA_SETUP_TTL_MS,
+  MFA_WRONG_CODES_DAILY,
+  MFA_WRONG_CODES_DAILY_WINDOW_MS,
   MFA_WRONG_CODES_GLOBAL,
   MFA_WRONG_CODES_WINDOW_MS,
   type MfaSetup,
@@ -259,9 +261,9 @@ export class TwoStep {
 
   // ---------- The pause shared by every network ----------
 
-  /** Wrong codes across every challenge and network in the window, oldest first. */
+  /** Wrong codes across every challenge and network in the last day (at most the daily cap), oldest first. */
   private wrongCodeTimes(): number[] {
-    const since = this.clock() - MFA_WRONG_CODES_WINDOW_MS;
+    const since = this.clock() - MFA_WRONG_CODES_DAILY_WINDOW_MS;
     const raw = this.state.get<string>("auth_mfa_wrong_codes");
     let times: unknown;
     try {
@@ -277,12 +279,14 @@ export class TwoStep {
    * step as the pause check, so answers sent together can't all slip under the
    * pause while the slow check runs. A right answer gives it back (`release`).
    */
-  reserveWrongCode(): number {
+  reserveWrongCode(): { at: number; reachedDailyCap: boolean } {
     const at = this.clock();
-    // A burst may leave more than 10 in the window; past 100 the oldest add nothing.
-    const times = [...this.wrongCodeTimes(), at].slice(-100);
+    const before = this.wrongCodeTimes();
+    // Only the newest the daily cap needs are kept: the list stays a small, bounded value.
+    const times = [...before, at].slice(-MFA_WRONG_CODES_DAILY);
     this.state.set("auth_mfa_wrong_codes", JSON.stringify(times));
-    return at;
+    // True only for the answer that fills the day: one alert per cap, not one per later try.
+    return { at, reachedDailyCap: before.length < MFA_WRONG_CODES_DAILY && times.length === MFA_WRONG_CODES_DAILY };
   }
 
   releaseWrongCode(at: number): void {
@@ -293,12 +297,21 @@ export class TwoStep {
     this.state.set("auth_mfa_wrong_codes", JSON.stringify(times));
   }
 
-  /** Until when networks that aren't the owner's must wait to try a code; null when they may now. */
+  /**
+   * Until when networks that aren't the owner's must wait to try a code; null
+   * when they may now. Two limits, the later end wins: the short pause (10 in
+   * 15 minutes) and the daily cap (100 in 24 hours).
+   */
   pausedUntil(): number | null {
     const times = this.wrongCodeTimes();
-    // Paused until the window holds fewer than the limit again.
-    const oldest = times[times.length - MFA_WRONG_CODES_GLOBAL];
-    return oldest !== undefined ? oldest + MFA_WRONG_CODES_WINDOW_MS : null;
+    const since = this.clock() - MFA_WRONG_CODES_WINDOW_MS;
+    const recent = times.filter((t) => t > since);
+    // Each holds until its window has fewer than its limit again.
+    const short = recent[recent.length - MFA_WRONG_CODES_GLOBAL];
+    const daily = times[times.length - MFA_WRONG_CODES_DAILY];
+    const ends = [short === undefined ? null : short + MFA_WRONG_CODES_WINDOW_MS, daily === undefined ? null : daily + MFA_WRONG_CODES_DAILY_WINDOW_MS];
+    const live = ends.filter((end): end is number => end !== null);
+    return live.length > 0 ? Math.max(...live) : null;
   }
 
   // ---------- Sign-in challenges ----------

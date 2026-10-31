@@ -391,11 +391,15 @@ export class AuthService {
     throw new AppError("RATE_LIMITED", undefined, { retryAfter: Math.max(1, Math.ceil((until - this.#clock()) / 1000)) });
   }
 
-  /** A wrong second step, wherever it was given (already counted for the pause): the activity, and the alert at three in a row. */
-  private noteWrongSecondStep(client: ClientInfo, reason: string): void {
+  /**
+   * A wrong second step, wherever it was given (already counted for the pause):
+   * the activity, and the alert at every third in a row and when the day's cap fills.
+   */
+  private noteWrongSecondStep(client: ClientInfo, reason: string, reachedDailyCap: boolean): void {
     // Every third in a row, not only the first three: a slow guess that goes on for days keeps telling the owner.
     const failures = this.twoStep.consecutiveFailures();
-    this.events.record("mfa_failure", client, { reason, alert: failures > 0 && failures % MFA_FAILURES_ALERT === 0 });
+    const alert = reachedDailyCap || (failures > 0 && failures % MFA_FAILURES_ALERT === 0);
+    this.events.record("mfa_failure", client, { reason: reachedDailyCap ? `${reason},daily_cap` : reason, alert });
   }
 
   private async completeSecondStep(
@@ -416,9 +420,9 @@ export class AuthService {
     }
     const reserved = this.twoStep.reserveWrongCode();
     const factor = await check(row);
-    if (factor) this.twoStep.releaseWrongCode(reserved);
+    if (factor) this.twoStep.releaseWrongCode(reserved.at);
     if (!factor) {
-      this.noteWrongSecondStep(client, reason);
+      this.noteWrongSecondStep(client, reason, reserved.reachedDailyCap);
       const left = Math.max(0, MFA_MAX_ATTEMPTS - attempts);
       if (left === 0) {
         this.twoStep.deleteChallenge(row.id);
@@ -684,9 +688,9 @@ export class AuthService {
     const attempt = this.beginChecked(client, "mfa_failure");
     const reserved = this.twoStep.reserveWrongCode();
     const factor = await this.twoStep.verify(code, options);
-    if (factor) this.twoStep.releaseWrongCode(reserved);
+    if (factor) this.twoStep.releaseWrongCode(reserved.at);
     if (!factor) {
-      this.noteWrongSecondStep(client, reason);
+      this.noteWrongSecondStep(client, reason, reserved.reachedDailyCap);
       throw new AppError("INVALID_CREDENTIALS", "auth.mfa.wrongCode");
     }
     this.limiter.succeed(attempt);

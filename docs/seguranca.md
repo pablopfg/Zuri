@@ -140,7 +140,17 @@ chega na etapa 5). Recomendado ligar logo depois do primeiro login.
   Os pedidos recusados pela pausa viram uma linha só na atividade por rede e
   janela, e pedir de novo as opções de passkey devolve o mesmo pedido ainda
   válido: insistir não gasta a cota de gravações do plano gratuito.
-- **Alertas.** 3 segundos passos errados seguidos, ligar ou desligar a
+- **Teto diário** (decisão de 31/10/2026). 30 respostas erradas em 24 horas,
+  somando todos os desafios e redes, suspendem o segundo passo para as redes
+  desconhecidas até a mais antiga delas completar um dia. Fecha o chute lento
+  que fica abaixo da pausa (9 a cada 15 minutos, 864 por dia): com o teto, quem
+  tem a senha tem cerca de 3% de chance por ano de acertar o código. O dono, no
+  navegador e na rede de sempre, segue entrando. O preço é que quem tem a senha
+  pode gastar o teto de propósito e travar o segundo passo em redes novas por
+  até um dia. A resposta que enche o teto gera alerta, uma vez por teto, e
+  aparece em Acessos como "limite diário atingido".
+- **Alertas.** 3 segundos passos errados seguidos (e de novo a cada 3, enquanto
+  o ataque durar), o teto diário, ligar ou desligar a
   verificação, gerar códigos novos, usar um código de recuperação, adicionar ou
   remover uma passkey: eventos com alerta (entregues na etapa 11). Ligar ou
   desligar encerra todas as outras sessões.

@@ -51,6 +51,7 @@ const REASON_LABEL: Record<string, MessageKey> = {
   recovery_code: "web.accessLog.reason.recovery_code",
   passkey: "web.accessLog.reason.passkey",
   idle: "web.accessLog.reason.idle",
+  daily_cap: "web.accessLog.reason.daily_cap",
 };
 
 /** The reasons of a row the owner can read, in order. */

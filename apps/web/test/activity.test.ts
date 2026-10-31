@@ -29,6 +29,7 @@ describe("the access log's helpers", () => {
     expect(reasonLabels("totp,new_device")).toEqual(["web.accessLog.reason.totp", "web.accessLog.reason.new_device"]);
     expect(reasonLabels(" missing ,credentials,,x")).toEqual(["web.accessLog.reason.missing"]);
     expect(reasonLabels("__proto__,constructor")).toEqual([]);
+    expect(reasonLabels("code,daily_cap")).toEqual(["web.accessLog.reason.daily_cap"]);
   });
 
   it("groups and flags kinds the way the badges show them", () => {
