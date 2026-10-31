@@ -35,10 +35,12 @@ chegar aos arquivos estáticos. Os portões rodam nesta ordem:
    estrita, HSTS, `frame-ancestors 'none'` e `Permissions-Policy`, os mesmos de
    `apps/web/public/_headers` (um teste confere que os dois são iguais). A API
    recebe uma CSP que não deixa nada carregar e `Cache-Control: no-store`.
-5. **Autenticação**, dentro da API. Só as rotas registradas antes do
-   middleware de credencial são públicas (hoje, só `GET /api/health`). As
-   sessões chegam na etapa 3; até lá, toda outra rota responde 401
-   `UNAUTHORIZED`.
+5. **Autenticação**, dentro da API. Toda rota, menos `GET /api/health`,
+   exige o cabeçalho `x-zuri-request: 1` e uma `Origin` (ou `Sec-Fetch-Site`)
+   da própria origem; sem isso, 403 `CSRF_FAILED`. Depois, só
+   `POST /api/auth/login` dispensa sessão; o resto exige o cookie
+   `__Host-zuri_session` válido, ou responde 401 `UNAUTHORIZED`. Detalhes em
+   [seguranca.md](seguranca.md).
 6. **Repasse ao Durable Object** de nome fixo (`AGENT_INSTANCE_NAME`, em
    `packages/shared`). Nenhuma rota, cabeçalho ou parâmetro escolhe outra
    instância. Os cabeçalhos internos do Agents SDK (`x-agents-*`,
@@ -55,38 +57,49 @@ stack trace na resposta, e o log registra só o nome do erro.
 ## Configuração
 
 Nada pessoal fica no repositório. Os valores abaixo são definidos no painel da
-Cloudflare (ou pelo deploy, na etapa 24). Grave `PUBLIC_URL` e os dois do Access
-como **segredo** (texto cifrado), mesmo sem serem secretos: o `wrangler deploy`
-apaga as variáveis comuns do painel que não estão no `wrangler.jsonc`, e o
-Worker ficaria fora do ar com `NOT_CONFIGURED`. Segredos sobrevivem ao deploy.
+Cloudflare (ou pelo deploy, na etapa 24). Grave `PUBLIC_URL`, os dois do Access
+e a chave pública do Turnstile como **segredo** (texto cifrado), mesmo sem
+serem secretos: o `wrangler deploy` apaga as variáveis comuns do painel que não
+estão no `wrangler.jsonc`, e o Worker ficaria fora do ar com `NOT_CONFIGURED`.
+Segredos sobrevivem ao deploy.
 
 | Nome | Tipo | Obrigatório | Regra |
 | --- | --- | --- | --- |
 | `PUBLIC_URL` | segredo | sim | Só a origem, em HTTPS, como `https://zuri.exemplo.com.br`, sem caminho nem parâmetros |
-| `SESSION_SECRET` | segredo | sim | 48 caracteres ou mais |
-| `PASSWORD_PEPPER` | segredo | sim | 48 caracteres ou mais |
-| `OWNER_PASSWORD_HASH` | segredo | sim* | Não vazio (o formato é conferido na etapa 3) |
-| `OWNER_PASSWORD` | segredo | sim* | 20 caracteres ou mais; só quando não há `OWNER_PASSWORD_HASH` |
-| `OWNER_EMAIL` | segredo | sim | Um e-mail válido |
+| `SESSION_SECRET` | segredo | sim | 48 caracteres aleatórios ou mais |
+| `PASSWORD_PEPPER` | segredo | sim | 48 caracteres aleatórios ou mais |
+| `OWNER_EMAIL` | segredo | sim | Um e-mail válido; o login compara por HMAC |
+| `OWNER_PASSWORD` | segredo | até o 1º login* | 20 caracteres ou mais |
+| `OWNER_PASSWORD_HASH` | segredo | não* | `pbkdf2$100000$<sal>$<hash>`, feito com o `PASSWORD_PEPPER` |
+| `TURNSTILE_SITE_KEY`, `TURNSTILE_SECRET_KEY` | segredo | não | Os dois ou nenhum; ligam o Turnstile adaptativo do login |
 | `ACCESS_TEAM_DOMAIN`, `ACCESS_AUD` | segredo | não | Os dois ou nenhum |
 | `DEFAULT_TIMEZONE`, `AGENT_NAME` | variável | sim | Já vêm no `wrangler.jsonc` |
 
-\* Um dos dois: o hash, ou a senha em texto até o primeiro login trocá-la (etapa 3).
+\* Instalação sem instalador: grave `OWNER_PASSWORD`. O primeiro login com ela
+exige a troca; o Zuri grava o hash da senha nova no banco e a sessão passa a
+avisar (`removePlainPasswordSecret`) que o segredo pode ser apagado do painel.
+Apagar o segredo depois disso não muda nada. Gravar uma senha nova no painel
+(`OWNER_PASSWORD` ou `OWNER_PASSWORD_HASH` com outro valor) ou trocar o
+`PASSWORD_PEPPER` é o jeito de redefinir a senha: o Zuri descarta a senha do
+banco e encerra todas as sessões. Detalhes em [seguranca.md](seguranca.md).
 
 O que acontece quando falta algo:
 
 - `PUBLIC_URL` ausente ou malformado, ou só metade do Access: **toda**
   requisição recebe 503 `NOT_CONFIGURED`. O Worker não adivinha o host.
-- Algum segredo obrigatório ausente ou curto: a interface abre, mas a API,
-  inclusive `GET /api/health`, responde 503 `NOT_CONFIGURED`, sem dizer qual
-  valor falta.
+- Algum segredo obrigatório ausente ou curto, ou um `OWNER_PASSWORD_HASH`
+  malformado: a interface abre, mas a API, inclusive `GET /api/health`, responde
+  503 `NOT_CONFIGURED`, sem dizer qual valor falta. O log do Worker, na chamada
+  do health check, lista só os **nomes** que faltam.
+- Nenhuma senha (nem segredo nem hash no banco): o health check e o login
+  respondem 503 `NOT_CONFIGURED`, e o log pede `OWNER_PASSWORD`.
 
 ## Modelo de dados
 
 O banco é o SQLite do Durable Object `ZuriAgent`. As tabelas do Zuri começam
 com `zur_` e nunca encostam nas `cf_agents_*` do Agents SDK. O banco é criado
 sob demanda: a primeira requisição que precisa dele aplica as migrations
-pendentes. `GET /api/health` não abre o banco.
+pendentes. `GET /api/health` não abre o banco enquanto houver um segredo de senha; sem nenhum, ele confere se há uma senha guardada.
 
 As migrations ficam em `apps/agent/src/db/migrations.ts` e só crescem. Cada uma
 roda numa transação junto com o aumento de versão em `zur_schema_version`; se
@@ -99,12 +112,24 @@ fixa o hash de cada migration já mesclada, para ninguém editar uma antiga.
 | — | `zur_schema_version` | Versão aplicada (uma linha) | não |
 | 1 | `zur_settings` | Uma linha por configuração alterada, valor em JSON | só as chaves não sensíveis (etapa 23) |
 | 1 | `zur_activity` | Registro de atividade: quando, o quê e detalhes sem segredos | não |
+| 2 | `zur_sessions` | Sessões do navegador; o id é `HMAC(SESSION_SECRET, token)`, o token só existe no cookie | não |
+| 2 | `zur_login_attempts` | Tentativas de senha por rede (IPv4 ou /64 do IPv6), para o limite de força bruta | não |
+| 2 | `zur_auth_events` | Atividade de acesso por 90 dias, com `alert_pending` para a etapa 11 | não |
+| 2 | `zur_auth_events_daily` | Contagens diárias por tipo e país, sem IP, por 1 ano | não |
+| 2 | `zur_devices` | `HMAC` do cookie de aparelho (até 50), para reconhecer um navegador já visto | não |
+
+Valores internos do servidor também ficam em `zur_settings`, com chaves
+`auth_*` (o hash da senha trocada no app, a impressão digital dos segredos,
+quando a limpeza rodou). O `SettingsRepository` não lê essas chaves e o backup
+(etapa 23) usa uma lista positiva, então elas nunca saem do banco.
 
 ### Configurações
 
 `SettingsRepository` (`apps/agent/src/db/settings.ts`) devolve as
 configurações com os padrões preenchidos: idioma `pt-BR` e o fuso de
-`DEFAULT_TIMEZONE` (`America/Sao_Paulo` se a variável faltar ou for inválida).
+`DEFAULT_TIMEZONE` (`America/Sao_Paulo` se a variável faltar ou for inválida)
+e a saída automática de 30 min sem uso, 5 min sem aba aberta e 6 h no máximo
+(faixas de 5 a 60 min, 3 a 15 min e 1 a 24 h).
 Só os campos alterados viram linha no banco. Um valor guardado que deixou de
 ser válido é lido como o padrão. Mudança inválida volta como
 `VALIDATION_FAILED`, com o nome dos campos e nunca o valor enviado, e cada
@@ -151,15 +176,26 @@ O `npm run dev` monta a interface e sobe o Worker com `wrangler dev` em
 ```ini
 SESSION_SECRET=um-valor-local-qualquer-com-pelo-menos-48-caracteres-aqui
 PASSWORD_PEPPER=outro-valor-local-com-pelo-menos-48-caracteres-tambem
-OWNER_PASSWORD_HASH=provisorio
 OWNER_EMAIL=dono@exemplo.com.br
 ```
+
+O `wrangler dev` só lê do `.dev.vars` os segredos que o `wrangler.jsonc` lista
+como obrigatórios, e a senha não está entre eles (depois do primeiro login ela
+mora no banco). Passe uma senha local como variável:
+
+```sh
+npm run dev -w @zuri/agent -- --var "OWNER_PASSWORD:uma senha local com vinte ou mais"
+```
+
+Em `http://localhost` os cookies saem sem o prefixo `__Host-` e sem `Secure`
+(`zuri_session`, `zuri_device`); em HTTPS são sempre os `__Host-`.
 
 HTTP só é aceito quando `PUBLIC_URL` aponta para `localhost`, `127.0.0.1` ou
 `[::1]`. Em qualquer outro host, o Worker exige HTTPS.
 
-Os testes e2e sobem o mesmo Worker com os valores de `tests/e2e/worker.env`,
-de modo que cada teste de tela também passa pelos portões.
+Os testes e2e sobem o mesmo Worker com os valores de `tests/e2e/worker.env`
+(e o hash da senha de teste por `--var`, no `playwright.config.ts`), de modo
+que cada teste de tela também passa pelos portões.
 
 ## Tipos
 

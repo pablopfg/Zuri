@@ -35,9 +35,10 @@
     "AGENT_NAME": "Zuri"
   },
   // Declared for type generation and local warnings; their values are Worker
-  // secrets, never in this file.
+  // secrets, never in this file. The password is not here: either
+  // OWNER_PASSWORD_HASH or OWNER_PASSWORD at first, then the database (step 3).
   "secrets": {
-    "required": ["SESSION_SECRET", "OWNER_PASSWORD_HASH", "OWNER_EMAIL", "PASSWORD_PEPPER"]
+    "required": ["SESSION_SECRET", "OWNER_EMAIL", "PASSWORD_PEPPER"]
   },
   // Workers Logs only, without request or response bodies (the Worker never
   // logs them) and without query strings, which may carry one-time tokens.

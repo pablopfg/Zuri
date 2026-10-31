@@ -203,9 +203,10 @@ Todas as rotas ficam sob `/api`, recebem e devolvem JSON validado por Zod (`pack
 | Etapa | Método e rota | Credencial | Corpo | Respostas |
 | --- | --- | --- | --- | --- |
 | 1 | GET `/api/health` | nenhuma | — | 200 `{ok:true}`; 503 `NOT_CONFIGURED` sem segredos obrigatórios |
-| 3 | POST `/api/auth/login` | nenhuma + Turnstile quando exigido | `{email, password, turnstileToken?}` | 200 sessão; 200 `{mfaRequired:true}`; 401 `INVALID_CREDENTIALS`; 429 `RATE_LIMITED` + `Retry-After`; 400 `TURNSTILE_REQUIRED` |
-| 3 | POST `/api/auth/logout`, POST `/api/auth/heartbeat`, GET `/api/auth/session` | sessão + CSRF | — | 204 ou 200 |
+| 3 | POST `/api/auth/login` | CSRF + Turnstile quando exigido | `{email, password, turnstileToken?}` | 200 sessão; 200 `{mfaRequired:true}`; 401 `INVALID_CREDENTIALS`; 429 `RATE_LIMITED` + `Retry-After`; 400 `TURNSTILE_REQUIRED`; 503 `SERVICE_UNAVAILABLE` (Turnstile sem resposta) |
+| 3 | POST `/api/auth/logout`, POST `/api/auth/heartbeat` (`{active}`), GET `/api/auth/session` | sessão + CSRF | — | 204 ou 200 |
 | 3 | POST `/api/auth/confirm` (senha recente) | sessão + CSRF | `{password}` ou `{totp}` | 204; 401 |
+| 3 | POST `/api/auth/password` | sessão + CSRF + senha atual | `{currentPassword, newPassword}` | 200 sessão nova; 400 `VALIDATION_FAILED`; 401 `INVALID_CREDENTIALS`; 503 `SERVICE_UNAVAILABLE` (HIBP sem resposta) |
 | 4 | POST `/api/auth/mfa/{setup,enable,disable,recovery-codes}`, POST `/api/auth/mfa/passkey/options`, POST `/api/auth/mfa/passkey` | sessão ou cookie MFA | ver `api/routes/auth.ts` do Talorys | — |
 | 9 | POST `/api/chat` (SSE), POST `/api/chat/cancel`, POST `/api/actions/:id/approve`, POST `/api/actions/:id/cancel` | sessão + CSRF | `{conversationId?, message}` | eventos SSE `text`, `tool`, `approval`, `done`, `error` |
 | 11 | POST `/api/auth/recover/request`, POST `/api/auth/recover/confirm` | nenhuma + limitador | `{email}` / `{token, password, totp?}` | 202 sempre no pedido; 204; 410 `RECOVERY_EXPIRED` |
@@ -231,7 +232,8 @@ Formato único: `{ "code": "...", "message": "<texto do catálogo>", "details"?:
 | `TARGET_CHANGED` | 409 | `APPROVAL_EXPIRED` | 410 |
 | `RECOVERY_EXPIRED` | 410 | `LOCKDOWN_ACTIVE` | 423 |
 | `APPROVALS_LOCKED` | 423 | `STORAGE_LIMIT_REACHED` | 507 |
-| `NOT_CONFIGURED` | 503 |  |  |
+| `NOT_CONFIGURED` | 503 | `SERVICE_UNAVAILABLE` | 503 |
+| `PASSWORD_CHANGE_REQUIRED` | 403 |  |  |
 
 ### Tabelas do Telegram (colunas)
 

@@ -171,8 +171,10 @@ describe("configuration", () => {
       { SESSION_SECRET: "curto" },
       { SESSION_SECRET: "s".repeat(47) },
       { PASSWORD_PEPPER: "p".repeat(47) },
+      // A password secret that is set must be well formed (no password at all is the object's call: auth tests).
       { OWNER_PASSWORD_HASH: "" },
-      { OWNER_PASSWORD_HASH: undefined },
+      { OWNER_PASSWORD_HASH: "pbkdf2$100000$dGVzdA$dGVzdA" },
+      { OWNER_PASSWORD_HASH: `pbkdf2$1000$${"A".repeat(22)}$${"A".repeat(43)}` },
       { OWNER_PASSWORD_HASH: undefined, OWNER_PASSWORD: "x".repeat(19) },
       { OWNER_EMAIL: undefined },
       { OWNER_EMAIL: "nao-e-email" },

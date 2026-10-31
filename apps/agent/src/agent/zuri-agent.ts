@@ -1,7 +1,11 @@
-import { DEFAULT_LOCALE, type Locale } from "@zuri/shared";
+import { DEFAULT_LOCALE, isBreachedPassword, isPasswordHash, type Locale } from "@zuri/shared";
 import { Agent } from "agents";
 import { createApi } from "../api/app.ts";
+import { AuthService } from "../auth/service.ts";
+import { createTurnstile } from "../auth/turnstile.ts";
+import { MIN_OWNER_PASSWORD_LENGTH, parsePublicUrl } from "../config.ts";
 import { Database } from "../db/database.ts";
+import { InternalState } from "../db/internal-state.ts";
 import { migrate } from "../db/migrations.ts";
 import { SettingsRepository } from "../db/settings.ts";
 import type { WorkerEnv } from "../env.ts";
@@ -11,6 +15,7 @@ import { AppError, errorResponse } from "../http/errors.ts";
 interface Store {
   db: Database;
   settings: SettingsRepository;
+  auth: AuthService;
 }
 
 /**
@@ -20,7 +25,21 @@ interface Store {
  */
 export class ZuriAgent extends Agent<WorkerEnv> {
   #store: Store | undefined;
-  readonly #api = createApi({ locale: () => this.locale() });
+  readonly #api = createApi({
+    locale: () => this.locale(),
+    auth: () => this.store.auth,
+    passwordSecretSet: () =>
+      isPasswordHash(this.env.OWNER_PASSWORD_HASH) || (this.env.OWNER_PASSWORD?.length ?? 0) >= MIN_OWNER_PASSWORD_LENGTH,
+    origin: () => this.publicUrl().origin,
+    development: () => parsePublicUrl(this.env.PUBLIC_URL)?.allowPlainHttp === true,
+  });
+
+  /** The Worker refuses every request without a valid PUBLIC_URL, so one is always there by now. */
+  private publicUrl(): URL {
+    const parsed = parsePublicUrl(this.env.PUBLIC_URL);
+    if (!parsed) throw new AppError("NOT_CONFIGURED");
+    return parsed.url;
+  }
 
   /**
    * The database, migrated on demand: the first request that needs data applies
@@ -30,7 +49,24 @@ export class ZuriAgent extends Agent<WorkerEnv> {
     if (!this.#store) {
       const db = new Database(this.ctx.storage);
       migrate(db);
-      this.#store = { db, settings: new SettingsRepository(db, { timeZone: this.env.DEFAULT_TIMEZONE }) };
+      const settings = new SettingsRepository(db, { timeZone: this.env.DEFAULT_TIMEZONE });
+      const env = this.env;
+      const auth = new AuthService({
+        db,
+        state: new InternalState(db),
+        settings,
+        secrets: {
+          sessionSecret: env.SESSION_SECRET,
+          pepper: env.PASSWORD_PEPPER,
+          ownerEmail: env.OWNER_EMAIL,
+          passwordHash: env.OWNER_PASSWORD_HASH,
+          plainPassword: env.OWNER_PASSWORD,
+          agentName: env.AGENT_NAME,
+        },
+        turnstile: createTurnstile(env.TURNSTILE_SITE_KEY, env.TURNSTILE_SECRET_KEY, this.publicUrl().hostname),
+        breached: (password) => isBreachedPassword(password),
+      });
+      this.#store = { db, settings, auth };
     }
     return this.#store;
   }

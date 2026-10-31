@@ -15,6 +15,9 @@ import { type Database, now } from "./database.ts";
 const STORAGE_KEYS = {
   language: "language",
   timeZone: "time_zone",
+  sessionIdleMinutes: "session_idle_minutes",
+  sessionPresenceMinutes: "session_presence_minutes",
+  sessionMaxHours: "session_max_hours",
 } as const satisfies Record<keyof Settings, string>;
 
 type Field = keyof Settings;

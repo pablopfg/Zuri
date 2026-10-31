@@ -6,7 +6,7 @@ import { Database } from "../src/db/database.ts";
 import { migrate } from "../src/db/migrations.ts";
 import { SettingsRepository } from "../src/db/settings.ts";
 import { AppError } from "../src/http/errors.ts";
-import { call, errorBody, ORIGIN, testEnv } from "./helpers.ts";
+import { CSRF, ORIGIN, call, errorBody, testEnv } from "./helpers.ts";
 
 const owner = () => testEnv.AGENT.get(testEnv.AGENT.idFromName(AGENT_INSTANCE_NAME));
 const inOwner = <T>(fn: (agent: ZuriAgent, db: Database) => T | Promise<T>) =>
@@ -28,7 +28,7 @@ function withRepository<T>(
 describe("SettingsRepository", () => {
   it("returns the defaults on a new database", async () => {
     await withRepository("defaults", (settings) => {
-      expect(settings.get()).toEqual({ language: "pt-BR", timeZone: "America/Sao_Paulo" });
+      expect(settings.get()).toEqual({ ...DEFAULT_SETTINGS, language: "pt-BR", timeZone: "America/Sao_Paulo" });
       expect(settings.locale()).toBe("pt-BR");
     });
   });
@@ -51,12 +51,12 @@ describe("SettingsRepository", () => {
 
   it("saves a change and keeps the other fields at their defaults", async () => {
     await withRepository("update", (settings, db) => {
-      expect(settings.update({ language: "en" })).toEqual({ language: "en", timeZone: "America/Sao_Paulo" });
+      expect(settings.update({ language: "en" })).toEqual({ ...DEFAULT_SETTINGS, language: "en", timeZone: "America/Sao_Paulo" });
       expect(settings.get().language).toBe("en");
       expect(db.all(`SELECT key, value FROM zur_settings`)).toEqual([{ key: "language", value: '"en"' }]);
 
       settings.update({ timeZone: "Europe/Lisbon" });
-      expect(settings.get()).toEqual({ language: "en", timeZone: "Europe/Lisbon" });
+      expect(settings.get()).toEqual({ ...DEFAULT_SETTINGS, language: "en", timeZone: "Europe/Lisbon" });
     });
   });
 
@@ -100,27 +100,27 @@ describe("SettingsRepository", () => {
 
 describe("API errors in the owner's language", () => {
   it("answer in pt-BR by default and in English after the owner switches", async () => {
-    const before = await errorBody(await call(`${ORIGIN}/api/tasks`));
+    const before = await errorBody(await call(`${ORIGIN}/api/tasks`, { headers: CSRF }));
     expect(before).toEqual({ code: "UNAUTHORIZED", message: "Entre para continuar." });
 
     await inOwner((agent) => agent.store.settings.update({ language: "en" }));
-    const unauthorized = await errorBody(await call(`${ORIGIN}/api/tasks`));
+    const unauthorized = await errorBody(await call(`${ORIGIN}/api/tasks`, { headers: CSRF }));
     expect(unauthorized).toEqual({ code: "UNAUTHORIZED", message: "Sign in to continue." });
 
     await inOwner((agent) => agent.store.settings.update({ language: "pt-BR" }));
-    expect((await errorBody(await call(`${ORIGIN}/api/tasks`))).message).toBe("Entre para continuar.");
+    expect((await errorBody(await call(`${ORIGIN}/api/tasks`, { headers: CSRF }))).message).toBe("Entre para continuar.");
   });
 
   it("keep the stable code whatever the language", async () => {
     await inOwner((agent) => agent.store.settings.update({ language: "en" }));
-    const res = await call(`${ORIGIN}/api/nada`, { method: "POST" });
+    const res = await call(`${ORIGIN}/api/nada`, { method: "POST", headers: CSRF });
     expect(res.status).toBe(401);
     expect(await errorBody(res)).toEqual({ code: "UNAUTHORIZED", message: "Sign in to continue." });
   });
 
   it("stay in the default language for the Worker's gates, which answer before the object is woken", async () => {
     await inOwner((agent) => agent.store.settings.update({ language: "en" }));
-    const res = await call("https://outro.exemplo.com.br/api/tasks");
+    const res = await call("https://outro.exemplo.com.br/api/tasks", { headers: CSRF });
     expect(await errorBody(res)).toEqual({ code: "HOST_NOT_ALLOWED", message: "Este endereço não atende o Zuri." });
   });
 
@@ -133,7 +133,7 @@ describe("API errors in the owner's language", () => {
       return agent.locale();
     });
     expect(locale).toBe("pt-BR");
-    const res = await call(`${ORIGIN}/api/tasks`);
+    const res = await call(`${ORIGIN}/api/tasks`, { headers: CSRF });
     expect(res.status).toBe(401);
     expect((await errorBody(res)).message).toBe("Entre para continuar.");
     // Put the table back so a test added after this one finds a whole database.

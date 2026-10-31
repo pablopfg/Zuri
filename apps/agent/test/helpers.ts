@@ -26,6 +26,13 @@ export function call(url: string, init: RequestInit = {}, overrides: Partial<Rec
   return worker.fetch(request, { ...testEnv, ...overrides } as WorkerEnv);
 }
 
+/** The header every API request but the health check carries (CSRF). */
+export const CSRF = { "x-zuri-request": "1" } as const;
+
 export async function errorBody(response: Response): Promise<{ code: string; message: string }> {
   return (await response.json()) as { code: string; message: string };
 }
+
+/** The owner's password in the tests: OWNER_PASSWORD_HASH in vitest.config.ts is its hash. */
+export const TEST_PASSWORD = "girafa trombone neblina caderno";
+export const TEST_EMAIL = "dono@exemplo.com.br";
