@@ -21,6 +21,10 @@ describe("safeNext", () => {
     ["a tab or newline", "/\t/atacante.exemplo.com.br"],
     ["the sign-in page itself", "/entrar"],
     ["something huge", `/${"a".repeat(600)}`],
+    ["dot segments that leave a protocol-relative path", "/..//atacante.exemplo.com.br"],
+    ["a single dot before a double slash", "/.//atacante.exemplo.com.br"],
+    ["an encoded dot before a double slash", "/%2e//atacante.exemplo.com.br"],
+    ["an encoded dot-dot before a double slash", "/x/%2e%2e//atacante.exemplo.com.br/caminho"],
   ])("falls back to home for %s", (_name, value) => {
     expect(safeNext(value)).toBe("/");
   });

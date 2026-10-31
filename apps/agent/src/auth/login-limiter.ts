@@ -6,7 +6,6 @@ import {
   MAX_TURNSTILE_FAILURES_PER_NETWORK,
   TRUSTED_NETWORK_MS,
   TURNSTILE_AFTER_GLOBAL_FAILURES,
-  TURNSTILE_AFTER_NETWORK_FAILURES,
 } from "@zuri/shared";
 import type { Database } from "../db/database.ts";
 import { AppError } from "../http/errors.ts";
@@ -58,9 +57,8 @@ export interface LimitContext {
  *   and refused robot checks) across all networks, a network without a recent
  *   sign-in gets one try per window; past GLOBAL_FAILURES_HARD, none. The
  *   owner's own networks and browsers keep their 3.
- * - With Turnstile on, a network that got it wrong in the window, or any
- *   network while 10 failures pile up globally, must pass the robot check first.
- *   10 refused checks from a network make it wait like a blocked one.
+ * - With Turnstile on (every sign-in passes it first, AuthService.login), 10
+ *   refused checks from a network make it wait like a blocked one.
  *
  * A try is written as a failure before the slow password check (begin) and
  * turned into a success after it, in the same synchronous step as the limit
@@ -146,7 +144,7 @@ export class LoginLimiter {
     return this.countGlobal() >= GLOBAL_FAILURES_SOFT;
   }
 
-  /** True while every network must pass the robot check, or worse: refusals then fold into one row for all. */
+  /** True while 10 wrong passwords pile up across networks, or worse: refusals then fold into one row for all. */
   underPressure(): boolean {
     return this.failures() >= TURNSTILE_AFTER_GLOBAL_FAILURES || this.underAttack();
   }
@@ -182,11 +180,6 @@ export class LoginLimiter {
       now - FAILURE_KEEP_MS,
       now - TRUSTED_NETWORK_MS,
     );
-  }
-
-  /** Whether this network must pass the robot check before its password is tried (only with Turnstile on). */
-  turnstileRequired(network: string): boolean {
-    return this.failures(network) >= TURNSTILE_AFTER_NETWORK_FAILURES || this.failures() >= TURNSTILE_AFTER_GLOBAL_FAILURES;
   }
 
   /** Counts a refused robot check (never a password guess), so a network can't send them without end. */

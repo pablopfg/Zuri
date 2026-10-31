@@ -14,7 +14,7 @@ import { runInDurableObject } from "cloudflare:test";
 import { afterEach, describe, expect, it } from "vitest";
 import type { ZuriAgent } from "../src/agent/zuri-agent.ts";
 import { Database } from "../src/db/database.ts";
-import { CSRF, call, ORIGIN, TEST_EMAIL, TEST_PASSWORD, testEnv } from "./helpers.ts";
+import { call, CSRF, HUMAN_TOKEN, ORIGIN, TEST_EMAIL, TEST_PASSWORD, testEnv } from "./helpers.ts";
 import { softPasskey } from "./soft-passkey.ts";
 
 // Through the Worker, as a browser would. The owner's object is shared by the
@@ -38,7 +38,7 @@ function login(ip: string, cookie = "") {
   return call(`${ORIGIN}/api/auth/login`, {
     method: "POST",
     headers: json(ip, cookie ? { cookie } : {}),
-    body: JSON.stringify({ email: TEST_EMAIL, password: TEST_PASSWORD }),
+    body: JSON.stringify({ email: TEST_EMAIL, password: TEST_PASSWORD, turnstileToken: HUMAN_TOKEN }),
   });
 }
 

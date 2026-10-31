@@ -6,9 +6,7 @@ const isoDate = z.iso.datetime();
 export const LOGIN_WINDOW_MS = 15 * 60_000;
 /** Wrong passwords per network in the window before it must wait. */
 export const MAX_FAILURES_PER_NETWORK = 3;
-/** With Turnstile on: one wrong password in the window makes the network solve it next time. */
-export const TURNSTILE_AFTER_NETWORK_FAILURES = 1;
-/** With Turnstile on: this many wrong passwords across all networks make every network solve it. */
+/** This many wrong passwords across all networks in the window: refusals fold into one row for every network. */
 export const TURNSTILE_AFTER_GLOBAL_FAILURES = 10;
 /** Refused robot checks per network in the window before it must wait like a blocked network. */
 export const MAX_TURNSTILE_FAILURES_PER_NETWORK = 10;
@@ -56,6 +54,16 @@ export const MAX_PASSWORD_INPUT_LENGTH = 1024;
 export const MAX_TURNSTILE_TOKEN_LENGTH = 2048;
 
 const password = z.string().min(1).max(MAX_PASSWORD_INPUT_LENGTH);
+
+/** Public settings of the sign-in form, answered by the Worker itself (no session, no Durable Object). */
+export const LOGIN_OPTIONS_PATH = "/api/auth/login-options";
+export const loginOptionsSchema = z
+  .object({
+    /** Cloudflare Turnstile's public site key; null only where the check is off (local development without keys). */
+    turnstileSiteKey: z.string().min(1).nullable(),
+  })
+  .strict();
+export type LoginOptions = z.infer<typeof loginOptionsSchema>;
 
 export const loginRequestSchema = z
   .object({

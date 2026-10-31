@@ -60,6 +60,11 @@ export interface AuthDeps {
   clock?: () => number;
   /** Null when Turnstile is off. */
   turnstile?: Turnstile | null;
+  /**
+   * Outside local development the robot check is mandatory: with it off, the
+   * sign-in answers NOT_CONFIGURED instead of going on without it (fail closed).
+   */
+  turnstileMandatory?: boolean;
   /** Have I Been Pwned: true breached, false not found, null no answer (refused: fail closed). */
   breached: (password: string) => Promise<boolean | null>;
   /** The owner's host and origin (PUBLIC_URL): the only ones a passkey is made for or accepted from. */
@@ -262,14 +267,16 @@ export class AuthService {
 
   /**
    * In this order: the network's limit (a blocked network hears "wait", nothing
-   * else), the robot check when the sign-in looks risky, the try counted as a
-   * failure, and only then PBKDF2 over the password together with the HMAC of
-   * the e-mail (both always run, and a refusal never says which was wrong).
+   * else), the robot check (every try, when Turnstile is on), the try counted
+   * as a failure, and only then PBKDF2 over the password together with the HMAC
+   * of the e-mail (both always run, and a refusal never says which was wrong).
    */
   async login(input: LoginRequest, client: ClientInfo, cookies: SignInCookies): Promise<SignedIn | MfaPending> {
     // Sync first: a reset from the panel must drop the old password before it is read.
     await this.sync();
     const source = this.requireConfigured();
+    // Fail closed: a deploy without its robot check takes no password at all.
+    if (!this.turnstile && this.deps.turnstileMandatory) throw new AppError("NOT_CONFIGURED", "error.turnstileNotConfigured");
     const device = await this.knownDevice(cookies.device);
     const context = { trusted: device.known };
     try {
@@ -279,12 +286,7 @@ export class AuthService {
       this.alertIfUnderAttack();
       throw error;
     }
-    const verified = await this.assertHuman(input.turnstileToken, client);
-    // Again after the await, in the same synchronous step as the count: a check that
-    // became needed while this request waited (another try failed meanwhile) still applies.
-    if (!verified && this.turnstile && this.limiter.turnstileRequired(client.network)) {
-      throw this.turnstileError("error.turnstileRequired");
-    }
+    await this.assertHuman(input.turnstileToken, client);
     let attempt: number;
     try {
       attempt = this.limiter.begin(client.network, context);
@@ -344,11 +346,11 @@ export class AuthService {
    * when no passkey fits this host. A request still live is sent again rather
    * than replaced, so asking over and over costs no writes.
    */
-  async passkeyOptions(token: string | null, client: ClientInfo) {
+  async passkeyOptions(token: string | null, client: ClientInfo, cookies: SignInCookies) {
     await this.sync();
     this.requireConfigured();
     const row = await this.liveChallenge(token, null);
-    this.assertCodesAllowed(client, "passkey");
+    this.assertCodesAllowed(client, "passkey", await this.ownerBrowser(client, cookies));
     const live = row.webauthn_challenge !== null && (row.webauthn_expires_at ?? 0) > this.#clock() ? row.webauthn_challenge : undefined;
     const request = await this.passkeys.authenticationOptions(this.relyingParty, "preferred", live);
     if (!request) throw new AppError("NOT_FOUND", "auth.passkey.noneHere");
@@ -370,10 +372,20 @@ export class AuthService {
     return new AppError("UNAUTHORIZED", "auth.mfa.expired", { mfa: "expired" });
   }
 
-  /** RATE_LIMITED while wrong codes pile up across networks, unless this network is one of the owner's. */
-  private assertCodesAllowed(client: ClientInfo, reason: string): void {
+  /**
+   * The owner's own browser half-way through a sign-in: one of the owner's
+   * networks AND a device cookie that signed in before. The network alone isn't
+   * enough: a shared address (mobile carrier CGNAT, public Wi-Fi, a relay) is
+   * also the network of whoever stands next to the owner.
+   */
+  private async ownerBrowser(client: ClientInfo, cookies: SignInCookies): Promise<boolean> {
+    return this.limiter.isTrusted(client.network) && (await this.knownDevice(cookies.device)).known;
+  }
+
+  /** RATE_LIMITED while wrong codes pile up across networks, unless the caller vouched for the owner (`exempt`). */
+  private assertCodesAllowed(client: ClientInfo, reason: string, exempt: boolean): void {
     const until = this.twoStep.pausedUntil();
-    if (until === null || this.limiter.isTrusted(client.network)) return;
+    if (until === null || exempt) return;
     // A refusal like a blocked sign-in: folded per network, so hammering a pause costs no writes.
     this.recordRefusal("login_rate_limited", client, `mfa_${reason}`);
     throw new AppError("RATE_LIMITED", undefined, { retryAfter: Math.max(1, Math.ceil((until - this.#clock()) / 1000)) });
@@ -381,8 +393,9 @@ export class AuthService {
 
   /** A wrong second step, wherever it was given (already counted for the pause): the activity, and the alert at three in a row. */
   private noteWrongSecondStep(client: ClientInfo, reason: string): void {
+    // Every third in a row, not only the first three: a slow guess that goes on for days keeps telling the owner.
     const failures = this.twoStep.consecutiveFailures();
-    this.events.record("mfa_failure", client, { reason, alert: failures === MFA_FAILURES_ALERT });
+    this.events.record("mfa_failure", client, { reason, alert: failures > 0 && failures % MFA_FAILURES_ALERT === 0 });
   }
 
   private async completeSecondStep(
@@ -395,7 +408,7 @@ export class AuthService {
     await this.sync();
     const source = this.requireConfigured();
     const row = await this.liveChallenge(token, client);
-    this.assertCodesAllowed(client, reason);
+    this.assertCodesAllowed(client, reason, await this.ownerBrowser(client, cookies));
     const attempts = this.twoStep.reserveAttempt(row.id);
     if (attempts === null) {
       this.events.record("mfa_failure", client, { reason: "expired" });
@@ -441,16 +454,16 @@ export class AuthService {
     this.events.record(kind, client, { reason, everyNetwork: this.limiter.underPressure() });
   }
 
-  /** Runs before the try is counted and before any PBKDF2. True when a token was confirmed. */
-  private async assertHuman(token: string | undefined, client: ClientInfo): Promise<boolean> {
+  /** Runs before the try is counted and before any PBKDF2. Returns only when Turnstile is off or its token was confirmed. */
+  private async assertHuman(token: string | undefined, client: ClientInfo): Promise<void> {
     const turnstile = this.turnstile;
-    if (!turnstile || !this.limiter.turnstileRequired(client.network)) return false;
+    if (!turnstile) return;
     if (!token) {
       this.recordRefusal("login_turnstile", client, "missing");
       throw this.turnstileError("error.turnstileRequired");
     }
     const result = await turnstile.verify(token, client.ip);
-    if (result === "ok") return true;
+    if (result === "ok") return;
     if (result === "unavailable") {
       // Fail closed: no answer from Cloudflare is no pass.
       this.recordRefusal("login_turnstile", client, "unavailable");
@@ -665,8 +678,9 @@ export class AuthService {
    * shared pause. INVALID_CREDENTIALS when wrong; the session stays.
    */
   async checkCode(row: SessionRow, code: string, client: ClientInfo, options: { recovery: boolean }, reason: string): Promise<MfaFactor> {
-    // The shared pause first: a paused network spends none of its own tries.
-    this.assertCodesAllowed(client, reason);
+    // The shared pause first: a paused network spends none of its own tries. A
+    // live session already proves the owner's browser; the network must too.
+    this.assertCodesAllowed(client, reason, this.limiter.isTrusted(client.network));
     const attempt = this.beginChecked(client, "mfa_failure");
     const reserved = this.twoStep.reserveWrongCode();
     const factor = await this.twoStep.verify(code, options);

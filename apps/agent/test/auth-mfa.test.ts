@@ -20,18 +20,18 @@ const OWN = "198.51.100.41";
 
 /** Signs in with the password (second step off) and returns the live session. */
 async function session(h: Harness, network = NET) {
-  const { token } = await h.auth.login(right(), client(network), noCookies);
-  return { token, row: await live(h.auth, token) };
+  const { token, deviceToken } = await h.auth.login(right(), client(network), noCookies);
+  return { token, deviceToken, row: await live(h.auth, token) };
 }
 
 /** Turns the second step on. Returns the secret, the recovery codes and the owner's session. */
 async function turnOn(h: Harness) {
-  const { token, row } = await session(h, OWN);
+  const { token, row, deviceToken } = await session(h, OWN);
   const setup = await h.service.mfaSetup(row);
   const codes = await h.service.mfaEnable(row, await totpCode(setup.secret, totpStep(h.clock.now())), client(OWN));
   // The step just used never counts again: the tests move on to a fresh one.
   h.clock.advance(30_000);
-  return { secret: setup.secret, codes, token, row };
+  return { secret: setup.secret, codes, token, row, ownerBrowser: { session: null, device: deviceToken } };
 }
 
 /** Moves the clock with the tab open (one heartbeat a minute) and the owner using it, so the session lives. */
@@ -229,20 +229,22 @@ describe("signing in with the second step on", () => {
     });
   });
 
-  it("3 wrong answers in a row tell the owner, once", async () => {
+  it("every 3rd wrong answer in a row tells the owner, across challenges (a slow guess keeps being told)", async () => {
     await withAuth("mfa-alert", async (h) => {
       const { secret } = await turnOn(h);
-      const token = await challenge(h, OWN);
       const wrong = await wrongCode(h, secret);
-      for (let i = 0; i < 4; i++) await outcome(h.service.completeMfa(token, wrong, client(OWN), noCookies));
+      const first = await challenge(h, OWN);
+      for (let i = 0; i < 4; i++) await outcome(h.service.completeMfa(first, wrong, client(OWN), noCookies));
+      const second = await challenge(h, "198.51.100.42");
+      for (let i = 0; i < 3; i++) await outcome(h.service.completeMfa(second, wrong, client("198.51.100.42"), noCookies));
       const failures = h.events().filter((e) => e.kind === "mfa_failure");
-      expect(failures.map((e) => e.alert_pending)).toEqual([0, 0, 1, 0]);
+      expect(failures.map((e) => e.alert_pending)).toEqual([0, 0, 1, 0, 0, 1, 0]);
     });
   });
 
   it("10 wrong codes in 15 minutes pause unknown networks; the owner's own keep trying", async () => {
     await withAuth("mfa-pause", async (h) => {
-      const { secret, row } = await turnOn(h);
+      const { secret, row, ownerBrowser } = await turnOn(h);
       const wrong = () => wrongCode(h, secret);
       // Two networks per challenge so the per-network limit of 3 sign-ins isn't what stops them.
       for (let i = 0; i < 9; i++) {
@@ -257,8 +259,17 @@ describe("signing in with the second step on", () => {
       expect(paused).toMatchObject({ code: "RATE_LIMITED" });
       expect((paused?.details as { retryAfter?: number } | undefined)?.retryAfter).toBeGreaterThan(0);
 
-      // The owner's network (signed in within 30 days) is not paused.
-      expect(await outcome(h.service.completeMfa(await challenge(h, OWN), await code(h, secret), client(OWN), noCookies))).toBe("ok");
+      // The owner's network alone is not enough: a shared address (CGNAT, public Wi-Fi) is also a stranger's.
+      expect(await outcome(h.service.completeMfa(await challenge(h, OWN), await code(h, secret), client(OWN), noCookies))).toBe("RATE_LIMITED");
+      // A device cookie alone neither: it may have been stolen and used from anywhere.
+      const elsewhere = "203.0.113.131";
+      const fromElsewhere = await h.service.login(right(), client(elsewhere), ownerBrowser);
+      if (!("mfa" in fromElsewhere)) throw new Error("expected the second step");
+      expect(await outcome(h.service.completeMfa(fromElsewhere.mfa.token, await code(h, secret), client(elsewhere), ownerBrowser))).toBe("RATE_LIMITED");
+      // The owner's browser (signed in before) on the owner's network (signed in within 30 days) is not paused.
+      const own = await h.service.login(right(), client(OWN), ownerBrowser);
+      if (!("mfa" in own)) throw new Error("expected the second step");
+      expect(await outcome(h.service.completeMfa(own.mfa.token, await code(h, secret), client(OWN), ownerBrowser))).toBe("ok");
 
       // A session used from an unknown network is paused too, and spends none of that network's own 3 tries.
       const stranger = "203.0.113.130";

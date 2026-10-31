@@ -9,6 +9,10 @@ export const TEST_ENV = {
   // The hash of TEST_PASSWORD with this PASSWORD_PEPPER (test/helpers.ts).
   OWNER_PASSWORD_HASH: "pbkdf2$100000$AcTQCiOJ4i5rmm8BK3SVhw$jXz1s8Hzwwmbb1WLaDSm2L_tj0VdbZ34yI-37qSnjmU",
   OWNER_EMAIL: "dono@exemplo.com.br",
+  // Made-up keys: outside local development the sign-in needs Turnstile, and
+  // test/setup-turnstile.ts answers siteverify in place of Cloudflare.
+  TURNSTILE_SITE_KEY: "0x4AAAAAAAteste-site",
+  TURNSTILE_SECRET_KEY: "0x4AAAAAAAteste-secret",
 };
 
 // The agent runs inside workerd, with the bindings of wrangler.jsonc. Nothing
@@ -21,5 +25,5 @@ export default defineProject({
       miniflare: { bindings: TEST_ENV },
     }),
   ],
-  test: { name: "agent", include: ["test/**/*.test.ts"] },
+  test: { name: "agent", include: ["test/**/*.test.ts"], setupFiles: ["test/setup-turnstile.ts"] },
 });

@@ -55,6 +55,8 @@ export class ZuriAgent extends Agent<WorkerEnv> {
       migrate(db);
       const settings = new SettingsRepository(db, { timeZone: this.env.DEFAULT_TIMEZONE });
       const env = this.env;
+      // Loopback http PUBLIC_URL: the only place Turnstile may be off or use Cloudflare's test keys.
+      const development = parsePublicUrl(env.PUBLIC_URL)?.allowPlainHttp === true;
       const auth = new AuthService({
         db,
         state: new InternalState(db),
@@ -67,7 +69,8 @@ export class ZuriAgent extends Agent<WorkerEnv> {
           plainPassword: env.OWNER_PASSWORD,
           agentName: env.AGENT_NAME,
         },
-        turnstile: createTurnstile(env.TURNSTILE_SITE_KEY, env.TURNSTILE_SECRET_KEY, this.publicUrl().hostname),
+        turnstile: createTurnstile(env.TURNSTILE_SITE_KEY, env.TURNSTILE_SECRET_KEY, this.publicUrl().hostname, { development }),
+        turnstileMandatory: !development,
         breached: (password) => isBreachedPassword(password),
         // Passkeys belong to the host they were made on: always PUBLIC_URL's, never the request's.
         relyingParty: { rpId: this.publicUrl().hostname, origin: this.publicUrl().origin },

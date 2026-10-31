@@ -131,7 +131,7 @@ export function createApi(deps: ApiDeps) {
   );
 
   app.post("/auth/mfa/passkey/options", (c) =>
-    secondStep(c, async () => Response.json({ options: await deps.auth().passkeyOptions(readMfaCookie(c.req.raw), client(c)) })),
+    secondStep(c, async () => Response.json({ options: await deps.auth().passkeyOptions(readMfaCookie(c.req.raw), client(c), signInCookies(c)) })),
   );
 
   app.post("/auth/mfa/passkey", (c) =>
