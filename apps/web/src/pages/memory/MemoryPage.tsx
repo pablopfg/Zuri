@@ -14,12 +14,13 @@ import {
 } from "@zuri/shared";
 import { Archive, ArchiveRestore, BadgeCheck, Brain, CircleHelp, GitCompareArrows, History, Pencil, RefreshCw, Search, Trash2 } from "lucide-react";
 import { type FormEvent, useId, useState } from "react";
-import { Button, Card, cn, Dialog, EmptyState, ErrorNotice, fieldClass, Notice, PageHeader, SelectField, Spinner, TextAreaField } from "../../components/ui.tsx";
+import { Button, Card, cn, Dialog, EmptyState, ErrorNotice, fieldClass, PageHeader, SelectField, Spinner, TextAreaField } from "../../components/ui.tsx";
 import { MEMORIES_KEY, useMemories, useMemoryHistory, useMemoryReviews } from "../../hooks/memory.ts";
 import { SETTINGS_KEY } from "../../hooks/session.tsx";
 import { api, errorMessage } from "../../lib/api.ts";
 import { useDebounced } from "../../lib/debounce.ts";
 import { addMessages, useI18n } from "../../lib/i18n.tsx";
+import { useToast } from "../../components/Toaster.tsx";
 import { CATEGORY_LABEL, FILTER_LABEL, ORIGIN_LABEL, REASON_LABEL, STATUS_LABEL, TOPIC_LABEL } from "./labels.ts";
 
 // This screen's pt-BR texts travel with its code, not in the first bundle (rule P11).
@@ -47,26 +48,18 @@ export function MemoryPage() {
   const [editing, setEditing] = useState<Editing | null>(null);
   const [historyOf, setHistoryOf] = useState<Memory | null>(null);
   const [deleting, setDeleting] = useState<Memory | null>(null);
-  const [notice, setNotice] = useState<string | null>(null);
+  const toast = useToast();
+  // A write that raised conflicts leaves something to do: that toast stays until closed.
+  const notify = (message: string, pending: boolean) => toast(message, { persistent: pending });
 
   return (
     <>
       <PageHeader title={t("web.memory.title")} description={t("web.memory.description")} />
 
-      {notice && (
-        <Notice tone="success">
-          <span className="flex flex-wrap items-center justify-between gap-2">
-            <span>{notice}</span>
-            <Button variant="ghost" onClick={() => setNotice(null)}>
-              {t("web.close")}
-            </Button>
-          </span>
-        </Notice>
-      )}
 
-      <NewMemory onSaved={setNotice} />
+      <NewMemory onSaved={notify} />
 
-      {(counts?.reviews ?? 0) > 0 && <ReviewQueue total={counts?.reviews ?? 0} onDone={setNotice} />}
+      {(counts?.reviews ?? 0) > 0 && <ReviewQueue total={counts?.reviews ?? 0} onDone={toast} />}
 
       <section aria-label={t("web.memory.listLabel")} className="space-y-3">
         <fieldset className="flex gap-1 rounded-xl bg-raised p-1">
@@ -145,7 +138,7 @@ export function MemoryPage() {
 
       <ConflictReviewSetting />
 
-      {editing && <EditDialog editing={editing} onClose={() => setEditing(null)} onSaved={setNotice} />}
+      {editing && <EditDialog editing={editing} onClose={() => setEditing(null)} onSaved={notify} />}
       {historyOf && <HistoryDialog memory={historyOf} onClose={() => setHistoryOf(null)} />}
       {deleting && (
         <DeleteDialog
@@ -153,7 +146,7 @@ export function MemoryPage() {
           onClose={() => setDeleting(null)}
           onDeleted={() => {
             setDeleting(null);
-            setNotice(t("web.memory.deleted"));
+            toast(t("web.memory.deleted"));
           }}
         />
       )}
@@ -171,7 +164,7 @@ function useWriteMessage() {
   };
 }
 
-function NewMemory({ onSaved }: { onSaved: (message: string) => void }) {
+function NewMemory({ onSaved }: { onSaved: (message: string, pending: boolean) => void }) {
   const { t } = useI18n();
   const qc = useQueryClient();
   const message = useWriteMessage();
@@ -188,7 +181,7 @@ function NewMemory({ onSaved }: { onSaved: (message: string) => void }) {
     try {
       const result = await api<MemoryWriteResult>("/memories", { method: "POST", body: { content, category } });
       setContent("");
-      onSaved(message(result, "saved"));
+      onSaved(message(result, "saved"), result.reviews > 0);
       await qc.invalidateQueries({ queryKey: MEMORIES_KEY });
     } catch (err) {
       setError(errorMessage(err));
@@ -444,7 +437,7 @@ function ReviewItem({ review, onDone }: { review: MemoryReview; onDone: (message
   );
 }
 
-function EditDialog({ editing, onClose, onSaved }: { editing: Editing; onClose: () => void; onSaved: (message: string) => void }) {
+function EditDialog({ editing, onClose, onSaved }: { editing: Editing; onClose: () => void; onSaved: (message: string, pending: boolean) => void }) {
   const { t } = useI18n();
   const qc = useQueryClient();
   const message = useWriteMessage();
@@ -463,7 +456,7 @@ function EditDialog({ editing, onClose, onSaved }: { editing: Editing; onClose: 
         mode === "edit"
           ? await api<MemoryWriteResult>(`/memories/${memory.id}`, { method: "PATCH", body: { content, category } })
           : await api<MemoryWriteResult>(`/memories/${memory.id}/correct`, { method: "POST", body: { content, category } });
-      onSaved(message(result, mode === "edit" ? "updated" : "corrected"));
+      onSaved(message(result, mode === "edit" ? "updated" : "corrected"), result.reviews > 0);
       await qc.invalidateQueries({ queryKey: MEMORIES_KEY });
       onClose();
     } catch (err) {

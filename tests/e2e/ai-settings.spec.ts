@@ -74,7 +74,8 @@ test("the model and the limits: out-of-range values are refused on the spot, the
   const saved = page.waitForResponse((r) => r.url().endsWith("/api/settings") && r.request().method() === "PATCH");
   await form.getByRole("button", { name: "Salvar limites" }).click();
   expect((await saved).status()).toBe(200);
-  await expect(form.getByText("Limites salvos.")).toBeVisible();
+  // The confirmation is a toast, at the foot of the screen.
+  await expect(page.getByRole("status").filter({ hasText: "Limites salvos." })).toBeVisible();
   const usage = page.getByRole("region", { name: "Uso de hoje" });
   await expect(usage.getByText("0 de 1.000", { exact: true })).toBeVisible();
   await expect(usage.getByText("0 de 2.000", { exact: true })).toBeVisible();

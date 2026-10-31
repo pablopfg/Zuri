@@ -88,7 +88,9 @@ test("a task: create with a deadline and a project, edit, complete, delete and r
   await page.getByRole("link", { name: "Lixeira" }).click();
   await expect(page).toHaveURL(/\/configuracoes\/dados$/);
   await page.getByRole("button", { name: `Restaurar ${title} de dezembro` }).click();
-  await expect(page.getByText(`"${title} de dezembro" voltou para o lugar.`)).toBeVisible();
+  // The confirmation is a toast: spoken once by the status region, shown at the foot of the screen.
+  await expect(page.getByRole("status").filter({ hasText: `"${title} de dezembro" voltou para o lugar.` })).toHaveCount(1);
+  await expect(page.getByText(`"${title} de dezembro" voltou para o lugar.`).last()).toBeVisible();
 
   await page.goto("/tarefas");
   await page.getByRole("button", { name: "Concluídas" }).click();
@@ -182,7 +184,8 @@ test("the trash: purge one item and empty the rest, each after a confirmation", 
   await page.getByRole("button", { name: "Apagar de vez: lixo um" }).click();
   const confirm = page.getByRole("dialog", { name: "Apagar de vez?" });
   await confirm.getByRole("button", { name: "Apagar de vez" }).click();
-  await expect(page.getByText("Apagado de vez.")).toBeVisible();
+  await expect(page.getByRole("status").filter({ hasText: "Apagado de vez." })).toHaveCount(1);
+  await expect(page.getByText("Apagado de vez.").last()).toBeVisible();
   await expect(page.getByText("lixo um")).toBeHidden();
 
   await page.getByRole("button", { name: "Esvaziar a lixeira" }).click();
