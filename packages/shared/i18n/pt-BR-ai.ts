@@ -72,4 +72,6 @@ export const ptBRAi = {
   "web.ai.save": "Salvar limites",
   "web.ai.saved": "Limites salvos.",
   "web.ai.unchanged": "Nada mudou.",
+  "web.ai.scheduledRunsPerDay": "Rotinas da Zuri por dia",
+  "web.ai.scheduledRunsPerDayHint": "Quantas vezes por dia as rotinas com IA podem rodar sozinhas. 0 desliga. De {min} a {max}.",
 } as const;

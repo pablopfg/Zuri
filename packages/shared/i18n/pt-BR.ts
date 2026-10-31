@@ -6,6 +6,7 @@ import { ptBRChat } from "./pt-BR-chat.ts";
 import { ptBRSecurity } from "./pt-BR-security.ts";
 import { ptBRServer } from "./pt-BR-server.ts";
 import { ptBRSettings } from "./pt-BR-settings.ts";
+import { ptBRAutomations } from "./pt-BR-automations.ts";
 
 // Default and fallback catalog. Every key must also exist in en.ts and be used in the code (npm run lint).
 // The texts of the lazy screens live in their own files (pt-BR-memory.ts, pt-BR-productivity.ts,
@@ -131,10 +132,11 @@ export const ptBRCore = {
   "web.markdown.open": "A fazer",
   "web.nav.memory": "Memória",
   "web.nav.chat": "Conversa",
+  "web.nav.automations": "Automações",
 } as const;
 
 /** Joins catalog parts. Marked pure so a bundle that never uses the whole catalog drops the call. */
-function join<A extends object, B extends object, C extends object, D extends object, E extends object, F extends object, G extends object, H extends object, I extends object>(
+function join<A extends object, B extends object, C extends object, D extends object, E extends object, F extends object, G extends object, H extends object, I extends object, J extends object>(
   a: A,
   b: B,
   c: C,
@@ -144,9 +146,10 @@ function join<A extends object, B extends object, C extends object, D extends ob
   g: G,
   h: H,
   i: I,
-): A & B & C & D & E & F & G & H & I {
-  return { ...a, ...b, ...c, ...d, ...e, ...f, ...g, ...h, ...i };
+  j: J,
+): A & B & C & D & E & F & G & H & I & J {
+  return { ...a, ...b, ...c, ...d, ...e, ...f, ...g, ...h, ...i, ...j };
 }
 
 /** The whole pt-BR catalog: what the server, the tests and the lint use. */
-export const ptBR = /* @__PURE__ */ join(ptBRCore, ptBRMemory, ptBRProductivity, ptBRSecurity, ptBRAi, ptBRChat, ptBRSettings, ptBRServer, ptBRPalette);
+export const ptBR = /* @__PURE__ */ join(ptBRCore, ptBRMemory, ptBRProductivity, ptBRSecurity, ptBRAi, ptBRChat, ptBRSettings, ptBRServer, ptBRPalette, ptBRAutomations);

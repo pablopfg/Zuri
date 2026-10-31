@@ -479,6 +479,65 @@ export const MIGRATIONS: readonly Migration[] = [
       `ALTER TABLE zur_memories ADD COLUMN author TEXT NOT NULL DEFAULT 'owner' CHECK (author IN ('owner', 'agent'))`,
     ],
   },
+  {
+    version: 9,
+    name: "automations",
+    statements: [
+      // Reminders, the task digest and AI routines (step 10). `schedule` is JSON
+      // (scheduleSchema) in the owner's wall-clock time; `next_run` is the UTC
+      // instant it fires next, set only while active. One shared alarm wakes the
+      // object at the earliest next_run (rule P8). In the backup, paused (step 23).
+      `CREATE TABLE IF NOT EXISTS zur_automations (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        kind TEXT NOT NULL CHECK (kind IN ('reminder', 'task_digest', 'agent_prompt')),
+        message TEXT NOT NULL DEFAULT '',
+        schedule TEXT NOT NULL,
+        status TEXT NOT NULL CHECK (status IN ('active', 'paused', 'pending_approval', 'completed')),
+        sentinel INTEGER NOT NULL DEFAULT 0,
+        origin TEXT NOT NULL DEFAULT 'app' CHECK (origin IN ('app', 'chat')),
+        next_run TEXT,
+        last_run_at TEXT,
+        last_run_status TEXT,
+        run_count INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      )`,
+      // The due ones, in order: the alarm reads only what it runs.
+      `CREATE INDEX IF NOT EXISTS zur_automations_due ON zur_automations (status, next_run)`,
+      `CREATE INDEX IF NOT EXISTS zur_automations_created ON zur_automations (created_at)`,
+      // Every run, kept for the history (AUTOMATION_LIMITS.runsKept). `slot` is
+      // the next_run that fired: one run per automation and slot, so a reminder
+      // never fires twice for the same time, whatever restarts in between.
+      // Manual runs have no slot. Not in the backup.
+      `CREATE TABLE IF NOT EXISTS zur_automation_runs (
+        id TEXT PRIMARY KEY,
+        automation_id TEXT NOT NULL,
+        automation_name TEXT NOT NULL,
+        kind TEXT NOT NULL,
+        trigger TEXT NOT NULL CHECK (trigger IN ('schedule', 'catch_up', 'manual')),
+        slot TEXT,
+        status TEXT NOT NULL CHECK (status IN ('running', 'success', 'quiet', 'skipped', 'error')),
+        result TEXT,
+        problem TEXT,
+        ai INTEGER NOT NULL DEFAULT 0,
+        started_at TEXT NOT NULL,
+        finished_at TEXT
+      )`,
+      `CREATE UNIQUE INDEX IF NOT EXISTS zur_automation_runs_slot ON zur_automation_runs (automation_id, slot) WHERE slot IS NOT NULL`,
+      `CREATE INDEX IF NOT EXISTS zur_automation_runs_started ON zur_automation_runs (started_at, id)`,
+      `CREATE INDEX IF NOT EXISTS zur_automation_runs_automation ON zur_automation_runs (automation_id, started_at, id)`,
+      `CREATE INDEX IF NOT EXISTS zur_automation_runs_status ON zur_automation_runs (status) WHERE status = 'running'`,
+      // Counter for the limit of 500 automations.
+      `INSERT INTO zur_counts (kind, n) SELECT 'automations', count(*) FROM zur_automations WHERE 1 ON CONFLICT (kind) DO UPDATE SET n = excluded.n`,
+      `CREATE TRIGGER IF NOT EXISTS zur_counts_automations_insert AFTER INSERT ON zur_automations BEGIN UPDATE zur_counts SET n = n + 1 WHERE kind = 'automations'; END`,
+      `CREATE TRIGGER IF NOT EXISTS zur_counts_automations_delete AFTER DELETE ON zur_automations BEGIN UPDATE zur_counts SET n = n - 1 WHERE kind = 'automations'; END`,
+      // And for the history's size (AUTOMATION_LIMITS.runsKept), so trimming it never counts the table.
+      `INSERT INTO zur_counts (kind, n) SELECT 'automation_runs', count(*) FROM zur_automation_runs WHERE 1 ON CONFLICT (kind) DO UPDATE SET n = excluded.n`,
+      `CREATE TRIGGER IF NOT EXISTS zur_counts_automation_runs_insert AFTER INSERT ON zur_automation_runs BEGIN UPDATE zur_counts SET n = n + 1 WHERE kind = 'automation_runs'; END`,
+      `CREATE TRIGGER IF NOT EXISTS zur_counts_automation_runs_delete AFTER DELETE ON zur_automation_runs BEGIN UPDATE zur_counts SET n = n - 1 WHERE kind = 'automation_runs'; END`,
+    ],
+  },
 ];
 
 export const LATEST_SCHEMA_VERSION = MIGRATIONS.at(-1)?.version ?? 0;

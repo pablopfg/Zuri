@@ -27,6 +27,9 @@ describe("GET /api/health", () => {
       productivity: () => {
         throw new Error("not used");
       },
+      automations: () => {
+        throw new Error("not used");
+      },
       memories: () => {
         throw new Error("not used");
       },

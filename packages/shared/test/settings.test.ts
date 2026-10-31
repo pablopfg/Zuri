@@ -17,6 +17,7 @@ describe("default settings", () => {
       aiMaxToolCalls: 6,
       aiMaxIterations: 4,
       aiMaxContextTokens: 6_000,
+      aiScheduledRunsPerDay: 6,
     });
     expect(DEFAULT_TIME_ZONE).toBe("America/Sao_Paulo");
     expect(settingsSchema.parse(DEFAULT_SETTINGS)).toEqual(DEFAULT_SETTINGS);

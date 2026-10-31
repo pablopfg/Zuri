@@ -16,7 +16,9 @@ export type InternalKey =
   | "auth_events_cap_mark"
   | "auth_mfa_wrong_codes"
   | "auth_passkey_pending"
-  | "auth_passkey_user";
+  | "auth_passkey_user"
+  // The one alarm of the automations: "<UTC ISO>|<schedule id>" (step 10).
+  | "automation_alarm";
 
 export class InternalState {
   constructor(private readonly db: Database) {}
