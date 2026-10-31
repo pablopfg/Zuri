@@ -55,13 +55,20 @@ export function SettingsPage() {
           <ul className="divide-y divide-border overflow-hidden rounded-2xl border border-border bg-surface shadow-sm">
             {tabs.map(({ id, label, hint, icon: Icon }) => (
               <li key={id}>
-                <Link to={`/configuracoes/${id}`} className="flex min-h-16 items-center gap-3 px-4 py-3 hover:bg-raised">
+                <Link
+                  to={`/configuracoes/${id}`}
+                  aria-describedby={`secao-${id}`}
+                  className="flex min-h-16 items-center gap-3 px-4 py-3 hover:bg-raised"
+                >
                   <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-accent-soft text-accent-text" aria-hidden>
                     <Icon className="h-[1.125rem] w-[1.125rem]" />
                   </span>
                   <span className="min-w-0 flex-1">
                     <span className="block font-medium">{label}</span>
-                    <span className="block text-sm text-fg-muted">{hint}</span>
+                    {/* The hint describes the link; its name stays the section's. */}
+                    <span id={`secao-${id}`} className="block text-sm text-fg-muted" aria-hidden>
+                      {hint}
+                    </span>
                   </span>
                   <ChevronRight className="h-4 w-4 shrink-0 text-fg-muted" aria-hidden />
                 </Link>

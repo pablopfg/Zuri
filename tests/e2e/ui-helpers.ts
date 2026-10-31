@@ -54,6 +54,5 @@ export function settingsHasTabs(page: Page) {
 export async function openSettingsSection(page: Page, name: string) {
   const sections = page.getByRole("navigation", { name: "Seções das configurações" });
   if (!settingsHasTabs(page) && (await sections.count()) === 0) await page.getByRole("link", { name: "Todas as configurações" }).click();
-  // On the phone list the link's name also carries its hint ("Conta Idioma, fuso…").
-  await sections.getByRole("link", { name: new RegExp(`^${name}`) }).click();
+  await sections.getByRole("link", { name, exact: true }).click();
 }

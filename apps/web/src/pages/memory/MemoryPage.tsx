@@ -49,13 +49,15 @@ export function MemoryPage() {
   const [historyOf, setHistoryOf] = useState<Memory | null>(null);
   const [deleting, setDeleting] = useState<Memory | null>(null);
   const toast = useToast();
+  // A write that raised conflicts leaves something to do: that toast stays until closed.
+  const notify = (message: string, pending: boolean) => toast(message, { persistent: pending });
 
   return (
     <>
       <PageHeader title={t("web.memory.title")} description={t("web.memory.description")} />
 
 
-      <NewMemory onSaved={toast} />
+      <NewMemory onSaved={notify} />
 
       {(counts?.reviews ?? 0) > 0 && <ReviewQueue total={counts?.reviews ?? 0} onDone={toast} />}
 
@@ -136,7 +138,7 @@ export function MemoryPage() {
 
       <ConflictReviewSetting />
 
-      {editing && <EditDialog editing={editing} onClose={() => setEditing(null)} onSaved={toast} />}
+      {editing && <EditDialog editing={editing} onClose={() => setEditing(null)} onSaved={notify} />}
       {historyOf && <HistoryDialog memory={historyOf} onClose={() => setHistoryOf(null)} />}
       {deleting && (
         <DeleteDialog
@@ -162,7 +164,7 @@ function useWriteMessage() {
   };
 }
 
-function NewMemory({ onSaved }: { onSaved: (message: string) => void }) {
+function NewMemory({ onSaved }: { onSaved: (message: string, pending: boolean) => void }) {
   const { t } = useI18n();
   const qc = useQueryClient();
   const message = useWriteMessage();
@@ -179,7 +181,7 @@ function NewMemory({ onSaved }: { onSaved: (message: string) => void }) {
     try {
       const result = await api<MemoryWriteResult>("/memories", { method: "POST", body: { content, category } });
       setContent("");
-      onSaved(message(result, "saved"));
+      onSaved(message(result, "saved"), result.reviews > 0);
       await qc.invalidateQueries({ queryKey: MEMORIES_KEY });
     } catch (err) {
       setError(errorMessage(err));
@@ -435,7 +437,7 @@ function ReviewItem({ review, onDone }: { review: MemoryReview; onDone: (message
   );
 }
 
-function EditDialog({ editing, onClose, onSaved }: { editing: Editing; onClose: () => void; onSaved: (message: string) => void }) {
+function EditDialog({ editing, onClose, onSaved }: { editing: Editing; onClose: () => void; onSaved: (message: string, pending: boolean) => void }) {
   const { t } = useI18n();
   const qc = useQueryClient();
   const message = useWriteMessage();
@@ -454,7 +456,7 @@ function EditDialog({ editing, onClose, onSaved }: { editing: Editing; onClose: 
         mode === "edit"
           ? await api<MemoryWriteResult>(`/memories/${memory.id}`, { method: "PATCH", body: { content, category } })
           : await api<MemoryWriteResult>(`/memories/${memory.id}/correct`, { method: "POST", body: { content, category } });
-      onSaved(message(result, mode === "edit" ? "updated" : "corrected"));
+      onSaved(message(result, mode === "edit" ? "updated" : "corrected"), result.reviews > 0);
       await qc.invalidateQueries({ queryKey: MEMORIES_KEY });
       onClose();
     } catch (err) {

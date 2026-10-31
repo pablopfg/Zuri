@@ -1,5 +1,5 @@
 import { expect, test } from "./fixtures.ts";
-import { CSRF, EMAIL, openSettingsSection, PASSWORD, settingsHasTabs, signIn } from "./ui-helpers.ts";
+import { CSRF, EMAIL, expectAccessible, openSettingsSection, PASSWORD, settingsHasTabs, signIn } from "./ui-helpers.ts";
 
 // The interface against the real Worker: sign-in, the session guard, sign-out
 // and the ways a session ends. pt-BR is the default language.
@@ -124,8 +124,9 @@ test("settings has the six sections, each with its address and content: tabs on 
     // The list is the page: each section with what it holds, no section open yet.
     await expect(page).toHaveURL(/\/configuracoes$/);
     await expect(sections.getByRole("link")).toHaveCount(6);
-    await expect(sections.getByRole("link", { name: /^Segurança/ })).toContainText("Duas etapas, passkeys e saída automática");
-    await expect(page.getByRole("link", { name: "Todas as configurações" })).toHaveCount(0);
+        await expect(page.getByRole("link", { name: "Todas as configurações" })).toHaveCount(0);
+    await expect(sections.getByRole("link", { name: "Segurança", exact: true })).toHaveAccessibleDescription("Duas etapas, passkeys e saída automática");
+    await expectAccessible(page, "configuracoes (lista)");
   }
   for (const [name, path, text] of [
     ["Segurança", "seguranca", "Atividade de acesso"],
