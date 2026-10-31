@@ -84,7 +84,7 @@ describe("the Free plan budget of each route", () => {
     expect(beat.written).toBeLessThanOrEqual(2);
   });
 
-  it("reads one row for the session check that opens every signed-in request", async () => {
+  it("reads at most two rows for the session check that opens every signed-in request", async () => {
     for (const path of ["/auth/session", "/settings"]) {
       const res = await cost("GET", path);
       expect(res.status, path).toBe(200);
@@ -100,11 +100,13 @@ describe("the Free plan budget of each route", () => {
     expect(all.read).toBeLessThanOrEqual(LIST_LIMIT_DEFAULT + 5);
 
     const completed = await cost("GET", "/tasks?view=completed");
+    expect(completed.status).toBe(200);
     expect(completed.read).toBeLessThanOrEqual(LIST_LIMIT_DEFAULT + 5);
 
     // Upcoming skips the open tasks due before tonight, then reads one page (2,490 rows before).
     const upcoming = await cost("GET", "/tasks?view=upcoming");
-    expect(upcoming.read).toBeLessThan(TASKS / 2);
+    expect(upcoming.status).toBe(200);
+    expect(upcoming.read).toBeLessThanOrEqual(750);
   });
 
   it("reads only the tasks that Today and Overdue show, through the open-tasks index", async () => {
@@ -138,6 +140,7 @@ describe("the Free plan budget of each route", () => {
     expect(notes.status).toBe(200);
     expect(notes.read).toBeLessThanOrEqual(2 * LIST_LIMIT_DEFAULT + 5);
     const search = await cost("GET", "/notes?q=word12");
+    expect(search.status).toBe(200);
     expect(search.read).toBeLessThan(100);
   });
 

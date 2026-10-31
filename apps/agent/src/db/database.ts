@@ -9,7 +9,8 @@ export class Database {
   /**
    * Rows read and written by this wrapper's statements since the object woke.
    * Both are billed per row on the Free plan (docs/arquitetura/orcamento-free-tier.md);
-   * the budget tests read them to keep each route's cost in check.
+   * the budget tests read them to keep each route's cost in check. The Agents
+   * SDK's own statements on its cf_agents_* tables don't pass through here.
    */
   readonly usage = { rowsRead: 0, rowsWritten: 0 };
 
