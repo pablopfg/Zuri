@@ -34,7 +34,7 @@ export const SESSION_TIMEOUT_RANGES = {
 const range = (r: { min: number; max: number }) => z.number().int().min(r.min).max(r.max);
 
 /** The settings of steps 2 and 3. Later steps add fields here, each with its default. */
-export const settingsSchema = z
+export const settingsSchema = /* @__PURE__ */ z
   .object({
     language: z.enum(LOCALES),
     timeZone: z.string().refine(isTimeZone),
@@ -49,7 +49,7 @@ export const settingsSchema = z
 export type Settings = z.infer<typeof settingsSchema>;
 
 /** A change asks for at least one known field; unknown fields are refused, not ignored. */
-export const settingsUpdateSchema = settingsSchema
+export const settingsUpdateSchema = /* @__PURE__ */ settingsSchema
   .partial()
   .strict()
   .refine((patch) => Object.keys(patch).length > 0);

@@ -52,7 +52,7 @@ export const NOTE_EXCERPT_LENGTH = 200;
 
 /** Ids are the server's own random UUIDs: anything else is not one of the owner's records. */
 export const RECORD_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
-export const recordIdSchema = z.string().regex(RECORD_ID);
+export const recordIdSchema = /* @__PURE__ */ z.string().regex(RECORD_ID);
 const recordId = recordIdSchema;
 
 /**
@@ -119,7 +119,7 @@ export interface Task {
   completedAt: string | null;
 }
 
-export const taskCreateSchema = z
+export const taskCreateSchema = /* @__PURE__ */ z
   .object({
     title: line(TASK_TITLE_MAX),
     description: text(TASK_DESCRIPTION_MAX).default(""),
@@ -132,7 +132,7 @@ export const taskCreateSchema = z
 export type TaskCreate = z.input<typeof taskCreateSchema>;
 
 // Without defaults: a default in a partial schema would overwrite stored values the owner never touched.
-export const taskUpdateSchema = z
+export const taskUpdateSchema = /* @__PURE__ */ z
   .object({
     title: line(TASK_TITLE_MAX),
     description: text(TASK_DESCRIPTION_MAX),
@@ -146,9 +146,9 @@ export const taskUpdateSchema = z
   .refine(atLeastOne);
 export type TaskUpdate = z.input<typeof taskUpdateSchema>;
 
-const limit = z.coerce.number().int().min(1).max(LIST_LIMIT_MAX).default(LIST_LIMIT_DEFAULT);
+const limit = /* @__PURE__ */ z.coerce.number().int().min(1).max(LIST_LIMIT_MAX).default(LIST_LIMIT_DEFAULT);
 
-export const taskListQuerySchema = z
+export const taskListQuerySchema = /* @__PURE__ */ z
   .object({
     view: z.enum(TASK_VIEWS).default("all"),
     /** A project's id, or "none" for tasks outside any project. */
@@ -176,7 +176,7 @@ export interface NoteSummary extends Omit<Note, "content"> {
   excerpt: string;
 }
 
-export const noteCreateSchema = z
+export const noteCreateSchema = /* @__PURE__ */ z
   .object({
     title: line(NOTE_TITLE_MAX),
     content: text(NOTE_CONTENT_MAX).default(""),
@@ -185,14 +185,14 @@ export const noteCreateSchema = z
   .strict();
 export type NoteCreate = z.input<typeof noteCreateSchema>;
 
-export const noteUpdateSchema = z
+export const noteUpdateSchema = /* @__PURE__ */ z
   .object({ title: line(NOTE_TITLE_MAX), content: text(NOTE_CONTENT_MAX), projectId: recordId.nullable() })
   .partial()
   .strict()
   .refine(atLeastOne);
 export type NoteUpdate = z.input<typeof noteUpdateSchema>;
 
-export const noteListQuerySchema = z
+export const noteListQuerySchema = /* @__PURE__ */ z
   .object({
     q: z.string().trim().max(SEARCH_MAX).refine(wellFormed).optional(),
     projectId: z.union([recordId, z.literal("none")]).optional(),
@@ -219,7 +219,7 @@ export interface Project {
   updatedAt: string;
 }
 
-export const projectCreateSchema = z
+export const projectCreateSchema = /* @__PURE__ */ z
   .object({
     name: line(PROJECT_NAME_MAX),
     description: text(PROJECT_DESCRIPTION_MAX).default(""),
@@ -228,7 +228,7 @@ export const projectCreateSchema = z
   .strict();
 export type ProjectCreate = z.input<typeof projectCreateSchema>;
 
-export const projectUpdateSchema = z
+export const projectUpdateSchema = /* @__PURE__ */ z
   .object({ name: line(PROJECT_NAME_MAX), description: text(PROJECT_DESCRIPTION_MAX), status: z.enum(PROJECT_STATUSES) })
   .partial()
   .strict()
@@ -249,7 +249,7 @@ export interface TrashItem {
 
 export const TRASH_TITLE_MAX = 120;
 
-export const trashListQuerySchema = z.object({ kind: z.enum(TRASH_KINDS).optional(), limit }).strict();
+export const trashListQuerySchema = /* @__PURE__ */ z.object({ kind: z.enum(TRASH_KINDS).optional(), limit }).strict();
 
 export interface TrashRestored {
   kind: TrashKind;

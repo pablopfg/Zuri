@@ -102,6 +102,9 @@ o [SemVer](https://semver.org/lang/pt-BR/). Cada PR escreve a sua entrada em
 
 ### Alterado
 
+- Abertura ainda mais leve: o JavaScript inicial caiu de 158 para 140 KB
+  (gzip). A interface passou a validar as respostas da API com o Zod Mini, e o
+  Zod completo ficou só no servidor. As validações são as mesmas.
 - Abertura mais leve: o código do QR e das passkeys saiu do pacote inicial,
   que cai cerca de 15 KB (gzip). A biblioteca de passkey só baixa quando o
   segundo passo oferece passkey, e o catálogo em inglês só baixa para quem usa
