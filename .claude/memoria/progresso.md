@@ -24,7 +24,7 @@ etapas ficam detalhadas; as mais antigas viram uma linha na tabela.
 | 6 | mesclada (31/10/2026) | #12 | Tarefas, notas (Markdown, FTS5), projetos, lixeira de 30 dias, limites por tipo |
 | 7 | mesclada (31/10/2026) | #21 | Memória com estados atual/incerta/passada, substituição sem ciclos, fila de revisão, recordação em `<data>` |
 | 8 | mesclada (31/10/2026) | #25 | Provedor Workers AI e IA simulada, medição por passo, teto de 9.000 Neurons/dia, aba IA |
-| 9 | em revisão (31/10/2026) | branch `feat/etapa-09-chat-ferramentas` | Conversa em SSE, 20 ferramentas com permissão e limite, aprovações e planos, voz, injeção de prompt testada |
+| 9 | em revisão (31/10/2026) | PR #28 | Conversa em SSE, 20 ferramentas com permissão e limite, aprovações e planos, voz, injeção de prompt testada |
 
 ## Últimas etapas (detalhe)
 
