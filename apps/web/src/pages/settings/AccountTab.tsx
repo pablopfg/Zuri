@@ -1,4 +1,4 @@
-import { isLocale, type Locale, LOCALES } from "@zuri/shared";
+import { isLocale, LOCALES } from "@zuri/shared";
 import { useMemo } from "react";
 import { ChangePasswordForm } from "../../components/ChangePasswordForm.tsx";
 import { ThemeSwitcher } from "../../components/ThemeSwitcher.tsx";
@@ -7,15 +7,9 @@ import { useSession } from "../../hooks/session.tsx";
 import { useSettings, useSettingsMutation } from "../../hooks/settings.ts";
 import { errorMessage } from "../../lib/api.ts";
 import { useI18n } from "../../lib/i18n.tsx";
+import { LANGUAGE_NAMES, timeZones } from "../../lib/zones.ts";
 import { useToast } from "../../components/Toaster.tsx";
 
-/** Each language by its own name, as people look for it. */
-const LANGUAGE_NAMES: Record<Locale, string> = { "pt-BR": "Português (Brasil)", en: "English" };
-
-function timeZones(current: string): string[] {
-  const all = typeof Intl.supportedValuesOf === "function" ? Intl.supportedValuesOf("timeZone") : [];
-  return all.includes(current) ? all : [current, ...all];
-}
 
 export function AccountTab() {
   const { t } = useI18n();

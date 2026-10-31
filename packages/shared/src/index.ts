@@ -22,6 +22,7 @@ export {
   ptBRPalette,
   ptBRServer,
   ptBRSettings,
+  ptBRSetup,
   t,
 } from "../i18n/index.ts";
 export { AGENT_INSTANCE_NAME } from "./constants.ts";

@@ -16,6 +16,7 @@ const PORT = 9333;
 
 const PAGES = [
   { name: "entrar", path: "/entrar", signedIn: false },
+  { name: "primeiro-acesso", path: "/primeiro-acesso", signedIn: false },
   { name: "inicio", path: "/", signedIn: true },
   { name: "tarefas", path: "/tarefas", signedIn: true },
   { name: "notas", path: "/notas", signedIn: true },

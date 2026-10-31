@@ -16,9 +16,17 @@ o [SemVer](https://semver.org/lang/pt-BR/). Cada PR escreve a sua entrada em
   certo e é gasto no cadastro. Cada tentativa passa pela verificação contra
   robôs, e os limites valem por rede: 5 erros em 15 minutos pausam e 20 em 24
   horas bloqueiam aquela rede pelo resto do dia. Logo depois do cadastro, a
-  verificação em duas etapas é obrigatória antes de qualquer outra tela. Um código novo, depois, só recupera o acesso
+  verificação em duas etapas é obrigatória antes de qualquer outra tela. Um
+  código novo, depois, só recupera o acesso
   (`POST /api/setup/recover`), mantendo os dados e o 2FA. Os quatro eventos
-  novos aparecem em Acessos. A tela vem no próximo PR.
+  novos aparecem em Acessos.
+- Tela de primeiro acesso em `/primeiro-acesso`, em três passos: o código de
+  instalação, os seus dados (e-mail, senha repetida, idioma e fuso já
+  preenchidos pelo navegador) e a verificação em duas etapas, que abre antes
+  de qualquer outra tela. Numa instalação nova, a tela de entrar leva direto
+  para ela. Depois do cadastro, a mesma tela serve para recuperar o acesso com
+  um código novo e o e-mail cadastrado. O Início lembra de apagar o segredo
+  `SETUP_CODE` enquanto ele continuar gravado.
 
 - Paleta de comandos com Ctrl/⌘ K, ou pelo botão Buscar na barra lateral e no
   topo do celular. Ela leva a qualquer página ou seção das configurações, cria
@@ -165,6 +173,9 @@ o [SemVer](https://semver.org/lang/pt-BR/). Cada PR escreve a sua entrada em
 
 ### Alterado
 
+- A tela de trocar a senha obrigatória e os avisos de segredo para apagar
+  passaram a carregar só quando aparecem. O JavaScript inicial caiu de 139,5
+  para 139,4 kB, e o teto da CI desceu junto.
 - Os textos que só o servidor diz (recusas e erros da API) saíram do pacote
   inicial da interface, que já recebe essas mensagens prontas na resposta. O
   JS inicial caiu de 139,9 para 139,4 KB, já com a paleta, e o teto da CI desceu

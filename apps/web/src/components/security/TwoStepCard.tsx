@@ -10,8 +10,11 @@ import { RecoveryCodes } from "./RecoveryCodes.tsx";
 
 type Mode = { kind: "idle" } | { kind: "setup"; setup: MfaSetup } | { kind: "codes"; codes: string[] } | { kind: "disable" } | { kind: "regenerate" };
 
-/** Two-step sign-in with an authenticator app: turn on (scan, confirm, keep the codes), new codes, turn off. */
-export function TwoStepCard() {
+/**
+ * Two-step sign-in with an authenticator app: turn on (scan, confirm, keep the codes), new codes, turn off.
+ * `onCodesKept` runs once the owner says the new recovery codes are kept (the first access waits for it).
+ */
+export function TwoStepCard({ onCodesKept }: { onCodesKept?: () => void } = {}) {
   const { t, dateTime, plural } = useI18n();
   const qc = useQueryClient();
   const status = useMfaStatus();
@@ -91,7 +94,16 @@ export function TwoStepCard() {
   let body: ReactNode;
   if (status.isPending) body = <Spinner />;
   else if (status.isError) body = <ErrorNotice error={status.error} onRetry={() => void status.refetch()} />;
-  else if (mode.kind === "codes") body = <RecoveryCodes codes={mode.codes} onDone={() => reset()} />;
+  else if (mode.kind === "codes")
+    body = (
+      <RecoveryCodes
+        codes={mode.codes}
+        onDone={() => {
+          reset();
+          onCodesKept?.();
+        }}
+      />
+    );
   else if (mode.kind === "setup") {
     body = (
       <div className="space-y-4">

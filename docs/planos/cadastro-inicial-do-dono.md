@@ -29,13 +29,25 @@ dois divergem, vale esta lista e a seção de primeiro acesso de
   exige o 2FA ligado antes, então vem depois.
 - Eventos: `setup_failure`, `setup_locked`, `owner_created` e
   `access_recovered`. Não há evento para o código aceito.
-- Sem tabela `zur_owner`: o e-mail fica numa chave interna, e o nome
-  (`ownerName`) entra no PR da tela.
+- Sem tabela `zur_owner`: o e-mail fica numa chave interna. O nome
+  (`ownerName`) entra no formulário quando o campo dos cumprimentos (PR #34)
+  chegar à `develop`; até lá o cadastro pede e-mail, senha, idioma e fuso.
 - Instalações antigas (`OWNER_EMAIL` nos segredos) contam como dono existente:
   um `SETUP_CODE` lá abre só a recuperação, que confere o e-mail. Elas não
   ganham a trava do 2FA.
 - O cookie `__Host-zuri_setup` precisa de `Path=/` (exigência do prefixo); ele
   só tem efeito nas rotas `/api/setup/*`.
+
+## Ajustes feitos na tela
+
+- Sem medidor de força: a regra de verdade é a do servidor (tamanho, partes
+  previsíveis, vazamentos), e a tela mostra a resposta dele no campo.
+- A recuperação tem o mesmo endereço, `/primeiro-acesso`, e termina com um
+  botão para a tela de entrar. A tela de entrar não ganhou link para ela: o
+  guia de instalação explica o caminho.
+- Capturas geradas por `scripts/capturas-do-primeiro-acesso.ts`, que simula no
+  navegador as respostas de uma instalação nova; o e2e usa um segundo servidor
+  local, sem dono e com o código de instalação.
 
 ## O pedido
 
@@ -247,7 +259,7 @@ auditoria completa (a área é autenticação).
 2. **`feat(web): tela de primeiro acesso e segundo passo obrigatório`**
    - Tela lazy `/primeiro-acesso` (três passos), textos em pt-BR e en pelo
      catálogo, redirecionamento a partir da tela de entrar, aviso para apagar o
-     código no Início. O JS inicial não pode subir (teto de 139,5 kB): a tela
+     código no Início. O JS inicial não pode subir (teto de 139,5 kB; desceu para 139,4 kB neste PR): a tela
      carrega sob demanda.
    - e2e: instalação nova do começo ao fim, código errado, recarregar no meio,
      fechar no segundo passo e voltar; axe; teclado; leitor de tela; celular e

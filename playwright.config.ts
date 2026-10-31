@@ -1,6 +1,8 @@
 import { defineConfig, devices } from "@playwright/test";
+import { E2E_SETUP_CODE, SETUP_PORT } from "./tests/e2e/setup-server.ts";
 
 const port = 4173;
+
 /** The hash of the e2e password (tests/e2e/auth.spec.ts) with the PASSWORD_PEPPER of tests/e2e/worker.env. */
 const E2E_PASSWORD_HASH = "pbkdf2$100000$yB2UxjzRGuh7xZ5tvM4q7w$Km8ai3JJWgqU-CJQLKgZhzxPwxEjZwItSB4xhAujhJ4";
 
@@ -22,26 +24,40 @@ export default defineConfig({
     { name: "desktop", use: { ...devices["Desktop Chrome"] } },
     { name: "mobile", use: { ...devices["Pixel 7"] }, grep: /@mobile/ },
   ],
-  webServer: {
-    // The real Worker (wrangler dev) serving the built interface, so every test
-    // also goes through the gates. Test-only secrets; PUBLIC_URL is loopback http.
-    // --local: the AI binding stays off (it would need the owner's Cloudflare account);
-    // over loopback the agent answers with the mock instead (src/ai/index.ts).
-    // Every run starts from an empty database (its own folder, apart from `npm run dev`'s):
-    // sign-in limits and settings left by an earlier run would change the results.
-    command:
-      `node -e "require('node:fs').rmSync('.wrangler/e2e',{recursive:true,force:true})" && ` +
-      "npm run build -w @zuri/web && npm exec -w @zuri/agent -- wrangler dev --local --ip 127.0.0.1 --persist-to ../../.wrangler/e2e " +
-      `--port ${port} --env-file ../../tests/e2e/worker.env --var PUBLIC_URL:http://127.0.0.1:${port} ` +
-      // Optional secrets don't load from the env file (only those wrangler.jsonc
-      // lists as required do): the e2e owner (an older installation's e-mail and
-      // password hash, never a real address) goes as variables.
-      `--var OWNER_EMAIL:dono@exemplo.com.br --var 'OWNER_PASSWORD_HASH:${E2E_PASSWORD_HASH}' ` +
-      // Cloudflare's always-pass Turnstile test keys: accepted only over loopback,
-      // where the Worker answers their test token without the network (tests/e2e/fixtures.ts).
-      "--var TURNSTILE_SITE_KEY:1x00000000000000000000AA --var TURNSTILE_SECRET_KEY:1x0000000000000000000000000000000AA",
-    url: `http://127.0.0.1:${port}/api/health`,
-    reuseExistingServer: false,
-    timeout: 120_000,
-  },
+  webServer: [
+    {
+      // The real Worker (wrangler dev) serving the built interface, so every test
+      // also goes through the gates. Test-only secrets; PUBLIC_URL is loopback http.
+      // --local: the AI binding stays off (it would need the owner's Cloudflare account);
+      // over loopback the agent answers with the mock instead (src/ai/index.ts).
+      // Every run starts from an empty database (its own folder, apart from `npm run dev`'s):
+      // sign-in limits and settings left by an earlier run would change the results.
+      command:
+        `node -e "require('node:fs').rmSync('.wrangler/e2e',{recursive:true,force:true})" && ` +
+        "npm run build -w @zuri/web && npm exec -w @zuri/agent -- wrangler dev --local --ip 127.0.0.1 --persist-to ../../.wrangler/e2e " +
+        `--port ${port} --env-file ../../tests/e2e/worker.env --var PUBLIC_URL:http://127.0.0.1:${port} ` +
+        // Optional secrets don't load from the env file (only those wrangler.jsonc
+        // lists as required do): the e2e owner (an older installation's e-mail and
+        // password hash, never a real address) goes as variables.
+        `--var OWNER_EMAIL:dono@exemplo.com.br --var 'OWNER_PASSWORD_HASH:${E2E_PASSWORD_HASH}' ` +
+        // Cloudflare's always-pass Turnstile test keys: accepted only over loopback,
+        // where the Worker answers their test token without the network (tests/e2e/fixtures.ts).
+        "--var TURNSTILE_SITE_KEY:1x00000000000000000000AA --var TURNSTILE_SECRET_KEY:1x0000000000000000000000000000000AA",
+      url: `http://127.0.0.1:${port}/api/health`,
+      reuseExistingServer: false,
+      timeout: 120_000,
+    },
+    {
+      // Started after the first one (Playwright waits for each in turn), so the interface is built already.
+      command:
+        `node -e "require('node:fs').rmSync('.wrangler/e2e-setup',{recursive:true,force:true})" && ` +
+        "npm exec -w @zuri/agent -- wrangler dev --local --ip 127.0.0.1 --persist-to ../../.wrangler/e2e-setup " +
+        `--port ${SETUP_PORT} --env-file ../../tests/e2e/worker.env --var PUBLIC_URL:http://127.0.0.1:${SETUP_PORT} ` +
+        `--var SETUP_CODE:${E2E_SETUP_CODE} ` +
+        "--var TURNSTILE_SITE_KEY:1x00000000000000000000AA --var TURNSTILE_SECRET_KEY:1x0000000000000000000000000000000AA",
+      url: `http://127.0.0.1:${SETUP_PORT}/api/health`,
+      reuseExistingServer: false,
+      timeout: 120_000,
+    },
+  ],
 });

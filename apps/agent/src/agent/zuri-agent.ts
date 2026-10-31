@@ -2,6 +2,7 @@ import { DEFAULT_LOCALE, isBreachedPassword, isPasswordHash, isUsableSetupCode, 
 import { Agent } from "agents";
 import { chooseProvider, MeteredAI, UsageMeter } from "../ai/index.ts";
 import type { AIProvider } from "../ai/provider.ts";
+import { developmentBreachCheck } from "../auth/dev-breach.ts";
 import { MockTranscriber, type Transcriber, WorkersAITranscriber } from "../ai/transcription.ts";
 import type { AiLimits } from "../ai/usage.ts";
 import { createApi } from "../api/app.ts";
@@ -190,7 +191,8 @@ export class ZuriAgent extends Agent<WorkerEnv> {
           agentName: env.AGENT_NAME,
         },
         ...signInTurnstile(env),
-        breached: (password) => isBreachedPassword(password),
+        // Local development never reaches the breach service (src/auth/dev-breach.ts).
+        breached: (password) => (this.development() ? developmentBreachCheck(password) : isBreachedPassword(password)),
         // Passkeys belong to the host they were made on: always PUBLIC_URL's, never the request's.
         relyingParty: { rpId: this.publicUrl().hostname, origin: this.publicUrl().origin },
       });

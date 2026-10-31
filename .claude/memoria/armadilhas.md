@@ -180,6 +180,13 @@ acrescente aqui cada armadilha nova que encontrar (sem dados pessoais).
   início precisa), `ai-limits.ts` (o mínimo das configurações) e `ai.ts` (o
   resto, só na tela). Também `formatUsd` de `format.ts` entrou no inicial ao
   ser usado só pela aba: formate na própria tela.
+- O mesmo vale para módulos que importam o roteador: `RequireSession.tsx`
+  (`FullScreen`, `SessionChecking`) traz `react-router` junto. Uma tela sob
+  demanda que importava um deles separou o roteador em `components-*.js` e
+  subiu o JS inicial em 1,5 KB. As telas de primeiro acesso e de trocar a
+  senha desenham o próprio `<main>` e recebem `go` por propriedade.
+  Lembrete: um `lazy()` sem uso continua no pacote (a chamada não é pura), então
+  para medir tire a declaração inteira, não só o uso.
 - Um `import` de `react-router` numa tela sob demanda que ainda não o usava
   (a Memória, ou o componente da paleta) separou o roteador num pedaço próprio
   (`hooks-*.js`) e subiu o JS inicial em 1,5 KB. A paleta recebe o `navigate`

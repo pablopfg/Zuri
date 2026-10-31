@@ -76,7 +76,7 @@ export const setupTicketSchema = /* @__PURE__ */ mini.strictObject({
 });
 export type SetupTicket = z.infer<typeof setupTicketSchema>;
 
-const email = /* @__PURE__ */ z.string().trim().max(MAX_EMAIL_LENGTH).pipe(z.email());
+const email = /* @__PURE__ */ z.string().trim().max(MAX_EMAIL_LENGTH).pipe(/* @__PURE__ */ z.email());
 const password = /* @__PURE__ */ z.string().min(1).max(MAX_PASSWORD_INPUT_LENGTH);
 
 /** POST /api/setup/owner: the owner's details. The password rules are checked by the server. */

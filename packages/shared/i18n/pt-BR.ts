@@ -6,6 +6,7 @@ import { ptBRChat } from "./pt-BR-chat.ts";
 import { ptBRSecurity } from "./pt-BR-security.ts";
 import { ptBRServer } from "./pt-BR-server.ts";
 import { ptBRSettings } from "./pt-BR-settings.ts";
+import { ptBRSetup } from "./pt-BR-setup.ts";
 
 // Default and fallback catalog. Every key must also exist in en.ts and be used in the code (npm run lint).
 // The texts of the lazy screens live in their own files (pt-BR-memory.ts, pt-BR-productivity.ts,
@@ -34,7 +35,6 @@ export const ptBRCore = {
   "web.nav.signOutConfirmTitle": "Sair do Zuri?",
   "web.nav.collapse": "Recolher menu",
   "web.nav.expand": "Expandir menu",
-  "web.shell.removePlainSecret": "A senha já está guardada no Zuri. Apague o segredo OWNER_PASSWORD no painel da Cloudflare (Workers › zuri › Configurações › Variáveis e segredos).",
   "web.login.email": "E-mail",
   "web.login.password": "Senha",
   "web.login.submit": "Entrar",
@@ -96,17 +96,8 @@ export const ptBRCore = {
   "web.crash.title": "Algo deu errado",
   "web.crash.body": "Esta tela parou por causa de um erro. Recarregue para tentar de novo; o que já estava salvo continua no Zuri.",
   "web.crash.reload": "Recarregar",
-  "web.passwordRequired.title": "Troque a sua senha",
-  "web.passwordRequired.body": "A senha atual não segue as regras de segurança. Escolha uma nova para continuar; o resto do Zuri fica bloqueado até lá.",
-  "web.password.current": "Senha atual",
-  "web.password.new": "Nova senha",
-  "web.password.repeat": "Repita a nova senha",
-  "web.password.rules": "Pelo menos {min} caracteres. Frases com palavras sem relação entre si funcionam bem.",
-  "web.password.mismatch": "As duas senhas não são iguais.",
   "web.password.show": "Mostrar senha",
   "web.password.hide": "Ocultar senha",
-  "web.password.submit": "Trocar a senha",
-  "web.password.changed": "Senha trocada. As outras sessões foram encerradas.",
   "web.settings.title": "Configurações",
   "web.mfaReminder.body": "A verificação em duas etapas está desligada. Ligue para proteger a sua conta.",
   "web.mfaReminder.short": "Duas etapas desligadas",
@@ -134,7 +125,7 @@ export const ptBRCore = {
 } as const;
 
 /** Joins catalog parts. Marked pure so a bundle that never uses the whole catalog drops the call. */
-function join<A extends object, B extends object, C extends object, D extends object, E extends object, F extends object, G extends object, H extends object, I extends object>(
+function join<A extends object, B extends object, C extends object, D extends object, E extends object, F extends object, G extends object, H extends object, I extends object, J extends object>(
   a: A,
   b: B,
   c: C,
@@ -144,9 +135,10 @@ function join<A extends object, B extends object, C extends object, D extends ob
   g: G,
   h: H,
   i: I,
-): A & B & C & D & E & F & G & H & I {
-  return { ...a, ...b, ...c, ...d, ...e, ...f, ...g, ...h, ...i };
+  j: J,
+): A & B & C & D & E & F & G & H & I & J {
+  return { ...a, ...b, ...c, ...d, ...e, ...f, ...g, ...h, ...i, ...j };
 }
 
 /** The whole pt-BR catalog: what the server, the tests and the lint use. */
-export const ptBR = /* @__PURE__ */ join(ptBRCore, ptBRMemory, ptBRProductivity, ptBRSecurity, ptBRAi, ptBRChat, ptBRSettings, ptBRServer, ptBRPalette);
+export const ptBR = /* @__PURE__ */ join(ptBRCore, ptBRMemory, ptBRProductivity, ptBRSecurity, ptBRAi, ptBRChat, ptBRSettings, ptBRServer, ptBRPalette, ptBRSetup);
