@@ -21,6 +21,9 @@ function api(auth: AuthService) {
     memories: () => {
       throw new Error("not used");
     },
+    chat: () => {
+      throw new Error("not used");
+    },
     aiUsage: () => {
       throw new Error("not used");
     },

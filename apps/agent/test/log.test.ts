@@ -81,6 +81,9 @@ describe("nothing personal or secret reaches the log", () => {
     });
     expect(line).toEqual({ level: "warn", event: "not_configured", secrets: ["SESSION_SECRET", "OWNER_EMAIL"] });
     expect(logLine("warn", "not_configured", { secrets: ["valor"] }).secrets).toBeUndefined();
+    expect(logLine("error", "tool_failed", { tool: "create_task" }).tool).toBe("create_task");
+    expect(logLine("error", "tool_failed", { tool: "dono@exemplo.com.br" }).tool).toBeUndefined();
+    expect(logLine("error", "tool_failed", { tool: "Create Task" }).tool).toBeUndefined();
     expect(logLine("warn", "not_configured", { secrets: Array.from({ length: 30 }, (_, i) => `NAME_${i}`) }).secrets).toHaveLength(10);
   });
 });

@@ -23,7 +23,7 @@ export type TaskView = (typeof TASK_VIEWS)[number];
 export type TrashKind = (typeof TRASH_KINDS)[number];
 
 /** Most records of each kind ("Constantes padrão"). One more is refused; nothing is deleted to make room. */
-export const STORAGE_LIMITS = { tasks: 20_000, notes: 5_000, projects: 1_000, memories: 10_000 } as const;
+export const STORAGE_LIMITS = { tasks: 20_000, notes: 5_000, projects: 1_000, memories: 10_000, conversations: 5_000, messages: 200_000 } as const;
 export type StorageKind = keyof typeof STORAGE_LIMITS;
 
 /** The database ceiling (rule 9): below the 1 GB a SQLite Durable Object gets on the Free plan. */
@@ -83,7 +83,7 @@ export const wellFormed = (value: string) => !/\p{Cs}/u.test(value);
 export const nfc = (value: string) => value.normalize("NFC");
 
 /** One line: no control character at all (a title may end up in a Telegram message or an e-mail subject). */
-const line = (max: number) =>
+export const line = (max: number) =>
   z
     .string()
     .trim()
@@ -93,7 +93,7 @@ const line = (max: number) =>
     .refine(wellFormed)
     .transform(nfc);
 /** Free text: line breaks and tabs are fine, other control characters are not. */
-const text = (max: number) =>
+export const text = (max: number) =>
   z
     .string()
     .max(max)

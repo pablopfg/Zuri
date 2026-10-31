@@ -23,6 +23,9 @@ export const LOG_EVENTS = [
   "settings_unreadable",
   "not_configured",
   "turnstile_misconfigured",
+  "chat_turn_failed",
+  "chat_stream_failed",
+  "tool_failed",
 ] as const;
 export type LogEvent = (typeof LOG_EVENTS)[number];
 
@@ -34,6 +37,8 @@ export interface LogFields {
   error?: unknown;
   /** Names of settings that are missing or wrong, never their values. */
   secrets?: readonly string[];
+  /** The agent tool's registered name (never its arguments or result). */
+  tool?: string;
 }
 
 export interface LogLine {
@@ -44,10 +49,12 @@ export interface LogLine {
   requestId?: string;
   error?: string;
   secrets?: string[];
+  tool?: string;
 }
 
 const ERROR_NAME = /^[A-Za-z][A-Za-z0-9]{0,39}$/;
 const SECRET_NAME = /^[A-Z][A-Z0-9_]{0,39}$/;
+const TOOL_NAME = /^[a-z][a-z0-9_]{0,39}$/;
 const CODE = /^[A-Z][A-Z_]{0,39}$/;
 // cf-ray: 16 hex digits, optionally followed by the data center (e.g. "-GRU").
 const RAY = /^[0-9a-f]{16}(?:-[A-Z]{3})?$/;
@@ -59,10 +66,10 @@ const METHOD = /^[A-Z]{3,7}$/;
  * every route registered under `src/api/` is in this list.
  */
 export const ROUTE_WORDS: ReadonlySet<string> = new Set([
-  "api", "activity", "actions", "ai", "approve", "auth", "cancel", "chat", "confirm", "correct", "disable",
+  "api", "activity", "actions", "ai", "approve", "auth", "cancel", "chat", "confirm", "conversations", "correct", "disable",
   "empty", "enable", "health", "heartbeat", "history", "login", "login-options", "logout", "memories", "mfa",
-  "notes", "options", "passkey", "passkeys", "password", "projects", "recovery-codes", "restore", "reviews",
-  "session", "settings", "setup", "status", "tasks", "telegram", "trash", "usage", "webhook",
+  "notes", "options", "passkey", "passkeys", "password", "plans", "projects", "recovery-codes", "restore", "reviews",
+  "session", "settings", "setup", "status", "tasks", "telegram", "transcribe", "trash", "usage", "webhook",
 ]);
 const MAX_SEGMENTS = 8;
 
@@ -78,6 +85,7 @@ export function logLine(level: LogLevel, event: LogEvent, fields: LogFields = {}
       if (ray && RAY.test(ray)) line.requestId = ray;
     }
   }
+  if (fields.tool !== undefined && TOOL_NAME.test(fields.tool)) line.tool = fields.tool;
   if ("error" in fields) line.error = errorName(fields.error);
   if (fields.secrets) {
     const names = fields.secrets.filter((name) => SECRET_NAME.test(name)).slice(0, 10);

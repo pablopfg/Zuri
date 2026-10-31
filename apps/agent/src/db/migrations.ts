@@ -396,6 +396,89 @@ export const MIGRATIONS: readonly Migration[] = [
       ) WITHOUT ROWID`,
     ],
   },
+  {
+    version: 8,
+    name: "chat",
+    statements: [
+      // Conversations (step 9). `summary` is the model's running summary of the
+      // messages up to the rowid `summary_upto`: data, never instructions (rule 2).
+      // In the backup (step 23), without the summary.
+      `CREATE TABLE IF NOT EXISTS zur_conversations (
+        id TEXT PRIMARY KEY,
+        title TEXT NOT NULL,
+        summary TEXT,
+        summary_upto INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      )`,
+      // The list, most recent first, read by a cursor.
+      `CREATE INDEX IF NOT EXISTS zur_conversations_updated ON zur_conversations (updated_at, id)`,
+      // Messages, in the order they were written: `seq` is the rowid, kept as an
+      // INTEGER PRIMARY KEY so it never changes (a VACUUM may renumber a hidden
+      // rowid, and the running summary points at one). The index on
+      // conversation_id is ordered by seq inside each conversation. `tools` is
+      // JSON of what the owner sees (names, status, the proposal ids), never a
+      // tool's output. `error_key` is a catalog key: data, not translated text.
+      `CREATE TABLE IF NOT EXISTS zur_messages (
+        seq INTEGER PRIMARY KEY,
+        id TEXT NOT NULL UNIQUE,
+        conversation_id TEXT NOT NULL,
+        role TEXT NOT NULL CHECK (role IN ('user', 'assistant')),
+        content TEXT NOT NULL,
+        tools TEXT NOT NULL DEFAULT '[]',
+        status TEXT NOT NULL DEFAULT 'complete' CHECK (status IN ('complete', 'cancelled', 'error')),
+        error_code TEXT,
+        error_key TEXT,
+        source TEXT NOT NULL DEFAULT 'app' CHECK (source IN ('app', 'telegram', 'import')),
+        created_at TEXT NOT NULL
+      )`,
+      `CREATE INDEX IF NOT EXISTS zur_messages_conversation ON zur_messages (conversation_id)`,
+      // Destructive actions the agent proposed: they run only when the owner
+      // approves, at most once, and only on the target as it was (target_hash).
+      // Kept 30 days. Not in the backup.
+      `CREATE TABLE IF NOT EXISTS zur_pending_actions (
+        id TEXT PRIMARY KEY,
+        conversation_id TEXT NOT NULL,
+        tool TEXT NOT NULL,
+        target_id TEXT NOT NULL,
+        target_hash TEXT NOT NULL,
+        target_label TEXT NOT NULL,
+        payload TEXT,
+        status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'cancelled', 'failed')),
+        problem TEXT CHECK (problem IS NULL OR problem IN ('changed', 'gone', 'failed')),
+        created_at TEXT NOT NULL,
+        expires_at TEXT NOT NULL,
+        resolved_at TEXT
+      )`,
+      `CREATE INDEX IF NOT EXISTS zur_pending_actions_conversation ON zur_pending_actions (conversation_id, created_at)`,
+      `CREATE INDEX IF NOT EXISTS zur_pending_actions_created ON zur_pending_actions (created_at)`,
+      // Task plans the agent proposed: a draft until the owner confirms it; only
+      // the confirmation creates tasks. Kept 30 days. Not in the backup.
+      `CREATE TABLE IF NOT EXISTS zur_task_plan_drafts (
+        id TEXT PRIMARY KEY,
+        conversation_id TEXT NOT NULL,
+        payload TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'confirmed', 'cancelled')),
+        revision INTEGER NOT NULL DEFAULT 1,
+        result TEXT,
+        created_at TEXT NOT NULL,
+        expires_at TEXT NOT NULL,
+        confirmed_at TEXT
+      )`,
+      `CREATE INDEX IF NOT EXISTS zur_task_plan_drafts_conversation ON zur_task_plan_drafts (conversation_id, created_at)`,
+      `CREATE INDEX IF NOT EXISTS zur_task_plan_drafts_created ON zur_task_plan_drafts (created_at)`,
+      // Counters for the limits per kind (5,000 conversations, 200,000 messages).
+      `INSERT INTO zur_counts (kind, n) SELECT 'conversations', count(*) FROM zur_conversations WHERE 1 ON CONFLICT (kind) DO UPDATE SET n = excluded.n`,
+      `INSERT INTO zur_counts (kind, n) SELECT 'messages', count(*) FROM zur_messages WHERE 1 ON CONFLICT (kind) DO UPDATE SET n = excluded.n`,
+      `CREATE TRIGGER IF NOT EXISTS zur_counts_conversations_insert AFTER INSERT ON zur_conversations BEGIN UPDATE zur_counts SET n = n + 1 WHERE kind = 'conversations'; END`,
+      `CREATE TRIGGER IF NOT EXISTS zur_counts_conversations_delete AFTER DELETE ON zur_conversations BEGIN UPDATE zur_counts SET n = n - 1 WHERE kind = 'conversations'; END`,
+      `CREATE TRIGGER IF NOT EXISTS zur_counts_messages_insert AFTER INSERT ON zur_messages BEGIN UPDATE zur_counts SET n = n + 1 WHERE kind = 'messages'; END`,
+      `CREATE TRIGGER IF NOT EXISTS zur_counts_messages_delete AFTER DELETE ON zur_messages BEGIN UPDATE zur_counts SET n = n - 1 WHERE kind = 'messages'; END`,
+      // Who wrote a memory: the owner, or the assistant from a conversation (SEC-09-07).
+      // Everything saved before this version was saved by the owner.
+      `ALTER TABLE zur_memories ADD COLUMN author TEXT NOT NULL DEFAULT 'owner' CHECK (author IN ('owner', 'agent'))`,
+    ],
+  },
 ];
 
 export const LATEST_SCHEMA_VERSION = MIGRATIONS.at(-1)?.version ?? 0;

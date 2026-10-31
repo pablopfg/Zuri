@@ -20,11 +20,23 @@ const BASE = "http://127.0.0.1:4173";
 const out = process.argv[2] ?? "docs/capturas";
 mkdirSync(out, { recursive: true });
 
-/** Which screens each device keeps: the README shows six on the computer and three on the phone. */
+/** Which screens each device keeps: the README shows seven on the computer and four on the phone. */
 const SCREENS = {
-  computador: ["entrar", "inicio", "tarefas", "nota", "memoria", "acessos"],
-  celular: ["entrar", "inicio", "tarefas"],
+  computador: ["entrar", "inicio", "conversa", "tarefas", "nota", "memoria", "acessos"],
+  celular: ["entrar", "inicio", "conversa", "tarefas"],
 } as const;
+
+/**
+ * The chat shot. The simulated AI only runs a tool when the message is
+ * `call <tool> {json}`, so the plan card is real (stored and shown by the app,
+ * see dados-de-exemplo.ts) while the two message texts are swapped, in the
+ * shot only, for what an owner and the real model would write.
+ */
+const CHAT_SHOT = {
+  question: "Me ajuda a organizar a mudança? As chaves saem no dia 20.",
+  answer: "Montei um plano com quatro tarefas no projeto Mudança de apartamento. Ajuste o que quiser e confirme; nada é criado antes disso.",
+};
+let conversationId = "";
 
 const browser = await chromium.launch(
   process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE ? { executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE } : {},
@@ -69,7 +81,7 @@ for (const [device, options] of [
     await signIn(page);
     await page.waitForURL((url) => !url.pathname.startsWith("/entrar"));
     if (!seeded) {
-      await seed(page, BASE);
+      ({ conversationId } = await seed(page, BASE));
       seeded = true;
     }
     const visit = async (path: string, name: string, ready: string) => {
@@ -78,6 +90,15 @@ for (const [device, options] of [
       await shot(name);
     };
     await visit("/", "inicio", "Olá!");
+    await page.route(`${BASE}/api/conversations/${conversationId}`, async (route) => {
+      const response = await route.fetch();
+      const body = (await response.json()) as { messages: { role: string; content: string; tools: unknown[] }[] };
+      for (const message of body.messages) {
+        message.content = message.role === "user" ? CHAT_SHOT.question : CHAT_SHOT.answer;
+      }
+      await route.fulfill({ response, json: body });
+    });
+    await visit(`/conversa/${conversationId}`, "conversa", "Fechar o orçamento da transportadora");
     await visit("/tarefas", "tarefas", "Pagar a conta de luz");
     await visit("/notas", "notas", "Ideias para a sala nova");
     await page.getByText("Ideias para a sala nova").first().click();

@@ -1,8 +1,11 @@
 import { DEFAULT_LOCALE, isBreachedPassword, isPasswordHash, type Locale } from "@zuri/shared";
 import { Agent } from "agents";
 import { chooseProvider, MeteredAI, UsageMeter } from "../ai/index.ts";
+import type { AIProvider } from "../ai/provider.ts";
+import { MockTranscriber, type Transcriber, WorkersAITranscriber } from "../ai/transcription.ts";
 import type { AiLimits } from "../ai/usage.ts";
 import { createApi } from "../api/app.ts";
+import { SSE_PING_MS } from "../api/chat.ts";
 import { AuthService } from "../auth/service.ts";
 import { createTurnstile, type Turnstile } from "../auth/turnstile.ts";
 import { MIN_OWNER_PASSWORD_LENGTH, parsePublicUrl } from "../config.ts";
@@ -12,9 +15,14 @@ import { migrate } from "../db/migrations.ts";
 import { SettingsRepository } from "../db/settings.ts";
 import type { WorkerEnv } from "../env.ts";
 import { AppError, errorResponse } from "../http/errors.ts";
+import { PendingActionRepository } from "../chat/actions.ts";
+import { ConversationRepository } from "../chat/conversations.ts";
+import { TaskPlanService } from "../chat/plans.ts";
 import { MemoryService } from "../memory/service.ts";
 import { Productivity } from "../productivity/index.ts";
 import { log } from "../log.ts";
+import type { ToolContext } from "../tools/registry.ts";
+import { AgentRunner } from "./runner.ts";
 
 /**
  * The sign-in's robot check for this deploy. Loopback http PUBLIC_URL (local
@@ -42,6 +50,9 @@ interface Store {
   productivity: Productivity;
   memories: MemoryService;
   usage: UsageMeter;
+  conversations: ConversationRepository;
+  actions: PendingActionRepository;
+  plans: TaskPlanService;
 }
 
 /**
@@ -51,6 +62,18 @@ interface Store {
  */
 export class ZuriAgent extends Agent<WorkerEnv> {
   #store: Store | undefined;
+  /** Chat turns running now, by conversation (the Stop button aborts one). */
+  readonly activeRuns = new Map<string, AbortController>();
+  /** One voice clip at a time ("Constantes padrão"). */
+  #transcribing = false;
+  /**
+   * Tests only: a stand-in model and transcriber, since the test deploy has no
+   * AI binding. Nothing in the app sets these.
+   */
+  testProvider: AIProvider | null = null;
+  testTranscriber: Transcriber | null = null;
+  /** How often a running chat stream writes a ping (SSE_PING_MS); the tests shorten it. */
+  streamPingMs = SSE_PING_MS;
   readonly #api = createApi({
     locale: () => this.locale(),
     auth: () => this.store.auth,
@@ -62,7 +85,47 @@ export class ZuriAgent extends Agent<WorkerEnv> {
       isPasswordHash(this.env.OWNER_PASSWORD_HASH) || (this.env.OWNER_PASSWORD?.length ?? 0) >= MIN_OWNER_PASSWORD_LENGTH,
     origin: () => this.publicUrl().origin,
     development: () => this.development(),
+    chat: () => ({
+      runner: () => this.runner(),
+      conversations: () => this.store.conversations,
+      actions: () => this.store.actions,
+      plans: () => this.store.plans,
+      toolContext: (conversationId) => ({ ...this.toolServices(), timeZone: this.store.settings.field("timeZone"), mode: "chat", conversationId }),
+      activeRuns: this.activeRuns,
+      transcribe: (audio, seconds, signal) => this.transcribe(audio, seconds, signal),
+      locale: () => this.locale(),
+      pingMs: () => this.streamPingMs,
+    }),
   });
+
+  private toolServices(): Omit<ToolContext, "conversationId" | "mode" | "timeZone"> {
+    const { db, productivity, memories, conversations, plans, actions } = this.store;
+    return { db, productivity, memories, conversations, plans, actions };
+  }
+
+  /** A chat turn's runner, over the store and the metered model. */
+  runner(): AgentRunner {
+    return new AgentRunner({
+      tools: this.toolServices(),
+      conversations: this.store.conversations,
+      settings: () => this.store.settings.get(),
+      locale: () => this.locale(),
+      ai: () => this.ai(),
+      agentName: this.env.AGENT_NAME,
+    });
+  }
+
+  /** Voice to text, one clip at a time, through the meter. */
+  async transcribe(audio: string, seconds: number, signal: AbortSignal): Promise<{ text: string; seconds: number }> {
+    if (this.#transcribing) throw new AppError("CONFLICT", "error.voiceBusy");
+    const ai = this.ai();
+    this.#transcribing = true;
+    try {
+      return await ai.transcribe(audio, seconds, { locale: this.locale(), signal });
+    } finally {
+      this.#transcribing = false;
+    }
+  }
 
   private development(): boolean {
     return parsePublicUrl(this.env.PUBLIC_URL)?.allowPlainHttp === true;
@@ -84,13 +147,16 @@ export class ZuriAgent extends Agent<WorkerEnv> {
    * per use, so a change of model in the settings applies to the next turn.
    */
   ai(): MeteredAI {
-    const provider = chooseProvider({
-      development: this.development(),
-      binding: this.env.AI,
-      model: this.store.settings.field("aiModel"),
-      locale: () => this.locale(),
-    });
-    return new MeteredAI(provider, this.store.usage, () => this.aiLimits());
+    const provider =
+      this.testProvider ??
+      chooseProvider({
+        development: this.development(),
+        binding: this.env.AI,
+        model: this.store.settings.field("aiModel"),
+        locale: () => this.locale(),
+      });
+    const transcriber = this.testTranscriber ?? (this.development() ? new MockTranscriber() : this.env.AI ? new WorkersAITranscriber(this.env.AI) : null);
+    return new MeteredAI(provider, this.store.usage, () => this.aiLimits(), undefined, transcriber);
   }
 
   /** The Worker refuses every request without a valid PUBLIC_URL, so one is always there by now. */
@@ -131,7 +197,10 @@ export class ZuriAgent extends Agent<WorkerEnv> {
       // The trash's 30 days also end while nobody opens it: checked each time the object wakes.
       productivity.trash.purgeExpired();
       const memories = new MemoryService(db, productivity.storage, { conflictReview: () => settings.field("memoryConflictReview") });
-      this.#store = { db, settings, auth, productivity, memories, usage: new UsageMeter(db) };
+      const conversations = new ConversationRepository(db, productivity.storage, () => this.locale());
+      const actions = new PendingActionRepository(db);
+      const plans = new TaskPlanService(db, productivity, () => settings.field("timeZone"));
+      this.#store = { db, settings, auth, productivity, memories, usage: new UsageMeter(db), conversations, actions, plans };
     }
     return this.#store;
   }
