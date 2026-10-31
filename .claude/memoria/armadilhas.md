@@ -56,6 +56,22 @@ acrescente aqui cada armadilha nova que encontrar (sem dados pessoais).
 - A auditoria completa da Cloudflare grava arquivos fora do repositório; nunca
   versione `findings.json`, `architecture.md` ou `coverage-ledger.json` dela.
 
+## Permissões do agente
+
+- Regra de `allow` com curinga em comando git (`Bash(git fetch*)`) libera
+  `--upload-pack` (executa programa) e `--output` (grava arquivo). Libere só
+  formas exatas e mantenha os `deny` de `.claude/settings.json`.
+- Todo plugin, inclusive o oficial `cloudflare`, fica fixado por `sha` no
+  catálogo local. Nada de marketplace sem ref.
+
+## CI e rulesets
+
+- Nome de check exigido no ruleset = nome do job (ou o `name:` dele, com a
+  matriz expandida, como `analyze (actions)`). Mudou o job, mude o ruleset e o
+  teste em `tests/repo/`.
+- O check `source-branch` roda o workflow da branch do PR; quem mescla na
+  `main` confere a origem.
+
 ## Testes
 
 - Teste instável é bug: corrija a causa (relógio falso, espera por condição),

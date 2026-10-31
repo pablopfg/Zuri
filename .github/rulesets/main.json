@@ -4,14 +4,20 @@
   "enforcement": "active",
   "conditions": {
     "ref_name": {
-      "include": ["refs/heads/main"],
+      "include": [
+        "refs/heads/main"
+      ],
       "exclude": []
     }
   },
   "bypass_actors": [],
   "rules": [
-    { "type": "deletion" },
-    { "type": "non_fast_forward" },
+    {
+      "type": "deletion"
+    },
+    {
+      "type": "non_fast_forward"
+    },
     {
       "type": "pull_request",
       "parameters": {
@@ -20,7 +26,9 @@
         "require_code_owner_review": false,
         "require_last_push_approval": false,
         "required_review_thread_resolution": true,
-        "allowed_merge_methods": ["merge"]
+        "allowed_merge_methods": [
+          "merge"
+        ]
       }
     },
     {
@@ -29,14 +37,36 @@
         "strict_required_status_checks_policy": false,
         "do_not_enforce_on_create": false,
         "required_status_checks": [
-          { "context": "typecheck" },
-          { "context": "lint" },
-          { "context": "test" },
-          { "context": "i18n" },
-          { "context": "build" },
-          { "context": "e2e" },
-          { "context": "audit" },
-          { "context": "source-branch" }
+          {
+            "context": "typecheck"
+          },
+          {
+            "context": "lint"
+          },
+          {
+            "context": "test"
+          },
+          {
+            "context": "i18n"
+          },
+          {
+            "context": "build"
+          },
+          {
+            "context": "e2e"
+          },
+          {
+            "context": "audit"
+          },
+          {
+            "context": "source-branch"
+          },
+          {
+            "context": "analyze (javascript-typescript)"
+          },
+          {
+            "context": "analyze (actions)"
+          }
         ]
       }
     }

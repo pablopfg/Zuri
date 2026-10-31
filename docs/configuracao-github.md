@@ -18,8 +18,13 @@ arquivo, confira a tela e clique em **Create**.
 
 | Arquivo | Protege | Regras |
 | --- | --- | --- |
-| `develop.json` | `develop` | PR obrigatório, **nenhuma aprovação humana** (o agente mescla no modo contínuo), só squash, histórico linear, checks `typecheck`, `lint`, `test`, `i18n`, `build`, `e2e` e `audit`, sem force-push nem exclusão, ninguém dispensa as regras |
+| `develop.json` | `develop` | PR obrigatório, **nenhuma aprovação humana** (o agente mescla no modo contínuo), só squash, histórico linear, checks `typecheck`, `lint`, `test`, `i18n`, `build`, `e2e`, `audit` e os dois do CodeQL (`analyze (javascript-typescript)` e `analyze (actions)`), sem force-push nem exclusão, ninguém dispensa as regras |
 | `main.json` | `main` | PR obrigatório, só merge commit, os mesmos checks mais `source-branch` (só aceita PR vindo da `develop` deste repositório), sem force-push nem exclusão |
+
+O check `source-branch` roda o `branch-policy.yml` da própria branch do PR. Um
+PR de outra branch que altere esse arquivo poderia deixá-lo verde. Por isso,
+antes de mesclar na `main`, confira que o PR vem da `develop` (o cabeçalho do
+PR mostra `develop → main`).
 
 O GitHub não sabe quem clica em **Merge**, então "a `main` é mesclada só pelo
 Pablo" é uma regra do agente (instruções do projeto e `AGENTS.md`), não do

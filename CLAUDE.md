@@ -19,7 +19,7 @@
   - `nateherk-design:scroll-craft` só se o Pablo pedir uma página de apresentação; geração pela kie.ai está bloqueada (custo).
   - As regras do repositório vencem as skills externas. Tabela completa, revisão de segurança e como atualizar: `docs/agente/skills-externas.md`.
 - Comandos nativos úteis: `/code-review`, `/security-review` e `/simplify`.
-- O plugin oficial `cloudflare` (marketplace `cloudflare/skills`) está declarado em `.claude/settings.json`. Prefira as skills dele (`workers-best-practices`, `durable-objects`, `agents-sdk`, `wrangler`) a lembrar APIs da Cloudflare de memória. O servidor MCP da Cloudflare só serve para consultar documentação e o estado da conta; nunca para deploy, mudar recursos ou ler segredos sem pedido do dono.
+- O plugin oficial `cloudflare` (`cloudflare/skills`, fixado por commit no catálogo de `.claude/skills-externas/`) está ligado em `.claude/settings.json`. Prefira as skills dele (`workers-best-practices`, `durable-objects`, `agents-sdk`, `wrangler`) a lembrar APIs da Cloudflare de memória. O servidor MCP da Cloudflare só serve para consultar documentação e o estado da conta; nunca para deploy, mudar recursos ou ler segredos sem pedido do dono.
 - Memória versionada: `.claude/memoria/`. Decisão nova do dono vai para `decisoes.md` (sem dados pessoais, domínio ou segredos); erro que você cometeu e corrigiu vai para `armadilhas.md`; o estado das etapas fica em `progresso.md`, que substitui o histórico das conversas anteriores.
 
 ## Agent skills

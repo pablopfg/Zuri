@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { describe, expect, it } from "vitest";
 import { loadWorkflow, REQUIRED_CI_JOBS, readText, triggers, workflowFiles } from "./helpers.ts";
 
@@ -16,6 +17,26 @@ describe("GitHub Actions workflows", () => {
     for (const step of steps(wf)) {
       if (!step.uses || step.uses.startsWith("./")) continue;
       expect(step.uses, step.uses).toMatch(/^[\w.-]+\/[\w./-]+@[0-9a-f]{40}$/);
+    }
+  });
+
+  it.each(all)("$path pins reusable workflows to a full commit SHA", ({ wf }) => {
+    for (const job of Object.values(wf.jobs)) {
+      const uses = (job as { uses?: string }).uses;
+      if (!uses || uses.startsWith("./")) continue;
+      expect(uses).toMatch(/@[0-9a-f]{40}$/);
+    }
+  });
+
+  it.each(all)("$path grants pull request jobs no write permission beyond CodeQL results", ({ path, wf }) => {
+    if (!triggers(wf).includes("pull_request")) return;
+    for (const [name, job] of Object.entries(wf.jobs)) {
+      if (job.permissions === undefined) continue;
+      expect(typeof job.permissions, `${name} permissions`).toBe("object");
+      for (const [scope, level] of Object.entries(job.permissions as Record<string, string>)) {
+        const allowed = path.endsWith("codeql.yml") && scope === "security-events" && level === "write";
+        if (!allowed) expect(["read", "none"], `${name} ${scope}`).toContain(level);
+      }
     }
   });
 
@@ -72,6 +93,14 @@ describe("GitHub Actions workflows", () => {
     expect(runs).toContain("npm audit --audit-level=high");
   });
 
+  it("runs CodeQL on pull requests and weekly, with the extended queries", () => {
+    const codeql = loadWorkflow(".github/workflows/codeql.yml");
+    expect(triggers(codeql).sort()).toEqual(["pull_request", "schedule"]);
+    const text = readText(".github/workflows/codeql.yml");
+    expect(text).toContain("queries: security-extended");
+    expect(text).toMatch(/language: \[javascript-typescript, actions\]/);
+  });
+
   it("lets only develop open pull requests into main", () => {
     const policy = loadWorkflow(".github/workflows/branch-policy.yml");
     expect(policy.on).toEqual({ pull_request: { branches: ["main"] } });
@@ -79,5 +108,31 @@ describe("GitHub Actions workflows", () => {
     const script = policy.jobs["source-branch"]?.steps?.[0]?.run ?? "";
     expect(script).toContain('"$HEAD_REF" != "develop"');
     expect(script).toContain('"$HEAD_REPO" != "$BASE_REPO"');
+  });
+});
+
+describe("source-branch check", () => {
+  const script = loadWorkflow(".github/workflows/branch-policy.yml").jobs["source-branch"]?.steps?.[0]?.run ?? "";
+  const run = (env: Record<string, string>) => {
+    try {
+      execFileSync("bash", ["-c", script], { env: { PATH: process.env.PATH ?? "", ...env }, stdio: "pipe" });
+      return 0;
+    } catch (error) {
+      return (error as { status: number }).status;
+    }
+  };
+  const repo = "dono/zuri";
+
+  it("accepts develop from this repository", () => {
+    expect(run({ HEAD_REF: "develop", HEAD_REPO: repo, BASE_REPO: repo })).toBe(0);
+  });
+
+  it("refuses any other branch", () => {
+    expect(run({ HEAD_REF: "feat/etapa-01-worker", HEAD_REPO: repo, BASE_REPO: repo })).toBe(1);
+    expect(run({ HEAD_REF: "develop2", HEAD_REPO: repo, BASE_REPO: repo })).toBe(1);
+  });
+
+  it("refuses a fork branch named develop", () => {
+    expect(run({ HEAD_REF: "develop", HEAD_REPO: "outra-pessoa/zuri", BASE_REPO: repo })).toBe(1);
   });
 });

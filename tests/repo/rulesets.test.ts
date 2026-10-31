@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { loadWorkflow, REQUIRED_CI_JOBS, readJson } from "./helpers.ts";
+import { loadWorkflow, REQUIRED_CI_JOBS, REQUIRED_CODEQL_CHECKS, readJson } from "./helpers.ts";
 
 interface Rule {
   type: string;
@@ -47,15 +47,20 @@ describe.each([
   });
 
   it("requires every CI check", () => {
-    expect(checks(rs).sort()).toEqual([...REQUIRED_CI_JOBS, ...extra].sort());
+    expect(checks(rs).sort()).toEqual([...REQUIRED_CI_JOBS, ...REQUIRED_CODEQL_CHECKS, ...extra].sort());
   });
 });
 
 describe("required checks", () => {
   it("all exist as jobs, so a ruleset never waits on a check that never runs", () => {
+    const codeql = loadWorkflow(".github/workflows/codeql.yml").jobs.analyze as unknown as {
+      name: string;
+      strategy: { matrix: { language: string[] } };
+    };
     const jobs = [
       ...Object.keys(loadWorkflow(".github/workflows/ci.yml").jobs),
       ...Object.keys(loadWorkflow(".github/workflows/branch-policy.yml").jobs),
+      ...codeql.strategy.matrix.language.map((language) => codeql.name.replace(/\$\{\{ matrix\.language \}\}/, language)),
     ];
     const main = readJson(".github/rulesets/main.json") as Ruleset;
     for (const context of checks(main)) expect(jobs).toContain(context);

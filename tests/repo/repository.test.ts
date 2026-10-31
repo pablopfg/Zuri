@@ -18,6 +18,20 @@ describe("Dependabot", () => {
   });
 });
 
+describe("TypeScript", () => {
+  it("is strict everywhere", () => {
+    expect(readJson("tsconfig.base.json").compilerOptions.strict).toBe(true);
+    for (const path of ["tsconfig.json", "packages/shared/tsconfig.json", "apps/agent/tsconfig.json", "apps/web/tsconfig.json"]) {
+      expect(readJson(path).extends, path).toMatch(/tsconfig\.base\.json$/);
+      expect(readJson(path).compilerOptions?.strict, path).not.toBe(false);
+    }
+  });
+
+  it("declares the three workspaces", () => {
+    expect(readJson("package.json").workspaces).toEqual(["packages/shared", "apps/agent", "apps/web"]);
+  });
+});
+
 describe("Node.js and npm", () => {
   it("pins Node.js 24 or newer in .nvmrc and engines", () => {
     expect(Number(readText(".nvmrc").trim())).toBeGreaterThanOrEqual(24);
@@ -54,6 +68,11 @@ describe("required project files", () => {
     ".claude/memoria/glossario.md",
   ])("%s exists", (path) => {
     expect(existsSync(join(ROOT, path))).toBe(true);
+  });
+
+  it("is MIT licensed and credits Talorys", () => {
+    expect(readText("LICENSE")).toMatch(/^MIT License/);
+    expect(readText("NOTICE.md")).toContain("Copyright (c) 2026 The Talorys contributors");
   });
 
   it("keeps the changelog with an unreleased section", () => {

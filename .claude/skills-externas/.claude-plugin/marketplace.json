@@ -1,8 +1,19 @@
 {
   "name": "zuri-skills-externas",
   "description": "Skills de terceiros usadas pelo agente do Zuri, cada uma fixada num commit revisado. Atualizar só por PR, depois de ler o diff.",
-  "owner": { "name": "Zuri" },
+  "owner": {
+    "name": "Zuri"
+  },
   "plugins": [
+    {
+      "name": "cloudflare",
+      "description": "Plugin oficial da Cloudflare: skills de Workers, Durable Objects, Agents SDK e wrangler, e o servidor MCP de documentação.",
+      "source": {
+        "source": "github",
+        "repo": "cloudflare/skills",
+        "sha": "86505e44f87d801aa1864a3c4109e9a8ae5c409f"
+      }
+    },
     {
       "name": "mattpocock-skills",
       "description": "Skills de engenharia de Matt Pocock: TDD, diagnóstico de bugs, design de código, modelagem de domínio, code review em dois eixos.",
@@ -31,7 +42,9 @@
         "path": "skills/security-audit",
         "sha": "c1c8a8c1471069fb0e188eeaff69b8e8db6564a8"
       },
-      "skills": ["./"]
+      "skills": [
+        "./"
+      ]
     },
     {
       "name": "humanizer",

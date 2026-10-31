@@ -29,7 +29,7 @@ Em ambiente de nuvem do Claude Code, o hook já resolve. Se quiser ganhar os
 | `nateherk-design` | `nateherkai/scroll-craft` | `75d81f74` | MIT | `scroll-craft` (páginas de apresentação com rolagem) | Scripts Node locais (servidor e capturas em localhost). `kie.mjs` chama a API paga kie.ai: **bloqueado** em `permissions.deny` |
 | `cloudflare-security-audit` | `cloudflare/security-audit-skill` | `c1c8a8c1` | MIT | `security-audit` (auditoria em 6 fases com validação independente) | Só leitura de código; executa código do alvo apenas em sandbox; resultados fora do repositório |
 | `humanizer` | `blader/humanizer` | `0ef9fe5b` | MIT | `humanizer` (tira marcas de escrita de IA) | Só instruções em Markdown |
-| `cloudflare` | `cloudflare/skills` | ramo padrão | Apache-2.0 | `workers-best-practices`, `durable-objects`, `agents-sdk`, `wrangler` e outras | Plugin oficial da Cloudflare |
+| `cloudflare` | `cloudflare/skills` | `86505e44` | Apache-2.0 | `workers-best-practices`, `durable-objects`, `agents-sdk`, `wrangler` e outras, e o servidor MCP `mcp.cloudflare.com` | Plugin oficial da Cloudflare, fixado como os demais desde a etapa 0 (antes seguia o ramo padrão e se atualizava sozinho) |
 
 Nenhum pacote traz hooks, servidores MCP ou agentes (conferido com
 `claude plugin details`).
