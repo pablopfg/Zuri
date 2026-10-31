@@ -38,6 +38,7 @@
 
 - [ ] O título segue o Conventional Commits (`feat(bot): …`, `fix(auth): …`), com o texto em pt-BR
 - [ ] `CHANGELOG.md` atualizado em "Não lançado", ou o rótulo `sem-changelog` foi adicionado
+- [ ] `README.md` atualizado (mapa das etapas, funcionalidades, capturas) quando o PR muda funcionalidade, etapa, tela ou arquitetura
 - [ ] Migrations só de acréscimo; migrations e segredos novos descritos no grupo "Atualização"
 - [ ] Itens que podem sair do plano gratuito da Cloudflare marcados com ⚠️ e aprovados pelo dono
 - [ ] Nenhum segredo, domínio real, e-mail ou id do Telegram nos arquivos

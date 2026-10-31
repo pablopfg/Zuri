@@ -9,6 +9,15 @@ o [SemVer](https://semver.org/lang/pt-BR/). Cada PR escreve a sua entrada em
 
 ### Adicionado
 
+- README renovado com a identidade visual Sinal: banner que segue o tema
+  claro ou escuro do GitHub, selos da CI, capturas das telas atuais, o que já
+  funciona e o que vem a seguir, mapa das 26 etapas, arquitetura resumida e um
+  resumo em inglês.
+- `scripts/capturas-do-readme.ts` refaz as capturas do README em
+  `docs/capturas/`, com dados de exemplo.
+- Regra permanente `.claude/rules/readme.md`: todo PR que muda
+  funcionalidade, conclui etapa, muda uma tela das capturas ou a arquitetura
+  atualiza o README junto com o changelog.
 - Página **Acessos** na barra lateral: cada tentativa de entrar no Zuri, com
   IP, cidade, país, rede (ASN), navegador e o resultado (login, senha ou código
   errado, bloqueio, verificação contra robôs recusada). Filtros por período,
@@ -102,6 +111,8 @@ o [SemVer](https://semver.org/lang/pt-BR/). Cada PR escreve a sua entrada em
 
 ### Alterado
 
+- O logo do README e o `CONTRIBUTING.md` usam a identidade Sinal; o
+  `CONTRIBUTING.md` explica como manter o README e as capturas em dia.
 - Os textos em pt-BR de Tarefas, Notas, Projetos, Lixeira e Acessos chegam
   junto com essas telas, como os da Memória, e não mais no pacote inicial. Com
   isso a tela de Memória entrou sem passar do teto de 140 KB (fica em 139,9 KB).

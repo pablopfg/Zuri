@@ -66,6 +66,7 @@ agentes podem ler as mesmas skills nos repositórios de origem, no commit fixado
 - Uma etapa da especificação = um PR. Branch `feat/etapa-NN-<assunto>` a partir da `develop`; PR **sempre para a `develop`**. A `main` só recebe releases.
 - Título em Conventional Commits, prefixo em inglês e o resto em pt-BR. Tipos: `feat`, `fix`, `perf`, `refactor`, `docs`, `test`, `build`, `ci`, `chore`, `revert`, `style`, `security`, `i18n`.
 - Mudança visível ganha entrada em `## Não lançado` no `CHANGELOG.md`, grupos em pt-BR (`Adicionado`, `Alterado`, `Corrigido`, `Segurança`, `Atualização`).
+- PR que muda funcionalidade, conclui etapa, muda tela das capturas ou a arquitetura atualiza o `README.md` no mesmo PR (mapa das etapas, "O que já funciona", capturas). Veja `.claude/rules/readme.md`.
 - Preencha `.github/pull_request_template.md`, inclusive a matriz de rastreabilidade e o relatório de auditoria.
 - Conflito: traga a `develop`, resolva preservando os dois lados, rode tudo de novo.
 - Ao terminar: skills `verificar`, `revisao-qa` e `auditoria-seguranca`, nessa ordem, e corrija o que elas acharem.

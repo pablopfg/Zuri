@@ -30,6 +30,7 @@ Fatos e decisões já tomados pelo Pablo. O agente não pergunta de novo nada da
 | 31/10/2026 | Padrão de qualidade da interface: UI/UX moderna, funcional, muito bonita e sem erros. Toda tela nova passa por revisão de UX (vazio, carregando, erro, teclado, leitor de tela, celular e computador, claro e escuro), tem capturas antes de fechar e e2e dos fluxos. |
 | 31/10/2026 | Performance e cotas do plano Free em toda etapa: o sistema deve ser o mais rápido possível e caber com folga nas cotas gratuitas (Workers, Durable Objects com SQLite, Workers AI). Toda etapa segue `.claude/rules/performance.md` (regras P1 a P14), mede o custo das rotas em `free-tier-budget.test.ts` e traz no PR a tabela "Custo no plano Free". Orçamento em `docs/arquitetura/orcamento-free-tier.md`. |
 | 31/10/2026 | Login: verificação contra robôs (Cloudflare Turnstile) em toda tentativa, visível na tela de login, obrigatória fora do ambiente local (sem chaves o login fica fechado); chaves de teste só no local. As tentativas de login ficam registradas com IP, lugar, rede e navegador na página "Acessos" (barra lateral; no celular, por Configurações > Segurança). |
+| 31/10/2026 | README e docs de entrada com a identidade Sinal, e o README sempre atualizado: todo PR que muda funcionalidade, conclui etapa, muda uma tela das capturas ou a arquitetura atualiza o README no mesmo PR, junto com o CHANGELOG (regra em `.claude/rules/readme.md`). A seção About do GitHub descreve o Zuri, sem site com domínio real. |
 
 ## Padrões em vigor até o Pablo dizer outra coisa
 
