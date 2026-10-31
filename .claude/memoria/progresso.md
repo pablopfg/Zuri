@@ -20,8 +20,16 @@ etapas ficam detalhadas; as mais antigas viram uma linha na tabela.
 | 2 | mesclada (31/10/2026) | #7 | Migration 1, configurações (idioma e fuso), erros no idioma do dono, lint de i18n |
 | 3 | mesclada (31/10/2026) | #8 | Login, sessões, CSRF, força bruta, Turnstile adaptativo, atividade de acesso |
 | 4 | mesclada (31/10/2026) | #9 | 2FA TOTP, códigos de recuperação, desafio em cookie, passkeys reutilizáveis |
+| 5 | mesclada (31/10/2026) | #10 | Casca da interface: login com 2FA, guarda de sessão, configurações, PWA (fecha a fase A) |
 
 ## Últimas etapas (detalhe)
+
+### Etapa 5 · Casca da interface
+- Entregou: `apps/web` em React (rotas `/entrar`, `/`, `/configuracoes/:tab` com 6 abas, 404), `lib/{api,activity,deadlines,next,i18n,theme}.ts`, `hooks/session.tsx`, `SessionGuard` (aviso 2 min antes, heartbeat único por Web Locks, saída em todas as abas), telas de 2FA, passkeys, limites de sessão e atividade. API: `GET`/`PATCH /api/settings`, `GET /api/auth/activity`. PWA sem cache no service worker. Docs: `docs/interface.md`.
+- Migrations: nenhuma.
+- Decisões técnicas: `x-zuri-activity` só em POST/PATCH/DELETE até 10 s após toque ou tecla; CSP do Turnstile em todas as páginas quando ligado (SPA; documentado em `seguranca.md`); identidade "Brisa" (opção A) aplicada enquanto o Pablo não escolhe; orçamento de duração do DO em `arquitetura.md` (6 h de uso ≈ 21% da cota diária).
+- Ficou para depois: Lighthouse na CI (medido à mão: 100); e2e da aba que volta do fundo (`SETTLE_MS`).
+- Atenção para a próxima: todo texto pelo catálogo com chave literal (`lint-i18n`); e2e roda contra `wrangler dev` com estado novo por execução (`.wrangler/e2e`); login tem limite de 3 falhas por rede em 15 min, então e2e não deve errar senha à toa; telas novas entram no `a11y.spec.ts`.
 
 ### Etapa 4 · 2FA e passkeys
 - Entregou: `packages/shared/src/{totp,passkeys}.ts`, `apps/agent/src/auth/{mfa,passkeys}.ts` (`TwoStep`, `Passkeys`), fluxo em `service.ts` (`login` devolve `SignedIn | MfaPending`; `completeMfa`, `completePasskey`, gestão), rotas `/api/auth/mfa*` e `/api/auth/passkeys*`, cookie `__Host-zuri_mfa`. Docs: `docs/seguranca.md`.
@@ -39,12 +47,6 @@ etapas ficam detalhadas; as mais antigas viram uma linha na tabela.
 - Ficou para depois: TOTP no `confirm` (etapa 4, hoje 400); entrega dos `alert_pending` (etapa 11); tela de atividade (etapa 5); regra de rate limiting do WAF no guia (etapa 24).
 - Atenção para a próxima: rota nova sensível chama `auth.requireRecentAuth(session)`; todo pedido da API precisa de `x-zuri-request: 1`; testes que gravam direto em `zur_login_attempts` precisam de `rebuild()` (veja `armadilhas.md`).
 
-### Etapa 2 · Banco, configurações e i18n
-- Entregou: `apps/agent/src/db/{database,migrations,settings,activity}.ts`, `ZuriAgent.store` (banco aberto e migrado no primeiro uso; falha não fica em cache), `packages/shared/src/{settings,format}.ts`, `plural()`/`createTranslator()` no i18n, `scripts/lint-i18n.ts` + `i18n-ignore.json` (no `npm run lint` e no job `i18n`).
-- Migrations: versão 1 (`zur_settings` chave/valor JSON, `zur_activity`); `zur_schema_version` criada pelo `migrate()`. Teste fixa o sha256 de cada migration mesclada: migration nova = linha nova em `PINNED`.
-- Decisões técnicas: parser do lint é `rolldown/parseAst` (TypeScript 7 não tem API JS; rolldown 1.2.16 já vinha com o Vite, agora devDependency explícita); fuso padrão vem de `DEFAULT_TIMEZONE` se válido; recusas dos portões do Worker ficam em pt-BR (não acordam o DO); sem rota de configurações ainda (precisa de sessão, etapa 3/5); limite do plano Free conferido em 31/10/2026: 1 GB por DO, 5 GB por conta, teto de 900 MB mantido.
-- Atenção para a próxima: erros dentro do DO já saem no idioma das configurações via `errorResponse(error, locale)`; `Database.run` devolve `rowsWritten` (conta índices, não use como "linhas afetadas"); a checagem de 900 MB e a retenção de `zur_activity` ainda não existem (etapa 23, ou antes se uma rota gravar muito); a allowlist do backup de `zur_settings` deve ser positiva.
-
 <!-- Modelo, até 10 linhas por etapa:
 ### Etapa NN · <nome>
 - Entregou: arquivos/rotas/tabelas principais.
@@ -59,10 +61,11 @@ etapas ficam detalhadas; as mais antigas viram uma linha na tabela.
 
 <!-- Itens "▶ Antes, você fornece" das próximas etapas e perguntas abertas. -->
 
-- Nada no momento. Rulesets da `develop` e da `main` conferidos ativos pela API em 31/10/2026.
+- Não travam: escolha da identidade visual (opções A, B ou C da etapa 5; A aplicada; trocar mexe em `styles.css`, `Logo.tsx`, `favicon.svg` e ícones via `scripts/gerar-icones.ts`). Perguntas abertas da etapa 4 (senha digitada de novo para ligar 2FA/passkey; repetir alerta de ataque lento ao TOTP) e da etapa 3 (acerto não zera falhas).
+- Rulesets da `develop` e da `main` conferidos ativos pela API em 31/10/2026.
 
 ## Próxima etapa
 
-- Número e nome: 5 · Casca da interface (fecha a fase A: mandar resumo de fase)
-- Dependências mescladas: sim (etapa 4, #9)
+- Número e nome: 6 · Tarefas, notas e projetos (paralela com 7 e 8; uma de cada vez no modo contínuo)
+- Dependências mescladas: sim (etapa 5, #10)
 - Precisa de algo do Pablo antes: não
