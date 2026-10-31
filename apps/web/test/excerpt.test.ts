@@ -14,8 +14,8 @@ describe("plainExcerpt", () => {
     );
   });
 
-  it("leaves no < or > behind, even from nested tags", () => {
-    expect(plainExcerpt("a <<script>script>alert(1)<</script>/script> b")).toBe("a scriptalert(1)/script b");
+  it("removes nested tags whole and leaves no < or > behind", () => {
+    expect(plainExcerpt("a <<script>script>alert(1)<</script>/script> b")).toBe("a alert(1) b");
   });
 
   it("keeps single * and _ that belong to the text", () => {
