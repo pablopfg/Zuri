@@ -29,7 +29,7 @@ export function applyTheme(pref: ThemePreference): void {
   const set = () => {
     const dark = resolve(pref) === "dark";
     document.documentElement.classList.toggle("dark", dark);
-    document.querySelector('meta[name="theme-color"]')?.setAttribute("content", dark ? "#0a1413" : "#f5f9f8");
+    document.querySelector('meta[name="theme-color"]')?.setAttribute("content", dark ? "#0b0f19" : "#f6f7f9");
   };
   set();
   if (media && listener) media.removeEventListener("change", listener);

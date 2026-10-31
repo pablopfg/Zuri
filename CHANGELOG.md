@@ -47,7 +47,9 @@ o [SemVer](https://semver.org/lang/pt-BR/). Cada PR escreve a sua entrada em
   central de avisos (vazia até a etapa 11) e Configurações com as abas Conta,
   Segurança, IA, Avisos, Integrações e Dados. Tema claro, escuro ou como o
   sistema, layout para celular e computador, em pt-BR e en.
-- Identidade visual do Zuri (logo, favicon, ícones e cores).
+- Identidade visual do Zuri, "Sinal": logo de um i cujo pingo é uma luz
+  verde, que pulsa enquanto o Zuri trabalha; favicon, ícones e cores da
+  interface nos dois temas.
 - App instalável (PWA) no celular e no computador.
 - Na aba Conta: idioma, fuso horário, aparência e troca de senha. Na aba
   Segurança: ligar e desligar a verificação em duas etapas com QR code e

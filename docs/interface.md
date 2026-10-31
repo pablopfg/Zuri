@@ -55,11 +55,16 @@ resposta de `/api/*` sai com `Cache-Control: no-store`, e o cliente pede com
 
 ## Identidade visual
 
-Opção "Brisa": Z em um traço só, verde-água (`#5eead4`) sobre um quadrado
-verde-azulado escuro (`#0f3b3a`), com uma faísca âmbar (`#fbbf24`). Todas as
-cores da interface são variáveis em `apps/web/src/styles.css`; trocar a
-identidade é trocar esse bloco, o `Logo.tsx`, o `public/favicon.svg` e gerar os
-ícones de novo com `node scripts/gerar-icones.ts`.
+Opção "Sinal", escolhida pelo Pablo: um "i" claro sobre um quadrado cor de
+tinta (`#0b0f19`), com o pingo do i como uma luz verde (`#22c55e`). O verde
+quer dizer "trabalhando" na interface toda, por isso é o único destaque. O
+`Logo` aceita `working`, que faz a luz pulsar (só com movimento permitido); a
+tela "Conferindo a sua sessão" já usa. O desenho passou no recorte redondo do
+avatar do Telegram, no favicon de 16 px e em uma cor só (ícone de notificação).
+
+Todas as cores da interface são variáveis em `apps/web/src/styles.css`; trocar
+a identidade é trocar esse bloco, o `Logo.tsx`, o `public/favicon.svg` e gerar
+os ícones de novo com `node scripts/gerar-icones.ts`.
 
 ## Acessibilidade
 

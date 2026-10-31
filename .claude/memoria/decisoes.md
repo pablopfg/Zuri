@@ -23,6 +23,7 @@ Fatos e decisões já tomados pelo Pablo. O agente não pergunta de novo nada da
 | 30/10/2026 | Especificação auditada por auditor independente; as correções (reconhecimento cruzado de alertas de segurança, trava de leitura do bot, bloqueio com saída por código de recuperação, processamento no Durable Object, prévia montada pelo servidor, webhook registrado pelo Worker) já estão na especificação. |
 | 30/10/2026 | Modo contínuo: o agente mescla sozinho na `develop` quando CI, QA e auditoria passam e segue para a próxima etapa numa conversa nova, sem pausa por fase. Para só nos bloqueios (algo que o Pablo fornece, etapa 21, decisão de produto, custo, falha persistente, achado de segurança). `main`, release e deploy continuam com o Pablo. O ruleset da `develop` exige CI verde e não exige aprovação humana. |
 | 31/10/2026 | Skills externas instaladas e usadas automaticamente: `mattpocock/skills`, `nateherkai/scroll-craft`, `cloudflare/security-audit-skill` e `blader/humanizer`, fixadas por commit em `.claude/skills-externas/` e instaladas por `scripts/instalar-skills.sh` no início de cada sessão. Atualização só por PR, depois de ler o diff. Geração paga de imagens do scroll-craft (kie.ai) bloqueada sem OK. |
+| 31/10/2026 | Identidade visual "Sinal": um i cujo pingo é uma luz verde (`#22c55e`) sobre tinta (`#0b0f19`); o verde é o único destaque e significa "trabalhando". Escolhida entre 17 opções. |
 
 ## Padrões em vigor até o Pablo dizer outra coisa
 

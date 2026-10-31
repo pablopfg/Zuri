@@ -4,55 +4,57 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 /*
- * Zuri's palette ("Brisa"): calm teal with an amber spark. Every color the
- * interface uses comes from these tokens, so another identity is one block to
- * change. Text pairs keep WCAG AA contrast in both themes (4.5:1 or more).
+ * Zuri's palette ("Sinal"): ink neutrals with one green light, the dot of the
+ * logo's i. Green means "working" across the interface, so it stays the only
+ * accent. Every color the interface uses comes from these tokens. Text pairs
+ * keep WCAG AA contrast in both themes (4.5:1 or more).
  */
 @theme {
-  --color-bg: #f5f9f8;
+  --color-bg: #f6f7f9;
   --color-surface: #ffffff;
-  --color-raised: #eef4f3;
-  --color-fg: #0f1f1e;
-  --color-fg-muted: #4a5c5a;
-  --color-border: #d3dfdd;
-  --color-border-strong: #8fa5a2;
-  --color-accent: #0f766e;
-  --color-accent-hover: #115e59;
+  --color-raised: #eef0f4;
+  --color-fg: #0b0f19;
+  --color-fg-muted: #4b5563;
+  --color-border: #dde1e8;
+  --color-border-strong: #8b93a1;
+  --color-accent: #15803d;
+  --color-accent-hover: #166534;
   --color-accent-fg: #ffffff;
-  --color-accent-soft: #d5f5ef;
-  --color-accent-text: #0f665f;
+  --color-accent-soft: #dcfce7;
+  --color-accent-text: #166534;
   --color-danger: #b42318;
   --color-danger-soft: #fdecea;
   --color-success: #12703a;
   --color-success-soft: #e3f6ea;
   --color-warning: #8a4b00;
   --color-warning-soft: #fdf1dc;
-  --color-brand-tile: #0f3b3a;
-  --color-brand-mark: #5eead4;
-  --color-brand-spark: #fbbf24;
+  --color-brand-tile: #0b0f19;
+  --color-brand-mark: #f8fafc;
+  --color-brand-signal: #22c55e;
   --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
 }
 
 .dark {
-  --color-bg: #0a1413;
-  --color-surface: #101e1d;
-  --color-raised: #162826;
-  --color-fg: #e4f1ef;
-  --color-fg-muted: #a3b9b6;
-  --color-border: #24403d;
-  --color-border-strong: #4f6f6b;
-  --color-accent: #5eead4;
-  --color-accent-hover: #99f6e4;
-  --color-accent-fg: #042f2e;
-  --color-accent-soft: #123b37;
-  --color-accent-text: #7ff0dc;
+  --color-bg: #0b0f19;
+  --color-surface: #121826;
+  --color-raised: #1a2233;
+  --color-fg: #e8ecf3;
+  --color-fg-muted: #a3acbd;
+  --color-border: #263043;
+  --color-border-strong: #56627a;
+  --color-accent: #4ade80;
+  --color-accent-hover: #86efac;
+  --color-accent-fg: #052e16;
+  --color-accent-soft: #0f2e1c;
+  --color-accent-text: #6ee7a0;
   --color-danger: #ffb4ab;
   --color-danger-soft: #3b1715;
   --color-success: #86efac;
   --color-success-soft: #10301d;
   --color-warning: #fcd34d;
   --color-warning-soft: #33270a;
-  --color-brand-tile: #12403e;
+  /* A step lighter than the page, so the tile still shows on it. */
+  --color-brand-tile: #1a2233;
   color-scheme: dark;
 }
 

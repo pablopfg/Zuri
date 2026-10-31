@@ -13,8 +13,7 @@ const logo = readFileSync(join(PUBLIC, "favicon.svg"), "utf8");
 /** The logo inside a full-bleed tile, its mark within the maskable safe zone (the inner 80%). */
 const maskable = logo
   .replace('rx="16"', 'rx="0"')
-  .replace(/<path /, '<g transform="translate(32 32) scale(0.72) translate(-32 -32)"><path ')
-  .replace("</svg>", "</g></svg>");
+  .replace("<g>", '<g transform="translate(32 32) scale(0.72) translate(-32 -32)">');
 
 const ICONS: { file: string; size: number; svg: string }[] = [
   { file: "favicon-32.png", size: 32, svg: logo },
