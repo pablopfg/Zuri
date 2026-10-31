@@ -59,25 +59,24 @@ export function TasksPage() {
 
       {trashed && <TrashedNotice item={trashed} message={t("web.tasks.trashed")} onDone={() => setTrashed(null)} />}
 
-      <div className="-mx-4 overflow-x-auto px-4">
-        <fieldset className="flex min-w-max gap-1 rounded-xl bg-raised p-1 sm:min-w-0">
-          <legend className="sr-only">{t("web.tasks.viewLabel")}</legend>
-          {TASK_VIEWS.map((item) => (
-            <button
-              key={item}
-              type="button"
-              aria-pressed={view === item}
-              onClick={() => setView(item)}
-              className={cn(
-                "min-h-11 flex-1 rounded-lg px-3 text-sm font-medium transition-colors",
-                view === item ? "bg-surface text-fg shadow-sm ring-1 ring-border-strong" : "text-fg-muted hover:text-fg",
-              )}
-            >
-              {t(VIEW_LABEL[item])}
-            </button>
-          ))}
-        </fieldset>
-      </div>
+      {/* Sized by their labels, so all five fit a phone without hiding past the edge. */}
+      <fieldset className="flex gap-1 rounded-xl bg-raised p-1">
+        <legend className="sr-only">{t("web.tasks.viewLabel")}</legend>
+        {TASK_VIEWS.map((item) => (
+          <button
+            key={item}
+            type="button"
+            aria-pressed={view === item}
+            onClick={() => setView(item)}
+            className={cn(
+              "min-h-11 flex-auto whitespace-nowrap rounded-lg px-1.5 text-xs font-medium transition-colors sm:px-3 sm:text-sm",
+              view === item ? "bg-surface text-fg shadow-sm ring-1 ring-border-strong" : "text-fg-muted hover:text-fg",
+            )}
+          >
+            {t(VIEW_LABEL[item])}
+          </button>
+        ))}
+      </fieldset>
 
       <div className="space-y-4">
         {/* A task added here would not show up in Completed or Overdue, so those views have no quick add. */}
