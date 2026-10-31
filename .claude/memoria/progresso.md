@@ -63,7 +63,7 @@ etapas ficam detalhadas; as mais antigas viram uma linha na tabela.
 
 <!-- Itens "▶ Antes, você fornece" das próximas etapas e perguntas abertas. -->
 
-- Não travam: teto diário único de Neurons (os padrões de IA e áudio passam da cota de 10.000; afeta a etapa 8) e busca de tarefas por FTS5. Ver `docs/arquitetura/orcamento-free-tier.md`, "Para o Pablo".
+- Decidido (31/10/2026): teto único de 9.000 Neurons/dia para chat, voz e embeddings (etapa 8). Não trava: busca de tarefas por FTS5. Ver `docs/arquitetura/orcamento-free-tier.md`, "Para o Pablo".
 - Toda etapa segue `.claude/rules/performance.md` (P1 a P14) e preenche "Custo no plano Free" no PR.
 
 - ⚠️ Antes do próximo deploy: criar o widget do Turnstile e gravar `TURNSTILE_SITE_KEY` e `TURNSTILE_SECRET_KEY` (docs/configuracao-cloudflare.md); sem eles o login fica fechado.
