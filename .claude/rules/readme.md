@@ -21,6 +21,7 @@ Todo PR que muda um destes itens atualiza o README **no mesmo PR**, junto com a 
 | Funcionalidade visível (tela, rota, comando do bot, integração) | Tabela "O que já funciona"; tire o item de "O que vem a seguir" quando ele chegar |
 | Etapa concluída (`proxima-etapa`) | "Mapa das etapas" (✅, 🚧 na próxima), o selo `etapas-N de 26`, o aviso do topo e a frase "steps 0 to N" de "In English" |
 | Tela que aparece nas capturas | Rode `node scripts/capturas-do-readme.ts` com o servidor do e2e numa base vazia e faça commit de `docs/capturas/` |
+| Tela criada ou alterada (qualquer uma) | Capturas na descrição do PR, em `docs/capturas/pr/<assunto>/` (`.claude/rules/capturas.md`) |
 | Tela nova importante | Acrescente a tela ao script e ao quadro "Telas" (claro e escuro com `<picture>`) |
 | Arquitetura, stack, recurso da Cloudflare ou cota | "Como funciona", "Plano Free, sem surpresa na fatura" e o diagrama Mermaid |
 | Comando, requisito ou passo de instalação | "Rodar localmente" e o `CONTRIBUTING.md` |
