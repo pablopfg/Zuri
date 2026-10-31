@@ -18,7 +18,7 @@ function recordId(value: string): string {
 
 /** The query string as an object; a key given twice is refused rather than guessed. */
 function readQuery<S extends z.ZodType>(url: string, schema: S): z.output<S> {
-  const values: Record<string, string> = {};
+  const values: Record<string, string> = Object.create(null);
   for (const [key, value] of new URL(url).searchParams) {
     if (Object.hasOwn(values, key)) throw new AppError("VALIDATION_FAILED", undefined, { fields: [key] });
     values[key] = value;

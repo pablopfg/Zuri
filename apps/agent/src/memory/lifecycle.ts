@@ -44,7 +44,8 @@ export class MemoryLifecycle {
         supersededBy: newId,
         validUntil: validUntil ?? older.valid_until,
       });
-      this.repo.deleteReviewsBetween(oldId, newId);
+      // A past fact has nothing left to review: answering an old review later would relink it.
+      this.repo.deleteReviewsOf(oldId);
       return updated;
     });
   }
@@ -54,13 +55,19 @@ export class MemoryLifecycle {
     const memory = this.repo.require(id);
     if (memory.status === status) return memory;
     if (status === "active" || status === "uncertain") {
+      if (memory.status === "historical" && this.repo.findCurrentDuplicate(memory.content, id)) {
+        throw new AppError("CONFLICT", "error.memoryDuplicate");
+      }
       return this.repo.setLifecycle(id, {
         status,
         supersededBy: null,
         validUntil: memory.status === "historical" ? null : memory.valid_until,
       });
     }
-    return this.repo.setLifecycle(id, { status: "historical", supersededBy: memory.superseded_by, validUntil: memory.valid_until });
+    return this.db.transaction(() => {
+      this.repo.deleteReviewsOf(id);
+      return this.repo.setLifecycle(id, { status: "historical", supersededBy: memory.superseded_by, validUntil: memory.valid_until });
+    });
   }
 
   /** The versions before (oldest first) and after a memory, bounded. */

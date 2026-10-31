@@ -1,4 +1,5 @@
 import {
+  MEMORY_REVIEWS_PENDING_MAX,
   type Memory,
   type MemoryCorrect,
   type MemoryCounts,
@@ -30,6 +31,13 @@ import { anyWordQuery } from "./text.ts";
 
 /** Candidates read per search when looking for conflicts: a few index reads, never the table. */
 const CONFLICT_CANDIDATES = 8;
+
+/**
+ * Newest full-text matches looked at per conflict search: a save runs up to
+ * six searches, and a word in every memory must not cost 6 × 200 reads.
+ * Conflicts are about recent facts, so the newest 50 are enough.
+ */
+const CONFLICT_WINDOW = 50;
 
 export interface MemoryServiceOptions {
   /** Settings → conflict review. Off, memories are saved without any detection. */
@@ -108,6 +116,10 @@ export class MemoryService {
       const category = patch.category ?? before.category;
       if (content === before.content && category === before.category) return { memory: toMemory(before), duplicate: false, superseded: [], reviews: 0 };
       const textChanged = content !== before.content;
+      // Two current memories with the same text would never be told apart (no review either).
+      if (textChanged && before.status !== "historical" && this.repo.findCurrentDuplicate(content, id)) {
+        throw new AppError("CONFLICT", "error.memoryDuplicate");
+      }
       const row = this.repo.edit(id, { content, category, validFrom: textChanged ? extractStatedDate(content) : before.valid_from });
       return textChanged ? this.afterWrite(row) : { memory: toMemory(row), duplicate: false, superseded: [], reviews: 0 };
     });
@@ -157,7 +169,8 @@ export class MemoryService {
   // ---------- Conflicts ----------
 
   private afterWrite(memory: MemoryRow): MemoryWriteResult {
-    const reviews = this.options.conflictReview() ? this.detectConflicts(memory) : 0;
+    // A past fact conflicts with nothing: fixing its typo must not question what replaced it.
+    const reviews = memory.status !== "historical" && this.options.conflictReview() ? this.detectConflicts(memory) : 0;
     return { memory: toMemory(this.repo.require(memory.id)), duplicate: false, superseded: [], reviews };
   }
 
@@ -169,7 +182,7 @@ export class MemoryService {
    */
   private detectConflicts(memory: MemoryRow): number {
     const candidates = new Map<string, MemoryRow>();
-    const options = { filter: "current" as const, limit: CONFLICT_CANDIDATES };
+    const options = { filter: "current" as const, limit: CONFLICT_CANDIDATES, window: CONFLICT_WINDOW };
     const words = anyWordQuery(memory.content);
     if (words) for (const m of this.repo.match(words, options)) candidates.set(m.id, m);
     for (const terms of topicSearchTerms(memory.content)) {
@@ -177,13 +190,20 @@ export class MemoryService {
       if (match) for (const m of this.repo.match(match, options)) candidates.set(m.id, m);
     }
     candidates.delete(memory.id);
+    if (candidates.size === 0) return 0;
+    // A full queue stops growing (owner rows are capped, reviews too): the save still happens.
+    let room = MEMORY_REVIEWS_PENDING_MAX - this.repo.reviewCount();
     let added = 0;
     for (const old of candidates.values()) {
+      if (room <= 0) break;
       // A memory saved after this one (an edit of an old memory) is not "older".
       if (old.created_at > memory.updated_at) continue;
       const assessment = classify(memory.content, old.content);
       const review = reviewFor(assessment);
-      if (review && this.repo.addReview({ memoryId: memory.id, otherId: old.id, ...review, topic: assessment.topic })) added++;
+      if (review && this.repo.addReview({ memoryId: memory.id, otherId: old.id, ...review, topic: assessment.topic })) {
+        added++;
+        room--;
+      }
     }
     return added;
   }

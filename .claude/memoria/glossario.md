@@ -19,3 +19,7 @@
 | Impressão digital dos segredos | HMAC dos segredos de senha e do pepper; muda quando o dono redefine a senha pelo painel. |
 | Lixeira | Onde tarefas, notas e projetos apagados ficam 30 dias, restauráveis, antes de sumirem de vez. |
 | Prazo só com dia | Tarefa com data sem hora: vale até 23:59 daquele dia no fuso do dono. |
+| Memória | Fato durável sobre o dono, guardado em `zur_memories`. Estado atual (`active`), incerto (`uncertain`) ou passado (`historical`). |
+| Substituição | Vínculo `superseded_by` de uma memória passada para a que tomou o lugar dela. Nunca forma ciclo. |
+| Revisão de memória | Item da fila "Para revisar", aberto quando um fato novo parece mudar ou contradizer um antigo. Só o dono resolve. |
+| Atualizar o fato | Gravar um fato novo que substitui o antigo, que vira passado (rota `correct`). Diferente de editar, que corrige a mesma memória. |

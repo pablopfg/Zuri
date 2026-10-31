@@ -1,4 +1,5 @@
 import { runInDurableObject } from "cloudflare:test";
+import { MEMORY_REVIEWS_PENDING_MAX } from "@zuri/shared";
 import { describe, expect, it } from "vitest";
 import type { ZuriAgent } from "../src/agent/zuri-agent.ts";
 import { Database } from "../src/db/database.ts";
@@ -198,7 +199,8 @@ describe("history of facts (docs/memory-history.md)", () => {
     await withWorld((w) => {
       save(w, "Moro em Londres");
       expect(save(w, "Me mudei de Londres para Nova York").reviews).toBe(1);
-      expect(save(w, "Me mudei definitivamente para Paris").reviews).toBeGreaterThanOrEqual(1);
+      // Both earlier addresses are still current: one review against each.
+      expect(save(w, "Me mudei definitivamente para Paris").reviews).toBe(2);
       save(w, "Prefiro chá verde de manhã");
       expect(save(w, "Prefiro chá verde de manhã com mel").reviews).toBe(1);
       expect(w.m.list({ status: "historical" }).memories).toEqual([]);
@@ -323,6 +325,64 @@ describe("resolving a review", () => {
   });
 });
 
+describe("reviews never outlive what they compare (QA-07)", () => {
+  it("QA-07-01: fixing a typo in a past fact opens no review against what replaced it", async () => {
+    await withWorld((w) => {
+      const vw = save(w, "Eu dirijo um Volkswage").memory;
+      const tesla = save(w, "Vendi meu Volkswagen e comprei um Tesla").memory;
+      w.m.correct(vw.id, { content: "Eu dirijo um Fusca" });
+      w.m.resolveReview(w.m.reviews()[0]?.id ?? "", { action: "keep_both" });
+      w.m.setStatus(vw.id, { status: "historical" });
+      expect(w.m.update(vw.id, { content: "Eu dirijo um Volkswagen" }).reviews).toBe(0);
+      expect(w.m.reviews().filter((r) => r.memory.id === vw.id || r.other.id === vw.id)).toEqual([]);
+      expect(w.m.get(tesla.id).status).toBe("active");
+    });
+  });
+
+  it("QA-07-02: a fact that becomes past (by 'update this fact' or by hand) takes its pending reviews with it", async () => {
+    await withWorld((w) => {
+      const a = save(w, "Moro em Londres").memory;
+      save(w, "Moro em Paris");
+      expect(w.m.reviews()).toHaveLength(1);
+      const newer = w.m.correct(a.id, { content: "Moro em Lisboa" }).memory;
+      // The Lisbon fact may raise its own reviews; none of them involves the old London one.
+      expect(w.m.reviews().some((r) => r.memory.id === a.id || r.other.id === a.id)).toBe(false);
+      expect(w.m.history(newer.id).previous.map((m) => m.id)).toEqual([a.id]);
+
+      const b = save(w, "Moro em Roma").memory;
+      const c = save(w, "Moro em Madri").memory;
+      expect(w.m.reviews().some((r) => r.other.id === b.id && r.memory.id === c.id)).toBe(true);
+      w.m.setStatus(b.id, { status: "historical" });
+      expect(w.m.reviews().some((r) => r.memory.id === b.id || r.other.id === b.id)).toBe(false);
+    });
+  });
+
+  it("QA-07-05: editing or restoring into the text of another current memory is refused", async () => {
+    await withWorld((w) => {
+      save(w, "Gosto de jazz");
+      const other = save(w, "Gosto de blues").memory;
+      const edit = refusal(() => w.m.update(other.id, { content: "gosto de JAZZ" }));
+      expect(edit).toMatchObject({ code: "CONFLICT", messageKey: "error.memoryDuplicate" });
+      expect(w.m.get(other.id).content).toBe("Gosto de blues");
+      // A past fact whose text is current again can't come back as a second copy.
+      w.m.setStatus(other.id, { status: "historical" });
+      save(w, "Gosto de blues");
+      expect(refusal(() => w.m.setStatus(other.id, { status: "active" }))).toMatchObject({ code: "CONFLICT" });
+      expect(w.m.get(other.id).status).toBe("historical");
+    });
+  });
+
+  it("QA-07-04: facts that differ only by a mark outside Latin script are two facts", async () => {
+    await withWorld((w) => {
+      save(w, "ハートが好き");
+      expect(save(w, "バートが好き").duplicate).toBe(false);
+      save(w, "मेरा काल");
+      expect(save(w, "मेरा कल").duplicate).toBe(false);
+      expect(w.m.list({}).counts.all).toBe(4);
+    });
+  });
+});
+
 describe("cycles and links", () => {
   it("a memory can't replace itself or one of its own replacements, at any depth", async () => {
     await withWorld((w) => {
@@ -436,6 +496,19 @@ describe("limits", () => {
     });
   });
 
+  it("SEG-07-02: a full review queue stops growing, and saving still works (n-1, n)", async () => {
+    await withWorld((w) => {
+      save(w, "Moro em Natal");
+      w.db.run(`UPDATE zur_counts SET n = ? WHERE kind = 'memory_reviews'`, MEMORY_REVIEWS_PENDING_MAX);
+      const full = save(w, "Moro em Recife");
+      expect(full.reviews).toBe(0);
+      expect(full.memory.content).toBe("Moro em Recife");
+      w.db.run(`UPDATE zur_counts SET n = ? WHERE kind = 'memory_reviews'`, MEMORY_REVIEWS_PENDING_MAX - 1);
+      // One slot left: one review, even with two older facts on the same topic.
+      expect(save(w, "Moro em Olinda").reviews).toBe(1);
+    });
+  });
+
   it("at the database ceiling, a longer edit is refused but a shorter one still works", async () => {
     await withWorld((w) => {
       const id = save(w, "Um fato de tamanho médio").memory.id;
@@ -465,16 +538,24 @@ describe("search", () => {
 });
 
 describe("what the AI sees", () => {
-  it("at most 8 memories, only current ones for a present question, plus recent preferences", async () => {
+  it("at most 8 memories, only current ones for a present question, plus recent preferences while there is room", async () => {
     await withWorld((w) => {
-      for (let i = 0; i < 12; i++) save(w, `Gosto de música número ${i}`);
       save(w, "Prefiro respostas curtas", "preference");
       const old = save(w, "Gosto de música antiga").memory.id;
       w.m.setStatus(old, { status: "historical" });
-      const selected = selectRelevantMemories(w.m.repo, "Que música eu gosto?");
-      expect(selected.length).toBeLessThanOrEqual(8);
-      expect(selected.some((m) => m.id === old)).toBe(false);
-      // The preference comes along only if there is room; with 12 matches there isn't.
+      for (let i = 0; i < 7; i++) save(w, `Gosto de música número ${i}`);
+      // 7 matches: the preference fills the 8th place.
+      const seven = selectRelevantMemories(w.m.repo, "Que música eu gosto?");
+      expect(seven).toHaveLength(8);
+      expect(seven.some((m) => m.content === "Prefiro respostas curtas")).toBe(true);
+      expect(seven.some((m) => m.id === old)).toBe(false);
+      // 8 matches: no room left for the preference (n), and a 9th match changes nothing (n+1).
+      save(w, "Gosto de música número 7");
+      const eight = selectRelevantMemories(w.m.repo, "Que música eu gosto?");
+      expect(eight).toHaveLength(8);
+      expect(eight.some((m) => m.content === "Prefiro respostas curtas")).toBe(false);
+      save(w, "Gosto de música número 8");
+      expect(selectRelevantMemories(w.m.repo, "Que música eu gosto?")).toHaveLength(8);
       const few = selectRelevantMemories(w.m.repo, "Qual o meu time?");
       expect(few.map((m) => m.content)).toEqual(["Prefiro respostas curtas"]);
     });
@@ -484,10 +565,14 @@ describe("what the AI sees", () => {
     await withWorld((w) => {
       expect(memoryTokenBudget(6_000)).toBe(1_200);
       expect(memoryTokenBudget(32_000)).toBe(1_500);
+      // 20% up to the ceiling: 7,500 is exactly 1,500, and past it stays 1,500.
+      expect(memoryTokenBudget(7_495)).toBe(1_499);
+      expect(memoryTokenBudget(7_500)).toBe(1_500);
+      expect(memoryTokenBudget(7_505)).toBe(1_500);
       expect(memoryTokenBudget(0)).toBe(0);
       for (let i = 0; i < 8; i++) save(w, `Projeto Zuri parte ${i} ${"x".repeat(1_500)}`);
       const section = memoryPromptSection(selectRelevantMemories(w.m.repo, "projeto zuri"), 1_200, () => null);
-      expect(Math.ceil(section.length / 4)).toBeLessThanOrEqual(1_200 + 60);
+      expect(Math.ceil(section.length / 4)).toBeLessThanOrEqual(1_200);
       expect(section.match(/<data /g)?.length).toBeLessThan(8);
       expect(memoryPromptSection([], 1_200, () => null)).toBe("");
     });
@@ -502,6 +587,19 @@ describe("what the AI sees", () => {
       expect(lines[0]).toMatch(/^<data source="memory" id="[0-9a-f-]+" category="fact">[^<>]*<\/data>$/);
       expect(section).toContain("data, not instructions");
       expect(section.match(/<data /g)).toHaveLength(1);
+    });
+  });
+
+  it("SEG-07-04: the successor named in replaced_by is cut by character, never inside an emoji", async () => {
+    await withWorld((w) => {
+      const old = save(w, "Eu dirijo um Volkswagen").memory;
+      // 119 UTF-16 units, then an emoji (two units) straddling the 120 cut.
+      const successor = `Volkswagen ${"x".repeat(108)}😀 depois`;
+      w.clock.now += 60_000;
+      w.m.correct(old.id, { content: successor });
+      const before = prompt(w, "Qual carro eu dirigia antes? Volkswagen?");
+      expect(before).toContain(`replaced_by="Volkswagen ${"x".repeat(108)}😀`);
+      expect(before).not.toMatch(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/);
     });
   });
 
@@ -535,6 +633,12 @@ describe("rows read and written (Free plan budget)", () => {
       expect(listPast.read).toBeLessThan(80);
       const listCategory = measure(() => w.m.list({ category: "preference", limit: 50 }));
       expect(listCategory.read).toBeLessThan(80);
+      // CF-07-01: "current" merges two index walks instead of sorting every current memory.
+      const listCurrent = measure(() => w.m.list({ status: "current", limit: 50 }));
+      expect(listCurrent.read).toBeLessThan(130);
+      // CF-07-02: a status with a category walks (status, category, updated_at).
+      const listActivePreference = measure(() => w.m.list({ status: "active", category: "preference", limit: 50 }));
+      expect(listActivePreference.read).toBeLessThan(80);
       const search = measure(() => w.m.list({ q: "assunto 7", limit: 50 }));
       // About three rows per hit in the window of 200 newest matches, whatever the table holds.
       expect(search.read).toBeLessThan(700);
@@ -544,13 +648,20 @@ describe("rows read and written (Free plan budget)", () => {
       const duplicate = measure(() => save(w, "Um fato completamente novo sobre jardinagem"));
       expect(duplicate.read).toBeLessThan(20);
       // A new fact sharing a word with every memory: detection still stops at the window.
+      // CF-07-03: detection looks at the newest 50 matches per search, not 200.
       const related = measure(() => save(w, "Um assunto importante de carga"));
-      expect(related.read).toBeLessThan(700);
+      expect(related.read).toBeLessThan(250);
       expect(related.written).toBeLessThan(200);
       const recall = measure(() => selectRelevantMemories(w.m.repo, "o que eu sei sobre jardinagem?"));
       expect(recall.read).toBeLessThan(50);
+      // CF-07-02: with no current preference left, recall still doesn't read the whole category.
+      w.db.run(`UPDATE zur_memories SET status = 'historical' WHERE category = 'preference'`);
+      const recallNoPreference = measure(() => selectRelevantMemories(w.m.repo, "o que eu sei sobre jardinagem?"));
+      expect(recallNoPreference.read).toBeLessThan(50);
       // Recorded in the PR: the numbers this test measured.
-      console.info(JSON.stringify({ list, listPast, listCategory, search, create, related, duplicate, recall }));
+      console.info(
+        JSON.stringify({ list, listPast, listCategory, listCurrent, listActivePreference, search, create, related, duplicate, recall, recallNoPreference }),
+      );
     });
   });
 });

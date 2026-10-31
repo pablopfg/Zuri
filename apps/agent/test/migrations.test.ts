@@ -86,7 +86,7 @@ describe("the migration list", () => {
       3: "42d9a6b3b30214125e809253e2f1d4472fdd885fdf77e3a5a017100a52ec63a2",
       4: "c66593e92a8fc765ad8096be69f544cac424de2a815e8eb3776dd4a98cc95ef7",
       5: "8c5284cbf1f107f27133133552387e56029c61885b3bc0d9940c2f8bd648fbf1",
-      6: "2ca42586619e3ec1c14926fbe470cee221f61d18bec18c21d53243c6b1601a93",
+      6: "fcebcd8e24cdf35cfa227b8e884e5a8fef72dd5858b886054fa7dade848e5730",
     };
     for (const m of MIGRATIONS) {
       const digest = createHash("sha256").update(statementText(m).replace(/\r\n/g, "\n")).digest("hex");
@@ -137,6 +137,7 @@ describe("migrate", () => {
         "trigger:zur_memories_fts_delete",
         "trigger:zur_memories_fts_insert",
         "trigger:zur_memories_fts_update",
+        "index:zur_memories_status_category",
         "index:zur_memories_status_updated",
         "index:zur_memories_superseded_by",
         "index:zur_memories_updated",

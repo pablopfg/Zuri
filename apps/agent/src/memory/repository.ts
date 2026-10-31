@@ -75,6 +75,18 @@ function filterWhere(filter: MemoryFilter): string {
   }
 }
 
+/** The statuses a filter keeps; none means every status. */
+function filterStatuses(filter: MemoryFilter): string[] {
+  switch (filter) {
+    case "all":
+      return [];
+    case "current":
+      return ["active", "uncertain"];
+    default:
+      return [filter];
+  }
+}
+
 /**
  * Storage of memories and their pending reviews. Plain reads and writes: the
  * relationship rules (no self link, no cycle) live in MemoryLifecycle, the
@@ -101,15 +113,35 @@ export class MemoryRepository {
     return row;
   }
 
-  /** Newest first. Each filter walks its index (status, updated_at) up to `limit` rows. */
+  /**
+   * Newest first. Each status walks its own index ((status, updated_at), or
+   * (status, category, updated_at) with a category) and stops at `limit`:
+   * "current" is two such walks merged, never a sort of every current memory.
+   */
   list(options: { filter: MemoryFilter; category?: MemoryCategory | undefined; limit: number }): MemoryRow[] {
-    const params: SqlValue[] = [];
-    let where = filterWhere(options.filter);
-    if (options.category) {
-      where += ` AND m.category = ?`;
-      params.push(options.category);
+    const statuses = filterStatuses(options.filter);
+    const category = options.category ? ` AND m.category = ?` : "";
+    const one = (status: string | null) => {
+      const params: SqlValue[] = [];
+      const where: string[] = [];
+      if (status) {
+        where.push("m.status = ?");
+        params.push(status);
+      }
+      if (options.category) params.push(options.category);
+      const sql = `SELECT ${COLUMNS} FROM zur_memories m WHERE ${where.length ? where.join(" AND ") : "1"}${category} ORDER BY m.updated_at DESC LIMIT ?`;
+      return { sql, params: [...params, options.limit] };
+    };
+    if (statuses.length < 2) {
+      const { sql, params } = one(statuses[0] ?? null);
+      return this.db.all<MemoryRow>(sql, ...params);
     }
-    return this.db.all<MemoryRow>(`SELECT ${COLUMNS} FROM zur_memories m WHERE ${where} ORDER BY m.updated_at DESC LIMIT ?`, ...params, options.limit);
+    const parts = statuses.map(one);
+    return this.db.all<MemoryRow>(
+      `SELECT * FROM (${parts.map((p) => `SELECT * FROM (${p.sql})`).join(" UNION ALL ")}) ORDER BY updated_at DESC LIMIT ?`,
+      ...parts.flatMap((p) => p.params),
+      options.limit,
+    );
   }
 
   /**
@@ -127,8 +159,8 @@ export class MemoryRepository {
    * common word from reading every memory that has it (rows read are billed):
    * FTS5 walks its index newest first and stops there.
    */
-  match(match: string, options: { filter: MemoryFilter; category?: MemoryCategory | undefined; limit: number }): MemoryRow[] {
-    const params: SqlValue[] = [match, SEARCH_WINDOW];
+  match(match: string, options: { filter: MemoryFilter; category?: MemoryCategory | undefined; limit: number; window?: number }): MemoryRow[] {
+    const params: SqlValue[] = [match, options.window ?? SEARCH_WINDOW];
     let where = filterWhere(options.filter);
     if (options.category) {
       where += ` AND m.category = ?`;
@@ -252,6 +284,11 @@ export class MemoryRepository {
 
   // ---------- Reviews ----------
 
+  /** Pending reviews, from the trigger-kept counter: one row read. */
+  reviewCount(): number {
+    return this.db.one<{ n: number }>(`SELECT n FROM zur_counts WHERE kind = 'memory_reviews'`)?.n ?? 0;
+  }
+
   /** One review per pair (either order); asking again keeps the first. True when a new one was added. */
   addReview(input: { memoryId: string; otherId: string; relationship: MemoryReviewRelationship; reason: MemoryReviewReason; topic: MemoryTopic | null }): boolean {
     const existing = this.db.one(
@@ -284,8 +321,9 @@ export class MemoryRepository {
     return this.db.one<ReviewRow>(`SELECT * FROM zur_memory_reviews WHERE id = ?`, id);
   }
 
-  deleteReviewsBetween(a: string, b: string): void {
-    this.db.run(`DELETE FROM zur_memory_reviews WHERE (memory_id = ? AND other_id = ?) OR (memory_id = ? AND other_id = ?)`, a, b, b, a);
+  /** Every pending review a memory is part of, on either side (two index lookups). */
+  deleteReviewsOf(id: string): void {
+    this.db.run(`DELETE FROM zur_memory_reviews WHERE memory_id = ? OR other_id = ?`, id, id);
   }
 
   deleteReview(id: string): void {

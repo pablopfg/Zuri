@@ -360,6 +360,7 @@ export const en: Messages = {
   "error.storageLimit.memories": "You reached the memory limit. Delete memories you no longer need to save new ones.",
   "error.memoryNotFound": "This memory no longer exists.",
   "error.memoryCycle": "A memory can't replace itself or one of the versions that came after it.",
+  "error.memoryDuplicate": "There is already a current memory with this text.",
   "error.memoryReviewGone": "This review was already resolved.",
   "error.memorySame": "The new text is the same as the current one. To fix a typo, use Edit.",
   "web.nav.memory": "Memory",

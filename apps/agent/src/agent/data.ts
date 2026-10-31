@@ -8,7 +8,23 @@
 export const DATA_SOURCES = ["memory", "note", "task", "tool", "mcp", "telegram_forward", "calendar", "remote_event"] as const;
 export type DataSource = (typeof DATA_SOURCES)[number];
 
-/** Text made inert for a `<data>` block: no angle brackets, no line breaks, no control characters. */
+/**
+ * Angle brackets and their look-alikes (the marks we write, fullwidth, small
+ * and math forms): stored text can't forge a tag in any of them, nor one that
+ * looks like an already neutralized tag from another block.
+ */
+const OPENING = new Set(["<", "‹", "＜", "﹤", "〈", "⟨", "〈", "❮", "«"]);
+const CLOSING = new Set([">", "›", "＞", "﹥", "〉", "⟩", "〉", "❯", "»"]);
+
+/**
+ * Invisible format characters (Unicode Cf): zero widths, bidi overrides,
+ * the U+E0000 "tag" letters that smuggle hidden ASCII, interlinear marks.
+ * The zero-width joiner stays, because emoji sequences need it.
+ */
+const FORMAT = /\p{Cf}/u;
+const ZERO_WIDTH_JOINER = 0x200d;
+
+/** Text made inert for a `<data>` block: no angle brackets, no line breaks, no control or invisible characters. */
 export function neutralize(text: string): string {
   let out = "";
   let space = false;
@@ -19,9 +35,10 @@ export function neutralize(text: string): string {
       space = true;
       continue;
     }
+    if (code !== ZERO_WIDTH_JOINER && FORMAT.test(char)) continue;
     if (space && char !== " " && !out.endsWith(" ")) out += " ";
     space = false;
-    out += char === "<" ? "‹" : char === ">" ? "›" : char;
+    out += OPENING.has(char) ? "‹" : CLOSING.has(char) ? "›" : char;
   }
   return out.trim();
 }

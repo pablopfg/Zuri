@@ -61,7 +61,7 @@ export function memoryPromptSection(selected: MemoryRow[], maxTokens: number, lo
     if (memory.status === "historical") {
       if (memory.valid_until) extra.until = memory.valid_until;
       const successor = memory.superseded_by ? lookup(memory.superseded_by) : null;
-      if (successor) extra.replaced_by = successor.content.slice(0, 120);
+      if (successor) extra.replaced_by = [...successor.content].slice(0, 120).join("");
     }
     const line = dataLine(SOURCE, memory.id, memory.content, extra);
     const cost = estimateTokens(line);

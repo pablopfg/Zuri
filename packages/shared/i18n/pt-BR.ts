@@ -359,6 +359,7 @@ export const ptBR = {
   "error.storageLimit.memories": "Você chegou ao limite de memórias. Apague as que não precisa mais para guardar novas.",
   "error.memoryNotFound": "Esta memória não existe mais.",
   "error.memoryCycle": "Uma memória não pode substituir a si mesma nem uma das versões que vieram depois dela.",
+  "error.memoryDuplicate": "Já existe uma memória atual com este texto.",
   "error.memoryReviewGone": "Esta revisão já foi resolvida.",
   "error.memorySame": "O texto novo é igual ao atual. Para corrigir um erro de digitação, use Editar.",
   "web.nav.memory": "Memória",

@@ -4,11 +4,17 @@
  * "não moro mais" and "nao moro mais" are the same sentence.
  */
 
-/** Lower case, NFC, accents removed, spaces collapsed. */
+/**
+ * Lower case, Latin accents removed, spaces collapsed. Only the combining
+ * diacritics block (U+0300–U+036F) goes: marks that change a word in other
+ * scripts stay (Japanese dakuten, Devanagari vowel signs), so "ハート" and
+ * "バート" never fold into the same fact.
+ */
 export function fold(text: string): string {
   return text
     .normalize("NFD")
-    .replace(/\p{M}+/gu, "")
+    .replace(/[\u0300-\u036f]+/g, "")
+    .normalize("NFC")
     .toLowerCase()
     .replace(/\s+/g, " ")
     .trim();

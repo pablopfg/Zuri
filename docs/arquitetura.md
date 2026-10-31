@@ -130,6 +130,8 @@ fixa o hash de cada migration já mesclada, para ninguém editar uma antiga.
 | 4 | `zur_trash` | Cópia em JSON do que foi apagado, por 30 dias, com quem apagou e o tamanho | não |
 | 4 | `zur_counts` | Contagem de linhas por tipo, mantida por gatilhos, para conferir limites lendo uma linha só | não |
 | 5 | índice `zur_tasks_board` | A ordem da lista de tarefas, para "Todas" e "Próximas" lerem uma página e não a tabela inteira | — |
+| 6 | `zur_memories` | Memórias: texto, categoria, origem, estado, `superseded_by`, `valid_from`, `valid_until`, `dedupe_key`; índice FTS5 `zur_memories_fts` (gatilhos) e contadores por estado em `zur_counts` | sim (etapa 23) |
+| 6 | `zur_memory_reviews` | Revisões pendentes entre duas memórias (um par por vez, até 500) | não |
 
 Valores internos do servidor também ficam em `zur_settings`, com chaves
 `auth_*` (o hash da senha trocada no app, a impressão digital dos segredos,

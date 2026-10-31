@@ -14,12 +14,13 @@ O modelo é **não confiável**: notas, memórias, resultados de ferramentas, re
 1. Nome único em snake_case, nunca com o prefixo reservado `mcp_`; descrição em inglês; entrada em Zod com limites de tamanho; permissão `read` | `write` | `destructive`; rótulo; `maxCallsPerTurn` quando fizer sentido.
 2. `destructive` nunca executa no turno: `prepare` resolve o alvo e devolve a proposta estruturada; `commit` roda depois da aprovação, uma vez, vinculada ao hash do alvo. A prévia mostrada ao dono é montada pelo servidor a partir da proposta, nunca do texto do modelo.
 3. Ferramentas acessam só a camada de serviços: nada de rede, shell, `eval`, credenciais ou deploy. Execuções agendadas recebem só `read` + `notify_owner`.
-4. Testes: caminho feliz, validação, limite por turno, aprovação (para `destructive`), alvo alterado entre proposta e aprovação, e tentativa de injeção.
+4. Memória (etapa 7, `MemoryService`): `remember` chama `create` e `update_memory` chama `correct` ("atualizar o fato", que guarda a versão antiga como passada). Reescrever o texto sem histórico (`update`) e resolver revisão com `replace` ou `cancel` apagam conteúdo para sempre: só entram como `destructive`, com aprovação. `forget_memory` também.
+5. Testes: caminho feliz, validação, limite por turno, aprovação (para `destructive`), alvo alterado entre proposta e aprovação, e tentativa de injeção.
 
 ## Prompt de sistema
 
 - Ordem: nome do agente (uma linha) → instruções fixas → instruções do dono → memórias → resumo → histórico.
-- Conteúdo guardado entra em `<data source="..." id="...">`, um item por linha, com `<` e `>` trocados por `‹` e `›`. Nunca concatene texto do usuário fora desses blocos.
+- Conteúdo guardado entra em `<data source="..." id="...">`, um item por linha, montado só por `dataLine` (`apps/agent/src/agent/data.ts`): `<`, `>` e os sinais parecidos (`‹ › ＜ ＞ 〈 〉`…) viram `‹` e `›`, e caracteres invisíveis (formato Unicode, bidi, "tags" U+E0000) somem. Nunca concatene texto do usuário fora desses blocos.
 - Não traduza o prompt de sistema nem as descrições das ferramentas.
 
 ## MCP remoto

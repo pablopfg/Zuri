@@ -54,6 +54,11 @@ Medido dentro do workerd por `apps/agent/test/free-tier-budget.test.ts`, com
 | `GET /api/notes` | 402 (índice e linha de cada uma das 200) | 0 |
 | `GET /api/notes?q=…` (FTS5) | 34 | 0 |
 | `POST /api/tasks` | 5 | 8 (a linha, os índices e o contador) |
+| `GET /api/memories` (página de 200, qualquer estado ou categoria) | 211 | 0 |
+| `GET /api/memories?status=current` | 412 (duas descidas de índice; antes da correção, todas as atuais) | 0 |
+| `GET /api/memories?q=…` (FTS5, janela de 200) | 14 a 610 | 0 |
+| `POST /api/memories` | 16 (151 com uma palavra presente em todas) | 10 a 22 |
+| `POST /api/memories/:id/correct` | 54 | 34 |
 | Acordar o objeto: só as migrations já aplicadas | 1 (antes: 91) | 0 |
 
 Os números contam só o SQL do Zuri (`Database.usage`): a cada despertar o

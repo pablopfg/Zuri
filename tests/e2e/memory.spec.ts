@@ -1,5 +1,5 @@
 import { expect, type Page, test } from "@playwright/test";
-import { expectAccessible, signIn, tooSmallControls } from "./ui-helpers.ts";
+import { CSRF, expectAccessible, signIn, tooSmallControls } from "./ui-helpers.ts";
 
 // Memory and its history against the real Worker (step 7): save, duplicate,
 // review a conflict, update a fact, history, restore and delete. pt-BR.
@@ -139,4 +139,55 @@ test("memory: a failure shows an error with a retry", async ({ page }) => {
   await page.unroute("**/api/memories?**");
   await page.getByRole("button", { name: "Tentar de novo" }).click();
   await expect(page.getByRole("alert")).toHaveCount(0);
+});
+
+test("memory in English: a conflict, replacing the older and discarding the newer, each after a confirmation", async ({ page }) => {
+  const tag = `en${crypto.randomUUID().slice(0, 8).replace(/\d/g, "y")}`;
+  await page.goto("/configuracoes/conta");
+  await signIn(page);
+  try {
+    await page.getByLabel("Idioma", { exact: true }).selectOption("en");
+    await expect(page.locator("html")).toHaveAttribute("lang", "en");
+    await page.getByRole("link", { name: "Memory" }).first().click();
+    await expect(page.getByRole("heading", { level: 1, name: "Memory" })).toBeVisible();
+    const form = page.getByRole("region", { name: "Save a memory" });
+    const saveEn = async (text: string) => {
+      await form.getByLabel("Memory").fill(text);
+      const saved = page.waitForResponse((r) => r.url().endsWith("/api/memories") && r.request().method() === "POST");
+      await form.getByRole("button", { name: "Save" }).click();
+      await saved;
+    };
+    const reviews = page.getByRole("region", { name: "To review" });
+    const list = page.getByRole("region", { name: "Your memories" });
+
+    // Replace the older: the confirmation is a dialog, accessible, and only then the older one goes.
+    await saveEn(`I live in London ${tag}`);
+    await saveEn(`I live in Paris ${tag}`);
+    const first = reviews.getByRole("listitem").filter({ hasText: `I live in London ${tag}` }).filter({ hasText: `I live in Paris ${tag}` });
+    await expect(first.getByText("Possible conflict")).toBeVisible();
+    await expect(first.getByText("Both are about where you live, and it's unclear which one holds now.")).toBeVisible();
+    await first.getByRole("button", { name: "Replace the older" }).click();
+    const replace = page.getByRole("dialog", { name: "Delete the older memory?" });
+    await expect(replace).toBeVisible();
+    await expectAccessible(page, "confirmation dialog open");
+    await replace.getByRole("button", { name: "Cancel" }).click();
+    await expect(first).toBeVisible();
+    await first.getByRole("button", { name: "Replace the older" }).click();
+    await replace.getByRole("button", { name: "Delete for good" }).click();
+    await expect(page.getByRole("status").filter({ hasText: "The older memory was deleted." })).toBeVisible();
+    await expect(page.getByText(`I live in London ${tag}`)).toHaveCount(0);
+    await expect(list.getByText(`I live in Paris ${tag}`)).toBeVisible();
+
+    // Discard the newer: the newer one goes, the older stays current.
+    await saveEn(`I live in Rome ${tag}`);
+    const second = reviews.getByRole("listitem").filter({ hasText: `I live in Rome ${tag}` }).filter({ hasText: `I live in Paris ${tag}` });
+    await second.getByRole("button", { name: "Discard the newer" }).click();
+    await page.getByRole("dialog", { name: "Delete the newer memory?" }).getByRole("button", { name: "Delete for good" }).click();
+    await expect(page.getByRole("status").filter({ hasText: "The newer memory was deleted." })).toBeVisible();
+    await expect(page.getByText(`I live in Rome ${tag}`)).toHaveCount(0);
+    await expect(list.getByText(`I live in Paris ${tag}`)).toBeVisible();
+  } finally {
+    const back = await page.request.patch("/api/settings", { headers: CSRF, data: { language: "pt-BR" } });
+    expect(back.status()).toBe(200);
+  }
 });

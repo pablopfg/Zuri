@@ -39,6 +39,8 @@ export type MemoryReviewAction = (typeof MEMORY_REVIEW_ACTIONS)[number];
 export const MEMORY_CONTENT_MAX = 2_000;
 /** Pending reviews listed at once; the oldest beyond this wait for the next page load. */
 export const MEMORY_REVIEWS_LIST_MAX = 50;
+/** Pending reviews kept at most: past this, saving still works but opens no new review. */
+export const MEMORY_REVIEWS_PENDING_MAX = 500;
 /** Longest supersession chain followed when reading history or checking for cycles. */
 export const MEMORY_CHAIN_MAX = 50;
 /** Bytes a memory body may take: 6 per character in the worst JSON escape, plus the other fields. */

@@ -52,7 +52,7 @@ export const TOPICS: readonly Topic[] = [
     name: "job",
     keywords: "trabalho trabalha emprego empresa cargo work works job employer employed position role",
     about: words(
-      "trabalh(?:o|a|ar|amos|ava|ei) (?:na|no|em|como|para|pra)|emprego|empregad[oa]|cargo|work(?:s|ing)? (?:at|for|as)|job|employer|employed|position at|role at",
+      "trabalh(?:o|a|ar|amos|ava|ei) (?:na|no|em|como|para|pra)|comecei a trabalhar|entrei n[ao]|emprego|empregad[oa]|cargo|work(?:s|ing)? (?:at|for|as)|job|employer|employed|position at|role at|joined|started (?:a new job|working)",
     ),
     change: words(
       "novo emprego|pedi demissao|sai d[oa]|sai da empresa|fui demitid[oa]|me aposentei|comecei a trabalhar|entrei n[ao]|nao trabalho mais|new job|quit|left (?:my|the) job|started (?:a new job|working)|joined|switched jobs|was laid off|retired|no longer work",

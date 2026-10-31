@@ -306,6 +306,7 @@ export const MIGRATIONS: readonly Migration[] = [
       // The list by filter, newest first; the "preferences" the recall always adds.
       `CREATE INDEX IF NOT EXISTS zur_memories_status_updated ON zur_memories (status, updated_at)`,
       `CREATE INDEX IF NOT EXISTS zur_memories_category ON zur_memories (category, updated_at)`,
+      `CREATE INDEX IF NOT EXISTS zur_memories_status_category ON zur_memories (status, category, updated_at)`,
       `CREATE INDEX IF NOT EXISTS zur_memories_updated ON zur_memories (updated_at)`,
       `CREATE INDEX IF NOT EXISTS zur_memories_superseded_by ON zur_memories (superseded_by) WHERE superseded_by IS NOT NULL`,
       `CREATE INDEX IF NOT EXISTS zur_memories_dedupe ON zur_memories (dedupe_key)`,
