@@ -33,31 +33,20 @@ function useNow(timeZone: string): Date {
   return now;
 }
 
-/** Holds the greeting's place while the name loads, so nothing jumps when it arrives. */
-function GreetingPlaceholder() {
-  return (
-    <div aria-hidden className="flex items-center gap-4">
-      <div className="h-12 w-12 shrink-0 rounded-2xl bg-border/60" />
-      <div className="min-w-0 flex-1 space-y-2">
-        <div className="h-8 w-56 max-w-full rounded-lg bg-border/60" />
-        <div className="h-5 w-72 max-w-full rounded-lg bg-border/60" />
-      </div>
-    </div>
-  );
-}
-
 /**
  * The home page's title: good morning, afternoon or evening by the owner's
  * clock (their zone, not the device's), with their name when they gave one,
  * and a line in the agent's voice that changes every day.
  */
-export function Greeting() {
+// The placeholder comes from the page: importing ui.tsx here would make the bundler split it
+// out of the first load into a shared chunk (armadilhas.md, "Pacote da interface").
+export function Greeting({ placeholder }: { placeholder: ReactNode }) {
   const { t, timeZone } = useI18n();
   // Same query as the session's: already in memory, no second request.
   const settings = useQuery({ queryKey: SETTINGS_KEY, queryFn: () => api<Settings>("/settings"), staleTime: 5 * 60_000 });
   const now = useNow(timeZone);
 
-  if (settings.isPending) return <GreetingPlaceholder />;
+  if (settings.isPending) return placeholder;
 
   const { part, line } = greetingFor(now, timeZone);
   const name = settings.data?.ownerName ?? "";

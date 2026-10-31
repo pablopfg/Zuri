@@ -58,7 +58,7 @@ export const ptBRSettings = {
   "auth.mfa.alreadyOn": "A verificação em duas etapas já está ligada. Desligue antes para usar outro aplicativo.",
   "auth.mfa.off": "A verificação em duas etapas está desligada.",
   "web.sessions.title": "Saída automática",
-  "web.sessions.description": "Quando a Zuri encerra a sessão sozinho. Mudar pede a senha de novo.",
+  "web.sessions.description": "Quando a Zuri encerra a sessão sozinha. Mudar pede a senha de novo.",
   "web.sessions.idle": "Sem uso",
   "web.sessions.presence": "Sem aba aberta",
   "web.sessions.max": "Duração máxima",
@@ -73,6 +73,6 @@ export const ptBRSettings = {
   "web.settings.later.integrations": "Servidores MCP e Google Agenda chegam numa próxima versão.",
   "web.settings.later.data": "Backup e uso do armazenamento chegam numa próxima versão.",
   "web.account.ownerName": "Seu nome",
-  "web.account.ownerNameHint": "Aparece nos cumprimentos da tela inicial. Pode ser um apelido; em branco, o cumprimento sai sem nome.",
+  "web.account.ownerNameHint": "Aparece nos cumprimentos da tela inicial. Até 40 caracteres, só texto; pode ser um apelido. Em branco, o cumprimento sai sem nome.",
   "web.account.ownerNameSave": "Salvar nome",
 } as const;

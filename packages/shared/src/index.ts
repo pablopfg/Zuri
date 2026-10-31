@@ -38,6 +38,7 @@ export { formatDateTime, formatDateTimeParts, formatUsd } from "./format.ts";
 export {
   DEFAULT_SETTINGS,
   DEFAULT_TIME_ZONE,
+  isOwnerName,
   isTimeZone,
   normalizeOwnerName,
   OWNER_NAME_MAX,

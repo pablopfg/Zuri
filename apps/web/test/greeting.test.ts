@@ -101,6 +101,16 @@ describe("when to look again", () => {
     expect(msUntilNextPart(sp("2026-10-31T17:59:59.990"), SP)).toBe(250);
   });
 
+  it("lands on 05:00 on the 25-hour day, when the clock goes back", () => {
+    // New York goes back from 02:00 to 01:00 on 1 November 2026.
+    let now = new Date("2026-11-01T04:30:00Z"); // 00:30 EDT
+    for (let i = 0; i < 10 && greetingFor(now, "America/New_York").part === "lateNight"; i++) {
+      now = new Date(now.getTime() + msUntilNextPart(now, "America/New_York"));
+    }
+    expect(localClock(now, "America/New_York")).toMatchObject({ hour: 5, minute: 0 });
+    expect(now.toISOString()).toBe("2026-11-01T10:00:00.000Z");
+  });
+
   it("lands on the right part across a daylight-saving jump", () => {
     // New York jumps from 02:00 to 03:00 on 8 March 2026; morning starts at 05:00 local.
     let now = new Date("2026-03-08T06:30:00Z"); // 01:30 EST

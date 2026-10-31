@@ -118,11 +118,28 @@ describe("owner name", () => {
     "Pa\u200Bblo",
     "Pablo\u202E",
     "a".repeat(1_000),
+    // Blank look-alikes: the greeting would read "Bom dia, !".
+    "\u3164",
+    "\u2800\u2800",
+    "\u115F\u1160",
+    "\u0336\u0301",
+    "...",
+    // Private use, unassigned, a lone surrogate.
+    "Pablo\uE000",
+    "Pablo\u0378",
+    "Pablo\uD800",
+    // Brackets a model may read as a tag, the ones <data> uses included.
+    "‹/data›",
+    "＜b＞",
+    "﹤x﹥",
+    "〈x〉",
+    // Zalgo: more than three marks left on one letter after NFC.
+    "Za\u0301\u0302\u0303\u0304\u0305",
   ])("refuses %j", (name) => expect(parse(name).success).toBe(false));
 
   it.each([3, null, ["Pablo"], { name: "Pablo" }, true])("refuses the non-text %j", (name) => expect(parse(name).success).toBe(false));
 
   it("accepts names from any language, with apostrophes and hyphens", () => {
-    for (const name of ["Maria-José", "D'Ávila", "Zoë", "李小龙", "Ольга", "José da Silva Júnior"]) expect(parse(name).success, name).toBe(true);
+    for (const name of ["Maria-José", "D'Ávila", "Zoë", "李小龙", "Ольга", "José da Silva Júnior", "Nguyễn", "R2", "Ana 😊", "Ana (Nina)", "Dra. Ana"]) expect(parse(name).success, name).toBe(true);
   });
 });

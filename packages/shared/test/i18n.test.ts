@@ -70,6 +70,13 @@ describe("isLocale", () => {
     expect(Object.keys(ptBRCore).filter((key) => lazy.test(key))).toEqual([]);
   });
 
+  it("speaks of the agent in the feminine: \"a Zuri\", never \"o Zuri\" (Pablo, 31/10/2026)", () => {
+    const masculine = Object.entries(ptBR).filter(
+      ([, text]) => /\b(o|O|do|Do|no|No|ao|Ao|pelo|Pelo|um|seu|Seu)\s+Zuri\b/.test(text) || /Zuri\b[^.?!]*\b(sozinho|configurado|pronto|inspirado|ele)\b/.test(text),
+    );
+    expect(masculine).toEqual([]);
+  });
+
   it("knows only the shipped locales", () => {
     expect(isLocale("pt-BR")).toBe(true);
     expect(isLocale("en")).toBe(true);

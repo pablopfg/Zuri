@@ -1,26 +1,13 @@
 import { ChevronRight, Clock, MessageCircle, ShieldAlert, ShieldCheck } from "lucide-react";
 import { lazy, type ReactNode, Suspense, useId } from "react";
 import { Link } from "react-router";
-import { EmptyState, ErrorNotice, Spinner, useDocumentTitle } from "../components/ui.tsx";
+import { EmptyState, ErrorNotice, GreetingSlot, Spinner, useDocumentTitle } from "../components/ui.tsx";
 import { useMfaStatus } from "../hooks/mfa.ts";
 import { useSession } from "../hooks/session.tsx";
 import { useI18n } from "../lib/i18n.tsx";
 
 // The greeting and its lines load on demand: none of it is needed to sign in (rule P11).
 const Greeting = lazy(() => import("../components/Greeting.tsx").then((m) => ({ default: m.Greeting })));
-
-/** Same size as the greeting, so the page doesn't jump when it arrives. */
-function GreetingSlot() {
-  return (
-    <div aria-hidden className="flex items-center gap-4">
-      <div className="h-12 w-12 shrink-0 rounded-2xl bg-border/60" />
-      <div className="min-w-0 flex-1 space-y-2">
-        <div className="h-8 w-56 max-w-full rounded-lg bg-border/60" />
-        <div className="h-5 w-72 max-w-full rounded-lg bg-border/60" />
-      </div>
-    </div>
-  );
-}
 
 /** A small status card of the home page. */
 function StatusCard({ icon, title, children }: { icon: ReactNode; title: string; children: ReactNode }) {
@@ -46,7 +33,7 @@ export function HomePage() {
   return (
     <>
       <Suspense fallback={<GreetingSlot />}>
-        <Greeting />
+        <Greeting placeholder={<GreetingSlot />} />
       </Suspense>
       <div className="grid gap-4 md:grid-cols-2">
         <StatusCard

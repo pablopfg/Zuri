@@ -92,7 +92,7 @@ Severidade: **alta** (quebra uso, segurança ou acessibilidade), **média** (atr
 | # | Achado | Sev. | Proposta | Status |
 | --- | --- | --- | --- | --- |
 | I1 | Não há atalhos de teclado nem busca global. | média | D1. | 🗳️ |
-| I2 | O início diz só "Olá! Este é o seu Zuri." | baixa | Saudação pela hora e um resumo do dia quando chegarem tarefas e chat. Fica para a etapa 9. | 🗳️ |
+| I2 | O início diz só "Olá! Este é o seu Zuri." | baixa | Saudação pela hora e um resumo do dia quando chegarem tarefas e chat. A saudação pelo horário e pelo nome entrou em 31/10/2026; o resumo do dia fica para a etapa 9. | ✅ |
 | I3 | Os estados vazios explicam o que falta, mas nem sempre oferecem a ação. | baixa | Botão "Nova nota" na lista de notas vazia. Em Tarefas a adição rápida já fica logo acima do vazio. | ✅ |
 
 ## Decisões para o Pablo (em ordem de prioridade)

@@ -1,3 +1,4 @@
+import { ptBR } from "@zuri/shared";
 import { expect, type Page, test } from "./fixtures.ts";
 import { CSRF, expectAccessible, signIn } from "./ui-helpers.ts";
 
@@ -64,11 +65,13 @@ test("uses the name saved in Account, refuses one with a tag, and greets without
   await expect(save).toBeDisabled();
   await expectAccessible(page, "conta com nome");
 
-  await page.goto("/");
+  // Back to the home page inside the app: the saved name shows without reloading.
+  await page.getByRole("link", { name: "Início", exact: true }).filter({ visible: true }).first().click();
   const heading = page.getByRole("heading", { level: 1 });
   await expect(heading).toHaveText(/^(Bom dia|Boa tarde|Boa noite), Ana Clara!$/);
-  // One line in her voice under the title.
-  await expect(heading.locator("xpath=following-sibling::p")).not.toBeEmpty();
+  // One line in her voice under the title, from the catalog.
+  const line = (await heading.locator("xpath=following-sibling::p").textContent()) ?? "";
+  expect(Object.entries(ptBR).some(([key, text]) => key.startsWith("web.greeting.") && /\.\d$/.test(key) && text === line), line).toBe(true);
   await expectAccessible(page, "início com nome");
 
   expect((await settings(page, { ownerName: "" })).ok()).toBe(true);

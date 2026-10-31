@@ -610,8 +610,8 @@ export const en: Messages = {
   "web.greeting.morning.2": "Good to see you this early.",
   "web.greeting.morning.3": "New day. Tell me what comes first today.",
   "web.greeting.morning.4": "Mornings are a good time to get things out of your head and onto the list.",
-  "web.greeting.morning.5": "Got here before you, as always.",
-  "web.greeting.afternoon.1": "How's the day going so far?",
+  "web.greeting.morning.5": "Ready for another day. Where do we start?",
+  "web.greeting.afternoon.1": "I'm curious: how's the day going so far?",
   "web.greeting.afternoon.2": "Half the day is gone. Anything left half done too?",
   "web.greeting.afternoon.3": "A coffee break sounds about right now.",
   "web.greeting.afternoon.4": "Good time to cross a few tasks off the list.",
@@ -623,6 +623,6 @@ export const en: Messages = {
   "web.greeting.lateNight.2": "The house is asleep and here we are. If something's keeping you awake, write it to me.",
   "web.greeting.lateNight.3": "It's late. Jot down what's on your mind and try to get some rest.",
   "web.account.ownerName": "Your name",
-  "web.account.ownerNameHint": "Shown in the greeting on the home page. A nickname works too; left blank, the greeting goes without a name.",
+  "web.account.ownerNameHint": "Shown in the greeting on the home page. Up to 40 characters, plain text; a nickname works too. Left blank, the greeting goes without a name.",
   "web.account.ownerNameSave": "Save name",
 };

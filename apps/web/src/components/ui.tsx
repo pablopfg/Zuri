@@ -343,3 +343,16 @@ export function Dialog({ open, onClose, title, children }: { open: boolean; onCl
     </dialog>
   );
 }
+
+/** Same size as the greeting, so the page doesn't jump when it arrives. */
+export function GreetingSlot() {
+  return (
+    <div aria-hidden className="flex items-center gap-4">
+      <div className="h-12 w-12 shrink-0 rounded-2xl bg-border/60" />
+      <div className="min-w-0 flex-1 space-y-2">
+        <div className="h-8 w-56 max-w-full rounded-lg bg-border/60" />
+        <div className="h-5 w-72 max-w-full rounded-lg bg-border/60" />
+      </div>
+    </div>
+  );
+}

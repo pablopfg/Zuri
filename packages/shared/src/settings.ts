@@ -28,16 +28,25 @@ export function normalizeOwnerName(value: string): string {
 }
 
 /**
- * How the owner likes to be called (the greeting, and later the agent). Empty
- * means no name. Control and invisible format characters (bidi overrides,
- * zero-width spaces) and angle brackets are refused: the name is shown on
- * screen and goes into the agent's prompt, where it must read as plain text.
+ * Characters a name never needs: control, format (bidi overrides, zero-width),
+ * private-use, unassigned and lone surrogates; the blank "letters" (Hangul
+ * fillers, blank braille) that make a name look empty; and every angle bracket
+ * a model could read as a tag, ‹ › included (they stand for < > inside <data>).
  */
-const ownerName = /* @__PURE__ */ z
-  .string()
-  .max(OWNER_NAME_MAX * 10)
-  .transform(normalizeOwnerName)
-  .refine((name) => [...name].length <= OWNER_NAME_MAX && !/[\p{Cc}\p{Cf}<>]/u.test(name));
+const NOT_IN_NAMES = /[\p{Cc}\p{Cf}\p{Co}\p{Cn}\p{Cs}\u115F\u1160\u3164\uFFA0\u2800<>‹›＜＞﹤﹥〈〉⟨⟩]/u;
+
+/** Empty, or plain text with at least one letter or digit and no pile of combining marks. */
+export function isOwnerName(name: string): boolean {
+  if (name === "") return true;
+  return [...name].length <= OWNER_NAME_MAX && !NOT_IN_NAMES.test(name) && /[\p{L}\p{N}]/u.test(name) && !/\p{M}{4,}/u.test(name);
+}
+
+/**
+ * How the owner likes to be called (the greeting, and later the agent). Empty
+ * means no name. The name is shown on screen and will reach the agent's
+ * prompt (always inside a <data> line), so it must read as plain text.
+ */
+const ownerName = /* @__PURE__ */ z.string().max(OWNER_NAME_MAX * 10).transform(normalizeOwnerName).refine(isOwnerName);
 
 const range = (r: { min: number; max: number }) => z.number().int().min(r.min).max(r.max);
 
