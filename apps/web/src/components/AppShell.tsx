@@ -1,8 +1,9 @@
-import { Brain, House, ListTodo, LogOut, NotebookPen, PanelLeftClose, PanelLeftOpen, Settings, ShieldCheck } from "lucide-react";
-import { type ReactNode, useEffect, useState } from "react";
-import { NavLink, Outlet } from "react-router";
+import { Brain, House, ListTodo, LogOut, NotebookPen, PanelLeftClose, PanelLeftOpen, Search, Settings, ShieldCheck } from "lucide-react";
+import { lazy, type ReactNode, Suspense, useEffect, useState } from "react";
+import { NavLink, Outlet, useNavigate } from "react-router";
 import { useSession } from "../hooks/session.tsx";
 import { useI18n } from "../lib/i18n.tsx";
+import { shortcutLabel } from "../lib/palette.ts";
 import { readSidebarCollapsed, SIDEBAR_KEY, saveSidebarCollapsed } from "../lib/sidebar.ts";
 import { ConfirmDialog } from "./ConfirmDialog.tsx";
 import { Logo } from "./Logo.tsx";
@@ -10,6 +11,9 @@ import { MfaReminder } from "./MfaReminder.tsx";
 import { NotificationCenter } from "./NotificationCenter.tsx";
 import { SessionGuard } from "./SessionGuard.tsx";
 import { Button, cn, Dialog, Notice } from "./ui.tsx";
+
+// Downloaded the first time it opens (rule P11): most visits never use it.
+const CommandPalette = lazy(() => import("./CommandPalette.tsx").then((m) => ({ default: m.CommandPalette })));
 
 /**
  * The frame of every signed-in page, after the Talorys layout: a full-height
@@ -34,6 +38,22 @@ export function AppShell() {
   const [confirmSignOut, setConfirmSignOut] = useState(false);
   // Escape hides the tooltips until the pointer or focus moves (WCAG 1.4.13).
   const [tipsHidden, setTipsHidden] = useState(false);
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const navigate = useNavigate();
+  useEffect(() => {
+    // Ctrl/⌘ K from anywhere opens the palette, and closes it again.
+    const onKey = (event: KeyboardEvent) => {
+      // Not with Shift (Firefox's console), and not over another dialog (an open editor would lose its edits).
+      if ((event.ctrlKey || event.metaKey) && !event.altKey && !event.shiftKey && event.key.toLowerCase() === "k") {
+        const other = document.querySelector("dialog[open]:not([data-palette])");
+        if (other) return;
+        event.preventDefault();
+        setPaletteOpen((open) => !open);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
   useEffect(() => {
     // Another tab changed it: follow, so every tab looks the same.
     const onStorage = (event: StorageEvent) => event.key === SIDEBAR_KEY && setCollapsed(readSidebarCollapsed());
@@ -64,6 +84,11 @@ export function AppShell() {
       </a>
       {session && <SessionGuard session={session} />}
       <ConfirmDialog />
+      {paletteOpen && (
+        <Suspense fallback={null}>
+          <CommandPalette onClose={() => setPaletteOpen(false)} navigate={navigate} />
+        </Suspense>
+      )}
 
       <aside
         id="menu-lateral"
@@ -85,6 +110,17 @@ export function AppShell() {
           </Tip>
         </div>
         <nav aria-label={t("web.nav.main")} className="flex-1 px-3 py-2">
+          <Tip label={collapsed ? t("web.search.open") : null} hidden={tipsHidden}>
+            <button type="button" onClick={() => setPaletteOpen(true)} aria-haspopup="dialog" aria-keyshortcuts="Control+K Meta+K" className={cn(sideLink({ isActive: false }), "mb-2 border border-border")}>
+              <Search className="h-5 w-5 shrink-0" aria-hidden />
+              <Label text={t("web.search.open")} hidden={collapsed} />
+              {!collapsed && (
+                <kbd className="ml-auto rounded-md border border-border px-1.5 py-0.5 font-sans text-xs text-fg-muted" aria-hidden>
+                  {shortcutLabel(navigator.platform)}
+                </kbd>
+              )}
+            </button>
+          </Tip>
           <ul className="space-y-1">
             {sections.map(({ to, label, icon: Icon, end }) => (
               <li key={to}>
@@ -124,6 +160,15 @@ export function AppShell() {
         <header className="sticky top-0 z-20 flex h-16 items-center justify-between gap-2 border-b border-border bg-surface/95 px-3 backdrop-blur md:hidden">
           {brand}
           <div className="flex items-center">
+            <button
+              type="button"
+              onClick={() => setPaletteOpen(true)}
+              aria-label={t("web.search.open")}
+              aria-haspopup="dialog"
+              className="inline-flex h-11 w-11 items-center justify-center rounded-xl text-fg hover:bg-raised"
+            >
+              <Search className="h-5 w-5" aria-hidden />
+            </button>
             <NotificationCenter />
             <button
               type="button"

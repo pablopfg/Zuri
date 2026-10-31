@@ -98,3 +98,13 @@ describe("no personal data in tracked files", () => {
     expect(found).toEqual([]);
   });
 });
+
+describe("pt-BR texts only the server says", () => {
+  it("are never used by the interface, which gets them already written in the API's answer", async () => {
+    const { ptBRServer } = await import("../../packages/shared/i18n/pt-BR-server.ts");
+    const files = execFileSync("git", ["ls-files", "apps/web/src"], { cwd: ROOT, encoding: "utf8" }).split("\n").filter((f) => /\.tsx?$/.test(f));
+    const code = files.map((file) => readText(file)).join("\n");
+    const used = Object.keys(ptBRServer).filter((key) => code.includes(`"${key}"`) || code.includes(`'${key}'`) || code.includes(`\`${key}`));
+    expect(used).toEqual([]);
+  });
+});

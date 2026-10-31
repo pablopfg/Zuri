@@ -18,6 +18,8 @@ export {
   ptBRMemory,
   ptBRProductivity,
   ptBRSecurity,
+  ptBRPalette,
+  ptBRServer,
   ptBRSettings,
   t,
 } from "../i18n/index.ts";
