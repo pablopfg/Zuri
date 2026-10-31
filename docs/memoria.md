@@ -79,7 +79,7 @@ desatualizadas" e "Passadas", dentro de um orçamento de
 sobre o passado ("onde eu morava?", "what did I drive before?").
 
 Cada memória vira uma linha `<data source="memory" id="…">…</data>`. A
-memória que o assistente guardou numa conversa ganha `saved_by="assistant"`, e
+memória que a assistente guardou numa conversa ganha `saved_by="assistant"`, e
 o cabeçalho pede ao modelo que confie menos nela. Dentro
 dela, `<`, `>` e os sinais parecidos (`‹ › ＜ ＞ ﹤ ﹥ 〈 〉 ⟨ ⟩ « »`) viram `‹` e
 `›`, então nenhum texto guardado imita uma tag, nem uma tag já neutralizada.
@@ -179,17 +179,18 @@ linhas lidas/gravadas por requisição:
 - a chave da revisão de conflitos.
 
 Cada item tem botões de 44 px: atualizar o fato, editar, histórico, mudar o
-estado e apagar. A memória que o assistente guardou numa conversa (`remember`
-ou `update_memory`) aparece com a marca **Anotada pelo assistente**.
+estado e apagar. O texto da memória aparece sempre como texto, nunca como HTML.
+A memória que a assistente guardou numa conversa (`remember`
+ou `update_memory`) aparece com a marca **Anotada pela assistente**.
 
 ## Quem escreveu
 
 A coluna `author` de `zur_memories` (migration 8) diz quem escreveu a memória:
 `owner` ou `agent`. O canal continua em `origin` (`app`, `telegram`,
-`import`). As memórias anteriores à migration são do dono. Uma memória do
-assistente passa a ser do dono quando ele a edita ou guarda o mesmo texto. O
-assistente repetir uma memória do dono não muda nada, e uma versão nova que ele
-escreva sobre uma memória do dono é dele, com a do dono guardada como fato
-passado. O texto da memória aparece sempre como texto, nunca como HTML.
+`import`). As memórias anteriores à migration são do dono. Uma memória da
+assistente passa a ser do dono quando ele a edita ou guarda o mesmo texto. A
+assistente repetir uma memória do dono não muda nada, e uma versão nova que ela
+escreva sobre uma memória do dono é dela, com a do dono guardada como fato
+passado.
 
 Capturas: `docs/assets/etapa-07/`.

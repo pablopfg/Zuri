@@ -115,7 +115,7 @@ limite) e manda para `POST /api/transcribe`. O texto volta para o compositor e
 o dono lê antes de enviar. O áudio não é guardado. Limites: 2 MB por áudio, um
 de cada vez e uma hora por dia. Cada áudio conta o maior entre o tempo medido
 pelo navegador e o que o tamanho indica, e é contado antes da chamada. A
-política `Permissions-Policy` libera o microfone só para o próprio Zuri
+política `Permissions-Policy` libera o microfone só para a própria Zuri
 (`microphone=(self)`).
 
 ## Modelo de dados (migration 8)

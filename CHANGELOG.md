@@ -237,10 +237,10 @@ o [SemVer](https://semver.org/lang/pt-BR/). Cada PR escreve a sua entrada em
   obedeça a um texto injetado, nada é apagado ou reescrito sem a aprovação do
   dono, e os limites por resposta seguram ataques em massa. Os cenários de
   injeção de prompt viraram testes (`docs/seguranca.md`).
-- A `Permissions-Policy` libera o microfone só para o próprio Zuri
+- A `Permissions-Policy` libera o microfone só para a própria Zuri
   (`microphone=(self)`), para a voz da conversa.
-- Uma memória que o assistente guarda numa conversa aparece como **Anotada
-  pelo assistente** na tela de Memória, e o modelo sabe que ela não foi
+- Uma memória que a assistente guarda numa conversa aparece como **Anotada
+  pela assistente** na tela de Memória, e o modelo sabe que ela não foi
   confirmada por você. Assim, um texto injetado que o leve a guardar um "fato"
   não passa por algo que você disse. Ao editar a memória, ela passa a ser sua.
 - O agente não pode renomear um item e, no mesmo turno, propor apagá-lo ou

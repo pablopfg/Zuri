@@ -87,8 +87,8 @@ test("a memory the assistant saves is marked as its own on the Memory screen, an
   await send(page, `call remember {"content":"${fact}"}`);
   await page.goto("/memoria");
   const item = page.getByRole("listitem").filter({ hasText: fact });
-  await expect(item.getByText("Anotada pelo assistente")).toBeVisible();
-  await expectAccessible(page, "memória do assistente");
+  await expect(item.getByText("Anotada pela assistente")).toBeVisible();
+  await expectAccessible(page, "memória da assistente");
 
   await item.getByRole("button", { name: "Editar" }).click();
   const dialog = page.getByRole("dialog");
@@ -96,7 +96,7 @@ test("a memory the assistant saves is marked as its own on the Memory screen, an
   await dialog.getByRole("button", { name: "Guardar" }).click();
   const edited = page.getByRole("listitem").filter({ hasText: `${fact}.` });
   await expect(edited).toBeVisible();
-  await expect(edited.getByText("Anotada pelo assistente")).toHaveCount(0);
+  await expect(edited.getByText("Anotada pela assistente")).toHaveCount(0);
 });
 
 test("deleting needs the owner's approval: declined, nothing happens; approved, it happens once", async ({ page }) => {
