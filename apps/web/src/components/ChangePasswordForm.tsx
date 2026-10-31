@@ -6,7 +6,10 @@ import { api, errorMessage } from "../lib/api.ts";
 import { useI18n } from "../lib/i18n.tsx";
 import { Button, Notice, PasswordField } from "./ui.tsx";
 
-/** Changes the password. The server checks the rules (length, predictable parts, leaks) and answers with a new session. */
+/**
+ * Changes the password. The server checks the rules (length, predictable parts, leaks) and answers with a new session.
+ * With `onChanged`, the caller confirms the change (a toast); without it, the form says so itself.
+ */
 export function ChangePasswordForm({ onChanged }: { onChanged?: () => void }) {
   const { t } = useI18n();
   const qc = useQueryClient();
@@ -61,7 +64,7 @@ export function ChangePasswordForm({ onChanged }: { onChanged?: () => void }) {
           {error}
         </p>
       )}
-      {done && <Notice tone="success">{t("web.password.changed")}</Notice>}
+      {done && !onChanged && <Notice tone="success">{t("web.password.changed")}</Notice>}
       <Button type="submit" loading={pending} disabled={!current || !next || next !== repeat}>
         {t("web.password.submit")}
       </Button>

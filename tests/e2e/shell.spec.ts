@@ -1,5 +1,5 @@
 import { expect, test } from "./fixtures.ts";
-import { CSRF, EMAIL, PASSWORD, signIn } from "./ui-helpers.ts";
+import { CSRF, EMAIL, expectAccessible, openSettingsSection, PASSWORD, settingsHasTabs, signIn } from "./ui-helpers.ts";
 
 // The interface against the real Worker: sign-in, the session guard, sign-out
 // and the ways a session ends. pt-BR is the default language.
@@ -114,11 +114,20 @@ test("the notification center opens empty and closes with Escape", async ({ page
   await expect(page.getByRole("button", { name: "Abrir avisos" })).toBeFocused();
 });
 
-test("settings has the six tabs, each with its address and content @mobile", async ({ page }) => {
+test("settings has the six sections, each with its address and content: tabs on a computer, a list on a phone @mobile", async ({ page }) => {
   await page.goto("/configuracoes");
   await signIn(page);
-  await expect(page).toHaveURL(/\/configuracoes\/conta$/);
-  const tabs = page.getByRole("navigation", { name: "Seções das configurações" });
+  const sections = page.getByRole("navigation", { name: "Seções das configurações" });
+  if (settingsHasTabs(page)) {
+    await expect(page).toHaveURL(/\/configuracoes\/conta$/);
+  } else {
+    // The list is the page: each section with what it holds, no section open yet.
+    await expect(page).toHaveURL(/\/configuracoes$/);
+    await expect(sections.getByRole("link")).toHaveCount(6);
+        await expect(page.getByRole("link", { name: "Todas as configurações" })).toHaveCount(0);
+    await expect(sections.getByRole("link", { name: "Segurança", exact: true })).toHaveAccessibleDescription("Duas etapas, passkeys e saída automática");
+    await expectAccessible(page, "configuracoes (lista)");
+  }
   for (const [name, path, text] of [
     ["Segurança", "seguranca", "Atividade de acesso"],
     ["IA", "ia", "Uso de hoje"],
@@ -127,17 +136,27 @@ test("settings has the six tabs, each with its address and content @mobile", asy
     ["Dados", "dados", "Backup e uso do armazenamento"],
     ["Conta", "conta", "Idioma e fuso horário"],
   ] as const) {
-    await tabs.getByRole("link", { name }).click();
+    await openSettingsSection(page, name);
     await expect(page).toHaveURL(new RegExp(`/configuracoes/${path}$`));
-    await expect(tabs.getByRole("link", { name })).toHaveAttribute("aria-current", "page");
     await expect(page.getByRole("main")).toContainText(text);
+    if (settingsHasTabs(page)) {
+      await expect(sections.getByRole("link", { name })).toHaveAttribute("aria-current", "page");
+    } else {
+      // One section per screen: its name on top and the way back, no tabs.
+      await expect(page.getByRole("heading", { level: 2, name, exact: true })).toBeVisible();
+      await expect(sections).toHaveCount(0);
+    }
   }
   // These texts arrive with the screen, not with the first download: they must still show, never as raw keys.
   await expect(page.getByRole("main")).toContainText("Conta, segurança e o que o Zuri pode usar.");
-  await tabs.getByRole("link", { name: "Segurança" }).click();
+  await openSettingsSection(page, "Segurança");
   await expect(page.getByRole("main")).toContainText("Saída automática");
   await expect(page.getByRole("main")).toContainText("Em breve nesta aba");
   await expect(page.getByRole("main")).not.toContainText("web.");
+  if (!settingsHasTabs(page)) {
+    await page.getByRole("link", { name: "Todas as configurações" }).click();
+    await expect(page).toHaveURL(/\/configuracoes$/);
+  }
 });
 
 test("changing the language to English changes the interface and the API's errors", async ({ page }) => {

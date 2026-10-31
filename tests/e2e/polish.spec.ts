@@ -1,5 +1,5 @@
 import { expect, test } from "./fixtures.ts";
-import { PASSWORD, signIn } from "./ui-helpers.ts";
+import { openSettingsSection, PASSWORD, signIn } from "./ui-helpers.ts";
 
 // Details from the design review (docs/qa/revisao-de-design.md): tab names,
 // the password reveal and the theme choice on a phone.
@@ -13,7 +13,7 @@ test("each page names the browser tab after itself @mobile", async ({ page }) =>
   await expect(page).toHaveTitle("Início · Zuri");
   await page.goto("/configuracoes/seguranca");
   await expect(page).toHaveTitle("Segurança · Configurações · Zuri");
-  await page.getByRole("navigation", { name: "Seções das configurações" }).getByRole("link", { name: "Conta" }).click();
+  await openSettingsSection(page, "Conta");
   await expect(page).toHaveTitle("Conta · Configurações · Zuri");
   await page.goto("/nao-existe");
   await expect(page).toHaveTitle("Página não encontrada · Zuri");

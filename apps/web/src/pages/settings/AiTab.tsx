@@ -22,6 +22,7 @@ import { useSettings, useSettingsMutation } from "../../hooks/settings.ts";
 import { USAGE_KEY, useUsage } from "../../hooks/usage.ts";
 import { errorMessage } from "../../lib/api.ts";
 import { addMessages, useI18n } from "../../lib/i18n.tsx";
+import { useToast } from "../../components/Toaster.tsx";
 import { useQueryClient } from "@tanstack/react-query";
 
 // This tab's pt-BR texts arrive with it, not in the first bundle (rule P11).
@@ -284,9 +285,10 @@ function LimitsForm({ settings }: { settings: Settings }) {
   const number = useNumber();
   const qc = useQueryClient();
   const save = useSettingsMutation();
+  const toast = useToast();
   const [model, setModel] = useState<ChatModel>(settings.aiModel);
   const [values, setValues] = useState<Record<LimitField, string>>(() => texts(settings));
-  const [status, setStatus] = useState<"saved" | "unchanged" | null>(null);
+  const [status, setStatus] = useState<"unchanged" | null>(null);
 
   // The settings as stored (after a save, or changed in another tab) replace the form.
   useEffect(() => {
@@ -314,7 +316,7 @@ function LimitsForm({ settings }: { settings: Settings }) {
     }
     await save.mutateAsync(patch).then(
       () => {
-        setStatus("saved");
+        toast(t("web.ai.saved"));
         void qc.invalidateQueries({ queryKey: USAGE_KEY });
       },
       () => undefined,
@@ -369,7 +371,6 @@ function LimitsForm({ settings }: { settings: Settings }) {
         </Button>
         <div aria-live="polite" className="text-sm">
           {save.isError && <p className="text-danger">{errorMessage(save.error)}</p>}
-          {status === "saved" && <p className="text-success">{t("web.ai.saved")}</p>}
           {status === "unchanged" && <p className="text-fg-muted">{t("web.ai.unchanged")}</p>}
         </div>
       </div>
