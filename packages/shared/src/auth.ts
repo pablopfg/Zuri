@@ -78,6 +78,13 @@ export const loginRequestSchema = /* @__PURE__ */ z
   })
   .strict();
 
+/**
+ * The password typed right now, never a code: turning two-step sign-in on and
+ * adding a passkey ask for it every time (owner's decision of 31/10/2026), not
+ * the 15-minute window that a code from the app could also open.
+ */
+export const passwordProofSchema = /* @__PURE__ */ z.object({ password }).strict();
+
 /** The password again, or (with two-step sign-in on) a current code from the authenticator app. */
 export const confirmRequestSchema = /* @__PURE__ */ z.union([
   /* @__PURE__ */ z.object({ password }).strict(),
@@ -285,6 +292,7 @@ export type AuthActivity = z.infer<typeof authActivitySchema>;
 
 export type LoginRequest = z.infer<typeof loginRequestSchema>;
 export type ConfirmRequest = z.infer<typeof confirmRequestSchema>;
+export type PasswordProof = z.infer<typeof passwordProofSchema>;
 export type ChangePasswordRequest = z.infer<typeof changePasswordRequestSchema>;
 export type SessionDeadlines = z.infer<typeof sessionDeadlinesSchema>;
 export type SessionState = z.infer<typeof sessionStateSchema>;

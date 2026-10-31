@@ -17,7 +17,9 @@ test("turns two-step sign-in on, asks for the code after the password, and refus
   const login = () => request.post("/api/auth/login", { headers: CSRF, data: { email: EMAIL, password: PASSWORD, turnstileToken: HUMAN_TOKEN } });
   expect((await login()).status()).toBe(200);
 
-  const setup = await request.post("/api/auth/mfa/setup", { headers: CSRF });
+  // Turning it on asks for the password typed right now, not the window the sign-in opened.
+  expect((await request.post("/api/auth/mfa/setup", { headers: CSRF })).status()).toBe(400);
+  const setup = await request.post("/api/auth/mfa/setup", { headers: CSRF, data: { password: PASSWORD } });
   expect(setup.status()).toBe(200);
   const { secret } = (await setup.json()) as { secret: string };
   const step = totpStep(Date.now());

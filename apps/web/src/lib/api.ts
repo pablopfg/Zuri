@@ -98,7 +98,8 @@ async function request<T>(path: string, { method = "GET", body, signal }: Reques
   }
   if (!res.ok) {
     const error = await toApiError(res);
-    if (res.status === 401 && !SIGN_IN_PATHS.has(path)) for (const fn of unauthorized) fn(error);
+    // A wrong password or code (INVALID_CREDENTIALS) is an answer about what was typed: the session is still there.
+    if (res.status === 401 && error.code === "UNAUTHORIZED" && !SIGN_IN_PATHS.has(path)) for (const fn of unauthorized) fn(error);
     if (error.code === "PASSWORD_CHANGE_REQUIRED") for (const fn of passwordChange) fn(error);
     throw error;
   }

@@ -7,6 +7,7 @@ import { useMfaStatus } from "../../hooks/mfa.ts";
 import { api, errorMessage } from "../../lib/api.ts";
 import { useI18n } from "../../lib/i18n.tsx";
 import { Button, Card, EmptyState, ErrorNotice, Notice, Spinner, TextField } from "../ui.tsx";
+import { PasswordNowDialog } from "./PasswordNowDialog.tsx";
 
 const PASSKEYS_KEY = ["passkeys"] as const;
 
@@ -22,6 +23,7 @@ export function PasskeysCard() {
   const [name, setName] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  const [askPassword, setAskPassword] = useState(false);
   const supported = typeof window !== "undefined" && "PublicKeyCredential" in window;
 
   const reset = (next: Mode = { kind: "idle" }, value = "") => {
@@ -45,11 +47,21 @@ export function PasskeysCard() {
     }
   }
 
+  // Adding one starts with the password typed right now (owner's decision): first the dialog, then the browser.
   const add = (e: FormEvent) => {
     e.preventDefault();
     if (!name.trim() || pending) return;
+    setError(null);
+    setAskPassword(true);
+  };
+
+  const register = async (password: string) => {
+    const { options } = await api<{ options: Parameters<typeof startRegistration>[0]["optionsJSON"] }>("/auth/passkeys/options", {
+      method: "POST",
+      body: { password },
+    });
+    setAskPassword(false);
     void run(async () => {
-      const { options } = await api<{ options: Parameters<typeof startRegistration>[0]["optionsJSON"] }>("/auth/passkeys/options", { method: "POST" });
       const response = await startRegistration({ optionsJSON: options });
       await api("/auth/passkeys", { method: "POST", body: { name: name.trim(), response } });
     });
@@ -160,6 +172,13 @@ export function PasskeysCard() {
           )}
         </div>
       )}
+      <PasswordNowDialog
+        open={askPassword}
+        title={t("web.passwordNow.passkeyTitle")}
+        body={t("web.passwordNow.passkeyBody")}
+        onConfirm={register}
+        onCancel={() => setAskPassword(false)}
+      />
     </Card>
   );
 }
