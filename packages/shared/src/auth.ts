@@ -98,6 +98,13 @@ export const MAX_MFA_CHALLENGES = 5;
  */
 export const MFA_WRONG_CODES_GLOBAL = 10;
 export const MFA_WRONG_CODES_WINDOW_MS = 15 * 60_000;
+/**
+ * The daily cap of the same count: a slow guess that stays under the pause
+ * (9 every 15 minutes, 864 a day) still stops here, for networks that aren't the owner's,
+ * until the oldest of these wrong codes is a day old. Reaching it tells the owner.
+ */
+export const MFA_WRONG_CODES_DAILY = 30;
+export const MFA_WRONG_CODES_DAILY_WINDOW_MS = 24 * 3600_000;
 /** Wrong second steps in a row that tell the owner. */
 export const MFA_FAILURES_ALERT = 3;
 /** A secret shown for setup must be confirmed with a code within this time. */

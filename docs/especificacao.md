@@ -401,7 +401,7 @@ São 26 etapas em 5 fases, cada uma um PR para `develop`. As fases A e B entrega
 
 **Etapa 4 · 2FA e passkeys** (`feat: adiciona verificação em duas etapas e passkeys`)
 
-- TOTP com códigos de recuperação (só hash), desafio de 5 min em cookie `__Host-`, 10 códigos errados em 15 min pausam redes desconhecidas.
+- TOTP com códigos de recuperação (só hash), desafio de 5 min em cookie `__Host-`, 10 códigos errados em 15 min pausam redes desconhecidas; 30 em 24 h suspendem o segundo passo para elas até a janela passar, com alerta (decisão de 31/10/2026).
 - Passkeys (WebAuthn) em qualquer endereço HTTPS; elas pertencem ao host onde foram criadas, então a lista marca as de outro endereço.
 - A recuperação de senha por e-mail fica na etapa 11, porque depende do SEND\_EMAIL.
 - Aceite: 2FA opcional no código, ligado no deploy do Pablo; testes de reuso de código e de link.

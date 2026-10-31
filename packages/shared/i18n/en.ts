@@ -263,6 +263,7 @@ export const en: Messages = {
   "web.accessLog.reason.recovery_code": "with a recovery code",
   "web.accessLog.reason.passkey": "with a passkey",
   "web.accessLog.reason.idle": "after inactivity",
+  "web.accessLog.reason.daily_cap": "daily limit reached: unknown networks paused",
   "web.activity.title": "Access activity",
   "web.activity.description": "The latest accesses: who signed in, from where, and what was refused.",
   "web.activity.emptyTitle": "No access recorded",

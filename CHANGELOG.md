@@ -153,6 +153,11 @@ o [SemVer](https://semver.org/lang/pt-BR/). Cada PR escreve a sua entrada em
 
 ### Segurança
 
+- Teto diário no segundo passo do login: 30 códigos errados em 24 horas
+  suspendem o código e a passkey para redes desconhecidas até o mais antigo
+  completar um dia, e o dono recebe um alerta. No seu navegador e na sua rede,
+  você continua entrando. Em Acessos, a linha aparece como "limite diário
+  atingido".
 - Memórias entram no prompt só como dado, em blocos `<data>`: sinais que
   imitam tags (inclusive `‹ › ＜ ＞`) são trocados e caracteres invisíveis
   (bidi, largura zero, "tags" Unicode) somem, então um texto guardado não

@@ -44,6 +44,7 @@ export const ptBRSecurity = {
   "web.accessLog.reason.recovery_code": "com código de recuperação",
   "web.accessLog.reason.passkey": "com passkey",
   "web.accessLog.reason.idle": "por inatividade",
+  "web.accessLog.reason.daily_cap": "limite diário atingido: redes desconhecidas suspensas",
   "web.activity.title": "Atividade de acesso",
   "web.activity.description": "Os acessos mais recentes: quem entrou, de onde e o que foi recusado.",
   "web.activity.emptyTitle": "Nenhum acesso registrado",
