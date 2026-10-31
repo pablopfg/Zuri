@@ -2,6 +2,8 @@
 import "./zod-config.ts";
 
 import { z } from "zod";
+// The interface parses every error with this one: Zod Mini keeps the classic API out of its first bundle.
+import { z as mini } from "zod/mini";
 import type { MessageKey } from "../i18n/index.ts";
 
 /**
@@ -38,13 +40,11 @@ export type ApiErrorCode = keyof typeof API_ERROR_STATUS;
 export const API_ERROR_CODES = Object.keys(API_ERROR_STATUS) as [ApiErrorCode, ...ApiErrorCode[]];
 
 /** The one shape of every API error: `{ code, message, details? }`. */
-export const apiErrorSchema = z
-  .object({
-    code: z.enum(API_ERROR_CODES),
-    message: z.string().min(1),
-    details: z.record(z.string(), z.unknown()).optional(),
-  })
-  .strict();
+export const apiErrorSchema = /* @__PURE__ */ mini.strictObject({
+  code: mini.enum(API_ERROR_CODES),
+  message: mini.string().check(mini.minLength(1)),
+  details: mini.optional(mini.record(mini.string(), mini.unknown())),
+});
 
 export type ApiError = z.infer<typeof apiErrorSchema>;
 
@@ -69,4 +69,4 @@ export const DEFAULT_ERROR_MESSAGE: Partial<Record<ApiErrorCode, MessageKey>> = 
 };
 
 /** The health check's only successful answer; it never carries data. */
-export const healthSchema = z.object({ ok: z.literal(true) }).strict();
+export const healthSchema = /* @__PURE__ */ z.object({ ok: z.literal(true) }).strict();

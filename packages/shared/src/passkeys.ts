@@ -24,10 +24,10 @@ const credentialBase = {
   authenticatorAttachment: z.enum(["platform", "cross-platform"]).optional(),
 };
 
-const name = z.string().trim().min(1).max(PASSKEY_NAME_MAX);
+const name = /* @__PURE__ */ z.string().trim().min(1).max(PASSKEY_NAME_MAX);
 
 /** What navigator.credentials.create returns, as JSON. The server checks every field again. */
-export const passkeyRegistrationSchema = z
+export const passkeyRegistrationSchema = /* @__PURE__ */ z
   .object({
     name,
     response: z.object({
@@ -45,7 +45,7 @@ export const passkeyRegistrationSchema = z
   .strict();
 
 /** What navigator.credentials.get returns, as JSON. */
-export const passkeyAssertionSchema = z
+export const passkeyAssertionSchema = /* @__PURE__ */ z
   .object({
     response: z.object({
       ...credentialBase,
@@ -59,10 +59,10 @@ export const passkeyAssertionSchema = z
   })
   .strict();
 
-export const passkeyRenameSchema = z.object({ name }).strict();
+export const passkeyRenameSchema = /* @__PURE__ */ z.object({ name }).strict();
 
 /** A passkey as the owner's list shows it. Never the public key or the counter. */
-export const passkeyInfoSchema = z
+export const passkeyInfoSchema = /* @__PURE__ */ z
   .object({
     id: z.string(),
     name: z.string(),
