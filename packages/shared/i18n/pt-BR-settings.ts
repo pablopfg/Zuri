@@ -91,4 +91,7 @@ export const ptBRSettings = {
   "web.settings.hint.automations": "Lembretes, resumo das tarefas e rotinas da Zuri",
   // Shown by the passkeys card in Settings › Security, so it travels with that screen (rule P11).
   "auth.passkey.needsMfa": "Ligue antes a verificação em duas etapas com um aplicativo autenticador. Os códigos de recuperação dele são o caminho de volta se você perder as passkeys.",
+  // Only the Settings screen shows these, so they travel with it (rule P11).
+  "web.copied": "Copiado",
+  "web.settings.title": "Configurações",
 } as const;

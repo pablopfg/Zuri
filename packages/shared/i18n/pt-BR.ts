@@ -7,6 +7,7 @@ import { ptBRSecurity } from "./pt-BR-security.ts";
 import { ptBRServer } from "./pt-BR-server.ts";
 import { ptBRSettings } from "./pt-BR-settings.ts";
 import { ptBRAutomations } from "./pt-BR-automations.ts";
+import { ptBRMarkdown } from "./pt-BR-markdown.ts";
 
 // Default and fallback catalog. Every key must also exist in en.ts and be used in the code (npm run lint).
 // The texts of the lazy screens live in their own files (pt-BR-memory.ts, pt-BR-productivity.ts,
@@ -21,7 +22,6 @@ export const ptBRCore = {
   "web.close": "Fechar",
   "web.save": "Salvar",
   "web.saved": "Salvo.",
-  "web.copied": "Copiado",
   "web.error.network": "Sem conexão com o Zuri. Confira a internet e tente de novo.",
   "web.session.checking": "Conferindo a sua sessão…",
   "web.nav.main": "Navegação principal",
@@ -107,7 +107,6 @@ export const ptBRCore = {
   "web.password.hide": "Ocultar senha",
   "web.password.submit": "Trocar a senha",
   "web.password.changed": "Senha trocada. As outras sessões foram encerradas.",
-  "web.settings.title": "Configurações",
   "web.mfaReminder.body": "A verificação em duas etapas está desligada. Ligue para proteger a sua conta.",
   "web.mfaReminder.short": "Duas etapas desligadas",
   "web.mfaReminder.action": "Ligar agora",
@@ -126,16 +125,13 @@ export const ptBRCore = {
   "web.nav.accessLog": "Acessos",
   "web.nav.tasks": "Tarefas",
   "web.nav.notes": "Notas",
-  "web.markdown.image": "[imagem: {alt}]",
-  "web.markdown.done": "Feito",
-  "web.markdown.open": "A fazer",
   "web.nav.memory": "Memória",
   "web.nav.chat": "Conversa",
   "web.nav.automations": "Automações",
 } as const;
 
 /** Joins catalog parts. Marked pure so a bundle that never uses the whole catalog drops the call. */
-function join<A extends object, B extends object, C extends object, D extends object, E extends object, F extends object, G extends object, H extends object, I extends object, J extends object>(
+function join<A extends object, B extends object, C extends object, D extends object, E extends object, F extends object, G extends object, H extends object, I extends object, J extends object, K extends object>(
   a: A,
   b: B,
   c: C,
@@ -146,9 +142,10 @@ function join<A extends object, B extends object, C extends object, D extends ob
   h: H,
   i: I,
   j: J,
-): A & B & C & D & E & F & G & H & I & J {
-  return { ...a, ...b, ...c, ...d, ...e, ...f, ...g, ...h, ...i, ...j };
+  k: K,
+): A & B & C & D & E & F & G & H & I & J & K {
+  return { ...a, ...b, ...c, ...d, ...e, ...f, ...g, ...h, ...i, ...j, ...k };
 }
 
 /** The whole pt-BR catalog: what the server, the tests and the lint use. */
-export const ptBR = /* @__PURE__ */ join(ptBRCore, ptBRMemory, ptBRProductivity, ptBRSecurity, ptBRAi, ptBRChat, ptBRSettings, ptBRServer, ptBRPalette, ptBRAutomations);
+export const ptBR = /* @__PURE__ */ join(ptBRCore, ptBRMemory, ptBRProductivity, ptBRSecurity, ptBRAi, ptBRChat, ptBRSettings, ptBRServer, ptBRPalette, ptBRAutomations, ptBRMarkdown);

@@ -30,13 +30,13 @@ export function AppShell() {
     { to: "/conversa", label: t("web.nav.chat"), icon: MessageCircle },
     { to: "/tarefas", label: t("web.nav.tasks"), icon: ListTodo },
     { to: "/notas", label: t("web.nav.notes"), icon: NotebookPen },
-    { to: "/automacoes", label: t("web.nav.automations"), icon: Clock },
     { to: "/memoria", label: t("web.nav.memory"), icon: Brain },
+    { to: "/automacoes", label: t("web.nav.automations"), icon: Clock },
     { to: "/acessos", label: t("web.nav.accessLog"), icon: ShieldCheck },
   ];
-  // Five places fit the phone's bar. Settings sit in the top bar there; the access log and the
-  // automations are one tap away in the Settings list (and in the search).
-  const mobileItems = sections.filter((s) => s.to !== "/acessos" && s.to !== "/automacoes");
+  // Five places fit the phone's bar: the first five. Settings sit in the top bar there; automations
+  // and the access log are one tap away in the Settings list (and in the search).
+  const mobileItems = sections.slice(0, 5);
   const [collapsed, setCollapsed] = useState(readSidebarCollapsed);
   // On a phone "Sair" sits next to the bell, where a thumb lands by mistake: it asks first.
   const [confirmSignOut, setConfirmSignOut] = useState(false);

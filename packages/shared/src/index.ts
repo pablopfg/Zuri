@@ -15,6 +15,7 @@ export {
   ptBR,
   ptBRAi,
   ptBRAutomations,
+  ptBRMarkdown,
   ptBRChat,
   ptBRCore,
   ptBRMemory,
