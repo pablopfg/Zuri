@@ -643,6 +643,8 @@ export const en: Messages = {
   "web.chat.streamingElsewhere": "An answer is being written in another tab. It shows up here when it's done.",
   "web.chat.restored": "Message restored from a backup",
   "web.chat.rename": "Rename",
+  "web.chat.renamed": "Conversation renamed.",
+  "web.chat.deleted": "Conversation deleted.",
   "web.chat.renameLabel": "Conversation name",
   "web.chat.save": "Save",
   "web.chat.cancel": "Cancel",

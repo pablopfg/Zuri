@@ -158,12 +158,14 @@ test("rename and delete a conversation", async ({ page }) => {
   await rename.getByLabel("Nome da conversa").fill(`Renomeada ${word}`);
   await rename.getByRole("button", { name: "Salvar" }).click();
   await expect(page.getByRole("heading", { level: 1, name: `Renomeada ${word}` })).toBeVisible();
+  await expect(page.getByRole("status").filter({ hasText: "Conversa renomeada." })).toBeVisible();
   await expect(page.getByRole("complementary", { name: "Conversas" }).getByRole("link", { name: new RegExp(`Renomeada ${word}`) })).toBeVisible();
 
   await page.getByRole("button", { name: "Apagar conversa" }).click();
   const confirm = page.getByRole("dialog", { name: "Apagar esta conversa?" });
   await confirm.getByRole("button", { name: "Apagar conversa" }).click();
   await expect(page).toHaveURL(/\/conversa$/);
+  await expect(page.getByRole("status").filter({ hasText: "Conversa apagada." })).toBeVisible();
   await expect(page.getByRole("complementary", { name: "Conversas" }).getByText(`Renomeada ${word}`)).toHaveCount(0);
 });
 

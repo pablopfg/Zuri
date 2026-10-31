@@ -51,6 +51,8 @@ export const ptBRChat = {
   "web.chat.streamingElsewhere": "Uma resposta está sendo escrita em outra aba. Ela aparece aqui quando terminar.",
   "web.chat.restored": "Mensagem restaurada de um backup",
   "web.chat.rename": "Renomear",
+  "web.chat.renamed": "Conversa renomeada.",
+  "web.chat.deleted": "Conversa apagada.",
   "web.chat.renameLabel": "Nome da conversa",
   "web.chat.save": "Salvar",
   "web.chat.cancel": "Cancelar",

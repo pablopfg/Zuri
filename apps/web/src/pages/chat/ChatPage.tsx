@@ -15,6 +15,7 @@ import { Check, CircleAlert, History, LoaderCircle, Mic, Pencil, Plus, SendHoriz
 import { type FormEvent, type KeyboardEvent, useCallback, useEffect, useId, useRef, useState } from "react";
 import { Link, NavLink, useNavigate, useParams } from "react-router";
 import { Markdown } from "../../components/Markdown.tsx";
+import { useToast } from "../../components/Toaster.tsx";
 import { Button, cn, Dialog, EmptyState, ErrorNotice, Notice, PageHeader, Spinner, TextField } from "../../components/ui.tsx";
 import { api, ApiError, errorMessage } from "../../lib/api.ts";
 import { addMessages, useI18n } from "../../lib/i18n.tsx";
@@ -320,6 +321,7 @@ function ConversationOptions({ conversation, disabled }: { conversation: Convers
   const { t } = useI18n();
   const qc = useQueryClient();
   const navigate = useNavigate();
+  const toast = useToast();
   const [mode, setMode] = useState<"rename" | "delete" | null>(null);
   const [name, setName] = useState(conversation.title);
   const [pending, setPending] = useState(false);
@@ -343,6 +345,7 @@ function ConversationOptions({ conversation, disabled }: { conversation: Convers
           : current,
       );
       close();
+      toast(t("web.chat.renamed"));
     } catch (failure) {
       setError(errorMessage(failure));
     } finally {
@@ -358,6 +361,7 @@ function ConversationOptions({ conversation, disabled }: { conversation: Convers
       void qc.invalidateQueries({ queryKey: LIST_KEY });
       close();
       navigate("/conversa", { replace: true });
+      toast(t("web.chat.deleted"));
     } catch (failure) {
       setError(errorMessage(failure));
     } finally {

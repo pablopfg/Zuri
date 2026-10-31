@@ -123,7 +123,8 @@ o [SemVer](https://semver.org/lang/pt-BR/). Cada PR escreve a sua entrada em
 - Rota `GET /api/usage` (detalhes em `docs/ia.md`).
 - Tela **Conversa** (etapa 9, `/conversa`): o chat com o agente, com a
   resposta chegando aos poucos, a lista de conversas (renomear e apagar), o
-  botão Parar e sugestões para começar. O agente cria e atualiza tarefas,
+  botão Parar e sugestões para começar. Renomear e apagar uma conversa
+  confirmam com um toast. O agente cria e atualiza tarefas,
   projetos, notas e memórias, busca em tudo e mostra o que fez em cada
   resposta.
 - Tudo o que apaga ou reescreve vira um cartão de aprovação. O cartão mostra
