@@ -129,6 +129,26 @@ o [SemVer](https://semver.org/lang/pt-BR/). Cada PR escreve a sua entrada em
 - Os textos em pt-BR de Tarefas, Notas, Projetos, Lixeira e Acessos chegam
   junto com essas telas, como os da Memória, e não mais no pacote inicial. Com
   isso a tela de Memória entrou sem passar do teto de 140 KB (fica em 139,9 KB).
+- Tela de entrar nova (modelo B, escolhido pelo Pablo entre três): no
+  computador, um painel escuro da marca à esquerda, com a frase "Tudo o que
+  importa, num só lugar.", o que o Zuri faz e três garantias, e o formulário à
+  direita; no celular, a marca vira um bloco curto no topo e o formulário fica
+  embaixo. O painel é escuro nos dois temas, o botão Entrar leva o sinal verde
+  do logo, os campos têm ícones, o formulário entra suave (parado com "reduzir
+  movimento") e o sinal do logo pulsa enquanto confere a senha.
+- Os textos em pt-BR de Configurações (segundo passo, passkeys, saída
+  automática, abas que ainda vão chegar) chegam com essa tela, e não mais no
+  pacote inicial. Foi o que abriu espaço para a tela nova sem passar dos 140 KB
+  (fica em 139,9 KB).
+- A verificação contra robôs ficou discreta: roda sozinha, sem caixa, e só
+  aparece quando precisa de um clique, com uma linha dizendo por quê.
+- Frases da tela de entrar reescritas, sem citar onde nem em que serviço o
+  Zuri roda (também na descrição da página e em dois erros de antes do login).
+- O botão Entrar não trava mais com campo vazio: ao tocar, o campo que falta
+  é marcado logo abaixo dele, e nada é enviado. O mesmo vale para o código do
+  segundo passo e para a verificação contra robôs, cuja linha vira o aviso.
+- O logo aparece antes do JavaScript carregar, já no tema do sistema, no
+  mesmo lugar onde a tela de conferir a sessão o desenha, sem saltos.
 - Abertura ainda mais leve: o JavaScript inicial caiu de 158 para 140 KB
   (gzip). A interface passou a validar as respostas da API com o Zod Mini, e o
   Zod completo ficou só no servidor. As validações são as mesmas.

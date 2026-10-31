@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { catalogs, createTranslator, DEFAULT_LOCALE, isLocale, LOCALES, loadCatalog, ptBR, ptBRAi, ptBRCore, ptBRMemory, ptBRProductivity, ptBRSecurity, t } from "../i18n/index.ts";
+import { catalogs, createTranslator, DEFAULT_LOCALE, isLocale, LOCALES, loadCatalog, ptBR, ptBRAi, ptBRCore, ptBRMemory, ptBRProductivity, ptBRSecurity, ptBRSettings, t } from "../i18n/index.ts";
 
 const placeholders = (text: string) => [...text.matchAll(/\{(\w+)\}/g)].map((m) => m[1]).sort();
 
@@ -43,7 +43,7 @@ describe("t", () => {
   });
 
   it("falls back to pt-BR for an unknown locale", () => {
-    expect(t("fr", "app.tagline")).toBe(catalogs["pt-BR"]["app.tagline"]);
+    expect(t("fr", "web.login.submit")).toBe(catalogs["pt-BR"]["web.login.submit"]);
   });
 
   it("keeps a placeholder without value visible", () => {
@@ -62,11 +62,11 @@ describe("isLocale", () => {
     // pt-BR is never fetched: it is in every bundle already.
     await expect(loadCatalog("pt-BR" as "en")).rejects.toThrow("no catalog for pt-BR");
     // The whole pt-BR catalog is its core plus each screen's part, nothing more and nothing less.
-    expect({ ...ptBRCore, ...ptBRMemory, ...ptBRProductivity, ...ptBRSecurity, ...ptBRAi }).toEqual(ptBR);
-    const parts = [ptBRCore, ptBRMemory, ptBRProductivity, ptBRSecurity, ptBRAi].map((part) => Object.keys(part));
+    expect({ ...ptBRCore, ...ptBRMemory, ...ptBRProductivity, ...ptBRSecurity, ...ptBRAi, ...ptBRSettings }).toEqual(ptBR);
+    const parts = [ptBRCore, ptBRMemory, ptBRProductivity, ptBRSecurity, ptBRAi, ptBRSettings].map((part) => Object.keys(part));
     // No key in two parts: one of them would silently win.
     expect(parts.flat().length).toBe(new Set(parts.flat()).size);
-    const lazy = /^(web\.(memory|tasks|notes|trash|projects|accessLog|activity|ai)\.|error\.ai|ai\.)/;
+    const lazy = /^(web\.(memory|tasks|notes|trash|projects|accessLog|activity|ai|mfa|passkeys|sessions|unit|security)\.|error\.ai|ai\.|auth\.mfa\.)/;
     expect(Object.keys(ptBRCore).filter((key) => lazy.test(key))).toEqual([]);
   });
 

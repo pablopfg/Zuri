@@ -5,10 +5,11 @@ import { CSRF, EMAIL, expectAccessible, PASSWORD, signIn, tooSmallControls } fro
 
 test.use({ locale: "pt-BR" });
 
-test("the sign-in form shows the robot check at once and sends its token with the password", async ({ page }) => {
+test("the sign-in form runs the robot check quietly and sends its token with the password", async ({ page }) => {
   await page.goto("/entrar");
-  await expect(page.getByText("Confirme que você não é um robô para entrar.")).toBeVisible();
   await expect(page.getByTestId("turnstile")).toContainText("turnstile:1x00000000000000000000AA:login");
+  // Discreet: no line about it unless the check needs a click or fails.
+  await expect(page.getByText("Confirme que é você para continuar.")).toHaveCount(0);
   const sent = page.waitForRequest((r) => r.url().endsWith("/api/auth/login"));
   await signIn(page);
   expect((await sent).postDataJSON()).toMatchObject({ turnstileToken: HUMAN_TOKEN });
@@ -21,7 +22,7 @@ test("the API refuses a sign-in without the robot check, or with a token it didn
   expect(await missing.json()).toMatchObject({ code: "TURNSTILE_REQUIRED", details: { turnstileSiteKey: "1x00000000000000000000AA" } });
   const forged = await request.post("/api/auth/login", { headers: CSRF, data: { email: EMAIL, password: PASSWORD, turnstileToken: "forjado" } });
   expect(forged.status()).toBe(400);
-  expect((await forged.json()).message).toBe("A verificação contra robôs não passou. Faça de novo.");
+  expect((await forged.json()).message).toBe("A verificação de segurança não passou. Tente de novo.");
   const options = await request.get("/api/auth/login-options", { headers: CSRF });
   expect(await options.json()).toEqual({ turnstileSiteKey: "1x00000000000000000000AA" });
 });
@@ -80,24 +81,47 @@ test("the robot check that fails to load says so and loads again on request", as
   await page.goto("/entrar");
   await page.getByLabel("E-mail").fill(EMAIL);
   await page.getByLabel("Senha", { exact: true }).fill(PASSWORD);
-  await expect(page.getByRole("alert").filter({ hasText: "A verificação contra robôs não carregou. Sem ela não dá para entrar." })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Entrar" })).toBeDisabled();
-  await page.getByRole("button", { name: "Carregar a verificação de novo" }).click();
-  await expect(page.getByRole("button", { name: "Entrar" })).toBeEnabled();
+  await expect(page.getByRole("alert").filter({ hasText: "A verificação de segurança não carregou. Tente de novo para entrar." })).toBeVisible();
+  // The button stays active; without the check's token, a try sends nothing and says why.
+  let tries = 0;
+  await page.route("**/api/auth/login", (route) => {
+    tries += 1;
+    return route.continue();
+  });
+  await page.getByRole("button", { name: "Entrar" }).click();
+  await expect(page.getByRole("alert").filter({ hasText: "Confirme que é você para continuar." })).toBeAttached();
+  expect(tries).toBe(0);
+  await page.getByRole("button", { name: "Recarregar a verificação" }).click();
+  // Once the new widget answers, the line about the check goes away.
+  await expect(page.locator("p").filter({ hasText: "Confirme que é você para continuar." })).toHaveCount(0);
   await page.getByRole("button", { name: "Entrar" }).click();
   await expect(page.getByRole("heading", { level: 1, name: "Olá!" })).toBeVisible();
 });
 
 test("without the form's options the server's refusal brings the robot check", async ({ page }) => {
-  await page.route("**/api/auth/login-options", (route) => route.abort());
+  // The options fail only when the test says so: the try before that must wait.
+  let release = () => {};
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  await page.route("**/api/auth/login-options", async (route) => {
+    await held;
+    await route.abort();
+  });
   await page.goto("/entrar");
   await page.getByLabel("E-mail").fill(EMAIL);
   await page.getByLabel("Senha", { exact: true }).fill(PASSWORD);
-  await expect(page.getByRole("button", { name: "Entrar" })).toBeEnabled({ timeout: 10_000 });
+  // Until the options fail the form can't tell whether the check is on: a try only says it is getting ready.
+  const loading = page.locator("p").filter({ hasText: "Preparando a verificação de segurança…" });
   await page.getByRole("button", { name: "Entrar" }).click();
-  await expect(page.getByText("Confirme que você não é um robô e tente de novo.")).toBeVisible();
+  await expect(loading).toBeVisible();
+  release();
+  await expect(loading).toBeHidden({ timeout: 10_000 });
+  await page.getByRole("button", { name: "Entrar" }).click();
+  await expect(page.getByText("Confirme a verificação de segurança e tente de novo.")).toBeVisible();
   await expect(page.getByTestId("turnstile")).toBeVisible();
   await page.getByLabel("Senha", { exact: true }).fill(PASSWORD);
+  await page.locator('[data-testid="turnstile"][data-solved="true"]').waitFor();
   await page.getByRole("button", { name: "Entrar" }).click();
   await expect(page.getByRole("heading", { level: 1, name: "Olá!" })).toBeVisible();
 });

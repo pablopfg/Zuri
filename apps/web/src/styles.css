@@ -34,6 +34,19 @@
   --color-brand-mark: #f8fafc;
   --color-brand-signal: #22c55e;
   --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  /* The sign-in card rising into place (motion-safe only, where used). */
+  --animate-rise: rise 0.45s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+
+  @keyframes rise {
+    from {
+      opacity: 0;
+      transform: translateY(12px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
 }
 
 .dark {
@@ -76,6 +89,58 @@ body {
   color: var(--color-fg);
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
+}
+
+/*
+ * Static shell (index.html): drawn by this stylesheet before any JavaScript
+ * runs, then replaced by React. No theme class exists yet, so it follows the
+ * system's dark mode on its own; the colors are the .dark tokens above.
+ */
+@media (prefers-color-scheme: dark) {
+  :root:not(.dark):has(#boot) {
+    --color-bg: #0b0f19;
+    --color-brand-tile: #1a2233;
+    color-scheme: dark;
+  }
+}
+
+/*
+ * The sign-in page's brand side: dark in both themes, so the mark keeps its own
+ * colors. Its tokens are the .dark ones; one soft green light, nothing to load.
+ */
+.login-brand {
+  --color-fg: #e8ecf3;
+  --color-fg-muted: #a3acbd;
+  --color-accent: #4ade80;
+  --color-brand-tile: #1a2233;
+  color-scheme: dark;
+  color: var(--color-fg);
+  background:
+    radial-gradient(22rem 16rem at 85% 10%, color-mix(in srgb, var(--color-brand-signal) 28%, transparent), transparent 65%),
+    #0b0f19;
+  border-bottom: 1px solid #263043;
+}
+
+@media (min-width: 64rem) {
+  .login-brand {
+    border-bottom: 0;
+    background:
+      radial-gradient(32rem 32rem at 78% 30%, color-mix(in srgb, var(--color-brand-signal) 28%, transparent), transparent 65%),
+      #0b0f19;
+  }
+}
+
+/*
+ * The sign-in button: ink on the page, with the mark's green light. Outside the
+ * utilities layer on purpose, so it wins over the primary variant's colors.
+ */
+.login-submit {
+  background: var(--color-fg);
+  color: var(--color-bg);
+}
+
+.login-submit:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--color-fg) 86%, var(--color-bg));
 }
 
 /* One visible focus ring for every control, keyboard only. */

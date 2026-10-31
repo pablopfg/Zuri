@@ -38,14 +38,25 @@ function loadTurnstile(): Promise<TurnstileApi> {
 /**
  * The "not a robot" check on the sign-in form. Hands its token through onToken,
  * and null when it expires or fails. A token works once: give it a new `key`
- * after each try.
+ * after each try. Discreet: it draws nothing unless Cloudflare needs a click,
+ * and then onInteractive tells the form to say why the box appeared.
  */
-export function TurnstileWidget({ siteKey, onToken, onError }: { siteKey: string; onToken: (token: string | null) => void; onError: () => void }) {
+export function TurnstileWidget({
+  siteKey,
+  onToken,
+  onError,
+  onInteractive,
+}: {
+  siteKey: string;
+  onToken: (token: string | null) => void;
+  onError: () => void;
+  onInteractive?: (shown: boolean) => void;
+}) {
   const { locale } = useI18n();
   const ref = useRef<HTMLDivElement>(null);
   // The latest callbacks, without drawing the widget again when they change.
-  const callbacks = useRef({ onToken, onError });
-  callbacks.current = { onToken, onError };
+  const callbacks = useRef({ onToken, onError, onInteractive });
+  callbacks.current = { onToken, onError, onInteractive };
 
   useEffect(() => {
     let widgetId: string | null = null;
@@ -58,6 +69,9 @@ export function TurnstileWidget({ siteKey, onToken, onError }: { siteKey: string
           action: "login",
           theme: "auto",
           size: "flexible",
+          appearance: "interaction-only",
+          "before-interactive-callback": () => callbacks.current.onInteractive?.(true),
+          "after-interactive-callback": () => callbacks.current.onInteractive?.(false),
           language: locale.toLowerCase(),
           callback: (token: string) => callbacks.current.onToken(token),
           "expired-callback": () => callbacks.current.onToken(null),
@@ -76,5 +90,5 @@ export function TurnstileWidget({ siteKey, onToken, onError }: { siteKey: string
     };
   }, [siteKey, locale]);
 
-  return <div ref={ref} className="min-h-[65px]" />;
+  return <div ref={ref} />;
 }

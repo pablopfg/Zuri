@@ -16,7 +16,10 @@ window.turnstile = {
     box.dataset.testid = "turnstile";
     box.textContent = "turnstile:" + options.sitekey + ":" + options.action;
     container.append(box);
-    setTimeout(() => options.callback("${HUMAN_TOKEN}"), 50);
+    setTimeout(() => {
+      options.callback("${HUMAN_TOKEN}");
+      box.dataset.solved = "true";
+    }, 50);
     return "w" + Math.random();
   },
   remove() {},
