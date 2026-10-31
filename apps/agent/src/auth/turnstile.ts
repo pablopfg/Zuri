@@ -24,6 +24,14 @@ export interface Turnstile {
 /** Keys are short base64url-like strings; anything else is a configuration slip. */
 const KEY = /^[0-9A-Za-z_-]{10,128}$/;
 
+/** Where the widget comes from: the interface's CSP allows it only while Turnstile is on. */
+export const TURNSTILE_ORIGIN = "https://challenges.cloudflare.com";
+
+/** True when both keys look right, the same test createTurnstile uses to turn the check on. */
+export function turnstileConfigured(siteKey: string | undefined, secretKey: string | undefined): boolean {
+  return KEY.test(siteKey?.trim() ?? "") && KEY.test(secretKey?.trim() ?? "");
+}
+
 /**
  * The check for this deploy, or null when it is off (either key missing or
  * malformed: half a setup is no setup). A token solved on any host other than
@@ -37,7 +45,7 @@ export function createTurnstile(
 ): Turnstile | null {
   const site = siteKey?.trim() ?? "";
   const secret = secretKey?.trim() ?? "";
-  if (!KEY.test(site) || !KEY.test(secret)) {
+  if (!turnstileConfigured(site, secret)) {
     if (site || secret) console.warn(JSON.stringify({ message: "turnstile off: set both keys, 10-128 letters, digits, - or _" }));
     return null;
   }

@@ -25,8 +25,11 @@ export default defineConfig({
   webServer: {
     // The real Worker (wrangler dev) serving the built interface, so every test
     // also goes through the gates. Test-only secrets; PUBLIC_URL is loopback http.
+    // Every run starts from an empty database (its own folder, apart from `npm run dev`'s):
+    // sign-in limits and settings left by an earlier run would change the results.
     command:
-      "npm run build -w @zuri/web && npm exec -w @zuri/agent -- wrangler dev --ip 127.0.0.1 " +
+      `node -e "require('node:fs').rmSync('.wrangler/e2e',{recursive:true,force:true})" && ` +
+      "npm run build -w @zuri/web && npm exec -w @zuri/agent -- wrangler dev --ip 127.0.0.1 --persist-to ../../.wrangler/e2e " +
       `--port ${port} --env-file ../../tests/e2e/worker.env --var PUBLIC_URL:http://127.0.0.1:${port} ` +
       // Optional secrets don't load from the env file (only those wrangler.jsonc
       // lists as required do): the hash of the e2e password goes as a variable.

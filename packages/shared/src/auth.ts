@@ -127,7 +127,14 @@ export const changePasswordRequestSchema = z.object({ currentPassword: password,
 
 /** When each of the three limits ends the session, by the server's clock. */
 export const sessionDeadlinesSchema = z
-  .object({ now: isoDate, idleAt: isoDate, presenceAt: isoDate, maxAt: isoDate })
+  .object({
+    now: isoDate,
+    idleAt: isoDate,
+    presenceAt: isoDate,
+    maxAt: isoDate,
+    /** The inactivity limit, so an open tab can count it from the last use it reported. */
+    idleMinutes: z.number().int().positive(),
+  })
   .strict();
 
 /** What a signed-in browser learns about its session. Never the e-mail address, never a secret. */
@@ -143,6 +150,59 @@ export const sessionStateSchema = z
     deadlines: sessionDeadlinesSchema,
   })
   .strict();
+
+// ---------- Access activity (shown in Settings > Security) ----------
+
+/** Every kind the access activity records. The interface has a catalog entry for each. */
+export const AUTH_EVENT_KINDS = [
+  "login_success",
+  "login_failure",
+  "login_rate_limited",
+  "login_turnstile",
+  "login_attack",
+  "logout",
+  "session_ended",
+  "confirm_success",
+  "confirm_failure",
+  "password_changed",
+  "password_change_failure",
+  "credentials_reset",
+  "mfa_challenge",
+  "mfa_failure",
+  "mfa_enabled",
+  "mfa_disabled",
+  "mfa_codes_regenerated",
+  "recovery_code_used",
+  "passkey_added",
+  "passkey_removed",
+] as const;
+export type AuthEventKind = (typeof AUTH_EVENT_KINDS)[number];
+
+/** Rows the activity screen shows: the newest ones, enough for a glance (the rest stays for the alerts). */
+export const AUTH_ACTIVITY_LIMIT = 50;
+
+export const authActivityEventSchema = z
+  .object({
+    id: z.number().int(),
+    at: isoDate,
+    /** The last of the folded refusals (count > 1). */
+    lastAt: isoDate,
+    kind: z.enum(AUTH_EVENT_KINDS),
+    reason: z.string(),
+    ip: z.string(),
+    country: z.string(),
+    region: z.string(),
+    city: z.string(),
+    userAgent: z.string(),
+    knownDevice: z.boolean(),
+    count: z.number().int().min(1),
+  })
+  .strict();
+
+export const authActivitySchema = z.object({ events: z.array(authActivityEventSchema) }).strict();
+
+export type AuthActivityEvent = z.infer<typeof authActivityEventSchema>;
+export type AuthActivity = z.infer<typeof authActivitySchema>;
 
 export type LoginRequest = z.infer<typeof loginRequestSchema>;
 export type ConfirmRequest = z.infer<typeof confirmRequestSchema>;

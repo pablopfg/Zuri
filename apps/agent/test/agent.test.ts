@@ -21,6 +21,9 @@ describe("GET /api/health", () => {
     const api = createApi({
       locale: () => "pt-BR",
       auth: () => ({ passwordConfigured: () => false }) as AuthService,
+      settings: () => {
+        throw new Error("not used");
+      },
       passwordSecretSet: () => false,
       origin: () => ORIGIN,
       development: () => false,

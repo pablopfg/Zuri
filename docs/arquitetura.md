@@ -33,8 +33,11 @@ chegar aos arquivos estáticos. Os portões rodam nesta ordem:
    e sem cookie nem `Authorization`.
 4. **Cabeçalhos de segurança** em toda resposta. A interface recebe CSP
    estrita, HSTS, `frame-ancestors 'none'` e `Permissions-Policy`, os mesmos de
-   `apps/web/public/_headers` (um teste confere que os dois são iguais). A API
-   recebe uma CSP que não deixa nada carregar e `Cache-Control: no-store`.
+   `apps/web/public/_headers` (um teste confere que os dois são iguais). Com o
+   Turnstile ligado (as duas chaves), a CSP da interface acrescenta só
+   `https://challenges.cloudflare.com` em `script-src` e `frame-src`, para o
+   widget do login; desligado, nada de fora carrega. A API recebe uma CSP que
+   não deixa nada carregar e `Cache-Control: no-store`.
 5. **Autenticação**, dentro da API. Toda rota, menos `GET /api/health`,
    exige o cabeçalho `x-zuri-request: 1` e uma `Origin` (ou `Sec-Fetch-Site`)
    da própria origem; sem isso, 403 `CSRF_FAILED`. Depois, só
@@ -139,6 +142,11 @@ ser válido é lido como o padrão. Mudança inválida volta como
 `VALIDATION_FAILED`, com o nome dos campos e nunca o valor enviado, e cada
 mudança real fica no registro de atividade (só os nomes dos campos).
 
+A interface lê e muda as configurações por `GET` e `PATCH /api/settings`
+(sessão e CSRF). Mudar a saída automática pede a senha digitada nos últimos 15
+minutos, porque uma sessão mais longa vale mais para quem rouba o cookie;
+idioma e fuso, não.
+
 Teto do banco: 900 MB, abaixo do limite de 1 GB por Durable Object com SQLite
 no plano Free (FAQ de limites da Cloudflare, conferido em 31/10/2026; a conta
 inteira tem 5 GB). `Database.size()` lê o tamanho; a recusa com
@@ -162,6 +170,27 @@ visível escrito fora do catálogo: texto JSX, os atributos `title`,
 `aria-label`, `placeholder` e `alt`, e os argumentos de `new AppError(...)`.
 Exceções ficam em `i18n-ignore.json`, cada uma com arquivo, texto e motivo; uma
 exceção que não corresponde a mais nada também faz o lint falhar.
+
+## Orçamento de duração do Durable Object
+
+O plano Free dá 13.000 GB-s de duração de Durable Object por dia. Um objeto
+fora de hibernação conta 128 MB enquanto está na memória, e só sai dela depois
+de um a dois minutos sem requisição. O heartbeat da interface (uma batida por
+minuto, de uma aba só, mesmo com várias abertas) mantém o objeto carregado
+enquanto houver sessão aberta:
+
+| Situação | Tempo carregado | Duração estimada |
+| --- | --- | --- |
+| Aba aberta sem uso (limite padrão de 30 min) | até 30 min | cerca de 225 GB-s |
+| Uso contínuo até o máximo padrão (6 h) | 6 h | cerca de 2.700 GB-s (21%) |
+| Uso contínuo até o máximo permitido (24 h) | 24 h | cerca de 11.000 GB-s (85%) |
+
+O pior caso só acontece com o dono usando o app o dia inteiro e o máximo da
+sessão em 24 h. O intervalo da batida não pode passar do limite mínimo de
+presença (3 min), e um intervalo maior que o tempo de despejo economizaria
+pouco. As etapas com Workflows e alarmes devem conferir a duração real no
+painel da Cloudflare antes de somar carga. Se apertar, a saída é diminuir o
+máximo da sessão, não espaçar a batida.
 
 ## Observabilidade
 

@@ -1,5 +1,6 @@
 import {
   ACTIVITY_HEADER,
+  AUTH_ACTIVITY_LIMIT,
   changePasswordRequestSchema,
   confirmRequestSchema,
   heartbeatRequestSchema,
@@ -10,11 +11,14 @@ import {
   passkeyAssertionSchema,
   passkeyRegistrationSchema,
   passkeyRenameSchema,
+  SESSION_TIMEOUT_RANGES,
+  settingsUpdateSchema,
 } from "@zuri/shared";
 import { type Context, Hono } from "hono";
 import { type ClientInfo, clientInfo } from "../auth/client.ts";
 import type { AuthService, SignedIn } from "../auth/service.ts";
 import type { SessionRow } from "../auth/sessions.ts";
+import type { SettingsRepository } from "../db/settings.ts";
 import type { WorkerEnv } from "../env.ts";
 import { AppError, errorResponse } from "../http/errors.ts";
 import { checkCsrf, deviceCookie, mfaCookie, readDeviceCookie, readJson, readMfaCookie, readSessionCookie, sessionCookie } from "./http.ts";
@@ -30,6 +34,8 @@ export interface ApiDeps {
   locale(): Locale;
   /** Sign-in and sessions, over the owner's database (opened on first use). */
   auth(): AuthService;
+  /** The owner's settings, over the same database. */
+  settings(): SettingsRepository;
   /** True when a password secret is set, so the health check can answer without opening the database. */
   passwordSecretSet(): boolean;
   /** The owner's origin (PUBLIC_URL): the only Origin accepted. */
@@ -184,6 +190,21 @@ export function createApi(deps: ApiDeps) {
     return response;
   });
 
+  // ---------- Settings ----------
+
+  app.get("/settings", () => Response.json(deps.settings().get()));
+
+  app.patch("/settings", async (c) => {
+    const patch = await readJson(c.req.raw, settingsUpdateSchema, 4 * 1024);
+    // Longer sessions weaken a stolen one: the session limits ask for the password typed recently.
+    if (SESSION_FIELDS.some((field) => field in patch)) deps.auth().requireRecentAuth(c.get("session"));
+    return Response.json(deps.settings().update(patch));
+  });
+
+  // ---------- Access activity ----------
+
+  app.get("/auth/activity", () => Response.json({ events: deps.auth().events.recent(AUTH_ACTIVITY_LIMIT) }));
+
   // ---------- Two-step sign-in, signed in (sensitive: the password typed recently) ----------
 
   app.get("/auth/mfa", () => Response.json(deps.auth().twoStep.status()));
@@ -231,6 +252,8 @@ export function createApi(deps: ApiDeps) {
 
   return app;
 }
+
+const SESSION_FIELDS = Object.keys(SESSION_TIMEOUT_RANGES);
 
 /** A passkey's id as WebAuthn hands it out (base64url); anything else is not one. */
 function passkeyId(value: string): string {

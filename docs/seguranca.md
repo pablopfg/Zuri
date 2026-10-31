@@ -75,7 +75,10 @@ documento cresce a cada etapa. Os portões de toda requisição estão em
 - O servidor encerra a sessão no que vier primeiro:
   - **30 minutos sem uso.** Só conta como uso a requisição que o dono iniciou,
     marcada com `x-zuri-activity: 1`; o polling em segundo plano não segura a
-    sessão.
+    sessão. A interface põe o cabeçalho só em mudanças (POST, PATCH, DELETE)
+    feitas até 10 s depois de um toque ou tecla, e no heartbeat com
+    `active: true`; leituras nunca o levam, porque o cache de consultas busca
+    de novo sozinho (foco da janela, dado vencido).
   - **5 minutos sem aba aberta.** Qualquer requisição de uma aba conta como
     presença; a interface manda `POST /api/auth/heartbeat` uma vez por minuto.
   - **6 horas** no total, com uso ou sem.
@@ -212,6 +215,14 @@ resposta do `siteverify`, o login é recusado com 503 `SERVICE_UNAVAILABLE`
 (falha fechada). Cada verificação recusada conta por rede; com 10 na janela, a
 rede espera como uma bloqueada, sem nova chamada ao `siteverify`.
 
+Com o Turnstile ligado, a CSP de **todas** as páginas da interface acrescenta
+`https://challenges.cloudflare.com` em `script-src` e `frame-src`, e não só a
+de `/entrar`. A interface é uma SPA: a CSP vale para o documento carregado
+primeiro, e o login também abre por navegação interna (sessão que terminou,
+sair). Restringir a origem ao `/entrar` quebraria o widget nesses casos. O
+risco aceito é pequeno: a origem é da própria Cloudflare, e a interface não
+tem HTML vindo de fora (`dangerouslySetInnerHTML` não é usado).
+
 ## CSRF
 
 Toda rota da API, menos `GET /api/health`, exige:
@@ -228,6 +239,10 @@ por isso (sem CSRF de login). O corpo precisa ser `application/json`, com
 limite de tamanho lido em fluxo.
 
 ## Atividade de acesso
+
+A aba Segurança mostra os 50 eventos mais recentes (`GET /api/auth/activity`,
+sessão e CSRF): tipo, hora, cidade, região, país, IP e navegador. A resposta
+nunca leva o id da sessão, a chave de rede nem a marca de alerta.
 
 `zur_auth_events` guarda logins, falhas, bloqueios, verificações recusadas,
 saídas, fins de sessão, confirmações e trocas de senha, com a hora, a rede, o

@@ -63,6 +63,16 @@ describe("lintSource", () => {
     expect(texts(code)).toEqual([]);
   });
 
+  it("reads what a condition renders, never the operands of a comparison", () => {
+    const code = `
+      const a = <div>{tab === "conta" && <Conta />}{mode.kind !== "idle" ? null : <X />}</div>;
+      const b = <p>{nome || "Sem nome"}</p>;
+      const c = <p>{pronto && "Pronto"}</p>;
+      const d = <p>{"Olá, " + nome}</p>;
+    `;
+    expect(texts(code)).toEqual(["jsx-text 3 Sem nome", "jsx-text 4 Pronto", "jsx-text 5 Olá,"]);
+  });
+
   it("does not care about text in plain TypeScript outside those places", () => {
     expect(texts(`console.error("log line"); const s = "texto qualquer";`, "x.ts")).toEqual([]);
   });
