@@ -14,6 +14,10 @@ describe("plainExcerpt", () => {
     );
   });
 
+  it("leaves no < or > behind, even from nested tags", () => {
+    expect(plainExcerpt("a <<script>script>alert(1)<</script>/script> b")).toBe("a scriptalert(1)/script b");
+  });
+
   it("keeps single * and _ that belong to the text", () => {
     expect(plainExcerpt("nome_do_arquivo e 2*3")).toBe("nome_do_arquivo e 2*3");
   });
