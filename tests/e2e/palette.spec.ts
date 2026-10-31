@@ -51,6 +51,15 @@ test("Ctrl K opens the palette, which loads only then, and the keyboard goes to 
   await expect(palette).toHaveCount(0);
   // Still one download: the second opening reuses it.
   expect(paletteCode).toHaveLength(1);
+
+  // Closing gives the focus back to where it was.
+  const searchButton = page.getByRole("button", { name: "Buscar" }).first();
+  await searchButton.focus();
+  await page.keyboard.press("Enter");
+  await expect(input).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(palette).toHaveCount(0);
+  await expect(searchButton).toBeFocused();
 });
 
 test("the search finds a task and opens it, and one letter asks the server nothing @mobile", async ({ page }) => {
@@ -75,15 +84,16 @@ test("the search finds a task and opens it, and one letter asks the server nothi
   await input.fill("passaporte");
   const option = palette.getByRole("option", { name: title });
   await expect(option).toBeVisible();
-  // Three small searches, one per kind, after the typing stopped.
+  // Three small searches, one per kind, after the typing stopped, each asking only for what it shows.
   expect(searches).toHaveLength(3);
+  for (const url of searches) expect(new URL(url).searchParams.get("limit")).toBe("5");
   await option.click();
   await expect(page).toHaveURL(/\/tarefas$/);
   const editor = page.getByRole("dialog", { name: "Editar tarefa" });
   await expect(editor.getByLabel("Título")).toHaveValue(title);
   await editor.getByRole("button", { name: "Mover para a lixeira" }).click();
   await expect(editor).toHaveCount(0);
-  // Back doesn't open it again: the request was used once.
+  // Reloading doesn't open it again: the request was used once.
   await page.reload();
   await expect(page.getByRole("dialog", { name: "Editar tarefa" })).toHaveCount(0);
 });

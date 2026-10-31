@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { type Memory, type NoteSummary, ptBRPalette, type Task } from "@zuri/shared";
 import {
   Bell,
@@ -54,12 +54,22 @@ export function CommandPalette({ onClose, navigate }: { onClose: () => void; nav
   const listId = useId();
   const [query, setQuery] = useState("");
   const [active, setActive] = useState(0);
-  const term = useDebounced(searchTerm(query));
+  const typed = searchTerm(query);
+  const term = useDebounced(typed);
+  const qc = useQueryClient();
 
   useEffect(() => {
     const element = dialog.current;
+    // Closing by unmounting skips the dialog's own close(), so focus goes back by hand (WCAG 2.4.3).
+    const before = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     if (element && !element.open) element.showModal();
-  }, []);
+    return () => {
+      element?.close();
+      if (before?.isConnected) before.focus();
+      // Results are a snapshot: the next opening asks again, so a renamed or deleted item doesn't linger.
+      qc.removeQueries({ queryKey: ["palette"] });
+    };
+  }, [qc]);
 
   const commands = useMemo<Item[]>(() => {
     const go = t("web.palette.groupGo");
@@ -93,13 +103,20 @@ export function CommandPalette({ onClose, navigate }: { onClose: () => void; nav
     enabled: term !== "",
     staleTime: 30_000,
     queryFn: async ({ signal }) => {
-      const q = encodeURIComponent(term);
-      const [tasks, notes, memories] = await Promise.all([
-        api<{ tasks: Task[] }>(`/tasks?view=all&q=${q}`, { signal }),
-        api<{ notes: NoteSummary[] }>(`/notes?q=${q}`, { signal }),
-        api<{ memories: Memory[] }>(`/memories?status=current&q=${q}`, { signal }),
+      // Ask only for what is shown (rules P2 and P6); one kind failing keeps the other two.
+      const q = `q=${encodeURIComponent(term)}&limit=${PER_KIND}`;
+      const [tasks, notes, memories] = await Promise.allSettled([
+        api<{ tasks: Task[] }>(`/tasks?view=all&${q}`, { signal }),
+        api<{ notes: NoteSummary[] }>(`/notes?${q}`, { signal }),
+        api<{ memories: Memory[] }>(`/memories?status=current&${q}`, { signal }),
       ]);
-      return { tasks: tasks.tasks.slice(0, PER_KIND), notes: notes.notes.slice(0, PER_KIND), memories: memories.memories.slice(0, PER_KIND) };
+      if (tasks.status === "rejected" && notes.status === "rejected" && memories.status === "rejected") throw tasks.reason;
+      return {
+        tasks: tasks.status === "fulfilled" ? tasks.value.tasks.slice(0, PER_KIND) : [],
+        notes: notes.status === "fulfilled" ? notes.value.notes.slice(0, PER_KIND) : [],
+        memories: memories.status === "fulfilled" ? memories.value.memories.slice(0, PER_KIND) : [],
+        partial: tasks.status === "rejected" || notes.status === "rejected" || memories.status === "rejected",
+      };
     },
   });
 
@@ -146,13 +163,15 @@ export function CommandPalette({ onClose, navigate }: { onClose: () => void; nav
   }
 
   const groups = [...new Set(items.map((item) => item.group))];
-  const searching = term !== "" && found.isFetching;
+  // While the pause in typing runs, it counts as searching: "nothing found" waits for the answer.
+  const searching = (typed !== "" && typed !== term) || (term !== "" && found.isFetching);
   const nothing = items.length === 0 && !searching;
 
   return (
     // biome-ignore lint/a11y/useKeyWithClickEvents: the keyboard closes it with Escape (the dialog's cancel); the click is for the backdrop.
     <dialog
       ref={dialog}
+      data-palette
       aria-label={t("web.palette.title")}
       onCancel={(event) => {
         event.preventDefault();
@@ -221,7 +240,7 @@ export function CommandPalette({ onClose, navigate }: { onClose: () => void; nav
         <span>
           {searching
             ? t("web.palette.searching")
-            : found.isError
+            : found.isError || found.data?.partial
               ? t("web.palette.failed")
               : nothing
                 ? t("web.palette.empty", { query: query.trim() })

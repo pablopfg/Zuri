@@ -14,7 +14,6 @@ o [SemVer](https://semver.org/lang/pt-BR/). Cada PR escreve a sua entrada em
   uma tarefa ou nota e busca tarefas, notas e memórias (a partir de 2 letras,
   com uma pausa curta na digitação). Funciona inteira pelo teclado: setas,
   Enter e Esc. O código e os textos dela só vêm na primeira vez que ela abre.
-
 - README renovado com a identidade visual Sinal: banner que segue o tema
   claro ou escuro do GitHub, selos da CI, capturas das telas atuais, o que já
   funciona e o que vem a seguir, mapa das 26 etapas, arquitetura resumida e um
@@ -129,6 +128,7 @@ o [SemVer](https://semver.org/lang/pt-BR/). Cada PR escreve a sua entrada em
 - Rota `GET /api/usage` (detalhes em `docs/ia.md`).
 
 ### Alterado
+
 - Os textos que só o servidor diz (recusas e erros da API) saíram do pacote
   inicial da interface, que já recebe essas mensagens prontas na resposta. O
   JS inicial caiu de 139,9 para 139,4 KB, já com a paleta, e o teto da CI desceu

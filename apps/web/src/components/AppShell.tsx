@@ -43,7 +43,10 @@ export function AppShell() {
   useEffect(() => {
     // Ctrl/⌘ K from anywhere opens the palette, and closes it again.
     const onKey = (event: KeyboardEvent) => {
-      if ((event.ctrlKey || event.metaKey) && !event.altKey && event.key.toLowerCase() === "k") {
+      // Not with Shift (Firefox's console), and not over another dialog (an open editor would lose its edits).
+      if ((event.ctrlKey || event.metaKey) && !event.altKey && !event.shiftKey && event.key.toLowerCase() === "k") {
+        const other = document.querySelector("dialog[open]:not([data-palette])");
+        if (other) return;
         event.preventDefault();
         setPaletteOpen((open) => !open);
       }

@@ -52,7 +52,7 @@ export function TasksPage() {
       setFocusNew((n) => n + 1);
     }
     // Once: going back or reloading doesn't open it again.
-    navigate(`${location.pathname}${location.search}`, { replace: true, state: null });
+    navigate(`${location.pathname}${location.search}${location.hash}`, { replace: true, state: null });
   }, [location.key]);
 
   return (
@@ -164,8 +164,11 @@ export function TasksPage() {
 function NewTask({ projects, forToday, focusSignal }: { projects: Project[]; forToday: boolean; focusSignal: number }) {
   const { t, locale, timeZone, dateTime } = useI18n();
   const titleRef = useRef<HTMLInputElement>(null);
+  // Only a new signal focuses: remounting (switching views) must not take the focus again.
+  const seenSignal = useRef(focusSignal);
   useEffect(() => {
-    if (focusSignal > 0) titleRef.current?.focus();
+    if (focusSignal > seenSignal.current) titleRef.current?.focus();
+    seenSignal.current = focusSignal;
   }, [focusSignal]);
   const qc = useQueryClient();
   const [title, setTitle] = useState("");
