@@ -1,6 +1,9 @@
+import tailwindcss from "@tailwindcss/vite";
+import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 
 export default defineConfig({
-  build: { outDir: "dist", emptyOutDir: true },
+  plugins: [react(), tailwindcss()],
+  build: { outDir: "dist", emptyOutDir: true, sourcemap: false },
   preview: { host: "127.0.0.1", port: 4173, strictPort: true },
 });

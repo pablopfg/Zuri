@@ -33,8 +33,11 @@ chegar aos arquivos estáticos. Os portões rodam nesta ordem:
    e sem cookie nem `Authorization`.
 4. **Cabeçalhos de segurança** em toda resposta. A interface recebe CSP
    estrita, HSTS, `frame-ancestors 'none'` e `Permissions-Policy`, os mesmos de
-   `apps/web/public/_headers` (um teste confere que os dois são iguais). A API
-   recebe uma CSP que não deixa nada carregar e `Cache-Control: no-store`.
+   `apps/web/public/_headers` (um teste confere que os dois são iguais). Com o
+   Turnstile ligado (as duas chaves), a CSP da interface acrescenta só
+   `https://challenges.cloudflare.com` em `script-src` e `frame-src`, para o
+   widget do login; desligado, nada de fora carrega. A API recebe uma CSP que
+   não deixa nada carregar e `Cache-Control: no-store`.
 5. **Autenticação**, dentro da API. Toda rota, menos `GET /api/health`,
    exige o cabeçalho `x-zuri-request: 1` e uma `Origin` (ou `Sec-Fetch-Site`)
    da própria origem; sem isso, 403 `CSRF_FAILED`. Depois, só
@@ -138,6 +141,11 @@ Só os campos alterados viram linha no banco. Um valor guardado que deixou de
 ser válido é lido como o padrão. Mudança inválida volta como
 `VALIDATION_FAILED`, com o nome dos campos e nunca o valor enviado, e cada
 mudança real fica no registro de atividade (só os nomes dos campos).
+
+A interface lê e muda as configurações por `GET` e `PATCH /api/settings`
+(sessão e CSRF). Mudar a saída automática pede a senha digitada nos últimos 15
+minutos, porque uma sessão mais longa vale mais para quem rouba o cookie;
+idioma e fuso, não.
 
 Teto do banco: 900 MB, abaixo do limite de 1 GB por Durable Object com SQLite
 no plano Free (FAQ de limites da Cloudflare, conferido em 31/10/2026; a conta

@@ -119,6 +119,22 @@ describe("gate 4: security headers", () => {
     expect(bundle.headers.get("cache-control")).toBe("public, max-age=31536000, immutable");
   });
 
+  it("lets the sign-in load Turnstile's script and frame only while both Turnstile keys are set", async () => {
+    const assets = fakeAssets();
+    const keys = { TURNSTILE_SITE_KEY: "0x4AAAAAAAexemplo", TURNSTILE_SECRET_KEY: "0x4AAAAAAAsegredo" };
+    const on = (await call(`${ORIGIN}/login`, {}, { ASSETS: assets.binding, ...keys })).headers.get("content-security-policy") ?? "";
+    expect(on).toContain("script-src 'self' https://challenges.cloudflare.com;");
+    expect(on).toContain("frame-src https://challenges.cloudflare.com;");
+    // Everything else stays as strict as without it.
+    expect(on.replace(" https://challenges.cloudflare.com", "").replace("frame-src https://challenges.cloudflare.com; ", "")).toBe(
+      WEB_HEADERS["content-security-policy"],
+    );
+    for (const half of [{ TURNSTILE_SITE_KEY: keys.TURNSTILE_SITE_KEY }, { TURNSTILE_SECRET_KEY: keys.TURNSTILE_SECRET_KEY }, {}]) {
+      const csp = (await call(`${ORIGIN}/login`, {}, { ASSETS: assets.binding, ...half })).headers.get("content-security-policy");
+      expect(csp).toBe(WEB_HEADERS["content-security-policy"]);
+    }
+  });
+
   it("puts the API's headers on API answers and on every refusal of the gates", async () => {
     for (const res of [
       await call(`${ORIGIN}/api/health`),

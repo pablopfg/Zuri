@@ -43,8 +43,29 @@ o [SemVer](https://semver.org/lang/pt-BR/). Cada PR escreve a sua entrada em
 - Passkeys como segundo passo do login (`/api/auth/passkeys`,
   `/api/auth/mfa/passkey`). A lista marca as passkeys criadas em outro
   endereço, que não funcionam no atual.
+- Interface web: login com código ou passkey na segunda etapa, início,
+  central de avisos (vazia até a etapa 11) e Configurações com as abas Conta,
+  Segurança, IA, Avisos, Integrações e Dados. Tema claro, escuro ou como o
+  sistema, layout para celular e computador, em pt-BR e en.
+- Identidade visual do Zuri (logo, favicon, ícones e cores).
+- App instalável (PWA) no celular e no computador.
+- Na aba Conta: idioma, fuso horário, aparência e troca de senha. Na aba
+  Segurança: ligar e desligar a verificação em duas etapas com QR code e
+  códigos de recuperação, passkeys, tempos de saída automática e a atividade
+  de acesso.
+- Aviso dois minutos antes de a sessão terminar por falta de uso, com a opção
+  de continuar; saída em todas as abas juntas.
+- `GET` e `PATCH /api/settings` e `GET /api/auth/activity`.
 
 ### Segurança
+
+- A interface só mostra dados depois de o servidor confirmar a sessão; sem
+  ela, leva ao login com `?next=`, que só aceita caminhos do próprio Zuri.
+- O service worker não guarda nada em cache: páginas e respostas da API vêm
+  sempre da rede.
+- Mudar os tempos de saída automática pede a senha digitada nos últimos 15
+  minutos.
+- O script do Turnstile só é liberado na CSP quando o Turnstile está ligado.
 
 - Conexões WebSocket e caminhos de sub-agente são recusados, e os cabeçalhos
   internos do Agents SDK são removidos antes de chegar ao agente.

@@ -68,7 +68,15 @@ function literalText(node: unknown): string | null {
   if (node.type === "ConditionalExpression") {
     return [literalText(node.consequent), literalText(node.alternate)].filter((t) => t !== null).join(" ") || null;
   }
-  if (node.type === "LogicalExpression" || node.type === "BinaryExpression") {
+  // `cond && <X/>` renders the right side; the left only when it is falsy, and a
+  // falsy string has no letters. `a ?? "text"` and `a || "text"` render either.
+  if (node.type === "LogicalExpression") {
+    const parts = node.operator === "&&" ? [literalText(node.right)] : [literalText(node.left), literalText(node.right)];
+    return parts.filter((t) => t !== null).join(" ") || null;
+  }
+  // Only "+" joins text; a comparison (tab === "conta") renders a boolean, never its operands.
+  if (node.type === "BinaryExpression") {
+    if (node.operator !== "+") return null;
     return [literalText(node.left), literalText(node.right)].filter((t) => t !== null).join(" ") || null;
   }
   return null;

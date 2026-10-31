@@ -28,6 +28,7 @@ export class ZuriAgent extends Agent<WorkerEnv> {
   readonly #api = createApi({
     locale: () => this.locale(),
     auth: () => this.store.auth,
+    settings: () => this.store.settings,
     passwordSecretSet: () =>
       isPasswordHash(this.env.OWNER_PASSWORD_HASH) || (this.env.OWNER_PASSWORD?.length ?? 0) >= MIN_OWNER_PASSWORD_LENGTH,
     origin: () => this.publicUrl().origin,

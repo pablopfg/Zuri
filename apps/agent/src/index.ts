@@ -1,5 +1,6 @@
 import { AGENT_INSTANCE_NAME } from "@zuri/shared";
 import { CLIENT_GEO_HEADER, geoFromCf } from "./auth/client.ts";
+import { TURNSTILE_ORIGIN, turnstileConfigured } from "./auth/turnstile.ts";
 import { type Config, readConfig, secretProblems } from "./config.ts";
 import type { WorkerEnv } from "./env.ts";
 import { type AccessConfig, verifyAccessToken } from "./gates/access.ts";
@@ -56,7 +57,10 @@ async function handle(request: Request, env: WorkerEnv): Promise<Response> {
   }
 
   // Gate 4 for the interface: the asset, with the interface's headers.
-  if (!isApiPath(url.pathname)) return withWebHeaders(await env.ASSETS.fetch(request), url.pathname);
+  if (!isApiPath(url.pathname)) {
+    const turnstile = turnstileConfigured(env.TURNSTILE_SITE_KEY, env.TURNSTILE_SECRET_KEY) ? TURNSTILE_ORIGIN : null;
+    return withWebHeaders(await env.ASSETS.fetch(request), url.pathname, turnstile);
+  }
 
   if (!config.secretsReady) {
     // The answer never says what is missing; the owner's log does, by name only.

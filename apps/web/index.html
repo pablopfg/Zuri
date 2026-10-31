@@ -2,11 +2,20 @@
 <html lang="pt-BR">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="description" content="Zuri: seu assistente pessoal de IA, na sua conta Cloudflare." />
+    <meta name="theme-color" content="#f5f9f8" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="referrer" content="same-origin" />
     <title>Zuri</title>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="icon" href="/favicon-32.png" type="image/png" sizes="32x32" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <link rel="manifest" href="/manifest.webmanifest" />
   </head>
   <body>
-    <main id="app"></main>
-    <script type="module" src="/src/main.ts"></script>
+    <div id="root"></div>
+    <noscript>O Zuri precisa de JavaScript. / Zuri needs JavaScript.</noscript>
+    <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

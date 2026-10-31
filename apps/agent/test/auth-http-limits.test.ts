@@ -12,6 +12,9 @@ function api(auth: AuthService) {
   return createApi({
     locale: () => "pt-BR",
     auth: () => auth,
+    settings: () => {
+      throw new Error("not used");
+    },
     passwordSecretSet: () => true,
     origin: () => ORIGIN,
     development: () => false,

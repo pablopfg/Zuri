@@ -41,10 +41,24 @@ export function webCacheControl(pathname: string, contentType: string | null, ok
   return null;
 }
 
+/**
+ * The interface's CSP. With Turnstile on, the sign-in loads Cloudflare's widget
+ * script and its frame from that one origin; with it off (the default) nothing
+ * outside the Worker's own origin may load, exactly as in _headers.
+ */
+export function webCsp(turnstileOrigin: string | null): string {
+  const base = WEB_HEADERS["content-security-policy"];
+  if (!turnstileOrigin) return base;
+  return base
+    .replace("script-src 'self'", `script-src 'self' ${turnstileOrigin}`)
+    .replace("style-src 'self'", `frame-src ${turnstileOrigin}; style-src 'self'`);
+}
+
 /** A copy of the asset response with the interface's headers. */
-export function withWebHeaders(response: Response, pathname: string): Response {
+export function withWebHeaders(response: Response, pathname: string, turnstileOrigin: string | null = null): Response {
   const res = new Response(response.body, response);
   for (const [name, value] of Object.entries(WEB_HEADERS)) res.headers.set(name, value);
+  res.headers.set("content-security-policy", webCsp(turnstileOrigin));
   const cache = webCacheControl(pathname, res.headers.get("content-type"), res.ok);
   if (cache) res.headers.set("cache-control", cache);
   return res;

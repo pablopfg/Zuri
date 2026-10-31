@@ -38,8 +38,8 @@ describe("i18n catalogs", () => {
 
 describe("t", () => {
   it("interpolates placeholders", () => {
-    expect(t("pt-BR", "app.underConstruction", { stage: 5 })).toBe("Em construção: a interface chega na etapa 5.");
-    expect(t("en", "app.underConstruction", { stage: 5 })).toBe("Under construction: the interface arrives in step 5.");
+    expect(t("pt-BR", "web.login.waitSeconds", { seconds: 5 })).toBe("Tente de novo em 5 s");
+    expect(t("en", "web.login.waitSeconds", { seconds: 5 })).toBe("Try again in 5 s");
   });
 
   it("falls back to pt-BR for an unknown locale", () => {
@@ -47,12 +47,12 @@ describe("t", () => {
   });
 
   it("keeps a placeholder without value visible", () => {
-    expect(t("pt-BR", "app.underConstruction")).toContain("{stage}");
+    expect(t("pt-BR", "web.login.waitSeconds")).toContain("{seconds}");
   });
 
   it("does not read inherited properties as params", () => {
-    expect(t("pt-BR", "app.underConstruction", {})).toContain("{stage}");
-    expect(t("pt-BR", "app.underConstruction", JSON.parse('{"__proto__": {"stage": "x"}}'))).toContain("{stage}");
+    expect(t("pt-BR", "web.login.waitSeconds", {})).toContain("{seconds}");
+    expect(t("pt-BR", "web.login.waitSeconds", JSON.parse('{"__proto__": {"seconds": "x"}}'))).toContain("{seconds}");
   });
 });
 

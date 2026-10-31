@@ -130,9 +130,16 @@ export class Sessions {
   }
 
   deadlines(row: SessionRow): SessionDeadlines {
-    const limit = this.limits(row);
+    const t = this.timeouts();
+    const limit = this.limits(row, t);
     const iso = (ms: number) => new Date(ms).toISOString();
-    return { now: iso(this.clock()), idleAt: iso(limit.idle), presenceAt: iso(limit.presence), maxAt: iso(limit.max) };
+    return {
+      now: iso(this.clock()),
+      idleAt: iso(limit.idle),
+      presenceAt: iso(limit.presence),
+      maxAt: iso(limit.max),
+      idleMinutes: t.idleMinutes,
+    };
   }
 
   /** Opens the 15-minute window for sensitive actions. */

@@ -229,6 +229,10 @@ limite de tamanho lido em fluxo.
 
 ## Atividade de acesso
 
+A aba Segurança mostra os 50 eventos mais recentes (`GET /api/auth/activity`,
+sessão e CSRF): tipo, hora, cidade, região, país, IP e navegador. A resposta
+nunca leva o id da sessão, a chave de rede nem a marca de alerta.
+
 `zur_auth_events` guarda logins, falhas, bloqueios, verificações recusadas,
 saídas, fins de sessão, confirmações e trocas de senha, com a hora, a rede, o
 IP, o país, a região, a cidade, o ASN e o data center da borda, o user agent

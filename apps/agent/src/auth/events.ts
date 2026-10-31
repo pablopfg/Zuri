@@ -1,6 +1,8 @@
 import {
   AUTH_EVENT_DETAIL_DAYS,
   AUTH_EVENT_SUMMARY_DAYS,
+  type AuthActivityEvent,
+  type AuthEventKind,
   LOGIN_WINDOW_MS,
   MAX_AUTH_EVENTS,
   MAX_DEVICES,
@@ -10,28 +12,8 @@ import type { Database } from "../db/database.ts";
 import type { InternalState } from "../db/internal-state.ts";
 import type { ClientInfo } from "./client.ts";
 
-/** What the access activity records. Kinds are data; the screen translates them (step 5). */
-export type AuthEventKind =
-  | "login_success"
-  | "login_failure"
-  | "login_rate_limited"
-  | "login_turnstile"
-  | "login_attack"
-  | "logout"
-  | "session_ended"
-  | "confirm_success"
-  | "confirm_failure"
-  | "password_changed"
-  | "password_change_failure"
-  | "credentials_reset"
-  | "mfa_challenge"
-  | "mfa_failure"
-  | "mfa_enabled"
-  | "mfa_disabled"
-  | "mfa_codes_regenerated"
-  | "recovery_code_used"
-  | "passkey_added"
-  | "passkey_removed";
+/** What the access activity records (AUTH_EVENT_KINDS). Kinds are data; the screen translates them. */
+export type { AuthEventKind };
 
 /** The owner's own events: a flood of refusals never pushes these out (RESERVED_OWNER_AUTH_EVENTS). */
 const OWNER_KINDS: readonly AuthEventKind[] = [
@@ -203,6 +185,42 @@ export class AuthEvents {
       count = Math.min(count, AUTH_EVENTS_CAP_TARGET);
     }
     this.state.set("auth_events_cap_mark", `${high}|${count}`);
+  }
+
+  /** The newest detailed rows, for the activity screen. Never the session id or the network key. */
+  recent(limit: number): AuthActivityEvent[] {
+    const rows = this.db.all<{
+      id: number;
+      at: number;
+      last_at: number;
+      kind: AuthEventKind;
+      reason: string;
+      ip: string;
+      country: string;
+      region: string;
+      city: string;
+      user_agent: string;
+      known_device: number;
+      count: number;
+    }>(
+      `SELECT id, at, last_at, kind, reason, ip, country, region, city, user_agent, known_device, count
+       FROM zur_auth_events ORDER BY at DESC, id DESC LIMIT ?`,
+      limit,
+    );
+    return rows.map((row) => ({
+      id: row.id,
+      at: new Date(row.at).toISOString(),
+      lastAt: new Date(row.last_at).toISOString(),
+      kind: row.kind,
+      reason: row.reason,
+      ip: row.ip,
+      country: row.country,
+      region: row.region,
+      city: row.city,
+      userAgent: row.user_agent,
+      knownDevice: row.known_device === 1,
+      count: row.count,
+    }));
   }
 
   /** Rows waiting for step 11 to tell the owner about them. */
