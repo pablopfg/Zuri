@@ -1,7 +1,7 @@
 import type { startAuthentication as startAuthenticationFn } from "@simplewebauthn/browser";
 import { useQuery } from "@tanstack/react-query";
 import { LOGIN_OPTIONS_PATH, loginOptionsSchema, mfaRequiredSchema, type SessionState, sessionStateSchema } from "@zuri/shared";
-import { Fingerprint, LockKeyhole, Mail, RotateCw } from "lucide-react";
+import { Fingerprint, LockKeyhole, Mail, RotateCw, ShieldCheck, Zap } from "lucide-react";
 import { type FormEvent, useEffect, useRef, useState } from "react";
 import { Navigate, useNavigate, useSearchParams } from "react-router";
 import { Logo } from "../components/Logo.tsx";
@@ -224,16 +224,45 @@ export function LoginPage() {
   );
 
   return (
-    <main className="login-backdrop flex min-h-full items-center justify-center p-4 sm:p-6">
-      <div className="w-full max-w-sm motion-safe:animate-rise">
-        <div className="mb-6 flex flex-col items-center text-center sm:mb-8">
+    <main className="grid min-h-full grid-rows-[auto_1fr] bg-surface lg:grid-cols-2 lg:grid-rows-none lg:bg-bg">
+      {/* Always dark, whatever the theme: the brand side carries the mark's own colors. */}
+      <section className="login-brand flex flex-col gap-4 px-4 pt-10 pb-8 sm:px-8 lg:justify-between lg:gap-10 lg:p-14 xl:px-16">
+        <div className="flex items-center gap-3">
           {/* The light pulses while the server checks: the logo is the sign of work. */}
-          <Logo className="h-14 w-14 drop-shadow-sm" working={pending} />
-          <h1 className="mt-4 text-3xl font-bold tracking-tight">{t("app.name")}</h1>
-          <p className="mt-1.5 text-sm text-fg-muted">{t("app.tagline")}</p>
+          <Logo className="h-9 w-9 lg:h-10 lg:w-10" working={pending} />
+          <h1 className="text-lg font-bold tracking-tight lg:text-xl">{t("app.name")}</h1>
         </div>
-        <div className="rounded-2xl border border-border bg-surface p-5 shadow-sm sm:p-7">
-
+        <div className="max-w-md space-y-5">
+          <p className="text-[1.75rem] leading-tight font-bold tracking-tight text-balance lg:text-[2.75rem] lg:leading-[1.1]">{t("web.login.headline")}</p>
+          <p className="hidden text-base leading-relaxed text-fg-muted lg:block">{t("web.login.lead")}</p>
+          <ul className="hidden flex-col gap-3.5 pt-2 text-[0.9375rem] lg:flex">
+            <li className="flex items-center gap-3">
+              <ShieldCheck className="h-[1.125rem] w-[1.125rem] shrink-0 text-accent" aria-hidden />
+              {t("web.login.pointTwoStep")}
+            </li>
+            <li className="flex items-center gap-3">
+              <LockKeyhole className="h-[1.125rem] w-[1.125rem] shrink-0 text-accent" aria-hidden />
+              {t("web.login.pointPrivate")}
+            </li>
+            <li className="flex items-center gap-3">
+              <Zap className="h-[1.125rem] w-[1.125rem] shrink-0 text-accent" aria-hidden />
+              {t("web.login.pointFast")}
+            </li>
+          </ul>
+        </div>
+        <p className="hidden items-center gap-1.5 text-xs text-fg-muted lg:flex">
+          <LockKeyhole className="h-3.5 w-3.5" aria-hidden />
+          {t("web.login.secure")}
+        </p>
+      </section>
+      <div className="flex flex-col px-4 pt-7 pb-6 sm:px-8 lg:items-center lg:justify-center lg:border-l lg:border-border lg:p-12">
+        <div className="flex w-full max-w-sm flex-1 flex-col motion-safe:animate-rise sm:max-w-md lg:max-w-[22.5rem] lg:flex-none">
+        {step.kind === "password" && (
+          <div className="mb-5 space-y-1.5 lg:mb-6">
+            <h2 className="text-[1.375rem] font-bold tracking-tight lg:text-[1.75rem]">{t("web.login.submit")}</h2>
+            <p className="hidden text-sm text-fg-muted lg:block">{t("web.login.welcome")}</p>
+          </div>
+        )}
         {step.kind === "password" ? (
           <form onSubmit={submitPassword} className="space-y-4" noValidate aria-describedby={error ? "login-error" : undefined}>
             {endedReason && !error && <Notice>{endedReason === "idle" ? t("web.login.endedIdle") : t("web.login.ended")}</Notice>}
@@ -306,7 +335,9 @@ export function LoginPage() {
                 />
               </div>
             )}
-            <Button type="submit" className="w-full" loading={pending} disabled={waitSeconds > 0}>
+            <Button type="submit" className="login-submit min-h-12 w-full" loading={pending} disabled={waitSeconds > 0}>
+              {/* The mark's green light, on the one button that matters here. */}
+              {!pending && waitSeconds === 0 && <span className="h-2 w-2 rounded-full bg-brand-signal" aria-hidden />}
               {waitSeconds > 0 ? t("web.login.waitSeconds", { seconds: waitSeconds }) : t("web.login.submit")}
             </Button>
             {errorLine}
@@ -368,16 +399,16 @@ export function LoginPage() {
             </div>
           </form>
         )}
-        </div>
         {spoken.text && (
           <span key={spoken.n} role="alert" className="sr-only">
             {spoken.text}
           </span>
         )}
-        <p className="mt-5 flex items-center justify-center gap-1.5 text-xs text-fg-muted">
+        <p className="mt-auto flex items-center justify-center gap-1.5 pt-8 text-xs text-fg-muted lg:hidden">
           <LockKeyhole className="h-3.5 w-3.5" aria-hidden />
           {t("web.login.secure")}
         </p>
+        </div>
       </div>
     </main>
   );

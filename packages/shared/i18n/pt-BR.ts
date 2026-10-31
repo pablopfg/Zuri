@@ -2,14 +2,13 @@ import { ptBRMemory } from "./pt-BR-memory.ts";
 import { ptBRProductivity } from "./pt-BR-productivity.ts";
 import { ptBRAi } from "./pt-BR-ai.ts";
 import { ptBRSecurity } from "./pt-BR-security.ts";
-import { ptBRTwoStep } from "./pt-BR-two-step.ts";
+import { ptBRSettings } from "./pt-BR-settings.ts";
 
 // Default and fallback catalog. Every key must also exist in en.ts and be used in the code (npm run lint).
 // The texts of the lazy screens live in their own files (pt-BR-memory.ts, pt-BR-productivity.ts,
 // pt-BR-security.ts), so the interface loads them with those screens (rule P11).
 export const ptBRCore = {
   "app.name": "Zuri",
-  "app.tagline": "Seu assistente pessoal, sempre à mão.",
   "error.unauthorized": "Entre para continuar.",
   "error.forbidden": "Você não tem permissão para fazer isso.",
   "error.httpsRequired": "Use uma conexão segura (HTTPS).",
@@ -41,12 +40,6 @@ export const ptBRCore = {
   "error.serviceUnavailable": "Um serviço necessário não respondeu. Tente de novo em instantes.",
   "error.bodyTooLarge": "O pedido é grande demais.",
   "error.clientAddressMissing": "Não foi possível confirmar a sua conexão. Tente de novo pelo endereço de sempre.",
-  "auth.mfa.expired": "Este login venceu. Digite a sua senha de novo.",
-  "auth.mfa.tooMany": "Códigos errados demais. Digite a sua senha de novo.",
-  "auth.mfa.wrongCode": "Código incorreto.",
-  "auth.mfa.setupWrongCode": "Código incorreto ou configuração vencida. Confira se o relógio do celular está certo e tente de novo.",
-  "auth.mfa.alreadyOn": "A verificação em duas etapas já está ligada. Desligue antes para usar outro aplicativo.",
-  "auth.mfa.off": "A verificação em duas etapas está desligada.",
   "auth.passkey.noneHere": "Nenhuma passkey funciona neste endereço. Use o código do aplicativo autenticador.",
   "auth.passkey.notAccepted": "Esta passkey não foi aceita, ou o pedido venceu. Tente de novo ou use o código do aplicativo.",
   "auth.passkey.needsMfa": "Ligue antes a verificação em duas etapas com um aplicativo autenticador. Os códigos de recuperação dele são o caminho de volta se você perder as passkeys.",
@@ -92,6 +85,12 @@ export const ptBRCore = {
   "web.login.humanBroken": "A verificação de segurança não carregou. Tente de novo para entrar.",
   "web.login.humanRetry": "Recarregar a verificação",
   "web.login.secure": "Conexão protegida",
+  "web.login.headline": "Tudo o que importa, num só lugar.",
+  "web.login.lead": "Tarefas, notas e lembranças organizadas por um assistente que aprende com você.",
+  "web.login.pointTwoStep": "Entrada protegida em duas etapas",
+  "web.login.pointPrivate": "Suas informações, só para você",
+  "web.login.pointFast": "Rápido em qualquer aparelho",
+  "web.login.welcome": "Que bom te ver de novo.",
   "web.login.humanLoading": "Preparando a verificação de segurança…",
   "web.login.emailRequired": "Digite o seu e-mail.",
   "web.login.passwordRequired": "Digite a sua senha.",
@@ -151,7 +150,6 @@ export const ptBRCore = {
   "web.password.submit": "Trocar a senha",
   "web.password.changed": "Senha trocada. As outras sessões foram encerradas.",
   "web.settings.title": "Configurações",
-  "web.settings.description": "Conta, segurança e o que o Zuri pode usar.",
   "web.mfaReminder.body": "A verificação em duas etapas está desligada. Ligue para proteger a sua conta.",
   "web.mfaReminder.short": "Duas etapas desligadas",
   "web.mfaReminder.action": "Ligar agora",
@@ -163,9 +161,6 @@ export const ptBRCore = {
   "web.settings.tab.notifications": "Avisos",
   "web.settings.tab.integrations": "Integrações",
   "web.settings.tab.data": "Dados",
-  "web.settings.later.notifications": "Push, e-mail, Telegram e categorias de aviso chegam junto com a central de avisos.",
-  "web.settings.later.integrations": "Servidores MCP e Google Agenda chegam numa próxima versão.",
-  "web.settings.later.data": "Backup e uso do armazenamento chegam numa próxima versão.",
   "web.account.preferences": "Idioma e fuso horário",
   "web.account.preferencesHint": "Valem para a interface, as mensagens do servidor e, depois, o bot.",
   "web.account.language": "Idioma",
@@ -178,18 +173,7 @@ export const ptBRCore = {
   "web.theme.system": "Como o sistema",
   "web.theme.light": "Claro",
   "web.theme.dark": "Escuro",
-  "web.sessions.title": "Saída automática",
-  "web.sessions.description": "Quando o Zuri encerra a sessão sozinho. Mudar pede a senha de novo.",
-  "web.sessions.idle": "Sem uso",
-  "web.sessions.presence": "Sem aba aberta",
-  "web.sessions.max": "Duração máxima",
-  "web.unit.minutes.one": "{count} minuto",
-  "web.unit.minutes.other": "{count} minutos",
-  "web.unit.hours.one": "{count} hora",
-  "web.unit.hours.other": "{count} horas",
   "web.nav.accessLog": "Acessos",
-  "web.security.laterTitle": "Em breve nesta aba",
-  "web.security.laterBody": "Lista de sessões abertas, acesso remoto por token e modo de bloqueio.",
   "web.nav.tasks": "Tarefas",
   "web.nav.notes": "Notas",
   "web.markdown.image": "[imagem: {alt}]",
@@ -210,4 +194,4 @@ function join<A extends object, B extends object, C extends object, D extends ob
 }
 
 /** The whole pt-BR catalog: what the server, the tests and the lint use. */
-export const ptBR = /* @__PURE__ */ join(ptBRCore, ptBRMemory, ptBRProductivity, ptBRSecurity, ptBRAi, ptBRTwoStep);
+export const ptBR = /* @__PURE__ */ join(ptBRCore, ptBRMemory, ptBRProductivity, ptBRSecurity, ptBRAi, ptBRSettings);

@@ -2,7 +2,6 @@ import type { Messages } from "./index.ts";
 
 export const en: Messages = {
   "app.name": "Zuri",
-  "app.tagline": "Your personal assistant, always at hand.",
   "error.unauthorized": "Sign in to continue.",
   "error.forbidden": "You are not allowed to do this.",
   "error.httpsRequired": "Use a secure connection (HTTPS).",
@@ -85,6 +84,12 @@ export const en: Messages = {
   "web.login.humanBroken": "The security check didn't load. Try again to sign in.",
   "web.login.humanRetry": "Reload the check",
   "web.login.secure": "Secure connection",
+  "web.login.headline": "Everything that matters, in one place.",
+  "web.login.lead": "Tasks, notes and memories, organized by an assistant that learns with you.",
+  "web.login.pointTwoStep": "Two-step sign-in protection",
+  "web.login.pointPrivate": "Your information, for you only",
+  "web.login.pointFast": "Fast on any device",
+  "web.login.welcome": "Good to see you again.",
   "web.login.humanLoading": "Getting the security check ready…",
   "web.login.emailRequired": "Enter your email.",
   "web.login.passwordRequired": "Enter your password.",

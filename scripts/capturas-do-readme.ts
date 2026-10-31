@@ -94,7 +94,15 @@ for (const [device, options] of [
 
     await page.goto(`${BASE}/entrar`);
     await page.getByRole("button", { name: "Entrar" }).waitFor();
+    // The real check passes unseen (interaction-only); the fake one prints its key, so it leaves the shot.
+    const check = page.locator('[data-testid="turnstile"][data-solved="true"]');
+    await check.evaluate((box: HTMLElement) => {
+      box.style.display = "none";
+    });
     await shot("entrar");
+    await check.evaluate((box: HTMLElement) => {
+      box.style.display = "";
+    });
     await signIn(page);
     await page.waitForURL((url) => !url.pathname.startsWith("/entrar"));
     if (!seeded) {
