@@ -14,6 +14,7 @@ import type { WorkerEnv } from "../env.ts";
 import { AppError, errorResponse } from "../http/errors.ts";
 import { MemoryService } from "../memory/service.ts";
 import { Productivity } from "../productivity/index.ts";
+import { log } from "../log.ts";
 
 /**
  * The sign-in's robot check for this deploy. Loopback http PUBLIC_URL (local
@@ -142,7 +143,7 @@ export class ZuriAgent extends Agent<WorkerEnv> {
     } catch (error) {
       // Only the name: the message may quote SQL or data. Without this line a
       // broken migration would hide behind answers that still look normal.
-      console.error(JSON.stringify({ message: "settings unreadable", error: error instanceof Error ? error.name : typeof error }));
+      log("error", "settings_unreadable", { error });
       return DEFAULT_LOCALE;
     }
   }

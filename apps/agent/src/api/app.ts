@@ -28,6 +28,7 @@ import type { Productivity } from "../productivity/index.ts";
 import { checkCsrf, deviceCookie, mfaCookie, readDeviceCookie, readJson, readMfaCookie, readSessionCookie, sessionCookie } from "./http.ts";
 import { registerMemoryRoutes } from "./memory.ts";
 import { registerProductivityRoutes } from "./productivity.ts";
+import { log } from "../log.ts";
 
 export interface ApiEnv {
   Bindings: WorkerEnv;
@@ -70,14 +71,14 @@ const WHILE_PASSWORD_CHANGE = new Set(["GET /api/auth/session", "POST /api/auth/
 export function createApi(deps: ApiDeps) {
   const app = new Hono<ApiEnv>().basePath("/api");
 
-  app.onError((error) => errorResponse(error, deps.locale()));
+  app.onError((error, c) => errorResponse(error, deps.locale(), c.req.raw));
   app.notFound(() => errorResponse(new AppError("NOT_FOUND"), deps.locale()));
 
   // Public: says only whether the Worker is up and configured. Never data, never
   // which setting is missing (the Worker's log says that).
   app.get("/health", () => {
     if (!deps.passwordSecretSet() && !deps.auth().passwordConfigured()) {
-      console.warn(JSON.stringify({ message: "not configured: set OWNER_PASSWORD or OWNER_PASSWORD_HASH" }));
+      log("warn", "not_configured", { secrets: ["OWNER_PASSWORD", "OWNER_PASSWORD_HASH"] });
       throw new AppError("NOT_CONFIGURED");
     }
     return Response.json({ ok: true });

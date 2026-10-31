@@ -135,6 +135,12 @@ o [SemVer](https://semver.org/lang/pt-BR/). Cada PR escreve a sua entrada em
 
 ### Alterado
 
+- Os logs do servidor têm agora um formato único (`level`, `event`, `code`,
+  `route`, `requestId`, `error`, `secrets`), com o `cf-ray` da requisição para
+  achar o erro no painel da Cloudflare. Tudo passa por um só módulo, que
+  descarta qualquer valor fora do formato esperado, e um teste impede escrever
+  no log por outro caminho. Primeira parte do plano de monitoramento em
+  `docs/planos/observabilidade.md`.
 - Os textos que só o servidor diz (recusas e erros da API) saíram do pacote
   inicial da interface, que já recebe essas mensagens prontas na resposta. O
   JS inicial caiu de 139,9 para 139,4 KB, já com a paleta, e o teto da CI desceu
