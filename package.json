@@ -14,6 +14,7 @@
     "test": "vitest run",
     "i18n": "node scripts/lint-i18n.ts && vitest run --project shared i18n",
     "build": "npm run build -w @zuri/web && npm run build -w @zuri/agent",
+    "size": "node scripts/check-bundle-size.ts",
     "test:e2e": "playwright test",
     "audit": "npm audit --audit-level=high"
   },

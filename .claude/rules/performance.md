@@ -21,7 +21,7 @@ Vale para todo código. Números, medidas e o porquê de cada regra: `docs/arqui
 - **P8.** Tarefas periódicas dividem um agendamento; nunca um alarme por item (cada disparo do SDK grava 4 a 5 linhas; `keepAliveWhile` bate a cada 30 s). Passo de Workflow abaixo de 10 ms de CPU.
 - **P9.** Subrequisições contadas por turno, parada antes de 45; até 6 conexões simultâneas.
 - **P10.** O log de invocação já é o evento da requisição: nada de `console.log` no caminho comum nem em laço; traces desligados.
-- **P11.** Interface: JavaScript inicial até 160 KB gzip (meta 150); tela nova sob demanda; biblioteca pesada só no uso; sem polling além do heartbeat; busca com debounce; `staleTime` de 15 s ou mais.
+- **P11.** Interface: JavaScript inicial até 160 KB gzip (meta 150), conferido na CI por `npm run size` (`scripts/check-bundle-size.ts`, teto que só desce); tela nova sob demanda; biblioteca pesada só no uso; sem polling além do heartbeat; busca com debounce; `staleTime` de 15 s ou mais.
 - **P12.** Cache: arquivos com hash `immutable` por um ano; HTML e `sw.js` `no-cache`; API `no-store`; service worker sem cache de API.
 - **P13.** Tabela nova respeita o teto de 900 MB e os limites por tipo; nada de arquivo no banco; dado temporário tem prazo de limpeza.
 - **P14.** Recurso que gera cobrança só com OK do Pablo, marcado com ⚠️.
