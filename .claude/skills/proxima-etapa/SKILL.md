@@ -16,6 +16,7 @@ lê só `progresso.md`, `decisoes.md` e o trecho da especificação dela.
       alto ou médio aberto; relatórios no corpo do PR.
 - [ ] Matriz de rastreabilidade completa (todo critério de aceite com teste).
 - [ ] `CHANGELOG.md` e docs atualizados; `progresso.md` atualizado neste PR.
+- [ ] `README.md` atualizado neste PR: etapa marcada ✅ no mapa, 🚧 na próxima, selo e "O que já funciona" (`.claude/rules/readme.md`).
 - [ ] Nenhuma decisão de produto pendente.
 - [ ] Os rulesets da `develop` e da `main` estão ativos no GitHub (o Pablo
       confirmou na etapa 0). Sem eles, não mescle sozinho.

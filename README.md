@@ -1,106 +1,160 @@
 <div align="center">
 
-<img src="docs/assets/zuri-logo.svg" alt="Símbolo do Zuri: um Z branco sobre um quadrado arredondado em degradê de violeta para verde-água" width="96" height="96">
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/assets/zuri-banner-escuro.svg">
+  <img src="docs/assets/zuri-banner-claro.svg" alt="Zuri: o símbolo, um i cujo pingo é uma luz verde, ao lado do nome e da frase 'Seu assistente pessoal de IA, na sua conta Cloudflare'" width="100%">
+</picture>
 
-# Zuri
+<br>
 
-**Seu assistente pessoal de IA, na sua conta Cloudflare, no navegador e no Telegram.**
-
-Gratuito e de código aberto. Um único dono, nenhum servidor de terceiros:<br>
-as conversas, as memórias e as tarefas ficam na sua conta.
-
-[![Licença: MIT](https://img.shields.io/badge/licen%C3%A7a-MIT-6d5dfc)](LICENSE)
+[![CI](https://github.com/pablopfg/Zuri/actions/workflows/ci.yml/badge.svg?branch=develop)](https://github.com/pablopfg/Zuri/actions/workflows/ci.yml?query=branch%3Adevelop)
+[![CodeQL](https://github.com/pablopfg/Zuri/actions/workflows/codeql.yml/badge.svg?branch=develop)](https://github.com/pablopfg/Zuri/actions/workflows/codeql.yml?query=branch%3Adevelop)
+[![Licença: MIT](https://img.shields.io/badge/licen%C3%A7a-MIT-0b0f19)](LICENSE)
 [![Roda na Cloudflare](https://img.shields.io/badge/roda%20na-Cloudflare-f38020?logo=cloudflare&logoColor=white)](https://developers.cloudflare.com/workers/)
-[![Bot do Telegram](https://img.shields.io/badge/bot-Telegram-26a5e4?logo=telegram&logoColor=white)](#-o-bot-do-telegram)
-[![Plano Free da Cloudflare](https://img.shields.io/badge/plano%20Free-compat%C3%ADvel-14b8a6)](#-o-que-é-gratuito-e-o-que-pode-custar)
-[![Sem telemetria](https://img.shields.io/badge/telemetria-nenhuma-6d5dfc)](#-segurança-e-privacidade)
+[![Plano Free](https://img.shields.io/badge/plano%20Free-compat%C3%ADvel-22c55e)](#-plano-free-sem-surpresa-na-fatura)
+[![Etapas](https://img.shields.io/badge/etapas-8%20de%2026-22c55e)](#️-mapa-das-etapas)
+[![Sem telemetria](https://img.shields.io/badge/telemetria-nenhuma-0b0f19)](#-segurança-e-privacidade)
 [![Node.js 24+](https://img.shields.io/badge/node-24%2B-339933?logo=nodedotjs&logoColor=white)](.nvmrc)
 
-[Instalação](#-instalação) · [Documentação](docs/) · [Segurança](SECURITY.md) · [Como contribuir](CONTRIBUTING.md) · [Changelog](CHANGELOG.md)
+**Um assistente de IA que é só seu.** Ele roda num único Worker da sua conta Cloudflare, guarda tudo no SQLite<br>
+de um Durable Object e conversa com você pelo navegador e, em breve, pelo Telegram.
+
+[Telas](#-telas) · [O que já funciona](#-o-que-já-funciona) · [Como funciona](#-como-funciona) · [Mapa das etapas](#️-mapa-das-etapas) · [Rodar localmente](#-rodar-localmente) · [Contribuir](CONTRIBUTING.md)
 
 </div>
 
-> [!IMPORTANT]
-> **O Zuri está em construção.** Ele é desenvolvido em 26 etapas, uma por PR, a partir da [especificação](docs/especificacao.md). O andamento fica em [`.claude/memoria/progresso.md`](.claude/memoria/progresso.md). As funções abaixo descrevem o produto completo; cada uma vale a partir da etapa que a entrega.
-
----
+> [!NOTE]
+> **Em construção.** O Zuri sai em 26 etapas, uma por PR, a partir da [especificação](docs/especificacao.md). As etapas 0 a 7 estão na `develop` e a 8 (provedor de IA e medição de uso) está em andamento. O [mapa das etapas](#️-mapa-das-etapas) mostra o que já existe e o que vem a seguir; o estado detalhado fica em [`progresso.md`](.claude/memoria/progresso.md).
 
 ## Sumário
 
-- [Por que Zuri](#por-que-zuri)
-- [✨ Funcionalidades](#-funcionalidades)
-- [🤖 O bot do Telegram](#-o-bot-do-telegram)
-- [🧭 Como funciona](#-como-funciona)
-- [🔒 Segurança e privacidade](#-segurança-e-privacidade)
-- [💸 O que é gratuito e o que pode custar](#-o-que-é-gratuito-e-o-que-pode-custar)
-- [🚀 Instalação](#-instalação)
-- [🛠️ Desenvolvimento](#️-desenvolvimento)
-- [🧪 Qualidade e testes](#-qualidade-e-testes)
-- [🗺️ Roteiro](#️-roteiro)
-- [📁 Estrutura do repositório](#-estrutura-do-repositório)
-- [🤝 Como contribuir](#-como-contribuir)
-- [🙌 Origem e créditos](#-origem-e-créditos)
-- [📄 Licença](#-licença)
+- [Por que o Zuri](#-por-que-o-zuri)
+- [Telas](#-telas)
+- [O que já funciona](#-o-que-já-funciona)
+- [O que vem a seguir](#-o-que-vem-a-seguir)
+- [Como funciona](#-como-funciona)
+- [Segurança e privacidade](#-segurança-e-privacidade)
+- [Plano Free, sem surpresa na fatura](#-plano-free-sem-surpresa-na-fatura)
+- [Mapa das etapas](#️-mapa-das-etapas)
+- [Rodar localmente](#-rodar-localmente)
+- [Qualidade](#-qualidade)
+- [Estrutura do repositório](#-estrutura-do-repositório)
+- [Documentação](#-documentação)
+- [Como contribuir](#-como-contribuir)
+- [In English](#-in-english)
+- [Créditos e licença](#-créditos-e-licença)
 
----
+## 💡 Por que o Zuri
 
-## Por que Zuri
+Cada pessoa publica o próprio Zuri na própria conta Cloudflare, e ele atende só ela. Conversas, memórias e tarefas não passam pelo servidor de outra empresa.
 
-O Zuri junta conversa, memória, tarefas, notas, lembretes e avisos num lugar só, e trabalha sozinho enquanto você faz outra coisa. Você fala com ele por dois caminhos que valem o mesmo:
+- **Seus dados ficam com você.** Tudo mora no SQLite de um Durable Object da sua conta. Não há banco externo nem servidor de terceiros.
+- **Custo zero.** Foi desenhado para caber no plano Free da Cloudflare, com contadores e tetos para a IA não passar da cota.
+- **Segurança.** Turnstile em todo login, 2FA, passkeys, página de acessos e um agente que não tem shell, não roda código e não acessa a internet livremente.
+- **Web e Telegram.** A interface web (PWA) já está no ar; o bot do Telegram chega na fase C e passa pelos mesmos portões, com os mesmos dados.
 
-- **No navegador**, pela interface web instalável (PWA) no celular e no computador.
-- **No Telegram**, por um bot que é só seu: consulta rápida, conversa por texto e voz, aprovações com passkey e um botão de emergência.
+## 📸 Telas
 
-Tudo roda num único Worker da Cloudflare, com os dados no SQLite de um Durable Object da sua conta. Sem banco externo, sem servidor para manter e sem cobrança no plano gratuito.
+As capturas abaixo acompanham o tema do seu GitHub (claro ou escuro) e saem da `develop` com dados de exemplo.
 
-## ✨ Funcionalidades
+<table>
+  <tr>
+    <td width="50%" valign="top">
+      <picture>
+        <source media="(prefers-color-scheme: dark)" srcset="docs/capturas/inicio-computador-escuro.png">
+        <img src="docs/capturas/inicio-computador-claro.png" alt="Início do Zuri no computador: barra lateral com Início, Tarefas, Notas, Memória e Acessos, e cartões de Segurança e Sessão">
+      </picture>
+      <p align="center"><b>Início</b>: segurança da conta e sessão num relance</p>
+    </td>
+    <td width="50%" valign="top">
+      <picture>
+        <source media="(prefers-color-scheme: dark)" srcset="docs/capturas/tarefas-computador-escuro.png">
+        <img src="docs/capturas/tarefas-computador-claro.png" alt="Tela de tarefas com as abas Hoje, Próximas, Atrasadas, Concluídas e Todas, uma tarefa de prioridade alta e outra em andamento">
+      </picture>
+      <p align="center"><b>Tarefas</b>: hoje, próximas, atrasadas, projetos e lixeira</p>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <picture>
+        <source media="(prefers-color-scheme: dark)" srcset="docs/capturas/nota-computador-escuro.png">
+        <img src="docs/capturas/nota-computador-claro.png" alt="Editor de notas com a lista à esquerda e a nota 'Ideias para a sala nova' aberta, em Markdown, ligada a um projeto">
+      </picture>
+      <p align="center"><b>Notas</b>: Markdown, busca sem acento e projetos</p>
+    </td>
+    <td width="50%" valign="top">
+      <picture>
+        <source media="(prefers-color-scheme: dark)" srcset="docs/capturas/memoria-computador-escuro.png">
+        <img src="docs/capturas/memoria-computador-claro.png" alt="Tela de memória com o formulário 'Guardar uma memória', as abas Todas, Atuais, Incertas e Passadas e a lista de fatos">
+      </picture>
+      <p align="center"><b>Memória</b>: o que o Zuri sabe, com histórico</p>
+    </td>
+  </tr>
+  <tr>
+    <td width="50%" valign="top">
+      <picture>
+        <source media="(prefers-color-scheme: dark)" srcset="docs/capturas/entrar-computador-escuro.png">
+        <img src="docs/capturas/entrar-computador-claro.png" alt="Tela de entrar com o símbolo do Zuri, campos de e-mail e senha e a verificação contra robôs">
+      </picture>
+      <p align="center"><b>Entrar</b>: senha, Turnstile e segundo passo</p>
+    </td>
+    <td width="50%" valign="top">
+      <picture>
+        <source media="(prefers-color-scheme: dark)" srcset="docs/capturas/acessos-computador-escuro.png">
+        <img src="docs/capturas/acessos-computador-claro.png" alt="Página Acessos com filtros por período, tipo e IP e uma tabela com data, resultado, IP, lugar, rede e navegador de cada tentativa">
+      </picture>
+      <p align="center"><b>Acessos</b>: cada tentativa de entrar, com lugar e rede</p>
+    </td>
+  </tr>
+</table>
 
-### Assistente
+<details>
+<summary><b>No celular</b></summary>
+<br>
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/capturas/entrar-celular-escuro.png">
+    <img src="docs/capturas/entrar-celular-claro.png" alt="Tela de entrar no celular" width="30%">
+  </picture>
+  &nbsp;
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/capturas/inicio-celular-escuro.png">
+    <img src="docs/capturas/inicio-celular-claro.png" alt="Início no celular, com a navegação inferior" width="30%">
+  </picture>
+  &nbsp;
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/capturas/tarefas-celular-escuro.png">
+    <img src="docs/capturas/tarefas-celular-claro.png" alt="Tarefas no celular" width="30%">
+  </picture>
+</p>
+</details>
 
-| | Funcionalidade | O que faz |
-| :---: | --- | --- |
-| 💬 | **Chat** | Respostas em tempo real, Markdown, atividade das ferramentas à vista e botão para parar. Conversas longas ganham resumo automático. |
-| 🎙️ | **Voz** | Fale até 1 minuto no app (ou 5 no Telegram). A transcrição roda no Workers AI da sua conta e o áudio nunca é guardado. |
-| 🧠 | **Memória** | Fatos e preferências que você vê, edita e apaga. Só os relevantes vão ao modelo. |
-| 🕰️ | **Histórico da memória** | Fatos que mudam com o tempo ficam como atual, incerto ou passado, com revisão de conflitos. |
-| 🔎 | **Busca semântica** <sub>opcional</sub> | Encontra pelo significado, além das palavras, em memórias, tarefas, notas e automações. |
+## ✅ O que já funciona
 
-### Produtividade
+O que está na `develop` hoje, etapa por etapa. "extra" marca melhorias feitas fora das etapas.
 
-| | Funcionalidade | O que faz |
-| :---: | --- | --- |
-| ✅ | **Tarefas, notas e projetos** | Pela interface ou pelo chat, com busca, lixeira e validação de datas. |
-| 🗺️ | **Planejamento com IA** | Descreva um objetivo e revise o plano num cartão. Nada é criado antes de você confirmar. |
-| ⏰ | **Automações** | Lembretes, resumos diários e rotinas de IA, que rodam com os alarmes da Cloudflare. Rotina criada pelo chat espera a sua aprovação. |
-| 📣 | **Central de avisos** | Prioridade, categorias, limites por canal, insistência até você tratar e um resumo às 07:30. Alertas de segurança chegam sempre, por todos os canais. |
-| 🔔 | **Canais** | Notificação push, e-mail pelo Email Routing e Telegram. |
-| 🔁 | **Monitor de sites** | Cloudflare Workflows avisa quando um site cai e quando volta. |
+| | Funcionalidade | O que faz | Etapa |
+| :---: | --- | --- | :---: |
+| 🛡️ | **Portões de segurança** | Um Worker só, que serve a interface e a API. Toda requisição passa por host permitido, HTTPS, Cloudflare Access opcional, cabeçalhos de segurança e autenticação. | 1 |
+| 🌐 | **Idiomas e fuso** | pt-BR por padrão e inglês, datas no padrão brasileiro e fuso `America/Sao_Paulo`. Os erros da API saem no idioma do dono. | 2 |
+| 🔑 | **Login e sessões** | Senha forte, sessão que termina por inatividade, proteção contra força bruta e Cloudflare Turnstile em toda tentativa de entrar. | 3 |
+| 📱 | **2FA e passkeys** | Aplicativo autenticador (TOTP), 10 códigos de recuperação e passkeys no segundo passo. Alerta a cada 3 códigos errados seguidos; com 30 erros em 24 h, o segundo passo fica suspenso para redes desconhecidas. | 4 |
+| 🧭 | **Interface web (PWA)** | Barra lateral recolhível, navegação inferior no celular, tema claro, escuro ou do sistema, instalável no celular e no computador. | 5 |
+| 👀 | **Acessos** | Cada tentativa de entrar, com IP, cidade, país, rede, navegador e resultado, filtrável por período e tipo. | extra |
+| ✅ | **Tarefas e projetos** | Hoje, próximas, atrasadas e concluídas, com prioridade, prazo no seu fuso e projetos. | 6 |
+| 📝 | **Notas** | Markdown seguro, busca de texto completo (com ou sem acento) e lixeira de 30 dias. | 6 |
+| 🧠 | **Memória** | Fatos que você guarda, edita e apaga. O que muda vira histórico (atual, incerto ou passado), e conflitos vão para uma fila de revisão. | 7 |
 
-### Integrações
+## 🔭 O que vem a seguir
 
-| | Funcionalidade | O que faz |
-| :---: | --- | --- |
-| 📅 | **Google Agenda** <sub>opcional</sub> | Leitura e escrita de eventos, com briefing do dia às 07:00 e fechamento às 19:00. |
-| 🔌 | **Servidores MCP** <sub>opcional</sub> | Ferramentas de servidores MCP remotos, desligadas por padrão. O que altera algo pede aprovação. |
-| 🔗 | **Acesso remoto** <sub>opcional</sub> | Tokens com escopo para o n8n e outros serviços enviarem eventos ao Zuri. |
-| 🛟 | **Funciona sem IA** | Tarefas, notas, lembretes e os comandos do bot continuam funcionando se a cota de IA acabar. |
-
-## 🤖 O bot do Telegram
-
-O bot é um painel de administração no bolso. Ele só ouve a sua conta, vinculada por um código de uso único e conferida pelo id do Telegram.
-
-| Para quê | Comandos |
-| --- | --- |
-| Consultar o dia | `/hoje` · `/tarefas` · `/rotinas` · `/avisos` · `/uso` · `/status` |
-| Agir rápido | `/nova` · `/feito` · `/lembrar` · `/nota` · `/buscar` · `/memoria` · `/nova_conversa` |
-| Segurança | `/acessos` · `/sessoes` · `/encerrar_sessoes` · `/tokens` · `/pausar_rotinas` · `/bloquear` |
-| Ajuda | `/ajuda` |
-
-- **Comandos sem IA.** Respondem na hora e não gastam a cota de IA.
-- **Conversa.** Texto e voz no chat privado viram uma conversa do app, com o mesmo histórico.
-- **Aprovações fortes.** Ações sensíveis se confirmam por **passkey** (digital ou rosto) ou por **código de 6 dígitos no e-mail**. Tocar no botão não basta, e algumas ações nunca saem do app.
-- **Trava de leitura.** Depois de 12 h sem uso, o bot só lê até você confirmar que é você.
-- **Modo de bloqueio.** `/bloquear` encerra sessões, suspende tokens e trava o acesso em segundos, mesmo com a IA fora do ar.
+| | Funcionalidade | O que faz | Etapa |
+| :---: | --- | --- | :---: |
+| 📊 | **IA com medição** | Workers AI com contador por chamada e um teto único de 9.000 Neurons por dia, com aviso claro ao chegar nele. | 8 |
+| 💬 | **Chat com ferramentas** | Respostas em tempo real, ferramentas com permissão e ações destrutivas que viram proposta para você aprovar. | 9 |
+| ⏰ | **Automações e avisos** | Lembretes, resumos e rotinas de IA; central de avisos com push, e-mail e prioridade. | 10–11 |
+| 🤖 | **Bot do Telegram** | Painel de administração no bolso: consultas sem IA, conversa por texto e voz, aprovações com passkey e modo de bloqueio. | 12–16 |
+| 🔌 | **Integrações** | Busca semântica, servidores MCP, Google Agenda, acesso remoto para o n8n e monitor de sites, todos opcionais. | 17–22 |
+| 💾 | **Backup e instalação** | Backup e importação, guia de instalação só pelo navegador e auditoria final. | 23–25 |
 
 ## 🧭 Como funciona
 
@@ -108,72 +162,104 @@ O bot é um painel de administração no bolso. Ele só ouve a sua conta, vincul
 flowchart LR
     subgraph Entradas
         W["🌐 Interface web (PWA)"]
-        T["🤖 Bot do Telegram"]
-        R["🔗 Eventos remotos (n8n)"]
+        T["🤖 Bot do Telegram<br/><i>fase C</i>"]
     end
     subgraph Worker["Worker da Cloudflare"]
-        G["Portões de segurança<br/>host · HTTPS · Access · cabeçalhos · autenticação"]
+        G["Portões<br/>host · HTTPS · Access · cabeçalhos · sessão"]
+        TS["Turnstile"]
     end
     subgraph DO["Durable Object (instância única)"]
-        A["Agente + API"]
-        S[("SQLite")]
+        A["Agente + API (Hono)"]
+        S[("SQLite + FTS5")]
     end
     AI["Workers AI"]
-    WF["Workflows"]
     W --> G
     T --> G
-    R --> G
+    G --- TS
     G --> A
     A <--> S
     A --> AI
-    A --> WF
 ```
 
-O bot não tem caminho próprio: passa pelos mesmos portões da interface e chega ao mesmo agente, aos mesmos dados e aos mesmos limites.
+O bot não terá caminho próprio: ele vai passar pelos mesmos portões da interface e chegar ao mesmo agente, aos mesmos dados e aos mesmos limites.
 
 | Camada | Tecnologia |
 | --- | --- |
-| Worker e API | Hono sobre Cloudflare Workers |
-| Agente e dados | Agents SDK, Durable Object com SQLite e FTS5 |
-| IA | Workers AI (chat, Whisper, embeddings); modelos pagos só com aprovação |
-| Interface | React, Vite, Tailwind, TanStack Query, PWA |
-| Validação | Zod nos dois lados, schemas compartilhados |
-| Testes | Vitest dentro do workerd e Playwright |
+| Worker e API | [Hono](https://hono.dev) sobre Cloudflare Workers |
+| Agente e dados | [Agents SDK](https://developers.cloudflare.com/agents/), Durable Object com SQLite e FTS5, migrations só de acréscimo |
+| IA | Workers AI; modelos pagos desligados e só com aprovação ⚠️ |
+| Interface | React, Vite, Tailwind, TanStack Query e React Router, servida pelo próprio Worker |
+| Validação | Zod no servidor e Zod Mini na interface, com os schemas em `packages/shared` |
+| Testes | Vitest dentro do workerd, Playwright, axe e Lighthouse |
+
+Mais detalhes em [docs/arquitetura.md](docs/arquitetura.md).
 
 ## 🔒 Segurança e privacidade
 
-- **Dono único.** Sem cadastro e sem contas de terceiros.
-- **Acesso forte.** Senha de 15+ caracteres conferida no HIBP, 2FA, passkeys, códigos de recuperação, Turnstile adaptativo e sessão que expira por inatividade.
-- **Agente com limites.** Sem shell, execução de código, HTTP livre ou deploy. Ações destrutivas viram proposta, que só roda com a sua aprovação.
-- **Conteúdo é dado, nunca instrução.** Notas, memórias, mensagens do Telegram e resultados de MCP entram no modelo isolados, contra injeção de prompt.
-- **Segredos só no Worker.** Nada sensível no navegador, no repositório ou nos logs.
+- **Dono único.** Não há cadastro nem contas de outras pessoas.
+- **Login forte.** Senha de 15 caracteres ou mais, Turnstile validado no Worker antes da senha, 2FA, passkeys, códigos de recuperação e defesa contra ataque lento ao segundo passo.
+- **Você vê quem tentou.** A página Acessos registra cada tentativa. O IP fica no banco do Zuri e não vai para os logs.
+- **Agente com limites.** Sem shell, execução de código, HTTP livre, credenciais ou deploy. Ação destrutiva vira proposta e só roda com a sua aprovação.
+- **Conteúdo é dado, nunca instrução.** Notas, memórias e mensagens entram no modelo em blocos `<data>` neutralizados, contra injeção de prompt.
+- **Segredos só no Worker.** Nada sensível no navegador, no repositório ou nos logs. A CSP da interface é testada na CI.
 - **Sem telemetria.** Nenhuma chamada a serviços dos desenvolvedores.
 
-Detalhes em [docs/seguranca.md](docs/seguranca.md). Para relatar uma vulnerabilidade, veja [SECURITY.md](SECURITY.md).
+Detalhes em [docs/seguranca.md](docs/seguranca.md). Para relatar uma vulnerabilidade, siga o [SECURITY.md](SECURITY.md) e não abra issue pública.
 
-## 💸 O que é gratuito e o que pode custar
+## 💸 Plano Free, sem surpresa na fatura
 
-| Recurso | Plano Free | Observação |
+| Recurso | Plano Free | Como o Zuri usa |
 | --- | :---: | --- |
-| Workers, Durable Objects com SQLite, Workflows | ✅ | Dentro dos limites diários do plano |
-| Workers AI | ✅ | Cota diária de Neurons, com contador e teto no Zuri |
-| Email Routing, Turnstile, Cloudflare Access | ✅ | Opcionais |
+| Workers, Durable Objects com SQLite | ✅ | Tudo roda aqui, com orçamento por rota medido nos testes |
+| Workers AI | ✅ | Teto único de 9.000 Neurons por dia (a cota é 10.000), zerado às 00:00 UTC |
+| Turnstile, Email Routing, Cloudflare Access | ✅ | Turnstile no login; os outros são opcionais |
 | Modelos pagos (Anthropic, OpenAI) | ⚠️ | Desligados. Só com a sua aprovação e um teto diário em US$ |
-| KV, D1, R2, Vectorize, Queues | ⚠️ | Não usados. Qualquer recurso que gere cobrança exige aprovação explícita |
+| KV, D1, R2, Vectorize, Queues, Workers Paid | ⚠️ | Não usados. Qualquer recurso que gere cobrança exige aprovação explícita |
 
-## 🚀 Instalação
+O orçamento de cada cota está em [docs/arquitetura/orcamento-free-tier.md](docs/arquitetura/orcamento-free-tier.md).
 
-A instalação é feita pelo navegador, sem terminal: você cria um fork, configura os segredos no painel da Cloudflare e no GitHub, e o GitHub Actions publica o Zuri na sua conta.
+## 🗺️ Mapa das etapas
 
-O passo a passo completo, com o bot do @BotFather, o domínio e o Email Routing, fica em [docs/instalacao-cloudflare.md](docs/instalacao-cloudflare.md), entregue na etapa 24.
+✅ mesclada · 🚧 em andamento · ⬜ a fazer
 
-## 🛠️ Desenvolvimento
+| Fase | Etapa | Entrega | Situação |
+| --- | :---: | --- | :---: |
+| **A · Fundação** | 0 | Repositório, CI, CodeQL e rulesets | ✅ |
+| | 1 | Worker, Durable Object e portões | ✅ |
+| | 2 | Banco, configurações e i18n | ✅ |
+| | 3 | Login e sessões | ✅ |
+| | 4 | 2FA e passkeys | ✅ |
+| | 5 | Casca da interface e identidade visual | ✅ |
+| **B · Assistente na web** | 6 | Tarefas, notas e projetos | ✅ |
+| | 7 | Memória e histórico | ✅ |
+| | 8 | Provedor de IA e medição de uso | 🚧 |
+| | 9 | Chat com ferramentas | ⬜ |
+| | 10 | Automações | ⬜ |
+| | 11 | Central de avisos, push e e-mail | ⬜ |
+| **C · Bot do Telegram** | 12 | Fundação do bot | ⬜ |
+| | 13 | Avisos no Telegram | ⬜ |
+| | 14 | Conversa e voz | ⬜ |
+| | 15 | Comandos administrativos | ⬜ |
+| | 16 | Aprovações seguras e modo de bloqueio | ⬜ |
+| **D · Integrações** | 17 | Busca semântica | ⬜ |
+| | 18 | Servidores MCP remotos | ⬜ |
+| | 19 | Google Agenda | ⬜ |
+| | 20 | Acesso remoto e eventos | ⬜ |
+| | 21 | Modelos pagos ⚠️ | ⬜ |
+| | 22 | Workflows (monitor de sites) | ⬜ |
+| **E · Fechamento** | 23 | Backup, importação e retenção | ⬜ |
+| | 24 | Deploy e guia de instalação | ⬜ |
+| | 25 | Auditoria final e testes de ponta a ponta | ⬜ |
 
-Requer Node.js 24+ (a versão fixada está em [`.nvmrc`](.nvmrc)).
+Além das etapas, PRs de melhoria já trouxeram o Turnstile em todo login, a página Acessos, o menu recolhível, a revisão de design e o orçamento de performance. Tudo isso está no [CHANGELOG](CHANGELOG.md).
+
+## 🚀 Rodar localmente
+
+Requer Node.js 24 ou mais novo (a versão fixada está em [`.nvmrc`](.nvmrc)).
 
 ```bash
 npm ci
-npm run dev        # agente + interface com IA simulada
+npm run dev        # Worker local com IA simulada e a interface
 ```
 
 Antes do primeiro `npm run dev`, crie o `apps/agent/.dev.vars` com valores locais, como explica [docs/arquitetura.md](docs/arquitetura.md#desenvolvimento-local).
@@ -182,61 +268,73 @@ Antes do primeiro `npm run dev`, crie o `apps/agent/.dev.vars` com valores locai
 | --- | --- |
 | `npm run typecheck` | TypeScript em todos os pacotes |
 | `npm run lint` | Biome e o lint de textos sem tradução |
-| `npm test` | Testes unitários e de integração (dentro do workerd) |
-| `npm run i18n` | Confere o catálogo de traduções em pt-BR e en |
+| `npm test` | Testes unitários e de integração, dentro do workerd |
+| `npm run i18n` | Confere o catálogo em pt-BR e en |
 | `npm run test:e2e` | Testes de interface com Playwright |
 | `npm run build` | Build da interface e do Worker |
 
-Guia completo em [CONTRIBUTING.md](CONTRIBUTING.md).
+A instalação na sua conta Cloudflare será feita só pelo navegador (fork, segredos e GitHub Actions). O guia chega na etapa 24; até lá, [docs/configuracao-cloudflare.md](docs/configuracao-cloudflare.md) lista os segredos já usados, como as chaves do Turnstile.
 
-## 🧪 Qualidade e testes
+## 🧪 Qualidade
 
-Toda etapa passa pelo mesmo crivo antes de entrar na `develop`:
+Antes de entrar na `develop`, cada etapa passa por:
 
-1. **Testes primeiro.** Cada critério de aceite tem um teste automatizado, ligado a ele numa matriz de rastreabilidade no PR.
-2. **Camadas.** Testes unitários, de integração no workerd, de contrato da API, e2e, acessibilidade (axe), i18n e casos de abuso.
-3. **QA sênior.** Revisão independente de casos de borda, regressão e aderência à especificação.
-4. **Auditoria de segurança.** Ela roda em toda etapa e é completa nas etapas sensíveis, com correção e teste para cada achado.
-5. **CI obrigatória.** Typecheck, lint, testes, e2e, i18n, build e `npm audit` precisam passar para mesclar.
+1. **Testes primeiro.** Todo critério de aceite tem um teste automatizado, ligado a ele numa matriz no PR.
+2. **Camadas.** Unitário, integração no workerd, contrato da API, e2e, acessibilidade (axe), i18n e casos de abuso.
+3. **Pisos na CI.** Cobertura mínima (99% no agente), Lighthouse 95 ou mais, teste de CSP e um teto para o JS inicial da interface que só pode descer.
+4. **QA e auditoria.** Revisão de QA independente e auditoria de segurança em toda etapa, com correção e teste para cada achado.
 
 Estratégia completa em [docs/qa/estrategia-de-testes.md](docs/qa/estrategia-de-testes.md).
-
-## 🗺️ Roteiro
-
-| Fase | Etapas | Entrega |
-| --- | --- | --- |
-| A · Fundação | 0–5 | Repositório, Worker e portões, banco e i18n, login, 2FA e passkeys, interface |
-| B · Assistente na web | 6–11 | Tarefas e notas, memória, IA com medição, chat com ferramentas, automações, avisos |
-| C · Bot do Telegram | 12–16 | Vínculo, avisos, conversa e voz, comandos, aprovações e modo de bloqueio |
-| D · Integrações | 17–22 | Busca semântica, MCP, Google Agenda, acesso remoto, modelos pagos ⚠️, monitor de sites |
-| E · Fechamento | 23–25 | Backup, deploy e guia de instalação, auditoria final |
 
 ## 📁 Estrutura do repositório
 
 ```text
 apps/
-  agent/        Worker, Durable Object, API e bot do Telegram
+  agent/        Worker, Durable Object, API (e, na fase C, o bot do Telegram)
   web/          Interface React (PWA)
 packages/
-  shared/       Schemas Zod, constantes e catálogo de textos (pt-BR e en)
-docs/           Documentação em pt-BR, especificação, QA e ADRs
+  shared/       Schemas Zod, constantes, criptografia e catálogo de textos (pt-BR e en)
+docs/           Documentação em pt-BR: especificação, arquitetura, QA e capturas
 tests/e2e/      Testes de interface com Playwright
+scripts/        Lint de i18n, ícones, tamanho do pacote e capturas do README
 .claude/        Regras, skills, subagentes e memória do agente de desenvolvimento
 ```
+
+## 📚 Documentação
+
+| Documento | Assunto |
+| --- | --- |
+| [Especificação](docs/especificacao.md) | Escopo, contratos e as 26 etapas |
+| [Arquitetura](docs/arquitetura.md) | Worker, Durable Object, portões e desenvolvimento local |
+| [Segurança](docs/seguranca.md) | Login, sessões, 2FA, passkeys e o modelo de ameaças |
+| [Interface](docs/interface.md) | Telas, acessibilidade e a identidade visual Sinal |
+| [Produtividade](docs/produtividade.md) | Tarefas, notas, projetos e lixeira |
+| [Memória](docs/memoria.md) | Estados, histórico e revisão de conflitos |
+| [Configurar a Cloudflare](docs/configuracao-cloudflare.md) | Segredos e Turnstile |
+| [Configurar o GitHub](docs/configuracao-github.md) | Rulesets e proteção das branches |
 
 ## 🤝 Como contribuir
 
 Leia o [CONTRIBUTING.md](CONTRIBUTING.md) e o [AGENTS.md](AGENTS.md). Em resumo:
 
-- Branch a partir da `develop` e PR sempre para a `develop`.
+- Branch a partir da `develop` e PR sempre para a `develop`. A `main` só recebe releases.
 - Título em Conventional Commits, com o texto em pt-BR (`feat(telegram): adiciona o comando /hoje`).
-- Testes junto com o código, changelog atualizado e o modelo de PR preenchido.
-- Todo texto visível em pt-BR e en.
+- Testes junto com o código, `CHANGELOG.md` e este README atualizados, e o modelo de PR preenchido.
+- Todo texto visível em pt-BR e en, pelo catálogo de i18n.
 
-## 🙌 Origem e créditos
+## 🌎 In English
+
+**Zuri** is a self-hosted, single-owner AI assistant that runs entirely in your own Cloudflare account: one Worker, one Durable Object with SQLite and Workers AI, designed to fit the Free plan. It has a web app (PWA) today and will get a Telegram admin bot in phase C. Sign-in uses Turnstile, TOTP 2FA and passkeys, and the agent has no shell, code execution or open HTTP. It's built in public in 26 steps; steps 0 to 7 are merged. The docs and the UI default to Brazilian Portuguese, and the interface is also available in English.
+
+## 🙌 Créditos e licença
 
 O Zuri é inspirado no [Talorys](https://github.com/pablopfg/talorys), assistente pessoal de IA na Cloudflare, e acrescenta o bot de administração no Telegram. Trechos reaproveitados mantêm o aviso de copyright em [NOTICE.md](NOTICE.md).
 
-## 📄 Licença
+Licença [MIT](LICENSE).
 
-[MIT](LICENSE).
+<div align="center">
+<br>
+<img src="docs/assets/zuri-logo.svg" alt="" width="40" height="40">
+<br>
+<sub>A luz verde quer dizer que o Zuri está trabalhando.</sub>
+</div>

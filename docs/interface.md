@@ -89,6 +89,10 @@ Todas as cores da interface são variáveis em `apps/web/src/styles.css`; trocar
 a identidade é trocar esse bloco, o `Logo.tsx`, o `public/favicon.svg` e gerar
 os ícones de novo com `node scripts/gerar-icones.ts`.
 
+Fora do app, a mesma identidade aparece no logo `docs/assets/zuri-logo.svg` e
+nos banners do README (`docs/assets/zuri-banner-claro.svg` e
+`zuri-banner-escuro.svg`), que seguem o tema do GitHub de quem lê.
+
 ## Acessibilidade
 
 - WCAG 2.1 AA: contraste de pelo menos 4,5:1 nos dois temas, foco visível em
