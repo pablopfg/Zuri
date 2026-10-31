@@ -18,7 +18,9 @@ jobs:
     name: analyze (${{ matrix.language }})
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    # The upload reads the workflow run (actions) and writes the results (security-events).
     permissions:
+      actions: read
       contents: read
       security-events: write
     strategy:
