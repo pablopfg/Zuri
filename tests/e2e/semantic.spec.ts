@@ -38,7 +38,7 @@ test("the card: off by default, on with the progress, the redo asks first, off a
   await expectAccessible(page, "busca-semantica-desligada");
 
   await toggle.click();
-  await expect(page.getByText("Busca por significado ligada.")).toBeVisible();
+  await expect(page.getByRole("status").filter({ hasText: "Busca por significado ligada." })).toHaveText("Busca por significado ligada.");
   await expect(toggle).toHaveAttribute("aria-checked", "true");
   await expect(card.getByText(/de \d+ itens prontos/)).toBeVisible();
   await expect(card.getByRole("meter", { name: "Itens prontos para a busca por significado" })).toBeVisible();
@@ -58,11 +58,11 @@ test("the card: off by default, on with the progress, the redo asks first, off a
   expect(reindexed).toBe(false);
   await card.getByRole("button", { name: "Preparar tudo de novo" }).click();
   await card.getByRole("button", { name: "Preparar de novo" }).click();
-  await expect(page.getByText("Preparando tudo de novo.")).toBeVisible();
+  await expect(page.getByRole("status").filter({ hasText: "Preparando tudo de novo." })).toHaveText("Preparando tudo de novo.");
   expect(reindexed).toBe(true);
 
   await toggle.click();
-  await expect(page.getByText("Busca por significado desligada.")).toBeVisible();
+  await expect(page.getByRole("status").filter({ hasText: "Busca por significado desligada." })).toHaveText("Busca por significado desligada.");
   await expect(toggle).toHaveAttribute("aria-checked", "false");
   await expect(card.getByRole("button", { name: "Preparar tudo de novo" })).toHaveCount(0);
 });
@@ -72,6 +72,7 @@ test("on: the palette finds “carro” in the memory about an “automóvel”,
   test.setTimeout(180_000);
   await page.goto("/");
   await signIn(page);
+  await expect(page.getByRole("heading", { level: 1, name: /^(Bom dia|Boa tarde|Boa noite)/ })).toBeVisible();
   const created = await page.request.post("/api/memories", { headers: { ...CSRF, "content-type": "application/json" }, data: { content: MEMORY } });
   expect(created.status()).toBe(201);
   await setEnabled(page, true);
