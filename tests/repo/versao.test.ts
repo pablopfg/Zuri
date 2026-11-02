@@ -268,6 +268,7 @@ describe("release notes", () => {
     const notes = releaseNotes(version({ body, pr: null }), null);
     expect(notes.match(/^### .+$/gm)).toEqual(["### ✨ Adicionado", "### 🔄 Alterado", "### 🐛 Corrigido", "### 🔒 Segurança", "### ⬆️ Atualização"]);
     expect(notes).toContain("| sem PR |");
+    expect(releaseNotes(version({ body: "### Outro\n\n- f" }), null)).toContain("### Outro\n");
   });
 });
 
@@ -293,6 +294,10 @@ describe("noMentions", () => {
     expect(noMentions("e-mail dono@exemplo.com.br")).toBe("e-mail dono@\u200bexemplo.com.br");
     expect(releaseNotes(version({ title: "fala com @alguem" }), null)).toContain("fala com @\u200balguem");
     expect(releaseNotes(version({ body: "### Adicionado\n\n- Avisa @time." }), null)).toContain("- Avisa @\u200btime.");
+    // A lone backtick in the title does not turn the rest of the notes into code.
+    const notes = releaseNotes(version({ title: "Corrige `foo", body: "### Adicionado\n\n- Avisa @fulano e `@codigo`." }), null);
+    expect(notes).toContain("- Avisa @\u200bfulano e `@codigo`.");
+    expect(notes).not.toMatch(/@fulano/);
   });
 });
 

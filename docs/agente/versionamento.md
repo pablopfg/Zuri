@@ -161,9 +161,10 @@ Pré-release de desenvolvimento da `develop`, não é deploy. Todas as versões 
   PR. Nunca empurra para `develop` ou `main` e nunca apaga tag; de uma
   pré-release que já existe, só acerta o título para "vX.Y.Z" e as notas
   para o formato atual, com o mesmo conteúdo.
-- Versão com tag fica congelada: se um fragmento for corrigido depois (por
-  exemplo, o marcador `minor` esquecido), o número e o conteúdo das notas daquele merge
-  não mudam, e os merges seguintes contam a partir dele.
+- O número de uma versão com tag fica congelado: se um fragmento for
+  corrigido depois (por exemplo, o marcador `minor` esquecido), aquele merge
+  mantém o número e os merges seguintes contam a partir dele. As notas acompanham
+  a seção do `CHANGELOG.md`: uma correção nela chega à pré-release no run seguinte.
 - Tag que já aponta para outro commit para o workflow antes de mexer na PR de
   versão, em vez de ser movida, e ele abre a issue padrão de falha
   (`docs/agente/issues.md`).

@@ -304,10 +304,11 @@ export function renderVersionFile(version: string): string {
 
 /** Text posted on GitHub with "@name" outside code turned inert, so a release or its pull request never notifies anyone. */
 export function noMentions(text: string): string {
+  // Only a closed span on one line is code: a lone backtick (in a title, say) must not leave the rest of the text live.
   return text
-    .split("`")
+    .split(/(`[^`\n]+`)/)
     .map((part, i) => (i % 2 === 0 ? part.replace(/@(?=[A-Za-z0-9])/g, "@\u200b") : part))
-    .join("`");
+    .join("");
 }
 
 /**
