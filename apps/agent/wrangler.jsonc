@@ -28,6 +28,9 @@
   // Workers AI (chat, transcription, embeddings). Every call is metered and
   // checked against the daily Neuron cap first (rule P7); local development and
   // the tests use the deterministic mock instead (src/ai/mock.ts).
+  // No `remote: true`: it only silences wrangler's "AI bindings always access
+  // remote resources" warning, and would make `wrangler dev` without --local spend
+  // the account's Neurons. With --local (npm run dev, e2e) the binding is off.
   "ai": { "binding": "AI" },
   "durable_objects": {
     "bindings": [{ "name": "AGENT", "class_name": "ZuriAgent" }]
