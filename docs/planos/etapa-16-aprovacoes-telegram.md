@@ -17,7 +17,7 @@ A etapa 16 tem duas metades independentes, como a 15: aprovar pelo bot as propos
 - Confirmação fora do Telegram: `apps/agent/src/telegram/confirmations.ts` (`open`, `pageOptions`, `pageVerify`, `sendCode`, `checkCode`, 5 falhas/15 min travam 1 h), rotas `apps/agent/src/api/approvals.ts`, página `apps/web/src/pages/ApprovePage.tsx` (textos em `pt-BR-approve.ts`).
 - Bot: `apps/agent/src/telegram/service.ts` (`/destravar`, `#maybeCode`, `#unlocked`), `conversation.ts` (proposta no turno manda **Abrir no app**), `callbacks.ts` (`CommandButtons`, `COMMAND_ACTIONS`), `commands.ts` (`OPEN_COMMANDS`).
 - Alertas: `apps/agent/src/alerts/security.ts` (`BOT_CAUSED`, `TOLD_ONCE`), `alerts/service.ts` (`respondOutOfBand` recusa no bot o alerta de origem `bot`).
-- Contrato: especificação, "Aprovação pelo bot", "Modo de bloqueio", "Reconhecimento cruzado", tabela de rotas (etapa 16: 409 `TARGET_CHANGED`).
+- Contrato: especificação, "Aprovação pelo bot", "Modo de bloqueio", "Reconhecimento cruzado", tabela de rotas (etapa 16: 409 `TARGET_CHANGED` e 409 `CONFLICT`).
 - Decisões: 30/10/2026 (aprovar pelo bot com passkey ou código por e-mail, nunca TOTP, lista "nunca pelo bot"), N11 (`TELEGRAM_ADMIN_ID` obrigatório), 02/11/2026 (destravamento avisa uma vez, sem insistir).
 
 ## 3. Objetivo e critérios de aceite
@@ -128,7 +128,7 @@ Uma lista fechada `BOT_APPROVABLE` diz que ferramentas o bot aprova (hoje as sei
 
 ### Rotas e contratos
 
-- `POST /api/approvals/telegram/options` → 200 `{ purpose, options, expiresAt, approval? }` com `approval: { tool, target, before?, after?, expiresAt }` quando `purpose = "approval"`; 409 `TARGET_CHANGED` se o alvo mudou; 410 `APPROVAL_EXPIRED` se a proposta venceu ou já foi tratada.
+- `POST /api/approvals/telegram/options` → 200 `{ purpose, options, expiresAt, approval? }` com `approval: { tool, target, before?, after?, expiresAt }` quando `purpose = "approval"`; 409 `TARGET_CHANGED` se o alvo mudou; 409 `CONFLICT` se a proposta já foi tratada no app (aprovada, cancelada ou com falha); 410 `APPROVAL_EXPIRED` se a proposta venceu.
 - `POST /api/approvals/telegram/verify` → 200 `{ purpose: "unlock", unlockedUntil }` ou `{ purpose: "approval", status: "approved" }`; 409 `TARGET_CHANGED`; 409 `CONFLICT` (já tratada no app); 410 `APPROVAL_EXPIRED`.
 
 ### Banco

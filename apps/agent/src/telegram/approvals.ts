@@ -1,4 +1,4 @@
-import { type ApprovalPreview, DESTRUCTIVE_TOOLS, type DestructiveToolName, disarmLinks, type Locale, type MessageKey, t } from "@zuri/shared";
+import { type ApprovalPreview, type DestructiveToolName, disarmLinks, type Locale, type MessageKey, t } from "@zuri/shared";
 import type { ActionRow, PendingActionRepository } from "../chat/actions.ts";
 import { AppError } from "../http/errors.ts";
 import { runApprovedAction, targetState, type ToolContext, type ToolDefinition } from "../tools/registry.ts";
@@ -7,11 +7,21 @@ import { disarm } from "./channel.ts";
 import type { Button, Out } from "./commands.ts";
 
 /**
- * The proposals the bot may approve (spec, "Aprovação pelo bot"). A closed
- * list: a destructive tool added later stays in the app until someone adds it
- * here on purpose. None of the "never through the bot" actions is a proposal.
+ * The proposals the bot may approve (spec, "Aprovação pelo bot"), written out
+ * by hand: a destructive tool added later must be put here or in APP_ONLY on
+ * purpose (a test fails until it is), and only this list opens a confirmation.
+ * None of the "never through the bot" actions is a proposal today.
  */
-export const BOT_APPROVABLE: ReadonlySet<DestructiveToolName> = new Set<DestructiveToolName>(DESTRUCTIVE_TOOLS);
+export const BOT_APPROVABLE: ReadonlySet<DestructiveToolName> = new Set<DestructiveToolName>([
+  "delete_task",
+  "replace_task_description",
+  "replace_note_content",
+  "delete_note",
+  "forget_memory",
+  "cancel_automation",
+]);
+/** Destructive tools approved only in the app, never through the bot. */
+export const APP_ONLY: ReadonlySet<DestructiveToolName> = new Set<DestructiveToolName>([]);
 
 /** The rewrites: their preview shows the text as it is and the text that would be written. */
 const REWRITES: ReadonlySet<DestructiveToolName> = new Set<DestructiveToolName>(["replace_task_description", "replace_note_content"]);
@@ -98,17 +108,41 @@ export class TelegramApprovals {
     return { status: "ok", preview, targetHash: state.hash, row };
   }
 
-  /** The preview as plain text for the bot (disarmed, cut) and, with `email`, for the e-mail (links disarmed, whole lines). */
+  /**
+   * The preview as plain text for the bot (disarmed) and, with `email`, for the
+   * e-mail (links disarmed). The title stays on one line; the texts go as a
+   * quoted block (each line starts with "│ "), so they can't fake a line of
+   * the preview, and a cut says how much was left out.
+   */
   text(preview: ApprovalPreview, email = false): string {
-    const clean = (value: string, max: number) => (email ? disarmLinks(cut(value, max * 4)) : disarm(cut(value, max)));
+    const safe = (value: string) => (email ? disarmLinks(value) : disarm(value));
+    const block = (value: string, max: number) => {
+      if (!value) return "│ —";
+      const chars = [...value];
+      const shown = chars.length > max ? chars.slice(0, max).join("") : value;
+      const lines = safe(shown)
+        .split(/\r?\n/)
+        .map((line) => `│ ${line}`);
+      if (chars.length > max) lines.push(this.#t("telegram.aprovar.cortado", { n: chars.length - max }));
+      return lines.join("\n");
+    };
     const lines = [
       this.#t("telegram.aprovar.proposta", { acao: this.#t(ACTION_NAME[preview.tool]) }),
-      this.#t("telegram.aprovar.item", { item: clean(preview.target.replace(/\s+/g, " ").trim(), TARGET_MAX) }),
+      this.#t("telegram.aprovar.item", { item: safe(cut(preview.target.replace(/\s+/g, " ").trim(), TARGET_MAX)) }),
     ];
-    if (preview.before !== undefined) lines.push(this.#t("telegram.aprovar.atual", { texto: clean(preview.before, BEFORE_MAX) || "—" }));
-    if (preview.after !== undefined) lines.push(this.#t("telegram.aprovar.novo", { texto: clean(preview.after, AFTER_MAX) || "—" }));
+    if (preview.before !== undefined) lines.push(this.#t("telegram.aprovar.atual"), block(preview.before, BEFORE_MAX));
+    if (preview.after !== undefined) lines.push(this.#t("telegram.aprovar.novo"), block(preview.after, AFTER_MAX));
     lines.push(this.#t("telegram.aprovar.validade", { hora: this.deps.hour(Date.parse(preview.expiresAt)) }));
     return lines.join("\n");
+  }
+
+  /**
+   * Whether the bot's preview shows all of it. When it doesn't, only the page
+   * (which shows the whole text) may confirm: approving by an e-mailed code
+   * would write text the owner never saw.
+   */
+  whole(preview: ApprovalPreview): boolean {
+    return [...(preview.before ?? "")].length <= BEFORE_MAX && [...(preview.after ?? "")].length <= AFTER_MAX;
   }
 
   /** The Aprovar button of a proposal: good until the proposal ends, and never used up by a tap (asking again reuses the confirmation). */

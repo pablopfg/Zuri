@@ -735,10 +735,16 @@ export class TelegramService {
       await this.#say(link.chatId, "telegram.aprovar.travado", { hora: this.#hour(blocked) });
       return;
     }
-    const methods = confirmations.methods();
+    const available = confirmations.methods();
+    // A text cut in the bot's preview is confirmed only on the page, which shows it whole.
+    const whole = approvals.whole(found.preview);
+    const methods = { passkey: available.passkey, email: available.email && whole };
     if (!methods.passkey && !methods.email) {
-      this.deps.links.audit("callback", "approve", "no_method");
-      await this.#send(link.chatId, { text: t(this.deps.locale(), "telegram.aprovar.noMethod"), keyboard: [[approvals.openInApp(found.row.conversation_id)]] });
+      this.deps.links.audit("callback", "approve", whole ? "no_method" : "too_long");
+      await this.#send(link.chatId, {
+        text: t(this.deps.locale(), whole ? "telegram.aprovar.noMethod" : "telegram.aprovar.longo"),
+        keyboard: [[approvals.openInApp(found.row.conversation_id)]],
+      });
       return;
     }
     const opened = await confirmations.open("approval", { pendingActionId: actionId, targetHash: found.targetHash });

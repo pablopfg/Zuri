@@ -511,7 +511,8 @@ export class ZuriAgent extends Agent<WorkerEnv> {
             if (about.purpose === "approval") {
               // The preview from the database, links disarmed: the same the bot and the page show.
               const found = about.pendingActionId === null ? null : await telegramApprovals.preview(about.pendingActionId);
-              if (found?.status !== "ok" || found.targetHash !== about.targetHash) return "error";
+              // Changed meanwhile, or too long to show whole in an e-mail: no code goes out.
+              if (found?.status !== "ok" || found.targetHash !== about.targetHash || !telegramApprovals.whole(found.preview)) return "error";
               return email.send({
                 subject: t(locale, "notice.email.approve.subject"),
                 text: t(locale, "notice.email.approve.body", { code, minutes, previa: telegramApprovals.text(found.preview, true) }),

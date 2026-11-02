@@ -242,6 +242,11 @@ Tocar em **Aprovar** não basta: o bot pede a mesma confirmação do
   "Se não foi você que tocou em Aprovar no Telegram, não digite este código".
   Responda à pergunta do bot com os 6 dígitos.
 
+Nas reescritas, os textos aparecem como citação (cada linha começa com `│`).
+O bot mostra até 300 caracteres do texto atual e 600 do novo; passando disso,
+avisa quanto ficou de fora e só a passkey confirma, porque a página mostra o
+texto inteiro. Sem passkey, um texto longo se aprova no app.
+
 O link e o código valem 5 minutos, uma vez só, e só para aquela proposta.
 Tocar em **Aprovar** de novo reaproveita o pedido aberto, com um link novo.
 A proposta roda pelo mesmo caminho do botão Aprovar do app, no máximo uma

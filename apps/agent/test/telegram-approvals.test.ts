@@ -5,7 +5,7 @@ import type { ZuriAgent } from "../src/agent/zuri-agent.ts";
 import { MockAIProvider } from "../src/ai/mock.ts";
 import { InternalState } from "../src/db/internal-state.ts";
 import { telegramWebhookSecret } from "../src/gates/telegram.ts";
-import { BOT_APPROVABLE, TelegramApprovals } from "../src/telegram/approvals.ts";
+import { APP_ONLY, BOT_APPROVABLE, TelegramApprovals } from "../src/telegram/approvals.ts";
 import { CommandButtons } from "../src/telegram/callbacks.ts";
 import { ALL_TOOLS } from "../src/tools/index.ts";
 import type { ToolContext } from "../src/tools/registry.ts";
@@ -259,8 +259,79 @@ describe("the proposal's card", () => {
     const lines = String(card?.body.text).split("\n");
     expect(lines[0]).toBe("Proposta da Zuri: trocar o texto da nota");
     expect(lines[1]).toBe("Item: Viagem");
-    expect(lines[2]).toBe("Texto atual: Ver hxxps://exemplo[.]com[.]br/a");
-    expect(lines[3]).toBe("Texto novo: Levar ∕destravar e ＠alguem");
+    // The texts go as a quoted block, so a line of them can't pass for a line of the preview.
+    expect(lines.slice(2, 6)).toEqual(["Texto atual:", "│ Ver hxxps://exemplo[.]com[.]br/a", "Texto novo:", "│ Levar ∕destravar e ＠alguem"]);
+    expect(lines[6]).toMatch(/^Vale até /);
+  });
+
+  it("names each of the six proposals, with the target read from the database", async () => {
+    await linkOwner();
+    await addPasskey();
+    const ids = await inOwner(async (agent) => {
+      const { productivity, memories, automations } = agent.store;
+      return {
+        task: productivity.tasks.create({ title: "Academia" }).id,
+        described: productivity.tasks.create({ title: "Mercado", description: "" }).id,
+        note: productivity.notes.create({ title: "Viagem", content: "Mala" }).id,
+        gone: productivity.notes.create({ title: "Rascunho", content: "x" }).id,
+        memory: memories.create({ content: "Prefere café sem açúcar", category: "preference" }).memory.id,
+        automation: (await automations.create({ name: "Remédio", kind: "reminder", message: "Tomar", schedule: { type: "daily", time: "08:00" } }, "app")).id,
+      };
+    });
+    const calls: [string, Record<string, string>, string[]][] = [
+      ["delete_task", { task: ids.task }, ["Proposta da Zuri: apagar a tarefa", "Item: Academia"]],
+      ["replace_task_description", { task: ids.described, description: "Leite" }, ["Proposta da Zuri: trocar a descrição da tarefa", "Item: Mercado", "Texto atual:", "│ —", "Texto novo:", "│ Leite"]],
+      ["replace_note_content", { id: ids.note, content: "Mala e passaporte" }, ["Proposta da Zuri: trocar o texto da nota", "Item: Viagem", "Texto atual:", "│ Mala", "Texto novo:", "│ Mala e passaporte"]],
+      ["delete_note", { id: ids.gone }, ["Proposta da Zuri: apagar a nota", "Item: Rascunho"]],
+      ["forget_memory", { id: ids.memory }, ["Proposta da Zuri: esquecer a memória", "Item: Prefere café sem açúcar"]],
+      ["cancel_automation", { automation: ids.automation }, ["Proposta da Zuri: cancelar a automação", "Item: Remédio"]],
+    ];
+    for (const [tool, args, expected] of calls) {
+      botCalls.length = 0;
+      await deliver(text(`call ${tool} ${JSON.stringify(args)}`));
+      const card = sent().find((c) => String(c.body.text).startsWith("Proposta da Zuri"));
+      const lines = String(card?.body.text).split("\n");
+      expect(lines.slice(0, -1), tool).toEqual(expected);
+      expect(lines.at(-1), tool).toMatch(/^Vale até \d{2}:\d{2}\.$/);
+      expect(buttons(card).map((b) => b.text), tool).toEqual(["Aprovar"]);
+    }
+  });
+
+  it("cuts a long text, says so, and then only the passkey (which shows it whole) may confirm", async () => {
+    await linkOwner();
+    await addPasskey();
+    const noteId = await inOwner((agent) => agent.store.productivity.notes.create({ title: "Lista", content: "a".repeat(400) }).id);
+    botCalls.length = 0;
+    await deliver(text(`call replace_note_content {"id":"${noteId}","content":"${"b".repeat(700)}"}`));
+    const card = sent().find((c) => String(c.body.text).startsWith("Proposta da Zuri"));
+    const lines = String(card?.body.text).split("\n");
+    expect(lines.slice(2, 8)).toEqual([
+      "Texto atual:",
+      `│ ${"a".repeat(300)}`,
+      "(e mais 100 caracteres; o texto inteiro está no app)",
+      "Texto novo:",
+      `│ ${"b".repeat(600)}`,
+      "(e mais 100 caracteres; o texto inteiro está no app)",
+    ]);
+    // No code by e-mail for a text the owner could not read whole.
+    const { question, emailData } = await askApproval(card);
+    expect(buttons(question).map((b) => b.text)).toEqual(["Confirmar com passkey"]);
+    expect(emailData).toBe("");
+  });
+
+  it("without a passkey, a long text goes to the app instead of the e-mail", async () => {
+    await linkOwner();
+    const noteId = await inOwner((agent) => agent.store.productivity.notes.create({ title: "Lista", content: "curta" }).id);
+    botCalls.length = 0;
+    await deliver(text(`call replace_note_content {"id":"${noteId}","content":"${"b".repeat(700)}"}`));
+    const card = sent().find((c) => String(c.body.text).startsWith("Proposta da Zuri"));
+    botCalls.length = 0;
+    await tap(approveData(card));
+    expect(await rows()).toHaveLength(0);
+    expect(mails).toHaveLength(0);
+    const answer = sent().at(-1);
+    expect(String(answer?.body.text)).toBe("Esse texto é longo demais para conferir por aqui. Aprove pela passkey ou no app, onde ele aparece inteiro.");
+    expect(buttons(answer).map((b) => b.text)).toEqual(["Abrir no app"]);
   });
 
   it("names the target as it is stored now, never by the words kept with the proposal", async () => {
@@ -275,12 +346,22 @@ describe("the proposal's card", () => {
     expect(texts()[0]).not.toContain("ouro");
   });
 
-  it("points to the app when the bot can't confirm: no admin id, or no passkey and no e-mail", async () => {
+  it("points to the app when the bot can't confirm: no passkey and no e-mail", async () => {
     await linkOwner();
     await inOwner((agent) => email(agent, false));
     const { card } = await proposeDelete();
     expect(buttons(card).map((b) => b.text)).toEqual(["Abrir no app"]);
     expect(buttons(card)[0]?.url).toMatch(new RegExp(`^${ORIGIN}/conversa/`));
+  });
+
+  it("points to the app when the bot can't confirm: no admin id", async () => {
+    await linkOwner();
+    await addPasskey();
+    await inOwner((agent) => {
+      envOf(agent).TELEGRAM_ADMIN_ID = "";
+    });
+    const { card } = await proposeDelete();
+    expect(buttons(card).map((b) => b.text)).toEqual(["Abrir no app"]);
   });
 
   it("keeps three cards under one answer and says how many more wait in /aprovar", async () => {
@@ -370,7 +451,7 @@ describe("Aprovar", () => {
     expect(sent("editMessageReplyMarkup")).toHaveLength(1);
   });
 
-  it("says the proposal ended when it expired or was handled in the app", async () => {
+  it("says the proposal ended when it was handled in the app", async () => {
     await linkOwner();
     await addPasskey();
     const { card, actionId } = await proposeDelete();
@@ -379,6 +460,19 @@ describe("Aprovar", () => {
     await tap(approveData(card));
     expect(texts()).toEqual(["Essa proposta venceu ou já foi tratada."]);
     expect(await rows()).toHaveLength(0);
+  });
+
+  it("says the proposal ended when it expired, and the card loses its button", async () => {
+    await linkOwner();
+    await addPasskey();
+    const { card, actionId, taskId } = await proposeDelete();
+    await inOwner((agent) => agent.store.db.run(`UPDATE zur_pending_actions SET expires_at = ? WHERE id = ?`, new Date(Date.now() - 1000).toISOString(), actionId));
+    botCalls.length = 0;
+    await tap(approveData(card));
+    expect(texts()).toEqual(["Essa proposta venceu ou já foi tratada."]);
+    expect(sent("editMessageReplyMarkup")).toHaveLength(1);
+    expect(await rows()).toHaveLength(0);
+    expect(await task(taskId)).not.toBeNull();
   });
 
   it("is refused while confirmations are locked", async () => {
@@ -395,7 +489,10 @@ describe("Aprovar", () => {
   it("keeps a destructive tool outside the bot's list in the app", async () => {
     await linkOwner();
     await addPasskey();
-    expect([...BOT_APPROVABLE].sort()).toEqual(ALL_TOOLS.filter((tool) => tool.permission === "destructive").map((tool) => tool.name).sort());
+    // Every destructive tool was put, on purpose, in exactly one of the two lists.
+    const destructive = ALL_TOOLS.filter((tool) => tool.permission === "destructive").map((tool) => tool.name);
+    expect([...BOT_APPROVABLE, ...APP_ONLY].sort()).toEqual([...destructive].sort());
+    expect([...BOT_APPROVABLE].filter((tool) => APP_ONLY.has(tool))).toEqual([]);
     const conversationId = await inOwner((agent) => agent.store.conversations.create("Teste").id);
     await inOwner((agent) =>
       agent.store.db.run(
@@ -429,6 +526,7 @@ describe("the /aprovar page", () => {
     // A security alert from the bot: told once, answered only in the app.
     const notice = await inOwner((agent) => agent.store.db.one<{ id: string; origin: string; escalation: string | null }>(`SELECT id, origin, escalation FROM zur_notices`));
     expect(notice?.origin).toBe("bot");
+    expect(notice?.escalation).toBeNull();
     expect(await inOwner((agent) => agent.store.alerts.respondOutOfBand(notice?.id ?? "", "done"))).toBe("app_only");
     // The token served once.
     const again = await page("options", { token });
@@ -439,7 +537,7 @@ describe("the /aprovar page", () => {
   it("refuses a target that changed: 409 TARGET_CHANGED, nothing runs, the bot says why", async () => {
     await linkOwner();
     const key = await addPasskey();
-    const { card, taskId } = await proposeDelete();
+    const { card, taskId, actionId } = await proposeDelete();
     const { token } = await askApproval(card);
     const options = await json<{ options: { challenge: string; rpId?: string } }>(await page("options", { token }), 200);
     await inOwner((agent) => agent.store.productivity.tasks.update(taskId, { title: "Outra coisa" }));
@@ -451,9 +549,13 @@ describe("the /aprovar page", () => {
     expect(await task(taskId)).not.toBeNull();
     expect(sent("editMessageText").map((c) => c.body.text)).toEqual(["O item mudou depois da proposta, então não fiz nada. Se ainda quiser, peça de novo à Zuri."]);
     expect(await events("telegram_approved")).toBe(0);
-    // The options too, before any passkey.
+    // The refused run closed the proposal: tapping Aprovar again opens nothing new.
+    expect(await inOwner((agent) => agent.store.actions.view(actionId).status)).toBe("failed");
+    botCalls.length = 0;
     const changed = await askApproval(card);
     expect(changed.token).toBe("");
+    expect(texts()).toEqual(["Essa proposta venceu ou já foi tratada."]);
+    expect((await rows()).filter((row) => row.status === "open")).toHaveLength(0);
   });
 
   it("checks the target on the page before the passkey (409)", async () => {
@@ -482,6 +584,24 @@ describe("the /aprovar page", () => {
     expect(apiErrorSchema.parse(await res.json()).code).toBe("CONFLICT");
     expect(await attempts()).toBe(before);
     expect(await events("telegram_approved")).toBe(0);
+  });
+
+  it("refuses the options of a proposal cancelled in the app (409 CONFLICT) or expired (410)", async () => {
+    await linkOwner();
+    await addPasskey();
+    const first = await proposeDelete("Primeira");
+    const cancelled = await askApproval(first.card);
+    await json(await api("POST", `/actions/${first.actionId}/cancel`), 200);
+    const res = await page("options", { token: cancelled.token });
+    expect(res.status).toBe(409);
+    expect(apiErrorSchema.parse(await res.json()).code).toBe("CONFLICT");
+    const second = await proposeDelete("Segunda");
+    const expired = await askApproval(second.card);
+    await inOwner((agent) => agent.store.db.run(`UPDATE zur_pending_actions SET expires_at = ? WHERE id = ?`, new Date(Date.now() - 1000).toISOString(), second.actionId));
+    const gone = await page("options", { token: expired.token });
+    expect(gone.status).toBe(410);
+    expect(apiErrorSchema.parse(await gone.json())).toMatchObject({ code: "APPROVAL_EXPIRED", details: { approval: "expired" } });
+    expect(await task(second.taskId)).not.toBeNull();
   });
 
   it("never lets one proposal's token run another", async () => {
@@ -575,6 +695,16 @@ describe("/aprovar", () => {
     expect(all[4]).toContain("Item: Tarefa 3");
     expect(all[5]).toBe("E mais 2 no app.");
     expect(buttons(sent()[0]).map((b) => b.text)).toEqual(["Aprovar"]);
+  });
+
+  it("leaves out a proposal whose target changed", async () => {
+    await linkOwner();
+    await addPasskey();
+    const { taskId } = await proposeDelete();
+    await inOwner((agent) => agent.store.productivity.tasks.update(taskId, { title: "Mudou" }));
+    botCalls.length = 0;
+    await deliver(text("/aprovar"));
+    expect(texts()).toEqual(["Nenhuma proposta esperando a sua aprovação."]);
   });
 
   it("needs reading unlocked", async () => {

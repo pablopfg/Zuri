@@ -225,7 +225,7 @@ Todas as rotas ficam sob `/api`, recebem e devolvem JSON validado por Zod (`pack
 | 11 | GET `/api/auth/recover`; POST `/api/auth/recover/request`, POST `/api/auth/recover/check`, POST `/api/auth/recover/confirm` | CSRF + limitador (Turnstile no pedido) | — / `{email, turnstileToken?}` / `{token}` / `{token, password, totp?}` | 200 `{available}`; 202 sempre no pedido; 200 `{secondStep}`; 204; 410 `RECOVERY_EXPIRED`; 401 `INVALID_CREDENTIALS` com `details.attemptsLeft` (código errado) |
 | 12 | POST `/api/telegram/webhook` | cabeçalho secreto | atualização (máx. 64 KB) | 200 sempre; 403 sem cabeçalho; 413 acima de 64 KB |
 | 12 | GET, PATCH e DELETE `/api/telegram`; POST `/api/telegram/{connect,confirm,test}` | sessão + CSRF (+ senha recente em connect, confirm e DELETE) | PATCH `{conversation:boolean, readLockHours:number}` | — |
-| 16 | POST `/api/approvals/telegram/options`, POST `/api/approvals/telegram/verify` | token de aprovação no corpo | `{token}` / `{token, credential}` | 200; 410 `APPROVAL_EXPIRED`; 409 `TARGET_CHANGED`; 423 `APPROVALS_LOCKED` |
+| 16 | POST `/api/approvals/telegram/options`, POST `/api/approvals/telegram/verify` | token de aprovação no corpo | `{token}` / `{token, credential}` | 200; 410 `APPROVAL_EXPIRED`; 409 `TARGET_CHANGED`; 409 `CONFLICT` (proposta já tratada no app); 423 `APPROVALS_LOCKED` |
 | 16 | GET `/api/lockdown`, POST `/api/lockdown/exit` | sessão + CSRF + senha recente | `{totp}` ou `{recoveryCode}` | 204; 423 `LOCKDOWN_ACTIVE` |
 
 Tokens remotos nunca alcançam `/api/auth*`, `/api/telegram*`, `/api/approvals*`, `/api/lockdown*`, aprovações nem planos. Um teste percorre todas as rotas registradas e confere isso.
