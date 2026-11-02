@@ -1,8 +1,9 @@
 # Plano · Cadastro inicial do dono (primeiro acesso)
 
-Situação: **aprovado pelo Pablo em 31/10/2026** (opção E, como está). A
-decisão está em `.claude/memoria/decisoes.md` e na especificação (N13). A
-implementação segue os três PRs do passo a passo.
+Situação: **aprovado pelo Pablo em 31/10/2026** (opção E, como está) e
+**implementado**: servidor no PR #35, tela no #45, campo "Seu nome" no #49 e
+guia de instalação em `docs/configuracao-cloudflare.md`. A decisão está em
+`.claude/memoria/decisoes.md` e na especificação (N13).
 
 ## Ajustes feitos na implementação do servidor
 
