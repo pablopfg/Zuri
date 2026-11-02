@@ -19,7 +19,7 @@
 // See docs/agente/merge-de-prs.md.
 import { execFileSync } from "node:child_process";
 import { appendFileSync } from "node:fs";
-import { BASE_BRANCH, isAdditiveFile, isHeldForBot, pullRequestRuns, type Run } from "./atualizar-prs.ts";
+import { BASE_BRANCH, BOT_LOGIN, isAdditiveFile, isHeldForBot, pullRequestRuns, type Run } from "./atualizar-prs.ts";
 import { RELEASE_BRANCH } from "./publicar-versao.ts";
 
 /** Label that lets a pull request go ahead of an older one (a stale or blocked PR); then re-run the check. */
@@ -31,6 +31,7 @@ export interface OpenPullRequest {
   head: { ref: string; sha: string; repo: { full_name: string } | null };
   base: { ref: string };
   labels: { name: string }[];
+  user?: { login: string } | null;
 }
 
 export interface Blocker {
@@ -83,8 +84,9 @@ export interface Context {
 
 const isFork = (ctx: Context, pr: OpenPullRequest) => pr.head.repo?.full_name !== ctx.repository;
 // The version pull request touches package.json and package-lock.json, which dependency updates also change:
-// it neither waits on them (a Dependabot PR can stay open for days) nor holds them.
-const isRelease = (ctx: Context, pr: OpenPullRequest) => pr.head.ref === RELEASE_BRANCH && !isFork(ctx, pr);
+// it neither waits on them (a Dependabot PR can stay open for days) nor holds them. Only the one the workflow
+// opened: a person's pull request from a branch with the same name is ordered like any other.
+const isRelease = (ctx: Context, pr: OpenPullRequest) => pr.head.ref === RELEASE_BRANCH && !isFork(ctx, pr) && pr.user?.login === BOT_LOGIN;
 
 function openPullRequests(ctx: Context): OpenPullRequest[] {
   return api(ctx, `repos/${ctx.repository}/pulls?state=open&per_page=100`) as OpenPullRequest[];

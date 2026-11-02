@@ -1,3 +1,4 @@
+import { APP_VERSION } from "@zuri/shared";
 import { expect, test } from "./fixtures.ts";
 import { CSRF, EMAIL, expectAccessible, openSettingsSection, PASSWORD, settingsHasTabs, signIn } from "./ui-helpers.ts";
 
@@ -121,12 +122,12 @@ test("settings has the seven sections, each with its address and content: tabs o
   await signIn(page);
   const sections = page.getByRole("navigation", { name: "Seções das configurações" });
   // The version in use, quietly: at the foot of the sidebar on a computer, of the list on a phone.
-  const version = /^Versão \d+\.\d+\.\d+$/;
+  const version = `Versão ${APP_VERSION}`;
   if (settingsHasTabs(page)) {
     await expect(page).toHaveURL(/\/configuracoes\/conta$/);
-    await expect(page.locator("aside").getByText(version)).toBeVisible();
+    await expect(page.locator("aside").getByText(version, { exact: true })).toBeVisible();
   } else {
-    await expect(page.getByRole("main").getByText(version)).toBeVisible();
+    await expect(page.getByRole("main").getByText(version, { exact: true })).toBeVisible();
     // The list is the page: each section with what it holds, no section open yet.
     await expect(page).toHaveURL(/\/configuracoes$/);
     await expect(sections.getByRole("link")).toHaveCount(7);

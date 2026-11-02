@@ -228,13 +228,18 @@ export function planVersions(last: string, merges: Merge[], tagged: ReadonlyMap<
     });
 }
 
-/** The package.json of the root and of each workspace that exists (the "workspaces" field of the root lists paths, not globs). */
-function packageFiles(root: string): string[] {
+/** The "workspaces" paths of the root package.json, as written (empty without one). */
+function workspacePaths(root: string): string[] {
   const rootFile = join(root, "package.json");
   if (!existsSync(rootFile)) return [];
   const workspaces: unknown = JSON.parse(readFileSync(rootFile, "utf8")).workspaces;
-  const paths = Array.isArray(workspaces) ? workspaces.filter((w): w is string => typeof w === "string") : [];
-  return ["package.json", ...paths.map((w) => `${w}/package.json`)].filter((file) => existsSync(join(root, file)));
+  return Array.isArray(workspaces) ? workspaces.filter((w): w is string => typeof w === "string") : [];
+}
+
+/** The package.json of the root and of each workspace that exists (versionMismatches reports a glob or a missing one). */
+function packageFiles(root: string): string[] {
+  if (!existsSync(join(root, "package.json"))) return [];
+  return ["package.json", ...workspacePaths(root).map((w) => `${w}/package.json`)].filter((file) => existsSync(join(root, file)));
 }
 
 /** Every file that carries the version of the system, relative to the root: the release pull request writes them all. */
@@ -273,6 +278,10 @@ export function writeVersion(root: string, version: string): void {
 /** One line per file (or lockfile entry) whose version is not `version`; empty when all agree. */
 export function versionMismatches(root: string, version: string): string[] {
   const problems: string[] = [];
+  // A glob or a missing folder would leave a package unchecked without a word: list each path, each with its package.json.
+  for (const w of workspacePaths(root)) {
+    if (!existsSync(join(root, w, "package.json"))) problems.push(`workspace "${w}": no package.json (list each workspace by its path, without globs)`);
+  }
   const check = (where: string, found: unknown) => {
     if (found !== version) problems.push(`${where}: ${JSON.stringify(found ?? null)} instead of "${version}"`);
   };

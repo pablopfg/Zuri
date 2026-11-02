@@ -1,3 +1,4 @@
+import { APP_VERSION } from "@zuri/shared";
 import { expect, type Page, test } from "./fixtures.ts";
 import { expectAccessible, signIn } from "./ui-helpers.ts";
 
@@ -35,7 +36,7 @@ test("collapsing keeps every control named, remembers the choice and expands aga
   await expect(aside.getByRole("link", { name: "Início" }).getByText("Início", { exact: true })).toHaveClass(/sr-only/);
   await expect(page.locator("main")).toBeInViewport();
   // The version does not fit the rail: it stays only for screen readers.
-  await expect(aside.getByText(/^Versão \d+\.\d+\.\d+$/)).toHaveClass(/sr-only/);
+  await expect(aside.getByText(`Versão ${APP_VERSION}`, { exact: true })).toHaveClass(/sr-only/);
 
   // Still collapsed after a reload: a look remembered on this device.
   await page.reload();
@@ -46,7 +47,7 @@ test("collapsing keeps every control named, remembers the choice and expands aga
   await aside.getByRole("button", { name: "Expandir menu" }).click();
   await expect(aside).toHaveAttribute("data-collapsed", "false");
   await expect(aside.getByText("Início", { exact: true })).toBeVisible();
-  await expect(aside.getByText(/^Versão \d+\.\d+\.\d+$/)).toBeVisible();
+  await expect(aside.getByText(`Versão ${APP_VERSION}`, { exact: true })).toBeVisible();
   await page.reload();
   await expect(aside.getByRole("button", { name: "Recolher menu" })).toBeVisible();
 });

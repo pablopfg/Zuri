@@ -294,3 +294,10 @@ acrescente aqui cada armadilha nova que encontrar (sem dados pessoais).
   nada: ponha o caractere no meio do texto.
 - Desde os cumprimentos (PR #34) o título do Início é "Bom dia/Boa tarde/Boa
   noite…", não "Olá!": no e2e use `/^(Bom dia|Boa tarde|Boa noite)/`.
+- Rebuildar a interface (`npm run build -w @zuri/web`) com o `wrangler dev`
+  do e2e no ar faz o servidor responder 404 em tudo até reiniciar: ele perde a
+  pasta `apps/web/dist` recriada. Pare o servidor antes de gerar capturas do
+  "antes" e suba de novo depois.
+- Depois da PR da versão no app (02/11/2026) o JavaScript inicial ficou em
+  138.986 bytes, colado no teto de 139 kB. Texto novo no primeiro carregamento
+  vai para um `pt-BR-<tela>.ts` com `addMessages` ou tira bytes de outro lugar.
