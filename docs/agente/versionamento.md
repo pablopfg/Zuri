@@ -92,9 +92,10 @@ sempre vazio; o teste do repositório falha se alguém escrever ali.
    a API de releases recusa ao `GITHUB_TOKEN` criar tag num commit cujos
    workflows diferem dos da `develop`) e uma
    **pré-release** no GitHub, com o título só "vX.Y.Z" (pedido do Pablo) e as
-   notas da seção, que começam pela linha do merge com o título da PR.
-   Pré-release antiga com outro título tem o título trocado para "vX.Y.Z"
-   no run seguinte; tag e notas não mudam. Pré-release nunca vira "Latest" e não publica nada: não é deploy.
+   notas da seção no formato de "Notas da pré-release", abaixo.
+   Pré-release que já existe com outro título ou com as notas num formato
+   antigo é reescrita no run seguinte, com o mesmo conteúdo; a tag não muda.
+   Pré-release nunca vira "Latest" e não publica nada: não é deploy.
 4. A branch `chore/versao` é refeita a partir da `develop` com as seções novas
    no `CHANGELOG.md`, os arquivos de `changelog/nao-lancado/` apagados e a
    versão nova no `version.ts`, nos `package.json` e no `package-lock.json`. Uma única PR `chore(release): versão X` fica aberta com
@@ -120,14 +121,48 @@ A data e a hora são as do merge no fuso `America/Sao_Paulo`; o deslocamento
 (`UTC-3`) é lido do fuso, não fixado. No pé do arquivo ficam os links de cada
 versão para a pré-release e de "Não lançado" para a comparação com a `develop`.
 
+## Notas da pré-release
+
+Todas as pré-releases seguem o mesmo formato (`releaseNotes` em
+`scripts/versao.ts`):
+
+```markdown
+## Adiciona os comandos administrativos do bot e a gramática de datas
+
+| Mesclada em | Pull request | Commit |
+| :-- | :-- | :-- |
+| 02/11/2026 às 15:49 (UTC-3) | [#89](…/pull/89) | [`e7546bf`](…/commit/…) |
+
+### ✨ Adicionado
+…
+### 🔒 Segurança
+…
+
+---
+
+**Histórico completo:** [`v0.19.0...v0.20.0`](…/compare/v0.19.0...v0.20.0)
+
+Pré-release de desenvolvimento da `develop`, não é deploy. Todas as versões estão no [CHANGELOG.md](…).
+```
+
+- Os grupos ganham um ícone fixo, sempre na mesma ordem: ✨ Adicionado,
+  🔄 Alterado, 🐛 Corrigido, 🔒 Segurança, ⬆️ Atualização. O `CHANGELOG.md`
+  fica com os títulos sem ícone.
+- "Histórico completo" compara a versão com a anterior. A 0.15.5 compara com
+  o commit da 0.15.4, que não tem tag (veja "Histórico", abaixo).
+- Mudou o formato: o próximo run do workflow reescreve as notas de todas as
+  pré-releases que estiverem diferentes. Edição feita à mão nas notas também
+  volta ao formato, então corrija o fragmento ou a seção, não a pré-release.
+
 ## Garantias
 
 - O workflow só roda na `develop`, com `GITHUB_TOKEN` (sem custo, sem segredo
   novo) e permissões de escrever tags, releases, a própria branch e a própria
   PR. Nunca empurra para `develop` ou `main` e nunca apaga tag; de uma
-  pré-release que já existe, só acerta o título para "vX.Y.Z".
+  pré-release que já existe, só acerta o título para "vX.Y.Z" e as notas
+  para o formato atual, com o mesmo conteúdo.
 - Versão com tag fica congelada: se um fragmento for corrigido depois (por
-  exemplo, o marcador `minor` esquecido), o número e as notas daquele merge
+  exemplo, o marcador `minor` esquecido), o número e o conteúdo das notas daquele merge
   não mudam, e os merges seguintes contam a partir dele.
 - Tag que já aponta para outro commit para o workflow antes de mexer na PR de
   versão, em vez de ser movida, e ele abre a issue padrão de falha
@@ -148,7 +183,7 @@ versão para a pré-release e de "Não lançado" para a comparação com a `deve
 | Sinal | Causa provável | O que fazer |
 | --- | --- | --- |
 | Issue "[falha automática] Versão" com "GitHub Actions is not permitted to create or approve pull requests" | a opção do repositório está desligada | Pablo liga **Settings > Actions > General > Allow GitHub Actions to create and approve pull requests** e roda o workflow de novo |
-| "tag vX.Y.Z could not be created" ou "release vX.Y.Z not created" | o GitHub recusou a tag ou a pré-release ao `GITHUB_TOKEN` | o resto do run segue (a PR de versão abre); veja a linha recusada no log e rode o workflow de novo |
+| "tag vX.Y.Z could not be created", "release vX.Y.Z not created" ou "release vX.Y.Z not updated" | o GitHub recusou a tag ou a pré-release ao `GITHUB_TOKEN` | o resto do run segue (a PR de versão abre); veja a linha recusada no log e rode o workflow de novo |
 | "vX.Y.Z points to …" | alguém criou a tag na mão | apague a tag errada (Pablo) ou corrija a seção, e rode de novo |
 | A PR `chore(release):` parada com checks esperando | a aprovação da CI do bot falhou | aprove as execuções na aba Actions ou rode o workflow de novo |
 | `node scripts/versao.ts` mostra versões pendentes há mais de uma hora | o workflow não rodou | abra Actions > Versão > Run workflow |
@@ -164,7 +199,7 @@ voltou para a PR que o escreveu, as etapas 0 a 13 subiram o número do meio e o
 resto o último.
 
 As tags e pré-releases começam na **0.15.5** (#68), constante
-`FIRST_TAGGED_VERSION` de `scripts/publicar-versao.ts`. O GitHub não deixa o
+`FIRST_TAGGED_VERSION` de `scripts/versao.ts`. O GitHub não deixa o
 `GITHUB_TOKEN` criar uma tag num commit cujos arquivos de `.github/workflows/`
 diferem dos da `develop` ("refusing to allow a GitHub App to create or update
 workflow … without `workflows` permission"), e todas as versões antes da #68

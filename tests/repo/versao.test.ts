@@ -8,6 +8,7 @@ import {
   FIRST_TAGGED_VERSION,
   isSameRelease,
   parseLsRemoteTags,
+  previousVersions,
   pullRequestBody,
   pullRequestTitle,
   releaseWork,
@@ -18,6 +19,7 @@ import {
   applyPlan,
   bumpVersion,
   type Changelog,
+  compareBase,
   compareVersions,
   computePlan,
   describeSubject,
@@ -233,11 +235,39 @@ describe("release notes", () => {
   it("names the release by the version alone and keeps the title in the notes", () => {
     expect(releaseName(version())).toBe("v0.1.0");
     expect(releaseName(version({ version: "0.18.1", title: "fala com @alguem" }))).toBe("v0.18.1");
-    const notes = releaseNotes(version());
-    expect(notes).toMatch(/^Mesclada às 09:20 \(UTC-3\)/);
-    expect(notes).toContain("Envia avisos (etapa 13)");
-    expect(notes).toContain("### Adicionado\n\n- Avisos.");
+    const notes = releaseNotes(version(), null);
+    expect(notes).toMatch(/^## Envia avisos \(etapa 13\)\n/);
+    expect(notes).toContain("| 02/11/2026 às 09:20 (UTC-3) | [#7](https://github.com/pablopfg/Zuri/pull/7) | [`aaaaaaa`](https://github.com/pablopfg/Zuri/commit/");
+    expect(notes).toContain("### ✨ Adicionado\n\n- Avisos.");
     expect(notes).toContain("blob/develop/CHANGELOG.md");
+    expect(notes).toContain("não é deploy");
+  });
+
+  it("links the full history to the comparison with the previous version", () => {
+    const previous = version({ version: "0.19.0", commit: sha("c") });
+    const notes = releaseNotes(version({ version: "0.20.0" }), previous);
+    expect(notes).toContain("**Histórico completo:** [`v0.19.0...v0.20.0`](https://github.com/pablopfg/Zuri/compare/v0.19.0...v0.20.0)");
+    expect(notes).not.toContain("**Histórico completo:** [CHANGELOG.md]");
+  });
+
+  it("compares the first tagged version with the commit of the untagged one before it", () => {
+    const untagged = version({ version: "0.15.4", commit: sha("d") });
+    expect(compareBase(untagged)).toBe(sha("d"));
+    expect(compareBase(version({ version: FIRST_TAGGED_VERSION }))).toBe(`v${FIRST_TAGGED_VERSION}`);
+    expect(releaseNotes(version({ version: FIRST_TAGGED_VERSION }), untagged)).toContain(
+      `[\`ddddddd...v${FIRST_TAGGED_VERSION}\`](https://github.com/pablopfg/Zuri/compare/${sha("d")}...v${FIRST_TAGGED_VERSION})`,
+    );
+  });
+
+  it("links the first version ever to every commit up to it", () => {
+    expect(releaseNotes(version(), null)).toContain("**Histórico completo:** [Todos os commits até a v0.1.0](https://github.com/pablopfg/Zuri/commits/v0.1.0)");
+  });
+
+  it("gives every group its icon in the same order and says when there is no pull request", () => {
+    const body = "### Adicionado\n\n- a\n\n### Alterado\n\n- b\n\n### Corrigido\n\n- c\n\n### Segurança\n\n- d\n\n### Atualização\n\n- e";
+    const notes = releaseNotes(version({ body, pr: null }), null);
+    expect(notes.match(/^### .+$/gm)).toEqual(["### ✨ Adicionado", "### 🔄 Alterado", "### 🐛 Corrigido", "### 🔒 Segurança", "### ⬆️ Atualização"]);
+    expect(notes).toContain("| sem PR |");
   });
 });
 
@@ -261,8 +291,8 @@ describe("noMentions", () => {
   it("keeps @names from notifying anyone, except inside code", () => {
     expect(noMentions("crie o bot no @BotFather e veja `@userinfobot`")).toBe("crie o bot no @\u200bBotFather e veja `@userinfobot`");
     expect(noMentions("e-mail dono@exemplo.com.br")).toBe("e-mail dono@\u200bexemplo.com.br");
-    expect(releaseNotes(version({ title: "fala com @alguem" }))).toContain("fala com @\u200balguem");
-    expect(releaseNotes(version({ body: "### Adicionado\n\n- Avisa @time." }))).toContain("- Avisa @\u200btime.");
+    expect(releaseNotes(version({ title: "fala com @alguem" }), null)).toContain("fala com @\u200balguem");
+    expect(releaseNotes(version({ body: "### Adicionado\n\n- Avisa @time." }), null)).toContain("- Avisa @\u200btime.");
   });
 });
 
@@ -270,27 +300,43 @@ describe("releaseWork", () => {
   const a = version({ version: "0.1.0", commit: sha("a") });
   const b = version({ version: "0.1.1", commit: sha("b") });
 
-  it("creates what is missing, oldest first, and leaves existing releases alone", () => {
-    const work = releaseWork([a, b], new Map([["v0.1.0", sha("a")]]), new Map([["v0.1.0", "v0.1.0"]]));
-    expect(work).toEqual({ create: [b], rename: [], conflicts: [] });
+  const previous = previousVersions([a, b]);
+  const notesOf = (v: Version) => releaseNotes(v, previous.get(v.version) ?? null);
+  const current = (v: Version, name = `v${v.version}`) => ({ name, body: notesOf(v) });
+
+  it("creates what is missing, oldest first, and leaves releases in the current layout alone", () => {
+    const work = releaseWork([a, b], new Map([["v0.1.0", sha("a")]]), new Map([["v0.1.0", current(a)]]), notesOf);
+    expect(work).toEqual({ create: [b], update: [], conflicts: [] });
   });
 
-  it("renames releases whose title is more than the version, and nothing else", () => {
+  it("does not count CRLF or a missing last newline from GitHub as a change", () => {
+    const body = notesOf(a).replace(/\n/g, "\r\n").trimEnd();
+    expect(releaseWork([a], new Map([["v0.1.0", sha("a")]]), new Map([["v0.1.0", { name: "v0.1.0", body }]]), notesOf).update).toEqual([]);
+  });
+
+  it("rewrites releases whose title is more than the version or whose notes are in an old layout", () => {
     const releases = new Map([
-      ["v0.1.0", "v0.1.0 · Envia avisos (etapa 13)"],
-      ["v0.1.1", "v0.1.1"],
+      ["v0.1.0", current(a, "v0.1.0 · Envia avisos (etapa 13)")],
+      ["v0.1.1", { name: "v0.1.1", body: "Mesclada às 09:20 (UTC-3)\n\nHistórico completo: [CHANGELOG.md](https://github.com/pablopfg/Zuri/blob/develop/CHANGELOG.md)\n" }],
     ]);
-    const work = releaseWork([a, b], new Map([["v0.1.0", sha("a")], ["v0.1.1", sha("b")]]), releases);
-    expect(work).toEqual({ create: [], rename: ["v0.1.0"], conflicts: [] });
+    const work = releaseWork([a, b], new Map([["v0.1.0", sha("a")], ["v0.1.1", sha("b")]]), releases, notesOf);
+    expect(work).toEqual({ create: [], update: [a, b], conflicts: [] });
+  });
+
+  it("pairs each version with the one before it", () => {
+    expect([...previousVersions([a, b])]).toEqual([
+      ["0.1.0", null],
+      ["0.1.1", a],
+    ]);
   });
 
   it("creates the release over a tag that already sits on the right commit", () => {
-    expect(releaseWork([a], new Map([["v0.1.0", sha("a")]]), new Map()).create).toEqual([a]);
+    expect(releaseWork([a], new Map([["v0.1.0", sha("a")]]), new Map(), notesOf).create).toEqual([a]);
   });
 
   it("stops on a tag that points somewhere else instead of moving it", () => {
-    const work = releaseWork([a], new Map([["v0.1.0", sha("f")]]), new Map([["v0.1.0", "v0.1.0 · outro"]]));
-    expect(work.rename).toEqual([]);
+    const work = releaseWork([a], new Map([["v0.1.0", sha("f")]]), new Map([["v0.1.0", current(a, "v0.1.0 · outro")]]), notesOf);
+    expect(work.update).toEqual([]);
     expect(work.create).toEqual([]);
     expect(work.conflicts[0]).toMatch(/v0\.1\.0 points to fffffff/);
   });
