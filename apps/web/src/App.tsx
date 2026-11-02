@@ -1,14 +1,13 @@
-import { lazy, Suspense } from "react";
-import { Route, Routes } from "react-router";
+import { lazy, Suspense, useCallback, useState } from "react";
+import { Route, Routes, useNavigate } from "react-router";
 import { AppShell } from "./components/AppShell.tsx";
-import { RequireSession } from "./components/RequireSession.tsx";
+import { RequireSession, SessionChecking } from "./components/RequireSession.tsx";
 import { Spinner } from "./components/ui.tsx";
 import { useSession } from "./hooks/session.tsx";
-import { LOGIN_PATH } from "./lib/next.ts";
+import { FIRST_ACCESS_PATH, LOGIN_PATH } from "./lib/next.ts";
 import { HomePage } from "./pages/HomePage.tsx";
 import { LoginPage } from "./pages/LoginPage.tsx";
 import { NotFoundPage } from "./pages/NotFoundPage.tsx";
-import { PasswordChangePage } from "./pages/PasswordChangePage.tsx";
 
 // Settings carry the QR code and passkey code, notes the Markdown renderer: loaded only when opened.
 const SettingsPage = lazy(() => import("./pages/SettingsPage.tsx").then((m) => ({ default: m.SettingsPage })));
@@ -16,19 +15,43 @@ const TasksPage = lazy(() => import("./pages/productivity/TasksPage.tsx").then((
 const MemoryPage = lazy(() => import("./pages/memory/MemoryPage.tsx").then((m) => ({ default: m.MemoryPage })));
 const AccessLogPage = lazy(() => import("./pages/security/AccessLogPage.tsx").then((m) => ({ default: m.AccessLogPage })));
 const ChatPage = lazy(() => import("./pages/chat/ChatPage.tsx").then((m) => ({ default: m.ChatPage })));
+// The screens that lock the rest of the app are rare: each comes only when needed.
+const PasswordChangePage = lazy(() => import("./pages/PasswordChangePage.tsx").then((m) => ({ default: m.PasswordChangePage })));
+const SecondStepPage = lazy(() => import("./pages/setup/SecondStepPage.tsx").then((m) => ({ default: m.SecondStepPage })));
+const FirstAccessPage = lazy(() => import("./pages/setup/FirstAccessPage.tsx").then((m) => ({ default: m.FirstAccessPage })));
 const NotesPage = lazy(() => import("./pages/productivity/NotesPage.tsx").then((m) => ({ default: m.NotesPage })));
 
-/** While the password must change, the server refuses everything else: so does the interface. */
+/** While the password must change, or the second step must be turned on, the server refuses everything else: so does the interface. */
 function SignedIn() {
   const { session } = useSession();
-  if (session?.passwordChangeRequired) return <PasswordChangePage />;
+  // Turning the second step on opens the server's session at once, while the recovery codes are
+  // still on screen: a session check then (back from another app) must not swap them for the app.
+  // The screen holds itself until the owner says the codes are kept.
+  const [held, hold] = useState(false);
+  const locked = session?.passwordChangeRequired ? <PasswordChangePage /> : held || session?.secondStepRequired ? <SecondStepPage hold={hold} /> : null;
+  if (locked) return <Suspense fallback={<SessionChecking />}>{locked}</Suspense>;
   return <AppShell />;
+}
+
+/** The router stays out of the lazy screen (.claude/memoria/armadilhas.md, "Pacote da interface"): it gets `go`. */
+function FirstAccess() {
+  const navigate = useNavigate();
+  const go = useCallback((path: string) => navigate(path, { replace: true }), [navigate]);
+  return <FirstAccessPage go={go} />;
 }
 
 export function App() {
   return (
     <Routes>
       <Route path={LOGIN_PATH} element={<LoginPage />} />
+      <Route
+        path={FIRST_ACCESS_PATH}
+        element={
+          <Suspense fallback={<SessionChecking />}>
+            <FirstAccess />
+          </Suspense>
+        }
+      />
       <Route
         element={
           <RequireSession>

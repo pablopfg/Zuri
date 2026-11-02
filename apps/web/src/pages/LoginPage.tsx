@@ -9,9 +9,10 @@ import { SessionChecking } from "../components/RequireSession.tsx";
 import { TurnstileWidget } from "../components/TurnstileWidget.tsx";
 import { Button, Notice, PasswordField, TextField, useDocumentTitle } from "../components/ui.tsx";
 import { useSession } from "../hooks/session.tsx";
+import { useSetupStatus } from "../hooks/setup.ts";
 import { ApiError, api, errorMessage } from "../lib/api.ts";
 import { useI18n } from "../lib/i18n.tsx";
-import { safeNext } from "../lib/next.ts";
+import { FIRST_ACCESS_PATH, safeNext } from "../lib/next.ts";
 
 type Step = { kind: "password" } | { kind: "code"; passkey: boolean; recovery: boolean };
 
@@ -48,6 +49,8 @@ export function LoginPage() {
     staleTime: Number.POSITIVE_INFINITY,
     retry: 1,
   });
+  // Asked only while signed out; the form shows meanwhile (an owner signs in far more often than a first access).
+  const setup = useSetupStatus(!loading && !session);
   const [refusedKey, setSiteKey] = useState<string | null>(null);
   const siteKey = refusedKey ?? options.data?.turnstileSiteKey ?? null;
   const [humanToken, setHumanToken] = useState<string | null>(null);
@@ -87,6 +90,8 @@ export function LoginPage() {
 
   if (loading) return <SessionChecking />;
   if (session) return <Navigate to={next} replace />;
+  // A new installation has no owner yet: its first access comes before any sign-in.
+  if (setup.data?.setup) return <Navigate to={FIRST_ACCESS_PATH} replace />;
 
   const finish = (state: SessionState) => {
     signedIn(state);
