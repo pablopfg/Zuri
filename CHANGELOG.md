@@ -19,6 +19,52 @@ funciona: [docs/agente/versionamento.md](docs/agente/versionamento.md).
 
 O que já entrou na `develop` e ainda não ganhou número fica em [`changelog/nao-lancado/`](changelog/nao-lancado/) por alguns minutos, até o workflow de versão escrever a seção.
 
+## [0.19.0] - 2026-11-02
+
+Mesclada às 14:58 (UTC-3) · commit [`0d390c6`](https://github.com/pablopfg/Zuri/commit/0d390c6a6fcb90b2e8925441a90cc5c72cb74707) · PR [#84](https://github.com/pablopfg/Zuri/pull/84) · Adiciona a trava de leitura com /destravar por passkey ou e-mail
+
+### Adicionado
+
+- `/destravar` no bot do Telegram. Quando a leitura está travada, o bot
+  oferece **Confirmar com passkey**, que abre a página nova `/aprovar`, e
+  **Receber código por e-mail**, com um código de 6 dígitos que você responde
+  no próprio chat. Confirmado, a leitura fica liberada por 12 horas e o bot
+  avisa até que horas.
+- `/nova_conversa` começa outra conversa com a Zuri pelo Telegram. A anterior
+  continua no app.
+- O menu do bot mostra `/ajuda`, `/destravar` e `/nova_conversa`, e o `/ajuda`
+  explica a trava.
+
+### Alterado
+
+- A trava provisória da conversa pelo Telegram saiu. Antes, depois de 12 horas
+  sem uso, a conversa se desligava e só voltava pelo app. Agora a conversa
+  continua ligada, e a leitura pede `/destravar`. Ligar a conversa no app não
+  destrava mais a leitura.
+
+### Segurança
+
+- Trava de leitura do bot: depois das horas sem uso escolhidas no app (12 por
+  padrão), a conversa, `/nova_conversa` e o botão de arquivo grande pedem
+  destravamento. Mensagem enviada com a leitura travada não conta como uso.
+- O link de `/aprovar` vale 5 minutos e uma vez só, fica guardado só como
+  HMAC e sai da barra de endereço antes de qualquer pedido. A passkey precisa
+  confirmar quem você é (digital, rosto ou PIN).
+- O código por e-mail vale 5 minutos, só como resposta à pergunta do bot, e a
+  mensagem com ele é apagada na hora. Reenvio depois de 1 minuto, até 3 por
+  hora, com uma cota própria de 10 e-mails por dia que não gasta a dos avisos.
+- Cinco confirmações erradas em 15 minutos travam as confirmações pelo bot por
+  1 hora e geram um alerta de segurança (no máximo 1 por dia).
+- Cada destravamento aparece em Acessos e gera um aviso de segurança, uma vez,
+  sem insistir.
+- Limite de 60 comandos por hora no bot, além das 30 mensagens por hora, que
+  agora contam também as mensagens enviadas com a leitura travada.
+- O rodapé dos e-mails avisa que códigos de confirmação só servem no bot.
+
+### Atualização
+
+- Migration 17: tabela `zur_telegram_approvals` (confirmações pelo bot).
+
 ## [0.18.4] - 2026-11-02
 
 Mesclada às 12:52 (UTC-3) · commit [`1c7b620`](https://github.com/pablopfg/Zuri/commit/1c7b62055b0e10846faede78962f685bf27e6adc) · PR [#83](https://github.com/pablopfg/Zuri/pull/83) · Fixa o runner em ubuntu-26.04 em todos os workflows
@@ -1462,7 +1508,8 @@ Mesclada às 22:15 (UTC-3) · commit [`360a79e`](https://github.com/pablopfg/Zur
   `npm audit`), CodeQL, Dependabot e rulesets para a `develop` e a `main`.
 - `LICENSE` (MIT), `NOTICE.md`, `SECURITY.md` e `CONTRIBUTING.md`.
 
-[Não lançado]: https://github.com/pablopfg/Zuri/compare/v0.18.4...develop
+[Não lançado]: https://github.com/pablopfg/Zuri/compare/v0.19.0...develop
+[0.19.0]: https://github.com/pablopfg/Zuri/releases/tag/v0.19.0
 [0.18.4]: https://github.com/pablopfg/Zuri/releases/tag/v0.18.4
 [0.18.3]: https://github.com/pablopfg/Zuri/releases/tag/v0.18.3
 [0.18.2]: https://github.com/pablopfg/Zuri/releases/tag/v0.18.2
