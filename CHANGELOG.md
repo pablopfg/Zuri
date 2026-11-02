@@ -19,6 +19,47 @@ funciona: [docs/agente/versionamento.md](docs/agente/versionamento.md).
 
 O que já entrou na `develop` e ainda não ganhou número fica em [`changelog/nao-lancado/`](changelog/nao-lancado/) por alguns minutos, até o workflow de versão escrever a seção.
 
+## [0.23.1] - 2026-11-02
+
+Mesclada às 20:09 (UTC-3) · commit [`9e84844`](https://github.com/pablopfg/Zuri/commit/9e8484474cca804d0841991df848810cec808e92) · PR [#102](https://github.com/pablopfg/Zuri/pull/102) · Ícone do cartão da busca semântica sem pedaço novo no JS inicial
+
+### Corrigido
+
+- A CI da PR de versão 0.23.0 voltou a passar. O botão **Preparar tudo de
+  novo** da busca por significado usa agora um ícone que já vem no primeiro
+  carregamento. Antes, ele criava um arquivo a mais, e o JavaScript inicial
+  passava do teto por poucos bytes.
+
+## [0.23.0] - 2026-11-02
+
+Mesclada às 19:41 (UTC-3) · commit [`71097e8`](https://github.com/pablopfg/Zuri/commit/71097e855afeaf0334841e1e7d23162b74887263) · PR [#99](https://github.com/pablopfg/Zuri/pull/99) · Adiciona busca semântica opcional
+
+### Adicionado
+
+- Busca por significado, opcional, em Configurações › IA. Ligada, a busca
+  acha "carro" na memória sobre o "automóvel". Ela aparece na paleta
+  (Ctrl/⌘ K, grupo **Pelo significado**), nas memórias que a Zuri lembra na
+  conversa e nas rotinas, na busca da Zuri e no `/buscar` do Telegram, que
+  também passam a achar rotinas.
+- O cartão mostra quantos itens estão prontos e quantos foram preparados hoje,
+  e tem **Preparar tudo de novo**.
+- `/uso` no Telegram mostra as perguntas e os itens preparados do dia enquanto
+  a busca está ligada.
+- Desligada, a busca é exatamente a de antes.
+
+### Segurança
+
+- Os textos vão só ao modelo grátis do Workers AI da sua conta, nunca a outro
+  provedor, e o resultado entra no prompt como dado.
+- O preparo e a busca param no modo de bloqueio, e o registro de falhas guarda
+  só o código do erro, nunca o texto.
+- No máximo 2.000 textos preparados por dia e nunca mais da metade do teto de
+  IA do dia. A conversa sempre fica com o resto.
+- Um item editado ou apagado enquanto a Zuri prepara a busca nunca fica com o
+  texto antigo no índice.
+- Três falhas seguidas do modelo param o preparo até o dia seguinte, sem
+  gastar a cota com tentativas.
+
 ## [0.22.0] - 2026-11-02
 
 Mesclada às 18:24 (UTC-3) · commit [`dc8f3ce`](https://github.com/pablopfg/Zuri/commit/dc8f3ceace1275875c452c7f230ab4ded19bb4a5) · PR [#96](https://github.com/pablopfg/Zuri/pull/96) · Comandos de segurança e modo de bloqueio pelo bot
@@ -1635,7 +1676,9 @@ Mesclada às 22:15 (UTC-3) · commit [`360a79e`](https://github.com/pablopfg/Zur
   `npm audit`), CodeQL, Dependabot e rulesets para a `develop` e a `main`.
 - `LICENSE` (MIT), `NOTICE.md`, `SECURITY.md` e `CONTRIBUTING.md`.
 
-[Não lançado]: https://github.com/pablopfg/Zuri/compare/v0.22.0...develop
+[Não lançado]: https://github.com/pablopfg/Zuri/compare/v0.23.1...develop
+[0.23.1]: https://github.com/pablopfg/Zuri/releases/tag/v0.23.1
+[0.23.0]: https://github.com/pablopfg/Zuri/releases/tag/v0.23.0
 [0.22.0]: https://github.com/pablopfg/Zuri/releases/tag/v0.22.0
 [0.21.1]: https://github.com/pablopfg/Zuri/releases/tag/v0.21.1
 [0.21.0]: https://github.com/pablopfg/Zuri/releases/tag/v0.21.0
