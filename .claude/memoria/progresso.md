@@ -33,7 +33,7 @@ etapas ficam detalhadas; as mais antigas viram uma linha na tabela.
 
 ### Etapa 11 · Central de avisos (parte 11a)
 - Entregou: `packages/shared/src/alerts.ts`, `apps/agent/src/alerts/{service,channels,security,watchers,automations}.ts`, `apps/agent/src/diagnostics/service.ts`, rotas `/api/notices*`, `/api/alerts`, `/api/diagnostics*`, contador `unreadNotices` na sessão e no heartbeat, sino + `NoticesPanel` sob demanda, abas Avisos e Diagnóstico, binding `CF_VERSION_METADATA`. Doc: `docs/avisos.md`.
-- Migrations: versão 10 (`zur_notices`, `zur_alert_keys`, `zur_alert_deliveries`, `zur_diagnostics`, contadores `notices`, `security_notices`, `notices_unread`, `alert_deliveries`).
+- Migrations: versão 11 (`zur_notices`, `zur_alert_keys`, `zur_alert_deliveries`, `zur_diagnostics`, contadores `notices`, `security_notices`, `notices_unread`, `alert_deliveries`).
 - Decisões técnicas: etapa dividida em 11a/11b/11c (anunciado ao Pablo); o alarme das automações cobre vigias e insistência por `otherDue`; primeira rodada dos vigias 15 min após o primeiro uso; sessão e heartbeat leem 3 linhas (uma do contador).
 - Falta (11b): canais push (VAPID/ECE) e e-mail (`SEND_EMAIL`, 10/dia, 4 reservados), recuperação de senha por e-mail, rotas por categoria na aba Avisos. 11c: prioridade que aprende e campo de prioridade nas automações. Depois de 11a/b/c, pedir a etapa 12.
 - Riscos: JS inicial em 139,0 kB com teto 139; tudo de push na 11b precisa ficar sob demanda.

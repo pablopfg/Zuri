@@ -29,6 +29,8 @@ export const LOG_EVENTS = [
   "automation_failed",
   "automation_interrupted",
   "automation_reconcile_failed",
+  "ai_fallback",
+  "prompt_secret_removed",
   "alert_delivery_failed",
   "alert_tick_failed",
   "diagnostics_failed",
@@ -45,7 +47,7 @@ export interface LogFields {
   secrets?: readonly string[];
   /** The agent tool's registered name (never its arguments or result). */
   tool?: string;
-  /** The kind of automation (reminder, task_digest, agent_prompt), never its name or text. */
+  /** The kind of automation (reminder, task_digest, agent_prompt) or of AI failure (aiBusy), never a name or text. */
   kind?: string;
   /** How many items a step touched (e.g. runs interrupted by a restart). */
   count?: number;

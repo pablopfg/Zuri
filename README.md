@@ -63,7 +63,7 @@ As capturas abaixo acompanham o tema do seu GitHub (claro ou escuro) e saem da `
     <img src="docs/capturas/conversa-computador-claro.png" alt="Tela Conversa: o dono pede ajuda para organizar a mudança e o agente responde com um plano de quatro tarefas, com prioridades e prazos, e os botões Criar 4 tarefas, Editar e Descartar" width="85%">
   </picture>
 </p>
-<p align="center"><b>Conversa</b>: o agente propõe, você confere e confirma</p>
+<p align="center"><b>Conversa</b>: a Zuri propõe, você confere e confirma</p>
 
 <table>
   <tr>
@@ -161,7 +161,8 @@ O que está na `develop` hoje, etapa por etapa. "extra" marca melhorias feitas f
 | 📝 | **Notas** | Markdown seguro, busca de texto completo (com ou sem acento) e lixeira de 30 dias. | 6 |
 | 🧠 | **Memória** | Fatos que você guarda, edita e apaga. O que muda vira histórico (atual, incerto ou passado), e conflitos vão para uma fila de revisão. | 7 |
 | 📊 | **IA com medição** | Workers AI com contador por chamada e um teto único de 9.000 Neurons por dia, com aviso claro ao chegar nele. | 8 |
-| 💬 | **Conversa com ferramentas** | Respostas em tempo real. O agente cria e organiza tarefas, notas e memórias; o que apaga ou reescreve vira um cartão para você aprovar, e planos de tarefas só viram tarefas depois da sua confirmação. Também aceita voz. | 9 |
+| 🛟 | **Modelo reserva** | Se o modelo de conversa estiver ocupado ou fora do ar, outro modelo grátis responde no lugar, com a marca "Respondida pelo modelo reserva". Nada sensível (e-mail, senha, sessões, Acessos) chega à IA, conferido por teste. | extra |
+| 💬 | **Conversa com ferramentas** | Respostas em tempo real, num tom simpático e natural, chamando você pelo nome. A Zuri cria e organiza tarefas, notas e memórias; o que apaga ou reescreve vira um cartão para você aprovar, e planos de tarefas só viram tarefas depois da sua confirmação. Também aceita voz. | 9 |
 | ⏰ | **Automações** | Lembretes, o resumo das tarefas e rotinas da Zuri, por dia, semana, mês ou a cada algumas horas, sempre no seu fuso. A rotina que a Zuri sugere na conversa só roda depois que você aprova, e um reinício nunca faz nada rodar duas vezes. | 10 |
 | 🔔 | **Central de avisos** | Um sino com contador junta os resultados das automações, o resumo do dia, prazos chegando, tarefas paradas, rotinas falhando, o uso da IA perto do limite e os alertas de segurança. Alerta de segurança não pode ser silenciado e só sai com a senha. | 11 |
 | 🩺 | **Diagnóstico** | Em Configurações, as falhas dos últimos 30 dias por tipo (nunca o que você escreveu), com aviso quando uma falha se repete ou aparece numa versão nova. | 11 |

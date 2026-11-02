@@ -90,7 +90,8 @@ describe("the migration list", () => {
       7: "975245f3b1af6fcdea2793c1cc14adf75da337311943fffb54de586f2ae81701",
       8: "2c9dc9a7347e9929d8e8e517201b749352f14e8dfc44cf1d306bdfa16b4f49fd",
       9: "bc70a4e518b48d148475ac3881abb565015f4f21b69c26c36a28054c47429c91",
-      10: "fa7a411f3603944c4ac983fea3d0958275f683c89795325df12f71b77dd49a4d",
+      10: "e1033d98cc925094806c0b7829568e64c0a3cbdeef9df30fba265f4879b5102d",
+      11: "fa7a411f3603944c4ac983fea3d0958275f683c89795325df12f71b77dd49a4d",
     };
     for (const m of MIGRATIONS) {
       const digest = createHash("sha256").update(statementText(m).replace(/\r\n/g, "\n")).digest("hex");
@@ -106,7 +107,7 @@ describe("migrate", () => {
       expect(zurObjects(db)).toEqual([]);
 
       expect(migrate(db)).toBe(LATEST_SCHEMA_VERSION);
-      expect(schemaVersion(db)).toBe(10);
+      expect(schemaVersion(db)).toBe(11);
       // FTS5 keeps shadow tables of its own (zur_notes_fts_data and others): only ours are listed.
       expect(zurObjects(db).filter((name) => !/^table:zur_(notes|memories)_fts_/.test(name))).toEqual([
         "table:zur_activity",
@@ -316,11 +317,24 @@ describe("migrate", () => {
     });
   });
 
-  it("upgrades a database at version 9 to 10: notices, deliveries and diagnostics, with their checks and counters, the owner's data kept", async () => {
+  it("upgrades a database at version 9 to 10: the fallback flag on messages, off for every older one", async () => {
     await withEmptyDatabase("from-9", (db) => {
       expect(migrate(db, MIGRATIONS.slice(0, 9))).toBe(9);
+      db.run(`INSERT INTO zur_conversations (id, title, created_at, updated_at) VALUES ('c1', 'Oi', 'x', 'x')`);
+      db.run(`INSERT INTO zur_messages (id, conversation_id, role, content, created_at) VALUES ('m1', 'c1', 'assistant', 'Olá', 'x')`);
+      expect(migrate(db, MIGRATIONS.slice(0, 10))).toBe(10);
+      expect(db.one(`SELECT content, fallback FROM zur_messages WHERE id = 'm1'`)).toEqual({ content: "Olá", fallback: 0 });
+      db.run(`INSERT INTO zur_messages (id, conversation_id, role, content, fallback, created_at) VALUES ('m2', 'c1', 'assistant', 'Oi', 1, 'x')`);
+      // Only 0 or 1: a hand-edited row can't put anything else there.
+      expect(() => db.run(`INSERT INTO zur_messages (id, conversation_id, role, content, fallback, created_at) VALUES ('m3', 'c1', 'assistant', 'Oi', 2, 'x')`)).toThrow();
+    });
+  });
+
+  it("upgrades a database at version 10 to 11: notices, deliveries and diagnostics, with their checks and counters, the owner's data kept", async () => {
+    await withEmptyDatabase("from-10", (db) => {
+      expect(migrate(db, MIGRATIONS.slice(0, 10))).toBe(10);
       db.run(`INSERT INTO zur_auth_events (at, last_at, kind, alert_pending) VALUES (1, 1, 'password_changed', 1)`);
-      expect(migrate(db)).toBe(10);
+      expect(migrate(db)).toBe(11);
       // The alerts recorded before step 11 wait to be told.
       expect(db.one(`SELECT alert_pending FROM zur_auth_events`)).toEqual({ alert_pending: 1 });
       const count = (kind: string) => db.one<{ n: number }>(`SELECT n FROM zur_counts WHERE kind = ?`, kind)?.n;

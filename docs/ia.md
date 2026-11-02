@@ -26,6 +26,58 @@ mesmo medidor.
   ferramenta pelo caminho real (limites, validação, aprovações). Os textos
   dela vêm do catálogo de i18n.
 - Modelos pagos (Anthropic, OpenAI) não existem aqui (decisão N7).
+- A IA simulada também finge um modelo ocupado: uma mensagem que começa com
+  `fail ` falha no modelo escolhido antes de responder, e o reserva simulado
+  (`mock-fallback`) responde no lugar. Assim a troca aparece em `npm run dev`
+  e nos e2e. Nesse modo o disjuntor recomeça a cada vez, para o `fail ` dos
+  testes nunca deixar o modelo simulado de lado.
+
+## Modelo reserva e disjuntor
+
+Decisão de 02/11/2026; plano em
+[troca de provedores e proteção de dados](planos/troca-de-provedores-e-protecao-de-dados.md),
+parte 2. Código em `apps/agent/src/ai/chain.ts` e `apps/agent/src/ai/metered.ts`.
+
+- **O quê.** Configurações > IA tem o campo "Modelo reserva"
+  (`aiFallbackModel`): nenhum ou outro modelo da mesma lista grátis. Padrão:
+  Qwen3 30B A3B, o mais barato. O reserva igual ao modelo de conversa conta
+  como nenhum.
+- **Como.** `ProviderChain` guarda o modelo escolhido e o reserva.
+  `MeteredAI` tenta um de cada vez, na ordem, e conta cada tentativa com o
+  preço do próprio modelo antes de chamar (regra P7). Duas tentativas são dois
+  pedidos; a que falhou conta como erro. O prazo de 120 s vale para as duas
+  juntas.
+- **Quando troca.** Só antes do primeiro evento da resposta (nenhum texto
+  mostrado, nenhuma ferramenta rodou) e só por falha do provedor
+  (`isSwitchable`): ocupado (`error.aiBusy`), modelo fora
+  (`error.aiModelUnavailable`), erro desconhecido ou do servidor
+  (`error.aiUnavailable`), tempo esgotado do lado do provedor (HTTP 408,
+  códigos 3007 e 3008, lidos como ocupado), ou 20 s sem o primeiro pedaço (`FIRST_CHUNK_MS`,
+  só enquanto há reserva; o último modelo da fila tem o prazo inteiro).
+- **Quando não troca.** Teto do dono (`AI_LIMIT_REACHED` do medidor), Parar,
+  pedido recusado (`error.aiRequestRejected`: HTTP 4xx que não é 429, entrada
+  inválida, contexto grande demais), o prazo de 120 s da vez, resposta que já
+  começou e qualquer passo depois de uma ferramenta. Nenhuma ferramenta roda
+  duas vezes.
+- **Disjuntor** (`CircuitBreaker`, um por provedor e modelo, na memória do
+  objeto). Três falhas trocáveis em 2 minutos abrem por 60 s: o modelo é
+  pulado e o reserva responde direto. Depois disso a próxima chamada real
+  testa o modelo; falhou, abre de novo pelo dobro do tempo, até 15 min; deu
+  certo, fecha. Sem pings de saúde. Com todos abertos, o escolhido é tentado
+  assim mesmo. Uma ferramenta que começou a rodar, mesmo antes de o evento
+  dela chegar, impede a troca.
+- **Cota da conta.** O 4006 da Cloudflare (cota grátis da conta esgotada) vale
+  para todos os modelos do Workers AI: o reserva não é tentado, e nenhuma
+  chamada sai até 00:00 UTC. O dia fica em `zur_settings`
+  (`ai_quota_exhausted_day`), gravado só quando muda, para um objeto que
+  reiniciou não gastar um pedido para descobrir de novo.
+- **O que o dono vê.** A resposta do reserva leva "Respondida pelo modelo
+  reserva" na conversa, também depois de recarregar (coluna `fallback` de
+  `zur_messages`). O texto não cita infraestrutura. O log ganha
+  `ai_fallback` com o tipo da falha, nunca o prompt.
+- **Ainda não.** Estado de cada modelo na tela e alertas ficam para a aba
+  Diagnóstico (etapa 11). Um segundo provedor distinto (Anthropic ou OpenAI)
+  é pago ⚠️ e fica para a etapa 21; a cadeia já aceita mais um item.
 
 ## Modelos e preços
 
@@ -115,7 +167,8 @@ vira `AI_LIMIT_REACHED` com `details.limit: "account"`.
 Cada modelo tem uma janela de contexto (campo `context` de `CHAT_MODELS` em
 `packages/shared/src/ai.ts`). O histórico de uma conversa usa o menor entre a
 memória da conversa escolhida pelo dono e a janela do modelo, menos a resposta
-máxima, as ferramentas e uma folga de 1.024 tokens. O Llama 3.3 70B, com
+máxima, as ferramentas e uma folga de 1.024 tokens. Com modelo reserva, vale a
+menor janela dos dois: o reserva recebe o mesmo prompt. O Llama 3.3 70B, com
 24.000 tokens, é o mais apertado. Cada resultado de ferramenta é cortado em
 8.000 caracteres antes de voltar ao modelo.
 
@@ -129,7 +182,7 @@ não ajuda. A reserva acontece antes da chamada e uma recusa da cota responde
 `429 AI_LIMIT_REACHED` com `details.limit: "audio"`. Na IA simulada a
 transcrição devolve um texto fixo do catálogo.
 
-## Modelo de dados (migration 7)
+## Modelo de dados (migrations 7 e 10)
 
 | Tabela | Linha | Para quê |
 | --- | --- | --- |
@@ -139,6 +192,9 @@ transcrição devolve um texto fixo do catálogo.
 - Guardam só contadores: nenhum texto do dono, prompt ou resposta.
 - O histórico guarda 90 dias. A primeira chamada de um dia novo apaga o resto.
 - Não entram no backup (são medidas, não dados do dono).
+- A migration 10 acrescenta `fallback` (0 ou 1) em `zur_messages`: a resposta
+  veio do modelo reserva. Só a marca, sem o nome do modelo; segue a mensagem
+  no backup.
 
 ## API
 

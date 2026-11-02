@@ -27,6 +27,8 @@ export type InternalKey =
   // The object's one alarm, "<UTC ISO>|<schedule id>": the automations (step 10) and, from step 11,
   // the tries of insisting notices and the watchers share it (rule P8).
   | "automation_alarm"
+  // The UTC day Cloudflare said the account's free AI allocation was spent (the AI breaker).
+  | "ai_quota_exhausted_day"
   // Step 11: when the watchers run next, the local day of the last digest, and the interface errors of this hour.
   | "alert_watch_at"
   | "alert_digest_day"

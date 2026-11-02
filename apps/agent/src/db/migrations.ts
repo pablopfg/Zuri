@@ -540,6 +540,15 @@ export const MIGRATIONS: readonly Migration[] = [
   },
   {
     version: 10,
+    name: "fallback_answers",
+    statements: [
+      // The answer came from the fallback model (Settings > AI): the chat shows
+      // "Respondida pelo modelo reserva". Only a flag, no model name. In the backup with the message.
+      `ALTER TABLE zur_messages ADD COLUMN fallback INTEGER NOT NULL DEFAULT 0 CHECK (fallback IN (0, 1))`,
+    ],
+  },
+  {
+    version: 11,
     name: "notices",
     statements: [
       // The notice center (step 11). The kind and its data, never translated

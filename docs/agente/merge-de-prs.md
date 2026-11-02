@@ -18,6 +18,9 @@ cada uma, anote:
 - se é rascunho;
 - qual thread é dona da PR e se ela ainda está trabalhando nela;
 - os arquivos que ela muda (para achar PRs que se cruzam).
+- se o check `merge-order` está vermelho (ela espera uma PR mais antiga; veja a
+  seção 3) e se tem o comentário "Conflito com a develop que precisa de uma
+  pessoa" do `Update PRs`. Essas PRs vêm primeiro: ninguém mais pega o aviso.
 
 ## 2. Quando uma PR pode ser mesclada
 
@@ -48,6 +51,41 @@ Uma PR por vez, sempre por squash.
 3. Uma etapa nunca entra antes das etapas de que ela depende (tabela
    "Dependências entre etapas" da especificação).
 
+O auto-merge do GitHub não conhece ordem: ele mescla a PR que ficar verde
+primeiro. Por isso a regra 1 virou um check exigido, o `merge-order`
+(`.github/workflows/merge-order.yml`, `scripts/ordem-de-merge.ts`). Ele fica
+vermelho enquanto existir uma PR **mais antiga** (número menor), aberta para a
+`develop`, fora de rascunho e deste repositório (PR de fork nunca segura
+ninguém), que muda algum dos mesmos arquivos. Não contam os arquivos em que o
+`Update PRs` junta acréscimos sozinho (changelog, `README.md`, memória,
+`docs/**/*.md` e os catálogos de texto `pt-BR*.ts` e `en.ts`). Se nesses
+arquivos as duas PRs mudarem a mesma linha, o conflito ainda aparece, mas é
+texto e se resolve rápido; contar o `README.md`, que quase toda PR muda,
+enfileiraria todas as PRs. Com o check vermelho, o auto-merge espera.
+
+Quando o resultado muda:
+
+- **A mais antiga entra:** a `develop` muda, o `Update PRs` traz a `develop`
+  para a mais nova, dispara a CI e o `merge-order`, e o check passa.
+- **A mais antiga é fechada, sai do rascunho ou passa a mudar outros
+  arquivos:** nada acontece na PR mais nova, então o `Update PRs` também roda
+  a cada 15 minutos e, a cada rodada, recalcula o `merge-order` de toda PR
+  aberta para a `develop`. Onde o último resultado não bate (ou não existe),
+  ele dispara o check de novo naquela branch. Isso também cobre a PR com o
+  rótulo `sem-atualizacao-automatica` e a `develop` que mudou workflows. Fica
+  uma janela de até 15 minutos em que uma PR mais nova, já verde, pode entrar
+  na frente de uma mais antiga que acabou de sair do rascunho.
+- **Rótulo novo na PR** (veja abaixo): o check roda sozinho.
+
+- **Passar na frente de propósito** (a mais antiga está parada, esperando o
+  Pablo ou com conflito que vai demorar): ponha o rótulo `fora-de-ordem` na
+  PR mais nova e diga o motivo na PR. Só a rotina de merge ou o Pablo decidem
+  isso; a thread dona da PR mais nova não se autoriza. Quem fica para trás
+  resolve o conflito depois, como na seção 4.
+- O check só lê a lista de PRs abertas e os arquivos de cada uma: não comenta,
+  não mescla, não muda nada. O script vem sempre da `develop`, então uma PR
+  não consegue mudar a regra que a julga.
+
 ## 4. Depois de cada merge
 
 O workflow `Update PRs` (`.github/workflows/update-prs.yml`) cuida da maior
@@ -68,7 +106,6 @@ base `develop` (menos rascunho, branch de fork e PR com o rótulo
    criado dos dois lados, link simbólico, quebra de linha CRLF e qualquer
    outro arquivo (inclusive `i18n/index.ts`, que tem lógica) ficam para uma
    pessoa. Se um arquivo precisa de pessoa, nada é resolvido naquela rodada.
-   lado e qualquer outro arquivo ficam para uma pessoa.
 3. Envia o commit e dispara `ci.yml` e `codeql.yml` na branch. O push feito
    pelo token do GitHub Actions não dispara a CI da PR, por isso o disparo
    manual: são os mesmos jobs, e os checks exigidos aparecem no commit novo.
@@ -80,6 +117,12 @@ base `develop` (menos rascunho, branch de fork e PR com o rótulo
 5. Uma PR que falha não para as outras; a rodada termina vermelha para
    alguém ver. Se o disparo da CI falhou depois do push, a rodada seguinte
    percebe o commit de merge sem CI e dispara de novo.
+
+O workflow só resolve conflito de acréscimo em arquivo de lista. Conflito em
+código (duas PRs mudando as mesmas linhas de `prompt.ts`, por exemplo) não
+tem resolução mecânica segura: juntar os dois lados às cegas compila e quebra
+o comportamento. Isso fica com quem entende a mudança, e o comentário na PR
+avisa.
 
 O que continua com a thread dona ou com a passada de merge:
 
@@ -121,6 +164,27 @@ teste de i18n). As causas que deu para tirar:
 O que sobra de manual: duas PRs mudando a mesma linha (por exemplo, a mesma
 linha da tabela "O que já funciona" ou de `progresso.md`), código e
 `package-lock.json`.
+
+### O que aconteceu com a #50 e a #52 (02/11/2026)
+
+A #50 (personalidade no prompt, aberta 03:20) e a #52 (modelo reserva, aberta
+03:27) mudavam `apps/agent/src/agent/prompt.ts`, `runner.ts` e o `README.md`.
+Pelos logs do `Update PRs` e dos checks:
+
+- 03:30, depois da #51: a #50 teve conflito no `README.md` (linha mudada, não
+  só acrescentada). O workflow comentou, e a thread dona resolveu às 03:36.
+- 03:38: o workflow trouxe a #48 para a #50 sem conflito e disparou a CI.
+  A #50 ficou verde e em dia às 03:50; a #52, às 03:51.
+- 03:52: o GitHub mesclou a #52. A #50 não entrou antes, embora estivesse
+  pronta um minuto antes; a API não diz quando o auto-merge dela foi ligado,
+  então o mais provável é que ainda não estivesse. De todo jeito, nada
+  impedia a mais nova de passar na frente.
+- Na rodada seguinte o conflito da #50 incluía `prompt.ts` e `runner.ts`.
+  Código o workflow não resolve, de propósito, e ele comentou pedindo uma
+  pessoa. A resolução à mão saiu às 03:58 e a #50 entrou às 04:06.
+
+O workflow fez o que foi desenhado para fazer. Faltava garantir a ordem, e é
+isso que o check `merge-order` faz agora.
 
 ### Corrida de merge e o que o GitHub oferece
 

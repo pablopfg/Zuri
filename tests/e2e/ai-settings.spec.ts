@@ -53,6 +53,11 @@ test("the model and the limits: out-of-range values are refused on the spot, the
   await expect(neurons).toHaveValue("9000");
   await expect(output).toHaveValue("1024");
   await expect(form.getByLabel("Modelo de conversa")).toHaveValue("@cf/zai-org/glm-4.7-flash");
+  // The fallback: on by default, a different model, never the chosen one again.
+  const fallback = form.getByLabel("Modelo reserva");
+  await expect(fallback).toHaveValue("@cf/qwen/qwen3-30b-a3b-fp8");
+  await expect(fallback.locator("option")).toHaveText(["Nenhum (só o modelo de conversa)", "Qwen3 30B A3B", "Llama 4 Scout 17B", "Llama 3.3 70B"]);
+  await expect(form.getByText(/Responde no lugar do modelo de conversa quando ele está ocupado/)).toBeVisible();
   await expect(form.getByText(/Cerca de 48 Neurons por resposta típica; 189 respostas/)).toBeVisible();
 
   // Nothing changed yet.
@@ -78,6 +83,10 @@ test("the model and the limits: out-of-range values are refused on the spot, the
   await output.fill("256");
   await form.getByLabel("Modelo de conversa").selectOption({ label: "Qwen3 30B A3B" });
   await expect(form.getByText(/Cerca de 40 Neurons por resposta típica; 25 respostas/)).toBeVisible();
+  // The fallback was the newly chosen model: it falls back to none, and that model leaves its list.
+  await expect(fallback).toHaveValue("none");
+  await expect(fallback.locator("option")).toHaveText(["Nenhum (só o modelo de conversa)", "GLM 4.7 Flash", "Llama 4 Scout 17B", "Llama 3.3 70B"]);
+  await fallback.selectOption({ label: "Llama 4 Scout 17B" });
   const saved = page.waitForResponse((r) => r.url().endsWith("/api/settings") && r.request().method() === "PATCH");
   await form.getByRole("button", { name: "Salvar limites" }).click();
   expect((await saved).status()).toBe(200);
@@ -90,8 +99,11 @@ test("the model and the limits: out-of-range values are refused on the spot, the
   await page.reload();
   await expect(neurons).toHaveValue("1000");
   await expect(form.getByLabel("Modelo de conversa")).toHaveValue("@cf/qwen/qwen3-30b-a3b-fp8");
+  await expect(fallback).toHaveValue("@cf/meta/llama-4-scout-17b-16e-instruct");
 
   // The server holds the same line as the form.
+  const unknown = await page.request.patch("/api/settings", { headers: CSRF, data: { aiFallbackModel: "@cf/openai/gpt-pago" } });
+  expect(unknown.status()).toBe(400);
   const refused = await page.request.patch("/api/settings", { headers: CSRF, data: { aiNeuronsPerDay: 9_001 } });
   expect(refused.status()).toBe(400);
   const report = await (await page.request.get("/api/usage", { headers: CSRF })).json();
@@ -100,7 +112,13 @@ test("the model and the limits: out-of-range values are refused on the spot, the
   // Back to the defaults, for the other tests of the run.
   const reset = await page.request.patch("/api/settings", {
     headers: CSRF,
-    data: { aiModel: "@cf/zai-org/glm-4.7-flash", aiRequestsPerDay: 200, aiNeuronsPerDay: 9_000, aiMaxOutputTokens: 1_024 },
+    data: {
+      aiModel: "@cf/zai-org/glm-4.7-flash",
+      aiFallbackModel: "@cf/qwen/qwen3-30b-a3b-fp8",
+      aiRequestsPerDay: 200,
+      aiNeuronsPerDay: 9_000,
+      aiMaxOutputTokens: 1_024,
+    },
   });
   expect(reset.status()).toBe(200);
 });

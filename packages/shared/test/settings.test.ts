@@ -19,6 +19,7 @@ describe("default settings", () => {
       sessionMaxHours: 6,
       memoryConflictReview: true,
       aiModel: "@cf/zai-org/glm-4.7-flash",
+      aiFallbackModel: "@cf/qwen/qwen3-30b-a3b-fp8",
       aiRequestsPerDay: 200,
       aiNeuronsPerDay: 9_000,
       aiMaxOutputTokens: 1_024,
@@ -44,6 +45,14 @@ describe("default settings", () => {
     });
     expect(DEFAULT_TIME_ZONE).toBe("America/Sao_Paulo");
     expect(settingsSchema.parse(DEFAULT_SETTINGS)).toEqual(DEFAULT_SETTINGS);
+  });
+
+  it("take a fallback model from the free list, or none; never a model off the list", () => {
+    expect(settingsUpdateSchema.safeParse({ aiFallbackModel: "none" }).success).toBe(true);
+    expect(settingsUpdateSchema.safeParse({ aiFallbackModel: "@cf/meta/llama-3.3-70b-instruct-fp8-fast" }).success).toBe(true);
+    for (const bad of ["", "None", "@cf/openai/gpt-4o", null, 1]) expect(settingsUpdateSchema.safeParse({ aiFallbackModel: bad }).success).toBe(false);
+    // The default pair is always two different models.
+    expect(DEFAULT_SETTINGS.aiFallbackModel).not.toBe(DEFAULT_SETTINGS.aiModel);
   });
 
   it("take only a boolean for memory conflict review", () => {

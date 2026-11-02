@@ -40,5 +40,8 @@ export const triggers = (wf: Workflow) =>
 /** The CI jobs that the develop and main rulesets require. */
 export const REQUIRED_CI_JOBS = ["typecheck", "lint", "test", "i18n", "build", "e2e", "audit", "lighthouse"];
 
+/** The check of merge-order.yml, also required by the rulesets. */
+export const REQUIRED_ORDER_CHECK = "merge-order";
+
 /** CodeQL contexts, one per language in codeql.yml, also required by the rulesets. */
 export const REQUIRED_CODEQL_CHECKS = ["analyze (javascript-typescript)", "analyze (actions)"];

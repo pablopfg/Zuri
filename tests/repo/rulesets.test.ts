@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { loadWorkflow, REQUIRED_CI_JOBS, REQUIRED_CODEQL_CHECKS, readJson } from "./helpers.ts";
+import { loadWorkflow, REQUIRED_CI_JOBS, REQUIRED_CODEQL_CHECKS, REQUIRED_ORDER_CHECK, readJson } from "./helpers.ts";
 
 interface Rule {
   type: string;
@@ -53,7 +53,7 @@ describe.each([
   });
 
   it("requires every CI check", () => {
-    expect(checks(rs).sort()).toEqual([...REQUIRED_CI_JOBS, ...REQUIRED_CODEQL_CHECKS, ...extra].sort());
+    expect(checks(rs).sort()).toEqual([...REQUIRED_CI_JOBS, ...REQUIRED_CODEQL_CHECKS, REQUIRED_ORDER_CHECK, ...extra].sort());
   });
 });
 
@@ -66,9 +66,12 @@ describe("required checks", () => {
     const jobs = [
       ...Object.keys(loadWorkflow(".github/workflows/ci.yml").jobs),
       ...Object.keys(loadWorkflow(".github/workflows/branch-policy.yml").jobs),
+      ...Object.keys(loadWorkflow(".github/workflows/merge-order.yml").jobs),
       ...codeql.strategy.matrix.language.map((language) => codeql.name.replace(/\$\{\{ matrix\.language \}\}/, language)),
     ];
-    const main = readJson(".github/rulesets/main.json") as Ruleset;
-    for (const context of checks(main)) expect(jobs).toContain(context);
+    for (const branch of ["develop", "main"]) {
+      const rs = readJson(`.github/rulesets/${branch}.json`) as Ruleset;
+      for (const context of checks(rs)) expect(jobs).toContain(context);
+    }
   });
 });
