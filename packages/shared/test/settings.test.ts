@@ -10,7 +10,7 @@ import {
 } from "../src/index.ts";
 
 describe("default settings", () => {
-  it("start in pt-BR, in the São Paulo time zone, with sign-out after 30 min idle, 5 min without a tab or 6 h, memory conflict review on and the AI limits of the specification, and no owner name yet", () => {
+  it("start in pt-BR, in the São Paulo time zone, with sign-out after 30 min idle, 5 min without a tab or 6 h, memory conflict review on, the AI limits of the specification, the priority that learns on, and no owner name yet", () => {
     expect(DEFAULT_SETTINGS).toEqual({
       language: "pt-BR",
       timeZone: "America/Sao_Paulo",
@@ -42,6 +42,7 @@ describe("default settings", () => {
       },
       alertPerHour: 6,
       alertPerDay: 30,
+      alertLearning: true,
     });
     expect(DEFAULT_TIME_ZONE).toBe("America/Sao_Paulo");
     expect(settingsSchema.parse(DEFAULT_SETTINGS)).toEqual(DEFAULT_SETTINGS);
