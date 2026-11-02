@@ -11,6 +11,7 @@ import { ptBRNotices } from "./pt-BR-notices.ts";
 import { ptBRSetup } from "./pt-BR-setup.ts";
 import { ptBRAutomations } from "./pt-BR-automations.ts";
 import { ptBRMarkdown } from "./pt-BR-markdown.ts";
+import { ptBRAlerts } from "./pt-BR-alerts.ts";
 
 // Default and fallback catalog. Every key must also exist in en.ts and be used in the code (npm run lint).
 // The texts of the lazy screens live in their own files (pt-BR-memory.ts, pt-BR-productivity.ts,
@@ -79,8 +80,7 @@ export const ptBRCore = {
   "web.confirm.usePassword": "Usar a senha",
   "web.notifications.open": "Abrir avisos",
   "web.notifications.title": "Avisos",
-  "web.notifications.emptyTitle": "Nenhum aviso por enquanto",
-  "web.notifications.emptyBody": "Lembretes, alertas de segurança e mensagens da Zuri vão aparecer aqui.",
+  "web.notifications.openUnread": "Abrir avisos, {count} sem ler",
   "web.home.emptyTitle": "A conversa com a Zuri chega em breve",
   "web.home.emptyBody": "A conversa com ela entra numa próxima etapa. Enquanto isso, deixe a sua conta protegida.",
   "web.home.securityLink": "Revisar a segurança da conta",
@@ -108,6 +108,7 @@ export const ptBRCore = {
   "web.settings.tab.notifications": "Avisos",
   "web.settings.tab.integrations": "Integrações",
   "web.settings.tab.data": "Dados",
+  "web.settings.tab.diagnostics": "Diagnóstico",
   "web.account.signOutHint": "Encerra esta sessão. As outras abas deste navegador saem junto.",
   "web.theme.label": "Tema",
   "web.theme.system": "Como o sistema",
@@ -151,4 +152,5 @@ export const ptBR = /* @__PURE__ */ join(
   ptBRNotices,
   ptBRAutomations,
   ptBRMarkdown,
+  ptBRAlerts,
 );

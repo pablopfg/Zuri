@@ -1,4 +1,7 @@
+import { CSRF_HEADER } from "@zuri/shared";
 import { TriangleAlert } from "lucide-react";
+import { useEffect } from "react";
+import { useRouteError } from "react-router";
 import { Logo } from "../components/Logo.tsx";
 import { Button } from "../components/ui.tsx";
 import { useI18n } from "../lib/i18n.tsx";
@@ -6,10 +9,16 @@ import { useI18n } from "../lib/i18n.tsx";
 /**
  * What the router shows when a screen throws while rendering, in place of its
  * built-in page (English, with the error's text). No detail of the error
- * reaches the screen; a reload starts over.
+ * reaches the screen; a reload starts over. Its name and the screen go to the
+ * Diagnóstico tab (signed out, the server refuses it and nothing happens).
  */
 export function RouteErrorPage() {
   const { t } = useI18n();
+  const error = useRouteError();
+  // Loaded only when a screen breaks: the report never weighs on the first load (rule P11).
+  useEffect(() => {
+    void import("../lib/report-error.ts").then((m) => m.reportClientError(error, CSRF_HEADER)).catch(() => undefined);
+  }, [error]);
   return (
     <main className="flex min-h-full items-center justify-center bg-bg px-4 py-10">
       <div className="flex w-full max-w-md flex-col items-center gap-4 rounded-2xl border border-border bg-surface px-6 py-10 text-center shadow-sm">

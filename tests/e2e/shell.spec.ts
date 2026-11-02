@@ -102,19 +102,21 @@ test("a session the server ended sends to the sign-in at the next request, with 
   await expect(page.getByText("Sua sessão terminou. Entre de novo para continuar.")).toBeVisible();
 });
 
-test("the notification center opens empty and closes with Escape", async ({ page }) => {
+test("the notification center opens from the bell and closes with Escape", async ({ page }) => {
   await page.goto("/");
   await signIn(page);
-  await page.getByRole("button", { name: "Abrir avisos" }).click();
+  // Earlier tests may have left notices (a sign-in from a new browser is one): the count may show.
+  const bell = page.getByRole("button", { name: /^Abrir avisos/ });
+  await bell.click();
   const dialog = page.getByRole("dialog", { name: "Avisos" });
   await expect(dialog).toBeVisible();
-  await expect(dialog.getByText("Nenhum aviso por enquanto")).toBeVisible();
+  await expect(dialog.getByText("Nenhum aviso por enquanto").or(dialog.getByRole("list", { name: "Seus avisos" }))).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(dialog).toBeHidden();
-  await expect(page.getByRole("button", { name: "Abrir avisos" })).toBeFocused();
+  await expect(bell).toBeFocused();
 });
 
-test("settings has the six sections, each with its address and content: tabs on a computer, a list on a phone @mobile", async ({ page }) => {
+test("settings has the seven sections, each with its address and content: tabs on a computer, a list on a phone @mobile", async ({ page }) => {
   await page.goto("/configuracoes");
   await signIn(page);
   const sections = page.getByRole("navigation", { name: "Seções das configurações" });
@@ -123,7 +125,7 @@ test("settings has the six sections, each with its address and content: tabs on 
   } else {
     // The list is the page: each section with what it holds, no section open yet.
     await expect(page).toHaveURL(/\/configuracoes$/);
-    await expect(sections.getByRole("link")).toHaveCount(6);
+    await expect(sections.getByRole("link")).toHaveCount(7);
         await expect(page.getByRole("link", { name: "Todas as configurações" })).toHaveCount(0);
     await expect(sections.getByRole("link", { name: "Segurança", exact: true })).toHaveAccessibleDescription("Duas etapas, passkeys e saída automática");
     await expectAccessible(page, "configuracoes (lista)");
@@ -131,16 +133,17 @@ test("settings has the six sections, each with its address and content: tabs on 
   for (const [name, path, text] of [
     ["Segurança", "seguranca", "Atividade de acesso"],
     ["IA", "ia", "Uso de hoje"],
-    ["Avisos", "avisos", "central de avisos"],
+    ["Avisos", "avisos", "Resumo do dia"],
     ["Integrações", "integracoes", "Google Agenda"],
     ["Dados", "dados", "Backup e uso do armazenamento"],
+    ["Diagnóstico", "diagnostico", "Nada do que você escreveu entra neste registro."],
     ["Conta", "conta", "Nome, idioma e fuso horário"],
   ] as const) {
     await openSettingsSection(page, name);
     await expect(page).toHaveURL(new RegExp(`/configuracoes/${path}$`));
     await expect(page.getByRole("main")).toContainText(text);
     if (settingsHasTabs(page)) {
-      await expect(sections.getByRole("link", { name })).toHaveAttribute("aria-current", "page");
+      await expect(sections.getByRole("link", { name, exact: true })).toHaveAttribute("aria-current", "page");
     } else {
       // One section per screen: its name on top and the way back, no tabs.
       await expect(page.getByRole("heading", { level: 2, name, exact: true })).toBeVisible();

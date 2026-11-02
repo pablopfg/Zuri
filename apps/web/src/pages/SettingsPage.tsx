@@ -1,12 +1,14 @@
 import { ptBRSettings } from "@zuri/shared";
-import { Bell, Bot, ChevronLeft, ChevronRight, Clock, Database, Plug, Shield, User } from "lucide-react";
+import { Activity, Bell, Bot, ChevronLeft, ChevronRight, Clock, Database, Plug, Shield, User } from "lucide-react";
 import { useSyncExternalStore } from "react";
 import { Link, NavLink, Navigate, useParams } from "react-router";
 import { cn, PageHeader } from "../components/ui.tsx";
 import { addMessages, useI18n } from "../lib/i18n.tsx";
 import { AccountTab } from "./settings/AccountTab.tsx";
 import { AiTab } from "./settings/AiTab.tsx";
+import { AlertsTab } from "./settings/AlertsTab.tsx";
 import { DataTab } from "./settings/DataTab.tsx";
+import { DiagnosticsTab } from "./settings/DiagnosticsTab.tsx";
 import { LaterTab } from "./settings/LaterTab.tsx";
 import { SecurityTab } from "./settings/SecurityTab.tsx";
 
@@ -14,10 +16,10 @@ import { SecurityTab } from "./settings/SecurityTab.tsx";
 addMessages(ptBRSettings);
 
 /** The tabs, by the path segment the address shows ("/configuracoes/seguranca"). */
-export const SETTINGS_TABS = ["conta", "seguranca", "ia", "avisos", "integracoes", "dados"] as const;
+export const SETTINGS_TABS = ["conta", "seguranca", "ia", "avisos", "integracoes", "dados", "diagnostico"] as const;
 type Tab = (typeof SETTINGS_TABS)[number];
 
-/** Where the six tabs fit beside the sidebar (Tailwind's lg): below it, settings is a list of sections, each on its own screen. */
+/** Where the seven tabs fit beside the sidebar (Tailwind's lg): below it, settings is a list of sections, each on its own screen. */
 const WIDE = "(min-width: 64rem)";
 
 function subscribeWide(change: () => void) {
@@ -39,9 +41,10 @@ export function SettingsPage() {
     { id: "conta", label: t("web.settings.tab.account"), hint: t("web.settings.hint.account"), icon: User },
     { id: "seguranca", label: t("web.settings.tab.security"), hint: t("web.settings.hint.security"), icon: Shield },
     { id: "ia", label: t("web.settings.tab.ai"), hint: t("web.settings.hint.ai"), icon: Bot },
-    { id: "avisos", label: t("web.settings.tab.notifications"), hint: t("web.settings.hint.later"), icon: Bell },
+    { id: "avisos", label: t("web.settings.tab.notifications"), hint: t("web.settings.hint.notifications"), icon: Bell },
     { id: "integracoes", label: t("web.settings.tab.integrations"), hint: t("web.settings.hint.later"), icon: Plug },
     { id: "dados", label: t("web.settings.tab.data"), hint: t("web.settings.hint.data"), icon: Database },
+    { id: "diagnostico", label: t("web.settings.tab.diagnostics"), hint: t("web.settings.hint.diagnostics"), icon: Activity },
   ] as const satisfies readonly { id: Tab; label: string; hint: string; icon: unknown }[];
 
   if (tab !== undefined && !(SETTINGS_TABS as readonly string[]).includes(tab)) return <Navigate to="/configuracoes" replace />;
@@ -142,13 +145,12 @@ export function SettingsPage() {
         {current === "conta" && <AccountTab />}
         {current === "seguranca" && <SecurityTab />}
         {current === "ia" && <AiTab />}
-        {current === "avisos" && (
-          <LaterTab title={t("web.settings.tab.notifications")} body={t("web.settings.later.notifications")} icon={<Bell className="h-6 w-6" />} />
-        )}
+        {current === "avisos" && <AlertsTab />}
         {current === "integracoes" && (
           <LaterTab title={t("web.settings.tab.integrations")} body={t("web.settings.later.integrations")} icon={<Plug className="h-6 w-6" />} />
         )}
         {current === "dados" && <DataTab />}
+        {current === "diagnostico" && <DiagnosticsTab />}
       </section>
     </>
   );

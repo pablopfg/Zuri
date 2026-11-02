@@ -111,7 +111,7 @@ export function AppShell() {
             {brand}
           </Tip>
           <Tip label={collapsed ? t("web.notifications.open") : null} hidden={tipsHidden}>
-            <NotificationCenter />
+            <NotificationCenter navigate={navigate} />
           </Tip>
         </div>
         <nav aria-label={t("web.nav.main")} className="flex-1 px-3 py-2">
@@ -174,7 +174,7 @@ export function AppShell() {
             >
               <Search className="h-5 w-5" aria-hidden />
             </button>
-            <NotificationCenter />
+            <NotificationCenter navigate={navigate} />
             <NavLink
               to="/configuracoes"
               aria-label={t("web.nav.settings")}
