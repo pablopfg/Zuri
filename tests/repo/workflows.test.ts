@@ -1,6 +1,14 @@
 import { execFileSync } from "node:child_process";
 import { describe, expect, it } from "vitest";
-import { loadWorkflow, REQUIRED_CI_JOBS, REQUIRED_CODEQL_CHECKS, readText, triggers, workflowFiles } from "./helpers.ts";
+import {
+  loadWorkflow,
+  REQUIRED_CI_JOBS,
+  REQUIRED_CODEQL_CHECKS,
+  REQUIRED_ORDER_CHECK,
+  readText,
+  triggers,
+  workflowFiles,
+} from "./helpers.ts";
 
 const files = workflowFiles();
 const all = files.map((path) => ({ path, wf: loadWorkflow(path), text: readText(path) }));
@@ -118,8 +126,13 @@ describe("update-prs workflow", () => {
   const wf = loadWorkflow(".github/workflows/update-prs.yml");
   const job = wf.jobs.update;
 
-  it("runs only when develop moves, or by hand", () => {
-    expect(wf.on).toEqual({ push: { branches: ["develop"] }, workflow_dispatch: null });
+  it("runs when develop moves, every 15 minutes, or by hand", () => {
+    expect(wf.on).toEqual({ push: { branches: ["develop"] }, schedule: [{ cron: "*/15 * * * *" }], workflow_dispatch: null });
+  });
+
+  it("refreshes stale merge-order results after updating the branches", () => {
+    const runs = job?.steps?.map((step) => step.run ?? "") ?? [];
+    expect(runs.at(-1)).toBe("node scripts/ordem-de-merge.ts --atualizar");
   });
 
   it("has no permission at the top and only what it needs in the job", () => {
@@ -139,7 +152,7 @@ describe("update-prs workflow", () => {
 
   it("dispatches every workflow that reports a required check", async () => {
     const { DISPATCHED_WORKFLOWS } = await import("../../scripts/atualizar-prs.ts");
-    const required = new Set([...REQUIRED_CI_JOBS, ...REQUIRED_CODEQL_CHECKS]);
+    const required = new Set([...REQUIRED_CI_JOBS, ...REQUIRED_CODEQL_CHECKS, REQUIRED_ORDER_CHECK]);
     const reporting = workflowFiles()
       .filter((path) => {
         const w = loadWorkflow(path);

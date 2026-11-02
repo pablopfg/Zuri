@@ -18,7 +18,7 @@ arquivo, confira a tela e clique em **Create**.
 
 | Arquivo | Protege | Regras |
 | --- | --- | --- |
-| `develop.json` | `develop` | PR obrigatório, **nenhuma aprovação humana** (o agente mescla no modo contínuo), só squash, histórico linear, checks `typecheck`, `lint`, `test`, `i18n`, `build`, `e2e`, `audit`, `lighthouse` e os dois do CodeQL (`analyze (javascript-typescript)` e `analyze (actions)`), branch atualizada com a `develop` antes de mesclar, sem force-push nem exclusão, ninguém dispensa as regras |
+| `develop.json` | `develop` | PR obrigatório, **nenhuma aprovação humana** (o agente mescla no modo contínuo), só squash, histórico linear, checks `typecheck`, `lint`, `test`, `i18n`, `build`, `e2e`, `audit`, `lighthouse`, `merge-order` (ordem de abertura entre PRs que mudam o mesmo código) e os dois do CodeQL (`analyze (javascript-typescript)` e `analyze (actions)`), branch atualizada com a `develop` antes de mesclar, sem force-push nem exclusão, ninguém dispensa as regras |
 | `main.json` | `main` | PR obrigatório, só merge commit, os mesmos checks mais `source-branch` (só aceita PR vindo da `develop` deste repositório), sem force-push nem exclusão |
 
 Quando um arquivo de ruleset mudar (por exemplo, um check novo), atualize a
