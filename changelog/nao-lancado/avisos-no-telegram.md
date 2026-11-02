@@ -21,3 +21,10 @@
 - Vincular um grupo pede a senha recente e gera um alerta de segurança que só
   se resolve no app. Um alerta causado na web para de insistir quando você o
   responde no Telegram.
+- Comandos (`/start`), menções (`@nome`) e endereços como `tg://` também
+  chegam desarmados, e cada despertar manda no máximo 5 avisos.
+
+### Atualização
+
+- A migration 15 cria a tabela dos botões do Telegram e a hora de volta dos
+  avisos adiados, e roda sozinha na primeira requisição depois do deploy.
