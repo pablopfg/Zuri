@@ -22,6 +22,8 @@ import { PushDevices } from "../push/devices.ts";
 import { PushService } from "../push/service.ts";
 import { usableVapidKeys, type VapidKeys } from "../push/webpush.ts";
 import { developmentTelegramFetcher } from "../telegram/dev-telegram.ts";
+import { TelegramCallbacks } from "../telegram/callbacks.ts";
+import { TelegramChannel } from "../telegram/channel.ts";
 import { TelegramLinks } from "../telegram/links.ts";
 import { TelegramService } from "../telegram/service.ts";
 import { createTurnstile, type Turnstile } from "../auth/turnstile.ts";
@@ -407,12 +409,23 @@ export class ZuriAgent extends Agent<WorkerEnv> {
         // Local development never reaches a push service (src/push/dev-push.ts).
         ...(this.development() ? { fetcher: developmentPushFetcher as typeof fetch } : {}),
       });
+      const telegramLinks = new TelegramLinks(db);
+      const telegramCallbacks = new TelegramCallbacks(db);
+      // The notices' Telegram channel (step 13): one instance, so two notices of a new category share one topic.
+      const telegramChannel = new TelegramChannel({
+        links: telegramLinks,
+        callbacks: telegramCallbacks,
+        configured: () => telegram.configured(),
+        client: () => telegram.client(),
+        locale: () => this.locale(),
+        origin: () => this.publicUrl().origin,
+        fullText: () => settings.field("alertFullText"),
+      });
       // The notices, the watchers and the automations share one alarm: each refers to the others lazily.
       const alerts: AlertService = new AlertService(db, productivity.storage, {
         locale: () => this.locale(),
         settings: () => settings.get(),
-        // Telegram plugs in here in step 13.
-        channels: () => [push.channel, new EmailChannel({ sender: email, locale: () => this.locale(), origin: () => this.publicUrl().origin })],
+        channels: () => [push.channel, telegramChannel, new EmailChannel({ sender: email, locale: () => this.locale(), origin: () => this.publicUrl().origin })],
         rearm: () => automations.rearm(),
       });
       const diagnostics = new DiagnosticsService(db, state, { alerts: () => alerts, release: () => env.CF_VERSION_METADATA?.id ?? null });
@@ -440,7 +453,9 @@ export class ZuriAgent extends Agent<WorkerEnv> {
         },
       });
       const telegram = new TelegramService({
-        links: new TelegramLinks(db),
+        links: telegramLinks,
+        callbacks: telegramCallbacks,
+        alerts: () => alerts,
         state,
         events: auth.events,
         token: () => telegramToken(env.TELEGRAM_BOT_TOKEN),

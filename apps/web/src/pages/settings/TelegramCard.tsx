@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { TelegramAccount, TelegramConnect, TelegramStatus } from "@zuri/shared";
-import { Copy, ExternalLink, Send } from "lucide-react";
+import type { TelegramAccount, TelegramConnect, TelegramGroupCode, TelegramStatus } from "@zuri/shared";
+import { Copy, ExternalLink, Send, Users } from "lucide-react";
 import { useState } from "react";
 import { Button, Card, Dialog, ErrorNotice, Notice, Spinner } from "../../components/ui.tsx";
 import { useToast } from "../../components/Toaster.tsx";
@@ -119,6 +119,8 @@ function TelegramBody({ status }: { status: TelegramStatus }) {
         </div>
       )}
 
+      {status.state === "linked" && <GroupSection status={status} onChange={refresh} />}
+
       <div className="flex flex-wrap gap-2">
         {status.state !== "waiting_confirm" && (
           <Button variant={status.state === "linked" ? "secondary" : "primary"} onClick={() => connect.mutate()} loading={connect.isPending}>
@@ -161,6 +163,104 @@ function TelegramBody({ status }: { status: TelegramStatus }) {
         </div>
       </Dialog>
     </div>
+  );
+}
+
+/**
+ * The notices' group (step 13, optional): a one-time link that opens Telegram to
+ * pick the group, its name once linked, and Remover grupo. Adding and removing
+ * ask for the password typed recently (the API's confirm dialog does that). The
+ * group's name is Telegram's text: React escapes it.
+ */
+function GroupSection({ status, onChange }: { status: TelegramStatus; onChange: () => Promise<unknown> }) {
+  const { t, dateTime } = useI18n();
+  const toast = useToast();
+  const [code, setCode] = useState<TelegramGroupCode | null>(null);
+  const [askRemove, setAskRemove] = useState(false);
+  const create = useMutation({
+    mutationFn: () => api<TelegramGroupCode>("/telegram/group", { method: "POST" }),
+    onSuccess: async (result) => {
+      setCode(result);
+      await onChange();
+    },
+  });
+  const remove = useMutation({
+    mutationFn: () => api<TelegramStatus>("/telegram/group", { method: "DELETE" }),
+    onSuccess: async () => {
+      setAskRemove(false);
+      setCode(null);
+      await onChange();
+      toast(t("web.alerts.telegram.group.removed"));
+    },
+  });
+  const group = status.group;
+  const shownCode = !group && code && status.groupCodeExpiresAt ? code : null;
+  const failure = create.error ?? (askRemove ? null : remove.error);
+
+  return (
+    <section aria-labelledby="telegram-group-title" className="space-y-3 border-t border-border pt-4">
+      <h3 id="telegram-group-title" className="flex items-center gap-2 text-sm font-semibold">
+        <Users className="h-4 w-4 text-fg-muted" aria-hidden />
+        {t("web.alerts.telegram.group.title")}
+      </h3>
+      {group ? (
+        <div className="space-y-1">
+          <p className="text-sm">{t("web.alerts.telegram.group.linked", { title: group.title })}</p>
+          <p className="text-sm text-fg-muted">{t(group.topics ? "web.alerts.telegram.group.topicsOn" : "web.alerts.telegram.group.topicsOff")}</p>
+        </div>
+      ) : (
+        <p className="text-sm text-fg-muted">{t("web.alerts.telegram.group.none")}</p>
+      )}
+      {shownCode ? (
+        <div className="space-y-3 rounded-xl border border-border p-4">
+          <p className="text-sm">{t("web.alerts.telegram.group.codeIntro", { time: dateTime(new Date(shownCode.expiresAt)) })}</p>
+          <a
+            href={shownCode.link}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-accent px-4 text-sm font-semibold text-accent-fg transition-colors hover:bg-accent-hover"
+          >
+            <ExternalLink className="h-4 w-4" aria-hidden />
+            {t("web.alerts.telegram.group.openTelegram")}
+          </a>
+        </div>
+      ) : (
+        !group &&
+        status.groupCodeExpiresAt && <p className="text-sm text-fg-muted">{t("web.alerts.telegram.group.waiting", { time: dateTime(new Date(status.groupCodeExpiresAt)) })}</p>
+      )}
+      <div className="flex flex-wrap gap-2">
+        {group ? (
+          <Button variant="danger" onClick={() => setAskRemove(true)}>
+            {t("web.alerts.telegram.group.remove")}
+          </Button>
+        ) : (
+          <Button variant="secondary" onClick={() => create.mutate()} loading={create.isPending}>
+            {t(status.groupCodeExpiresAt ? "web.alerts.telegram.group.newLink" : "web.alerts.telegram.group.add")}
+          </Button>
+        )}
+      </div>
+      {failure && (
+        <p role="alert" className="text-sm text-danger">
+          {errorMessage(failure)}
+        </p>
+      )}
+      <Dialog open={askRemove} onClose={() => setAskRemove(false)} title={t("web.alerts.telegram.group.removeTitle")}>
+        <p className="text-sm leading-6 text-fg-muted">{t("web.alerts.telegram.group.removeBody")}</p>
+        {remove.error && (
+          <p role="alert" className="text-sm text-danger">
+            {errorMessage(remove.error)}
+          </p>
+        )}
+        <div className="flex flex-wrap justify-end gap-2">
+          <Button variant="ghost" onClick={() => setAskRemove(false)}>
+            {t("web.cancel")}
+          </Button>
+          <Button variant="danger" loading={remove.isPending} onClick={() => remove.mutate()}>
+            {t("web.alerts.telegram.group.remove")}
+          </Button>
+        </div>
+      </Dialog>
+    </section>
   );
 }
 

@@ -731,6 +731,41 @@ Etapa 12, fundação. O bot obedece a uma conta só, no chat privado
   menu. O cartão mostra o @ do bot e os 4 últimos dígitos do id da conta, nunca o
   id inteiro.
 - **Saída.** Texto puro, sem `parse_mode`, e sem prévia de links.
+- **Avisos (etapa 13).** Discretos por padrão (só o título; o texto com "Texto
+  completo" ligado na categoria), com todo endereço desarmado por `disarmLinks`
+  (título e texto). O que só o Telegram transforma em toque também é desarmado:
+  comando (`/start` vira `∕start`), menção (`@nome` vira `＠nome`) e qualquer
+  outro esquema (`tg://` vira `tg[:]//`). O único link clicável é o botão
+  **Abrir**, para o endereço do próprio app e só para as páginas da lista
+  fechada `NOTICE_LINKS`.
+- **O que o grupo vê.** Quem está no grupo vê o endereço do app no botão
+  **Abrir** (a página continua pedindo login) e, nas categorias com "Texto
+  completo", o texto do aviso; a dica da tabela avisa isso. Num grupo, use só
+  pessoas de confiança ou deixe o texto completo desligado.
+- **Envios por despertar.** Cada despertar manda no máximo 5 avisos (os adiados
+  que voltam e as tentativas de insistência, juntos); o resto vai no despertar
+  seguinte, marcado na hora. Cada envio pode gastar várias subrequisições
+  (aparelhos, Telegram, e-mail) e um despertar tem 50 no plano Free.
+- **Botões.** `callback_data` = `v1:<ação>:<12 bytes aleatórios em base64url>`
+  (até 26 bytes); a ação, o aviso e a validade de 24 h ficam em
+  `zur_telegram_callbacks`, nunca no botão. O primeiro toque marca todos os
+  botões daquele aviso como usados num só `UPDATE`, então dois toques
+  simultâneos agem uma vez só. Todo toque é respondido com `answerCallbackQuery`
+  e tira os botões da mensagem tocada. As mensagens das outras tentativas do
+  mesmo aviso ficam com os botões, de propósito (editar cada uma gastaria
+  chamadas); tocar nelas responde "Este aviso já foi tratado." sem agir.
+- **Grupo de avisos (N9).** Vincular pede senha recente no app e um código de
+  10 minutos (HMAC com propósito próprio, diferente do código da conta) que só
+  vale se a conta do vínculo ativo (e do `TELEGRAM_ADMIN_ID`) adicionou o bot.
+  Gera o alerta `telegram_group_linked`, com origem `bot`: ele só para de
+  insistir no app, e chega no Telegram sem botões de resposta. No grupo, toque
+  de outra pessoa recebe "Só o dono pode usar estes botões." sem gravar nada.
+  Alertas de segurança e a terceira tentativa de qualquer aviso vão só ao chat
+  privado: o grupo nunca recebe sozinho um alerta de segurança.
+- **Reconhecimento cruzado.** Alerta de segurança causado na web para de
+  insistir com Feito, Adiar ou Silenciar no Telegram; ler no app não para.
+  Alerta causado pelo bot é recusado no bot ("Este aviso só pode ser confirmado
+  no app."); o reconhecimento no app com senha recente chega na etapa 16.
 
 ## Logs da Cloudflare
 

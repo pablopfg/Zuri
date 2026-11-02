@@ -4,6 +4,7 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vite
 import type { ZuriAgent } from "../src/agent/zuri-agent.ts";
 import { InternalState } from "../src/db/internal-state.ts";
 import { telegramWebhookSecret } from "../src/gates/telegram.ts";
+import { TelegramCallbacks } from "../src/telegram/callbacks.ts";
 import { TelegramLinks } from "../src/telegram/links.ts";
 import { TelegramService } from "../src/telegram/service.ts";
 import callbackOwner from "./fixtures/telegram/callback-owner.json?raw";
@@ -329,7 +330,8 @@ describe("linking the owner's account", () => {
     await deliver(update(ownerText, id()));
     expect(sent()[2]?.body.text).toContain("Fale comigo pelo app");
     await deliver(update(callbackOwner, id()));
-    expect(sent("answerCallbackQuery")[0]?.body).toEqual({ callback_query_id: "4382bfdwdsb323b2d9" });
+    // A button that points nowhere (step 13): answered, nothing done.
+    expect(sent("answerCallbackQuery")[0]?.body).toEqual({ callback_query_id: "4382bfdwdsb323b2d9", text: "Este aviso não existe mais." });
     const audit = await inOwner((agent) => agent.store.db.all<{ kind: string; name: string; result: string }>(`SELECT kind, name, result FROM zur_telegram_audit ORDER BY id`));
     expect(audit.map((row) => `${row.kind}:${row.name}:${row.result}`)).toEqual([
       "command:start:pending",
@@ -337,6 +339,7 @@ describe("linking the owner's account", () => {
       "command:ajuda:ok",
       "command:start:already_linked",
       "message:text:not_yet",
+      "callback:notice:unknown",
     ]);
     expect(JSON.stringify(audit)).not.toContain("Oi, Zuri");
   });
@@ -393,13 +396,15 @@ describe("linking the owner's account", () => {
     expect((await json<TelegramStatus>(await api("GET", "/telegram"), 200)).state).toBe("ready");
   });
 
-  it("Connect, Confirm, Unlink and the settings ask for the password typed recently; a stale session can't", async () => {
+  it("Connect, Confirm, Unlink, the group and the settings ask for the password typed recently; a stale session can't", async () => {
     await inOwner((agent) => agent.store.db.run(`UPDATE zur_sessions SET confirmed_at = ?`, Date.now() - 16 * 60_000));
     for (const [method, path] of [
       ["POST", "/telegram/connect"],
       ["POST", "/telegram/confirm"],
       ["DELETE", "/telegram"],
       ["PATCH", "/telegram"],
+      ["POST", "/telegram/group"],
+      ["DELETE", "/telegram/group"],
     ] as const) {
       const body = method === "PATCH" ? { readLockHours: 72 } : undefined;
       expect(apiErrorSchema.parse(await json(await api(method, path, body), 403)).code, path).toBe("RECENT_AUTH_REQUIRED");
@@ -416,6 +421,8 @@ describe("linking the owner's account", () => {
       ["POST", "/telegram/connect"],
       ["POST", "/telegram/confirm"],
       ["POST", "/telegram/test"],
+      ["POST", "/telegram/group"],
+      ["DELETE", "/telegram/group"],
     ] as const) {
       const anonymous = await call(`${ORIGIN}/api${path}`, { method, headers: headers(false) });
       expect(anonymous.status, `${method} ${path}`).toBe(401);
@@ -523,6 +530,8 @@ describe("without TELEGRAM_ADMIN_ID", () => {
   const service = (agent: ZuriAgent, admin: number | null) =>
     new TelegramService({
       links: new TelegramLinks(agent.store.db),
+      callbacks: new TelegramCallbacks(agent.store.db),
+      alerts: () => agent.store.alerts,
       state: new InternalState(agent.store.db),
       events: agent.store.auth.events,
       token: () => String(testEnv.TELEGRAM_BOT_TOKEN),

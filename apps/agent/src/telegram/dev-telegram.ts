@@ -18,6 +18,8 @@ export async function developmentTelegramFetcher(input: RequestInfo | URL, init?
         ? { url: webhookUrl, pending_update_count: 0 }
         : method === "sendMessage"
           ? { message_id: 1 }
-          : true;
+          : method === "createForumTopic"
+            ? { message_thread_id: 2, name: body.name }
+            : true;
   return Response.json({ ok: true, result });
 }

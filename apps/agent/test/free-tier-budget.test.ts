@@ -496,8 +496,9 @@ describe("the Free plan budget of each route", () => {
     // A run now writes its row (with indexes and the counter) and the automation's bookkeeping; trimming the history reads one counter.
     const ran = await cost("POST", `/automations/${ids[0]}/run`);
     expect(ran.status).toBe(200);
-    // The reminder's notice also asks the push channel whether any device is there (one count).
-    expect(ran.read).toBeLessThanOrEqual(20);
+    // The reminder's notice also asks the push channel whether any device is there (one count)
+    // and the Telegram channel whether an account is linked (its one-row table, step 13).
+    expect(ran.read).toBeLessThanOrEqual(22);
     expect(ran.written).toBeLessThanOrEqual(25);
 
     // The alarm: one due automation costs a handful of rows, whatever the size of the history.
@@ -510,7 +511,8 @@ describe("the Free plan budget of each route", () => {
       for (const id of ids) await automations.delete(id);
       return usage;
     });
-    expect(wake.read).toBeLessThanOrEqual(40);
+    // 41: the Telegram channel's look at its link and the snoozed notices' index (step 13) cost a row.
+    expect(wake.read).toBeLessThanOrEqual(41);
     expect(wake.written).toBeLessThanOrEqual(30);
   });
 

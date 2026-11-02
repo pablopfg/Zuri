@@ -115,7 +115,8 @@ describe("the notice routes", () => {
   it("show the delivery history and each channel's state", async () => {
     const overview = await json<{ channels: Record<string, string>; deliveries: unknown[] }>(await api("GET", "/alerts"), 200);
     // Push has its keys in the tests but no device yet; e-mail and Telegram come later.
-    expect(overview.channels).toEqual({ push: "no_target", telegram: "not_configured", email: "not_configured" });
+    // The bot is set up in the tests but no account is linked (step 13: Telegram is a channel).
+    expect(overview.channels).toEqual({ push: "no_target", telegram: "no_target", email: "not_configured" });
   });
 });
 

@@ -1,4 +1,4 @@
-import { TELEGRAM_LIMITS } from "@zuri/shared";
+import { ALERT_CATEGORIES, type AlertCategory, TELEGRAM_LIMITS } from "@zuri/shared";
 import { type Database, now } from "../db/database.ts";
 
 export type LinkStatus = "pending" | "active" | "suspended";
@@ -27,6 +27,26 @@ interface LinkRow {
   linked_at: string;
   confirmed_at: string | null;
   last_used_at: string | null;
+}
+
+/** The notices' group (step 13): where it is and what the bot knows about its topics. */
+export interface GroupLink {
+  chatId: number;
+  title: string;
+  /** The group has topics (a forum). */
+  forum: boolean;
+  /** Telegram refused to create a topic (the bot isn't an admin): no more tries until the group is linked again. */
+  topicsOff: boolean;
+  /** The topic (message_thread_id) of each category, created on first use. */
+  topics: Partial<Record<AlertCategory, number>>;
+  linkedAt: string;
+}
+
+/** What topic_ids keeps for the group, as JSON. */
+interface TopicState {
+  forum?: boolean;
+  off?: boolean;
+  ids?: Record<string, unknown>;
 }
 
 const DAY_MS = 24 * 3_600_000;
@@ -87,13 +107,75 @@ export class TelegramLinks {
     return changed !== null;
   }
 
-  /** Unlinks the account and drops any code waiting. True when there was something to remove. */
+  /** Unlinks the account (and the group with it) and drops any code waiting. True when there was something to remove. */
   remove(): boolean {
     return this.db.transaction(() => {
-      const removed = this.db.all(`DELETE FROM zur_telegram_links WHERE kind = 'private' RETURNING id`).length > 0;
+      const removed = this.db.all(`DELETE FROM zur_telegram_links RETURNING id`).length > 0;
       const codes = this.db.all(`DELETE FROM zur_telegram_link_codes RETURNING code_hash`).length > 0;
       return removed || codes;
     });
+  }
+
+  /** The notices' group, or null. */
+  group(): GroupLink | null {
+    const row = this.db.one<{ chat_id: number; display_name: string; topic_ids: string | null; linked_at: string }>(
+      `SELECT chat_id, display_name, topic_ids, linked_at FROM zur_telegram_links WHERE kind = 'group' AND status = 'active'`,
+    );
+    if (!row) return null;
+    let state: TopicState = {};
+    try {
+      const parsed: unknown = JSON.parse(row.topic_ids ?? "{}");
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) state = parsed as TopicState;
+    } catch {
+      // A broken row still sends to the group, without topics.
+    }
+    const topics: Partial<Record<AlertCategory, number>> = {};
+    for (const category of ALERT_CATEGORIES) {
+      const value = state.ids?.[category];
+      if (typeof value === "number" && Number.isSafeInteger(value) && value > 0) topics[category] = value;
+    }
+    return { chatId: row.chat_id, title: row.display_name, forum: state.forum === true, topicsOff: state.off === true, topics, linkedAt: row.linked_at };
+  }
+
+  /** The owner added the bot to a group with the code: it replaces any other group. */
+  saveGroup(group: { chatId: number; title: string; forum: boolean; userId: number }): void {
+    this.db.transaction(() => {
+      this.db.run(`DELETE FROM zur_telegram_links WHERE kind = 'group'`);
+      this.db.run(
+        `INSERT INTO zur_telegram_links (id, kind, user_id, chat_id, display_name, status, topic_ids, linked_at, confirmed_at)
+         VALUES (?, 'group', ?, ?, ?, 'active', ?, ?, ?)`,
+        crypto.randomUUID(),
+        group.userId,
+        group.chatId,
+        group.title,
+        JSON.stringify({ forum: group.forum, off: false, ids: {} } satisfies TopicState),
+        now(),
+        now(),
+      );
+    });
+  }
+
+  /** True when a group was linked. */
+  removeGroup(): boolean {
+    return this.db.all(`DELETE FROM zur_telegram_links WHERE kind = 'group' RETURNING id`).length > 0;
+  }
+
+  /** A group turned into a supergroup has a new id (Telegram says so in the old one); its topics start over. */
+  moveGroup(from: number, to: number): void {
+    this.db.run(
+      `UPDATE zur_telegram_links SET chat_id = ?, topic_ids = ? WHERE kind = 'group' AND chat_id = ?`,
+      to,
+      JSON.stringify({ forum: false, off: false, ids: {} } satisfies TopicState),
+      from,
+    );
+  }
+
+  /** Saves the topics' state, only if the group is still the one the topics belong to. */
+  setTopics(chatId: number, change: { topics?: Partial<Record<AlertCategory, number>>; topicsOff?: boolean; forum?: boolean }): void {
+    const group = this.group();
+    if (!group || group.chatId !== chatId) return;
+    const state: TopicState = { forum: change.forum ?? group.forum, off: change.topicsOff ?? group.topicsOff, ids: change.topics ?? group.topics };
+    this.db.run(`UPDATE zur_telegram_links SET topic_ids = ? WHERE kind = 'group' AND chat_id = ?`, JSON.stringify(state), chatId);
   }
 
   setConversation(enabled: boolean): void {

@@ -43,6 +43,7 @@ describe("default settings", () => {
       alertPerHour: 6,
       alertPerDay: 30,
       alertLearning: true,
+      alertFullText: [],
     });
     expect(DEFAULT_TIME_ZONE).toBe("America/Sao_Paulo");
     expect(settingsSchema.parse(DEFAULT_SETTINGS)).toEqual(DEFAULT_SETTINGS);
