@@ -190,7 +190,9 @@ describe("the push routes", () => {
     await confirmNow();
     await json(await api("POST", "/push/devices", await subscription()), 201);
     await inOwner(async (agent) => {
-      agent.store.db.run(`UPDATE zur_push_devices SET last_seen_at = ?`, new Date(Date.now() - 8 * 24 * 3_600_000).toISOString());
+      // A minute past the cut: workerd freezes Date.now() between I/O, so exactly
+      // eight days would sit on the strict boundary and pass only when the clock moved.
+      agent.store.db.run(`UPDATE zur_push_devices SET last_seen_at = ?`, new Date(Date.now() - 8 * 24 * 3_600_000 - 60_000).toISOString());
       await agent.runAutomations({});
       expect(agent.store.db.one<{ n: number }>(`SELECT count(*) AS n FROM zur_push_devices`)?.n).toBe(0);
     });
