@@ -1,0 +1,212 @@
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import type { TelegramAccount, TelegramConnect, TelegramStatus } from "@zuri/shared";
+import { Copy, ExternalLink, Send } from "lucide-react";
+import { useState } from "react";
+import { Button, Card, Dialog, ErrorNotice, Notice, Spinner } from "../../components/ui.tsx";
+import { useToast } from "../../components/Toaster.tsx";
+import { ALERTS_KEY } from "../../hooks/notices.ts";
+import { api, errorMessage } from "../../lib/api.ts";
+import { useI18n } from "../../lib/i18n.tsx";
+
+export const TELEGRAM_KEY = ["telegram"] as const;
+
+/**
+ * Settings > Notices, the Telegram card (step 12): connect the owner's account
+ * with a one-time code, confirm it here, send a test, unlink. Connecting,
+ * confirming and unlinking ask for the password typed recently (the API's
+ * confirm dialog does that). The account's name and @ are Telegram's text:
+ * React escapes them.
+ */
+export function TelegramCard() {
+  const { t } = useI18n();
+  const status = useQuery({ queryKey: TELEGRAM_KEY, queryFn: ({ signal }) => api<TelegramStatus>("/telegram", { signal }) });
+  return (
+    <Card title={t("web.alerts.telegram.title")} description={t("web.alerts.telegram.description")}>
+      {status.isPending && <Spinner />}
+      {status.isError && <ErrorNotice error={status.error} onRetry={() => void status.refetch()} />}
+      {status.data && <TelegramBody status={status.data} />}
+    </Card>
+  );
+}
+
+function TelegramBody({ status }: { status: TelegramStatus }) {
+  const { t, dateTime } = useI18n();
+  const toast = useToast();
+  const qc = useQueryClient();
+  // The code comes back only from Connect: kept on screen while this card lives.
+  const [code, setCode] = useState<TelegramConnect | null>(null);
+  const [askUnlink, setAskUnlink] = useState(false);
+  const refresh = () => Promise.all([qc.invalidateQueries({ queryKey: TELEGRAM_KEY }), qc.invalidateQueries({ queryKey: ALERTS_KEY })]);
+
+  const connect = useMutation({
+    mutationFn: () => api<TelegramConnect>("/telegram/connect", { method: "POST" }),
+    onSuccess: async (result) => {
+      setCode(result);
+      await refresh();
+    },
+  });
+  const confirm = useMutation({
+    mutationFn: () => api<TelegramStatus>("/telegram/confirm", { method: "POST" }),
+    onSuccess: async () => {
+      setCode(null);
+      await refresh();
+      toast(t("web.alerts.telegram.confirmed"));
+    },
+  });
+  const unlink = useMutation({
+    mutationFn: () => api("/telegram", { method: "DELETE" }),
+    onSuccess: async () => {
+      setAskUnlink(false);
+      setCode(null);
+      await refresh();
+      toast(t("web.alerts.telegram.unlinked"));
+    },
+  });
+  const test = useMutation({
+    mutationFn: () => api<{ sent: boolean }>("/telegram/test", { method: "POST" }),
+    onSuccess: ({ sent }) => toast(t(sent ? "web.alerts.telegram.testSent" : "web.alerts.telegram.testFailed")),
+  });
+
+  if (status.state === "not_configured") return <p className="text-sm text-fg-muted">{t("web.alerts.telegram.notConfigured")}</p>;
+
+  const failure = connect.error ?? confirm.error ?? test.error ?? (askUnlink ? null : unlink.error);
+  const shownCode = code && status.state === "waiting_start" ? code : null;
+  const connectLabel = status.state === "linked" || status.state === "suspended" ? "web.alerts.telegram.reconnect" : status.state === "waiting_start" ? "web.alerts.telegram.newCode" : "web.alerts.telegram.connect";
+
+  return (
+    <div className="space-y-4">
+      {status.bot && <p className="text-sm text-fg-muted">{t("web.alerts.telegram.bot", { bot: status.bot })}</p>}
+
+      {status.webhookMissing && <Notice tone="warning">{t("web.alerts.telegram.deliveryMissing")}</Notice>}
+      {!status.webhookMissing && status.webhookError && (
+        <Notice tone="warning">{t("web.alerts.telegram.deliveryError", { date: dateTime(new Date(status.webhookError.at)), message: status.webhookError.message })}</Notice>
+      )}
+
+      {status.state === "ready" &&
+        (status.codeInvalidated ? (
+          <Notice tone="warning">{t("web.alerts.telegram.codeInvalidated")}</Notice>
+        ) : (
+          <p className="text-sm text-fg-muted">{t("web.alerts.telegram.ready")}</p>
+        ))}
+
+      {status.state === "waiting_start" &&
+        (shownCode ? (
+          <CodeBox connect={shownCode} />
+        ) : (
+          <p className="text-sm text-fg-muted">{t("web.alerts.telegram.waitingStart", { time: dateTime(new Date(status.codeExpiresAt ?? Date.now())) })}</p>
+        ))}
+
+      {status.account && (status.state === "waiting_confirm" || status.state === "suspended") && (
+        <div className="space-y-3">
+          <p className="text-sm">{t(status.state === "suspended" ? "web.alerts.telegram.suspended" : "web.alerts.telegram.waitingConfirm")}</p>
+          <AccountLine account={status.account} />
+          <div className="flex flex-wrap gap-2">
+            <Button onClick={() => confirm.mutate()} loading={confirm.isPending}>
+              {t("web.alerts.telegram.confirm")}
+            </Button>
+            <Button variant="ghost" onClick={() => unlink.mutate()} loading={unlink.isPending}>
+              {t("web.alerts.telegram.notMine")}
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {status.account && status.state === "linked" && (
+        <div className="space-y-1">
+          <AccountLine account={status.account} />
+          <p className="text-sm text-fg-muted">{t("web.alerts.telegram.linked", { date: dateTime(new Date(status.account.confirmedAt ?? status.account.linkedAt)) })}</p>
+        </div>
+      )}
+
+      <div className="flex flex-wrap gap-2">
+        {status.state !== "waiting_confirm" && (
+          <Button variant={status.state === "linked" ? "secondary" : "primary"} onClick={() => connect.mutate()} loading={connect.isPending}>
+            {t(connectLabel)}
+          </Button>
+        )}
+        {status.state === "linked" && (
+          <>
+            <Button variant="secondary" onClick={() => test.mutate()} loading={test.isPending}>
+              <Send className="h-4 w-4" aria-hidden />
+              {t("web.alerts.telegram.test")}
+            </Button>
+            <Button variant="danger" onClick={() => setAskUnlink(true)}>
+              {t("web.alerts.telegram.unlink")}
+            </Button>
+          </>
+        )}
+      </div>
+
+      {failure && (
+        <p role="alert" className="text-sm text-danger">
+          {errorMessage(failure)}
+        </p>
+      )}
+
+      <Dialog open={askUnlink} onClose={() => setAskUnlink(false)} title={t("web.alerts.telegram.unlinkTitle")}>
+        <p className="text-sm leading-6 text-fg-muted">{t("web.alerts.telegram.unlinkBody")}</p>
+        {unlink.error && (
+          <p role="alert" className="text-sm text-danger">
+            {errorMessage(unlink.error)}
+          </p>
+        )}
+        <div className="flex flex-wrap justify-end gap-2">
+          <Button variant="ghost" onClick={() => setAskUnlink(false)}>
+            {t("web.cancel")}
+          </Button>
+          <Button variant="danger" loading={unlink.isPending} onClick={() => unlink.mutate()}>
+            {t("web.alerts.telegram.unlink")}
+          </Button>
+        </div>
+      </Dialog>
+    </div>
+  );
+}
+
+function CodeBox({ connect }: { connect: TelegramConnect }) {
+  const { t, dateTime } = useI18n();
+  const toast = useToast();
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(connect.code);
+      toast(t("web.alerts.telegram.copied"));
+    } catch {
+      // No clipboard (an old browser, no permission): the code is on screen to type.
+    }
+  };
+  return (
+    <div className="space-y-3 rounded-xl border border-border p-4">
+      <p className="text-sm">{t("web.alerts.telegram.codeIntro", { time: dateTime(new Date(connect.expiresAt)) })}</p>
+      <p className="font-mono text-2xl font-semibold tracking-[0.3em]">
+        <span className="sr-only">{t("web.alerts.telegram.code")}: </span>
+        {connect.code}
+      </p>
+      <div className="flex flex-wrap gap-2">
+        <a
+          href={connect.link}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-accent px-4 text-sm font-semibold text-accent-fg transition-colors hover:bg-accent-hover"
+        >
+          <ExternalLink className="h-4 w-4" aria-hidden />
+          {t("web.alerts.telegram.openBot")}
+        </a>
+        <Button variant="secondary" onClick={() => void copy()}>
+          <Copy className="h-4 w-4" aria-hidden />
+          {t("web.alerts.telegram.copy")}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function AccountLine({ account }: { account: TelegramAccount }) {
+  const { t } = useI18n();
+  return (
+    <p className="text-sm">
+      <span className="font-medium">{account.name || (account.username ? `@${account.username}` : "")}</span>
+      {account.username && account.name && <span className="text-fg-muted"> · @{account.username}</span>}
+      <span className="text-fg-muted"> · {t("web.alerts.telegram.idTail", { tail: account.idTail })}</span>
+    </p>
+  );
+}

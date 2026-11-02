@@ -94,6 +94,7 @@ describe("the migration list", () => {
       11: "fa7a411f3603944c4ac983fea3d0958275f683c89795325df12f71b77dd49a4d",
       12: "7731fefa0ced903440fd2ecf1235715834e22347a37c93cbf71d7a25bb8a43a5",
       13: "c624e0db89d6aed17b6a751b21cfe2fcec4b117206baeadc4d2c860967b1fe05",
+      14: "090919da832586473e230fa78cb31715d432200ed144fc94a57b83b73e4543b5",
     };
     for (const m of MIGRATIONS) {
       const digest = createHash("sha256").update(statementText(m).replace(/\r\n/g, "\n")).digest("hex");
@@ -109,7 +110,7 @@ describe("migrate", () => {
       expect(zurObjects(db)).toEqual([]);
 
       expect(migrate(db)).toBe(LATEST_SCHEMA_VERSION);
-      expect(schemaVersion(db)).toBe(13);
+      expect(schemaVersion(db)).toBe(14);
       // FTS5 keeps shadow tables of its own (zur_notes_fts_data and others): only ours are listed.
       expect(zurObjects(db).filter((name) => !/^table:zur_(notes|memories)_fts_/.test(name))).toEqual([
         "table:zur_activity",
@@ -224,6 +225,11 @@ describe("migrate", () => {
         "index:zur_tasks_open_due",
         "index:zur_tasks_project",
         "index:zur_tasks_status_due",
+        "table:zur_telegram_audit",
+        "index:zur_telegram_audit_at",
+        "table:zur_telegram_link_codes",
+        "table:zur_telegram_links",
+        "index:zur_telegram_links_kind",
         "table:zur_trash",
         "index:zur_trash_deleted",
         "index:zur_trash_expires",
@@ -395,6 +401,26 @@ describe("migrate", () => {
     });
   });
 
+  it("upgrades a database at version 13 to 14: the bot's link, code and audit tables, the owner's data kept", async () => {
+    await withEmptyDatabase("from-13", (db) => {
+      expect(migrate(db, MIGRATIONS.slice(0, 13))).toBe(13);
+      db.run(`INSERT INTO zur_tasks (id, title, created_at, updated_at) VALUES ('t1', 'Pagar a luz', 'x', 'x')`);
+      expect(migrate(db)).toBe(14);
+      expect(db.one(`SELECT title FROM zur_tasks WHERE id = 't1'`)).toEqual({ title: "Pagar a luz" });
+      const link = (id: string, kind: string, status = "pending") =>
+        db.run(`INSERT INTO zur_telegram_links (id, kind, user_id, chat_id, status) VALUES (?, ?, 1, 1, ?)`, id, kind, status);
+      link("l1", "private");
+      // One private link at most, and only the listed kinds and states.
+      expect(() => link("l2", "private")).toThrow();
+      expect(() => link("l3", "channel")).toThrow();
+      expect(() => link("l4", "group", "blocked")).toThrow();
+      expect(db.one(`SELECT display_name, conversation_enabled FROM zur_telegram_links WHERE id = 'l1'`)).toEqual({ display_name: "", conversation_enabled: 0 });
+      db.run(`INSERT INTO zur_telegram_link_codes (code_hash, expires_at) VALUES ('h', 'x')`);
+      expect(db.one(`SELECT failed_attempts FROM zur_telegram_link_codes`)).toEqual({ failed_attempts: 0 });
+      db.run(`INSERT INTO zur_telegram_audit (at, kind, name, result) VALUES ('x', 'command', 'start', 'pending')`);
+    });
+  });
+
   it("upgrades a database at version 12 to 13: learned priorities, each notice's source and each automation's priority, the owner's data kept", async () => {
     await withEmptyDatabase("from-12", (db) => {
       expect(migrate(db, MIGRATIONS.slice(0, 12))).toBe(12);
@@ -402,7 +428,7 @@ describe("migrate", () => {
       db.run(
         `INSERT INTO zur_automations (id, name, kind, schedule, status, created_at, updated_at) VALUES ('a1', 'Resumo', 'task_digest', '{}', 'active', 'x', 'x')`,
       );
-      expect(migrate(db)).toBe(13);
+      expect(migrate(db, MIGRATIONS.slice(0, 13))).toBe(13);
       expect(db.one(`SELECT id, learn_key, asked_priority FROM zur_notices`)).toEqual({ id: "n1", learn_key: null, asked_priority: null });
       expect(db.one(`SELECT name, priority FROM zur_automations`)).toEqual({ name: "Resumo", priority: "normal" });
       expect(() => db.run(`UPDATE zur_automations SET priority = 'critical'`)).toThrow();

@@ -26,50 +26,26 @@ etapas ficam detalhadas; as mais antigas viram uma linha na tabela.
 | 8 | mesclada (31/10/2026) | #25 | Provedor Workers AI e IA simulada, medição por passo, teto de 9.000 Neurons/dia, aba IA |
 | 9 | mesclada (31/10/2026) | #28 | Conversa em SSE, 20 ferramentas com permissão e limite, aprovações e planos, voz, injeção de prompt testada |
 | 10 | mesclada (02/11/2026) | #46 | Automações: lembretes, resumo das tarefas e rotinas com IA, alarme único, recuperação após reinício, aprovação das rotinas do chat |
-| 11 | em revisão (11a #55, 11b #56 e 11c #63 mescladas; 11d em revisão) | #55, #56, #63 | Central de avisos, insistência, vigias, resumo do dia e Diagnóstico (11a); notificação no aparelho e canais por tipo (11b); e-mail e recuperação de senha (11c); prioridade que aprende (11d) |
+| 11 | mesclada (02/11/2026) | #55, #56, #63, #64 | Central de avisos, Diagnóstico, notificação no aparelho, e-mail e recuperação de senha, prioridade que aprende |
+| 12 | em revisão | — | Fundação do bot do Telegram: cliente da Bot API, webhook com travas, vínculo por código confirmado no app, cartão em Configurações › Avisos |
 
 ## Últimas etapas (detalhe)
 
+### Etapa 12 · Fundação do bot
+- Entregou: `packages/shared/src/telegram.ts` (limites, estados do cartão, schema do PATCH), `apps/agent/src/telegram/{client,links,service}.ts`, `apps/agent/src/api/telegram.ts` (webhook antes do CSRF + `GET/PATCH/DELETE /api/telegram`, `POST /api/telegram/{connect,confirm,test}`), portão do webhook em `src/index.ts` (403 sem cabeçalho, 413 acima de 64 KB), `TelegramCard` na aba Avisos, eventos `telegram_linked`/`telegram_unlinked` (alerta). Docs: `docs/telegram.md`, `docs/configuracao-cloudflare.md`, `docs/seguranca.md`. Plano: `docs/planos/etapa-12-telegram-base.md`.
+- Migrations: versão 14 (`zur_telegram_links` com `display_name` a mais que o contrato, `zur_telegram_link_codes`, `zur_telegram_audit`). As tabelas de callbacks, aprovações, arquivos pendentes e listas nascem nas etapas 13 a 16.
+- Decisões técnicas: segredo do webhook = HMAC **hex** do `SESSION_SECRET` (antes base64url); o `update_id` só é gravado quando a atualização vai ser tratada (conta estranha não grava nada); fila serial no objeto com `keepAliveWhile`; códigos errados em memória, 10 em 10 min apagam o código e gravam `telegram_code_invalidated`; `getWebhookInfo` em cache de 5 min; menu com versão `TELEGRAM_MENU_VERSION:idioma`, reenviado no `onStart`; só `/ajuda` no menu por enquanto; mensagens em texto puro sem prévia de link.
+- Para a 13: canal `AlertChannel` do Telegram usa `TelegramService.client()` e o `chatId` do vínculo ativo; somar comandos ao `MENU` sobe `TELEGRAM_MENU_VERSION`. Para a 15: `bot_read_lock_hours` e `last_used_at` já existem; limite de 60 comandos/30 mensagens por hora ainda não. Para a 14: `conversation_enabled` já é gravado pelo PATCH.
+
 ### Etapa 11 · Prioridade que aprende (parte 11d)
-- Entregou: `apps/agent/src/alerts/learning.ts` (`AlertLearning`: chave da origem, ajuste, revisão diária na rodada dos vigias, desfazer), avisos `alerts.lowered`/`alerts.raised`, rota `DELETE /api/alerts/learning/:key`, `learned` em `GET /api/alerts`, configuração `alertLearning` (padrão ligada), campo `priority` nas automações, cartão "Prioridades que a Zuri aprendeu" e seletor de prioridade no formulário.
-- Migrations: versão 13 (`learn_key` em `zur_notices` + índice `zur_notices_learning`, tabela `zur_alert_learning`, `priority` em `zur_automations`).
-- Decisões técnicas: origem = `automation:<id>` ou o tipo do aviso; lembretes, segurança, críticos e `source: null` nunca aprendem; janela de 14 dias menos as últimas 24 h; mínimo 5 avisos; 80% ignorados desce, 80% abertos em 15 min sobe (até alta); 1 nível/semana; desfazer segura a origem por uma semana; até 200 origens. Cartão de decisão ao Pablo (baixar e subir / só baixar / desligada); segui a recomendada.
-- Depois de mesclar: pedir a etapa 12 ao coordenador.
+- Entregou: `apps/agent/src/alerts/learning.ts`, avisos `alerts.lowered`/`alerts.raised`, `DELETE /api/alerts/learning/:key`, configuração `alertLearning`, campo `priority` nas automações. Migration 13. Pendência de produto: "Marcar tudo como lido" conta como aberto.
 
 ### Etapa 11 · E-mail e recuperação de senha (parte 11c)
-- Entregou: `packages/shared/src/email.ts` (limites, schemas, `disarmLinks`), `apps/agent/src/email/{sender,channel}.ts`, `apps/agent/src/auth/email-recovery.ts`, rotas públicas `/api/auth/recovery`, `/check`, `/complete`, eventos `recovery_requested` e `password_recovered` (alerta), página `/recuperar-senha` sob demanda e link "Esqueci minha senha" no login.
-- Migrations: nenhuma (estado em `zur_settings`: `email_sent_window`, `recovery_link`, `recovery_requests`).
-- Decisões técnicas: token no fragmento do link, só o HMAC guardado; resposta 202 igual para qualquer e-mail; com 2FA o link pede código (5 erros encerram); e-mail tenta uma vez (`firstTryOnly`); assunto discreto como o push. O binding `SEND_EMAIL` com `destination_address` fica para o deploy da etapa 24 (`ZURI_ALERT_EMAIL_TO`); `ALERT_EMAIL_FROM` é segredo. JS inicial 138,9 kB.
-- Mesclada: PR #63 (02/11/2026).
+- Entregou: `apps/agent/src/email/{sender,channel}.ts`, `apps/agent/src/auth/email-recovery.ts`, página `/recuperar-senha`. Binding `SEND_EMAIL` com `destination_address` fica para o deploy da etapa 24; `ALERT_EMAIL_FROM` é segredo.
 
-### Etapa 11 · Notificação no aparelho (parte 11b)
-- Entregou: `apps/agent/src/push/{webpush,devices,channel,service,dev-push}.ts` (RFC 8291 + RFC 8292 só com WebCrypto, confere com o vetor da RFC), rotas `/api/push`, `/api/push/devices`, `/api/push/test`, eventos de acesso `push_added`/`push_removed` (alerta), `sw.js` com `push` e `notificationclick`, `PushCard` e `RoutesCard` na aba Avisos, `scripts/gerar-chaves-vapid.ts`.
-- Migrations: versão 12 (`zur_push_devices`, com `browser` = HMAC do cookie de aparelho).
-- Decisões técnicas: a etapa virou 11a/11b/11c/11d (e-mail e recuperação de senha na 11c, prioridade na 11d); o aparelho se mantém pela checagem de sessão do próprio navegador (sem código no JS inicial); só hosts de push conhecidos; em desenvolvimento local nada é postado. `auth-activity.ts` saiu de `auth.ts` para tirar a atividade de acesso do primeiro carregamento (−0,4 kB; JS inicial 138,6 kB).
-- Falta (11c): canal de e-mail (`SEND_EMAIL`, 10/dia, 4 reservados) e recuperação de senha por e-mail; 11d: prioridade que aprende. Pendências de QA da 11a: teste de orçamento de uma rodada do alarme e teste próprio de `healthy()`.
-
-### Etapa 11 · Central de avisos (parte 11a)
-- Entregou: `packages/shared/src/alerts.ts`, `apps/agent/src/alerts/{service,channels,security,watchers,automations}.ts`, `apps/agent/src/diagnostics/service.ts`, rotas `/api/notices*`, `/api/alerts`, `/api/diagnostics*`, contador `unreadNotices` na sessão e no heartbeat, sino + `NoticesPanel` sob demanda, abas Avisos e Diagnóstico, binding `CF_VERSION_METADATA`. Doc: `docs/avisos.md`.
-- Migrations: versão 11 (`zur_notices`, `zur_alert_keys`, `zur_alert_deliveries`, `zur_diagnostics`, contadores `notices`, `security_notices`, `notices_unread`, `alert_deliveries`).
-- Decisões técnicas: etapa dividida em 11a/11b/11c (anunciado ao Pablo); o alarme das automações cobre vigias e insistência por `otherDue`; primeira rodada dos vigias 15 min após o primeiro uso; sessão e heartbeat leem 3 linhas (uma do contador).
-- Falta (11b): canais push (VAPID/ECE) e e-mail (`SEND_EMAIL`, 10/dia, 4 reservados), recuperação de senha por e-mail, rotas por categoria na aba Avisos. 11c: prioridade que aprende e campo de prioridade nas automações. Depois de 11a/b/c, pedir a etapa 12.
-- Riscos: JS inicial em 139,0 kB com teto 139; tudo de push na 11b precisa ficar sob demanda.
-
-### Etapa 10 · Automações
-- Entregou: `packages/shared/src/{schedule,automations}.ts` (agendas sem Zod para a prévia da tela; schemas e limites), `apps/agent/src/automations/{service,executor}.ts`, `scheduled()` no runner, ferramentas `create_reminder`, `create_automation`, `list_automations`, `propose_ai_routine`, `cancel_automation` (destrutiva) e `notify_owner` (só em rotina), rotas `/api/automations*`, tela `/automacoes` (`pages/automations/`, `lib/automations.ts`), configuração `aiScheduledRunsPerDay` (padrão 6, até 48). Doc: `docs/automacoes.md`.
-- Migrations: versão 9 (`zur_automations`, `zur_automation_runs` com índice único em `(automation_id, slot)`, contadores `automations` e `automation_runs`).
-- Decisões técnicas: um alarme só do SDK para todas (P8), guardado em `automation_alarm`; cada horário é reivindicado numa transação antes de rodar, então nunca roda duas vezes; atraso < 24 h roda uma vez como "Recuperada", ≥ 24 h vira "Pulada"; reinício marca execuções presas como interrompidas (sem repetir) e rearma; horário que não existe no fuso anda para frente, horário repetido usa a primeira passagem; dia 29–31 cai no último dia do mês; rotina do chat nasce pendente e só o dono aprova; limites 50 ativas, 10 pendentes, 1 hora mínima, histórico de 2.000.
-- Ficou para depois: o resultado vai só para o histórico da tela; aviso no sino, push e Telegram chegam na etapa 11 (que também cria a aba Diagnóstico com as falhas `automation_failed` do log).
-- Riscos ou dívidas: o JS inicial ficou em 138,9 kB com teto de 139; textos de telas sob demanda saíram do catálogo inicial (`pt-BR-markdown.ts`, chaves de Configurações). No celular, Automações fica na lista de Configurações e na busca (a barra tem 5 lugares).
-- Atenção para a próxima: a etapa 11 entrega o resultado de cada execução (`zur_automation_runs.result`, `notify_owner` em `notices`) na central de avisos; não crie outro alarme, use o de `AutomationService.rearm()`.
-
-### Etapa 9 · Chat com ferramentas
-- Entregou: `packages/shared/src/chat.ts` (schemas, limites, eventos do SSE), `apps/agent/src/agent/{prompt,context,runner}.ts`, `apps/agent/src/tools/` (registro, executor, 20 ferramentas), `apps/agent/src/chat/` (`conversations`, `actions`, `plans`, `local-due`), `apps/agent/src/ai/transcription.ts`, rotas em `api/chat.ts`, tela `/conversa` (`apps/web/src/pages/chat/`). Doc: `docs/chat.md`; segurança em `docs/seguranca.md` ("Ferramentas do agente e injeção de prompt").
-- Migrations: versão 8 (`zur_conversations`, `zur_messages`, `zur_pending_actions`, `zur_task_plan_drafts`, contadores `conversations` e `messages`, coluna `author` em `zur_memories`).
-- Decisões técnicas: proposta destrutiva com hash SHA-256 do alvo, reivindicada por `UPDATE … RETURNING` e conferida de novo na transação; plano é rascunho e a confirmação recusa tarefa nova; chamada que chega à ferramenta conta no turno mesmo se falhar, mas devolve a vaga do limite por ferramenta; repetição exata recusada; resultado de ferramenta em `<data source="tool">` cortado em 8.000 caracteres; orçamento de contexto = menor entre o do dono e a janela do modelo; resumo quando 8+ mensagens não cabem; textos pt-BR das Configurações viraram `pt-BR-settings.ts` sob demanda (JS inicial 139,0 kB).
-- Ficou para depois: origem `telegram` das mensagens (etapa 14); sem atualização ao vivo entre duas abas abertas na mesma conversa.
-- SEC-09-07 (pedido do Pablo): memória que a assistente guarda tem `author = 'agent'`, marca "Anotada pela assistente" e `saved_by="assistant"` no prompt; vira do dono quando ele edita ou repete. O Telegram (etapa 14) passa `origin: telegram` e `author: agent` em `remember`.
-- Atenção para a próxima: a etapa 10 chama o runner com `context: "scheduled"` e sem dono presente (nada destrutivo, nenhum plano); toda IA continua por `agent.ai()`. O mock entende `call <ferramenta> {json}`.
+### Notas que continuam valendo
+- Um alarme só (P8): use `AutomationService.rearm()`/`otherDue`, nunca outro alarme. O runner aceita `context: "scheduled"` (só leitura, sem dono presente). Toda IA por `agent.ai()`.
+- A etapa 14 passa `origin: telegram` e `author: agent` no `remember`. JS inicial em ~138,9 kB (teto 139): tela nova sob demanda, textos via `addMessages`.
 
 <!-- Modelo, até 10 linhas por etapa:
 ### Etapa NN · <nome>

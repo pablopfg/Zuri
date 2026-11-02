@@ -1,0 +1,11 @@
+{
+  "update_id": 4000,
+  "edited_message": {
+    "message_id": 10,
+    "date": 1793612400,
+    "edit_date": 1793612460,
+    "from": { "id": 424242, "is_bot": false, "first_name": "Dono" },
+    "chat": { "id": 424242, "type": "private", "first_name": "Dono" },
+    "text": "/start CODE"
+  }
+}

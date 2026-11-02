@@ -1,5 +1,6 @@
 import { defineConfig, devices } from "@playwright/test";
 import { E2E_SETUP_CODE, SETUP_PORT } from "./tests/e2e/setup-server.ts";
+import { E2E_TELEGRAM_ADMIN, E2E_TELEGRAM_TOKEN } from "./tests/e2e/telegram-bot.ts";
 import { WORKER_LOG } from "./tests/e2e/worker-log.ts";
 
 const port = 4173;
@@ -48,6 +49,8 @@ export default defineConfig({
         "--var TURNSTILE_SITE_KEY:1x00000000000000000000AA --var TURNSTILE_SECRET_KEY:1x0000000000000000000000000000000AA " +
         // A P-256 pair made only for the tests (Web Push): over loopback the Worker never posts to a push service.
         "--var VAPID_PUBLIC_KEY:BArqm2bEiRY0vWr0hdrXN1eh6ibifZDca45l9kP34MtvpKnTtFebh64fsDf3d8SkgS7deK2cCQNehxkeKQyU2oE --var VAPID_PRIVATE_KEY:wOOMmS0NgL81YSjmS0UwAl7PotpIuPUi0q3Z2acC0Gk" +
+        // A made-up bot (step 12): over loopback the Worker answers the Bot API itself (src/telegram/dev-telegram.ts).
+        ` --var TELEGRAM_BOT_TOKEN:${E2E_TELEGRAM_TOKEN} --var TELEGRAM_ADMIN_ID:${E2E_TELEGRAM_ADMIN}` +
         // A copy of everything the Worker prints, for the check after the run, and
         // all of it back on stderr: Playwright shows only the server's stderr.
         // Appending (the file was just removed): the second server writes to it too,

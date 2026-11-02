@@ -1,0 +1,11 @@
+{
+  "update_id": 1002,
+  "message": {
+    "message_id": 12,
+    "date": 1793612400,
+    "from": { "id": 424242, "is_bot": false, "first_name": "Dono", "username": "dono_exemplo" },
+    "chat": { "id": 424242, "type": "private", "first_name": "Dono", "username": "dono_exemplo" },
+    "text": "/ajuda@zuri_teste_bot",
+    "entities": [{ "offset": 0, "length": 21, "type": "bot_command" }]
+  }
+}

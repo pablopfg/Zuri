@@ -7,6 +7,7 @@ import { SECRET_PLACEHOLDER } from "../src/ai/metered.ts";
 import { MockAIProvider, type RecordedPrompt } from "../src/ai/mock.ts";
 import { InternalState } from "../src/db/internal-state.ts";
 import { AppError } from "../src/http/errors.ts";
+import { TelegramLinks } from "../src/telegram/links.ts";
 import { client, live, noCookies, right, TEST_PASSWORD } from "./auth-harness.ts";
 import { HUMAN_TOKEN, TEST_EMAIL, testEnv } from "./helpers.ts";
 
@@ -25,6 +26,10 @@ const STORED_EMAIL = "canario.dono@exemplo.com.br";
 const SETUP_CODE = "CANARIO-codigo-de-instalacao-0123456789abcdef";
 /** Visible content: it must reach the model, which proves the recorder sees the tool results. */
 const VISIBLE = "VISIVEL-7731";
+/** The bot's link (step 12): the account's id, @ and name never reach a model. */
+const TELEGRAM_ID = 987650001;
+const TELEGRAM_USERNAME = "CANARIO_telegram_usuario";
+const TELEGRAM_NAME = "CANARIO-telegram-nome";
 
 let objects = 0;
 
@@ -55,6 +60,9 @@ describe("the canary test (D2): nothing sensitive reaches a model", () => {
       state.set("owner_email", STORED_EMAIL);
       state.set("setup_code", SETUP_CODE);
       const storedHash = state.get<string>("auth_password_hash");
+      // The Telegram link and its code (step 12).
+      new TelegramLinks(store.db).savePending({ userId: TELEGRAM_ID, chatId: TELEGRAM_ID, username: TELEGRAM_USERNAME, name: TELEGRAM_NAME });
+      new TelegramLinks(store.db).issueCode("CANARIO-hash-do-codigo-do-telegram", new Date(Date.now() + 60_000).toISOString());
 
       // The owner's content, with the visible marker, and a name for the greeting.
       store.settings.update({ ownerName: "Pablo" });
@@ -105,6 +113,10 @@ describe("the canary test (D2): nothing sensitive reaches a model", () => {
         CITY,
         REGION,
         AGENT_BROWSER,
+        String(TELEGRAM_ID),
+        TELEGRAM_USERNAME,
+        TELEGRAM_NAME,
+        testEnv.TELEGRAM_BOT_TOKEN,
       ].filter((value): value is string => typeof value === "string" && value.length > 0);
       expect(canaries.length).toBeGreaterThan(18);
 

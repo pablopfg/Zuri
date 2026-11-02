@@ -21,6 +21,9 @@ import { developmentPushFetcher } from "../push/dev-push.ts";
 import { PushDevices } from "../push/devices.ts";
 import { PushService } from "../push/service.ts";
 import { usableVapidKeys, type VapidKeys } from "../push/webpush.ts";
+import { developmentTelegramFetcher } from "../telegram/dev-telegram.ts";
+import { TelegramLinks } from "../telegram/links.ts";
+import { TelegramService } from "../telegram/service.ts";
 import { createTurnstile, type Turnstile } from "../auth/turnstile.ts";
 import { MIN_OWNER_PASSWORD_LENGTH, parsePublicUrl, secretProblems } from "../config.ts";
 import { Database } from "../db/database.ts";
@@ -56,6 +59,18 @@ export function signInTurnstile(
   };
 }
 
+/** The bot token as BotFather gives it ("123456:ABC…"), or null: a malformed one leaves the bot "not configured". */
+export function telegramToken(value: string | undefined): string | null {
+  const token = value?.trim();
+  return token && /^\d{5,16}:[A-Za-z0-9_-]{30,64}$/.test(token) ? token : null;
+}
+
+/** TELEGRAM_ADMIN_ID as a number, or null when unset or not a plain positive id. */
+export function telegramAdminId(value: string | undefined): number | null {
+  const id = value?.trim();
+  return id && /^[1-9]\d{0,15}$/.test(id) && Number.isSafeInteger(Number(id)) ? Number(id) : null;
+}
+
 /** The object's own storage, opened and migrated on first use. */
 interface Store {
   db: Database;
@@ -72,6 +87,7 @@ interface Store {
   watchers: Watchers;
   diagnostics: DiagnosticsService;
   push: PushService;
+  telegram: TelegramService;
 }
 
 /**
@@ -129,6 +145,14 @@ export class ZuriAgent extends Agent<WorkerEnv> {
       pingMs: () => this.streamPingMs,
     }),
     notices: () => ({ alerts: this.store.alerts, diagnostics: this.store.diagnostics, auth: this.store.auth, push: this.store.push }),
+    telegram: () => ({
+      telegram: this.store.telegram,
+      auth: this.store.auth,
+      // The work runs here, kept alive by the SDK's heartbeat: never ctx.waitUntil, which ends 30 s after the answer.
+      receive: (raw) => {
+        void this.keepAliveWhile(() => this.store.telegram.enqueue(raw));
+      },
+    }),
   });
 
   private passwordSecretSet(): boolean {
@@ -174,6 +198,8 @@ export class ZuriAgent extends Agent<WorkerEnv> {
     } catch (error) {
       log("error", "automation_reconcile_failed", { error });
     }
+    // A new version of the code may have changed the bot's menu: sent again, without holding up the start.
+    if (this.store.telegram.configured()) void this.keepAliveWhile(() => this.store.telegram.refreshMenu());
   }
 
   /**
@@ -301,7 +327,7 @@ export class ZuriAgent extends Agent<WorkerEnv> {
   /** The deploy's secrets: none may ever reach a model (prompt contract, D1). */
   private secretValues(): (string | undefined)[] {
     const env = this.env;
-    return [env.SESSION_SECRET, env.PASSWORD_PEPPER, env.OWNER_PASSWORD, env.OWNER_PASSWORD_HASH, env.SETUP_CODE, env.TURNSTILE_SECRET_KEY, env.TELEGRAM_BOT_TOKEN, env.VAPID_PRIVATE_KEY];
+    return [env.SESSION_SECRET, env.PASSWORD_PEPPER, env.OWNER_PASSWORD, env.OWNER_PASSWORD_HASH, env.SETUP_CODE, env.TURNSTILE_SECRET_KEY, env.TELEGRAM_BOT_TOKEN, env.TELEGRAM_ADMIN_ID, env.VAPID_PRIVATE_KEY];
   }
 
   /** The VAPID pair from the two secrets, or null while either is missing, malformed or the published test pair (push stays "not configured"). */
@@ -413,7 +439,19 @@ export class ZuriAgent extends Agent<WorkerEnv> {
           exists: async (id) => (await this.getScheduleById(id)) !== undefined,
         },
       });
-      this.#store = { db, settings, auth, productivity, memories, usage: new UsageMeter(db), conversations, actions, plans, automations, alerts, watchers, diagnostics, push };
+      const telegram = new TelegramService({
+        links: new TelegramLinks(db),
+        state,
+        events: auth.events,
+        token: () => telegramToken(env.TELEGRAM_BOT_TOKEN),
+        adminId: () => telegramAdminId(env.TELEGRAM_ADMIN_ID),
+        sessionSecret: () => env.SESSION_SECRET,
+        origin: () => this.publicUrl().origin,
+        locale: () => this.locale(),
+        // Local development never reaches Telegram (src/telegram/dev-telegram.ts).
+        ...(this.development() ? { fetcher: developmentTelegramFetcher as typeof fetch } : {}),
+      });
+      this.#store = { db, settings, auth, productivity, memories, usage: new UsageMeter(db), conversations, actions, plans, automations, alerts, watchers, diagnostics, push, telegram };
     }
     return this.#store;
   }

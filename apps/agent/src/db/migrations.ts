@@ -682,6 +682,50 @@ export const MIGRATIONS: readonly Migration[] = [
       `ALTER TABLE zur_automations ADD COLUMN priority TEXT NOT NULL DEFAULT 'normal' CHECK (priority IN ('low', 'normal', 'high'))`,
     ],
   },
+  {
+    version: 14,
+    name: "telegram_base",
+    statements: [
+      // The owner's bot (step 12). One private link at most: pending from the
+      // right /start code until the owner confirms it in the app, then active.
+      // The group (step 13) is a second row of kind 'group'. Ids are Telegram's
+      // integers (up to 52 bits, safe in JavaScript). `display_name` is what the
+      // card shows next to the @: third-party text, escaped wherever it appears.
+      // Never in the backup: a restored link would let an old account back in.
+      `CREATE TABLE IF NOT EXISTS zur_telegram_links (
+        id TEXT PRIMARY KEY,
+        kind TEXT NOT NULL CHECK (kind IN ('private', 'group')),
+        user_id INTEGER,
+        chat_id INTEGER,
+        username TEXT,
+        display_name TEXT NOT NULL DEFAULT '',
+        status TEXT NOT NULL CHECK (status IN ('pending', 'active', 'suspended')),
+        topic_ids TEXT,
+        conversation_enabled INTEGER NOT NULL DEFAULT 0,
+        linked_at TEXT,
+        confirmed_at TEXT,
+        last_used_at TEXT
+      )`,
+      `CREATE UNIQUE INDEX IF NOT EXISTS zur_telegram_links_kind ON zur_telegram_links (kind)`,
+      // The code shown in the app, only as an HMAC: one at a time, 10 minutes.
+      // Wrong tries are counted in the object's memory (spec), so a stranger's
+      // /start never writes here; the column stays for the contract.
+      `CREATE TABLE IF NOT EXISTS zur_telegram_link_codes (
+        code_hash TEXT PRIMARY KEY,
+        expires_at TEXT NOT NULL,
+        failed_attempts INTEGER NOT NULL DEFAULT 0
+      )`,
+      // What the bot did for the owner: metadata only (command, result, time), 90 days.
+      `CREATE TABLE IF NOT EXISTS zur_telegram_audit (
+        id INTEGER PRIMARY KEY,
+        at TEXT NOT NULL,
+        kind TEXT NOT NULL,
+        name TEXT,
+        result TEXT
+      )`,
+      `CREATE INDEX IF NOT EXISTS zur_telegram_audit_at ON zur_telegram_audit (at)`,
+    ],
+  },
 ];
 
 export const LATEST_SCHEMA_VERSION = MIGRATIONS.at(-1)?.version ?? 0;

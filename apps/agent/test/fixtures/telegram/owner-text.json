@@ -1,0 +1,10 @@
+{
+  "update_id": 1000,
+  "message": {
+    "message_id": 10,
+    "date": 1793612400,
+    "from": { "id": 424242, "is_bot": false, "first_name": "Dono", "last_name": "Exemplo", "username": "dono_exemplo", "language_code": "pt-br" },
+    "chat": { "id": 424242, "type": "private", "first_name": "Dono", "username": "dono_exemplo" },
+    "text": "Oi, Zuri"
+  }
+}

@@ -79,6 +79,8 @@ export const ptBRSecurity = {
   "web.activity.kind.passkey_removed": "Passkey removida",
   "web.activity.kind.push_added": "Aparelho adicionado aos avisos",
   "web.activity.kind.push_removed": "Aparelho removido dos avisos",
+  "web.activity.kind.telegram_linked": "Telegram conectado",
+  "web.activity.kind.telegram_unlinked": "Telegram desvinculado",
   "web.activity.kind.recovery_requested": "Link de senha nova pedido",
   "web.activity.kind.password_recovered": "Senha trocada pelo link do e-mail",
   "web.activity.kind.setup_failure": "Código de instalação recusado",

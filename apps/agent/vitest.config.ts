@@ -21,6 +21,9 @@ export const TEST_ENV = {
   TURNSTILE_SITE_KEY: "0x4AAAAAAAteste-site",
   TURNSTILE_SECRET_KEY: "0x4AAAAAAAteste-secret",
   VAPID_PUBLIC_KEY: vapidPublic,
+  // A made-up bot (step 12): test/telegram-*.test.ts answer the Bot API in place of Telegram.
+  TELEGRAM_BOT_TOKEN: "123456789:AAteste-token-falso_0123456789abcdefgh",
+  TELEGRAM_ADMIN_ID: "424242",
   VAPID_PRIVATE_KEY: vapid.d ?? "",
 };
 

@@ -1,0 +1,10 @@
+{
+  "update_id": 5000,
+  "callback_query": {
+    "id": "4382bfdwdsb323b2d9",
+    "from": { "id": 424242, "is_bot": false, "first_name": "Dono" },
+    "message": { "message_id": 40, "date": 1793612400, "chat": { "id": 424242, "type": "private" }, "text": "Aviso" },
+    "chat_instance": "-123456789",
+    "data": "v1:noop:AAAAAAAAAAAAAAAA"
+  }
+}

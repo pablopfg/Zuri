@@ -519,7 +519,8 @@ Plano D1 e D2 de [troca de provedores e proteção de dados](planos/troca-de-pro
   prompt nem resultado de ferramenta. Um marcador visível no conteúdo do dono
   prova que o gravador vê o que as ferramentas leem. Cada etapa que cria um
   lugar sensível (ids do Telegram na 12, credenciais de MCP na 18) acrescenta
-  o seu canário.
+  o seu canário. Desde a etapa 12, o id, o @ e o nome da conta vinculada ao bot,
+  o HMAC do código de vínculo e o token do bot estão entre os canários.
 
 As dicas de data que o servidor põe no prompt ("tomorrow" = Tue 2026-11-03)
 saem de uma lista fixa de expressões e de números; o texto do dono nunca é
@@ -699,6 +700,37 @@ Detalhes em [avisos.md](avisos.md).
   (três alertas para três aparelhos). O que passar disso fica só no sino.
 - Em desenvolvimento local o servidor cifra e assina, mas não posta para
   nenhum serviço (`src/push/dev-push.ts`).
+
+## Bot do Telegram
+
+Etapa 12, fundação. O bot obedece a uma conta só, no chat privado
+(`docs/telegram.md`).
+
+- **Webhook.** O Worker confere, antes de acordar o Durable Object, o método
+  POST, o bot configurado, o cabeçalho `X-Telegram-Bot-Api-Secret-Token` (HMAC
+  hex do `SESSION_SECRET`, comparado em tempo constante: 403 sem ele) e o corpo
+  até 64 KB (413 acima, contado mesmo sem `Content-Length`). Só o corpo e o
+  cabeçalho seguem, numa requisição nova. O objeto confere tudo de novo, responde
+  200 na hora e trata a atualização na própria fila, com `keepAliveWhile`.
+- **Quem o bot ouve.** `update_id` novo (últimos 100), tipo permitido
+  (`message`, `callback_query`, `my_chat_member`; `edited_message` e o resto são
+  ignorados), `TELEGRAM_ADMIN_ID` quando definido, a conta do vínculo e chat
+  privado com id igual ao da conta. Conta estranha não grava nada (nem o
+  `update_id`, que só é guardado quando a atualização vai ser tratada) e não
+  recebe resposta. Grupo: o bot sai sem gravar nada.
+- **Vínculo.** Código de 8 caracteres de um alfabeto sem 0/O/1/I, 10 minutos,
+  um por vez, guardado só como HMAC do `SESSION_SECRET`. O `/start` certo cria um
+  vínculo **pendente**; ele só vale depois de **Confirmar esta conta** no app, com
+  senha recente, que gera o alerta de segurança `telegram_linked`. Conectar e
+  Desvincular também pedem senha recente; Desvincular gera `telegram_unlinked`.
+  Códigos errados contam em memória (estranho não escreve no banco): 10 em 10
+  minutos apagam o código vigente e o cartão pede um novo.
+- **Token.** Só como segredo do Worker; o cliente da Bot API nunca segue
+  redirecionamento, tem 10 s de prazo e tira o token de qualquer erro. O GitHub
+  Actions nunca recebe o token, porque o próprio Worker registra o webhook e o
+  menu. O cartão mostra o @ do bot e os 4 últimos dígitos do id da conta, nunca o
+  id inteiro.
+- **Saída.** Texto puro, sem `parse_mode`, e sem prévia de links.
 
 ## Logs da Cloudflare
 
