@@ -8,7 +8,7 @@ partem da página do repositório. A etapa 24 acrescenta os segredos do deploy.
 | O quê | Onde | Como |
 | --- | --- | --- |
 | `develop` como padrão | **Settings → General → Default branch** | Clique no ícone de troca e escolha `develop` |
-| Formas de mesclar | **Settings → General → Pull Requests** | Marque **Allow merge commits** (releases para a `main`) e **Allow squash merging** (PRs para a `develop`); desmarque **Allow rebase merging**; marque **Automatically delete head branches** |
+| Formas de mesclar | **Settings → General → Pull Requests** | Marque **Allow merge commits** (releases para a `main`) e **Allow squash merging** (PRs para a `develop`); desmarque **Allow rebase merging**; marque **Automatically delete head branches** (as branches que ele não apaga, como a `chore/versao` mesclada por auto-merge, o workflow `Branches` apaga) |
 
 ## 2. Rulesets
 

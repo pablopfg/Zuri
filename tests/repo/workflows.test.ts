@@ -92,13 +92,17 @@ describe("GitHub Actions workflows", () => {
     }
   });
 
-  it("runs CI only on pull requests, with read-only contents", () => {
+  it("runs CI on pull requests and on pushes to develop only, with read-only contents", () => {
     const ci = loadWorkflow(".github/workflows/ci.yml");
     // No workflow_dispatch: the rulesets count only pull_request runs (#60 waited on "expected" checks).
-    expect(ci.on).toEqual({ pull_request: null });
+    // The push run on develop is what the README badge (?branch=develop) reads.
+    expect(ci.on).toEqual({ pull_request: null, push: { branches: ["develop"] } });
     expect(ci.permissions).toEqual({ contents: "read" });
-    // Dispatched runs have no PR number: each branch gets its own group instead of cancelling the others.
-    expect(readText(".github/workflows/ci.yml")).toContain(`group: ci-\${{ github.event.pull_request.number || github.ref }}`);
+    const text = readText(".github/workflows/ci.yml");
+    // Each pull request gets its own group; develop gets one group too.
+    expect(text).toContain(`group: ci-\${{ github.event.pull_request.number || github.ref }}`);
+    // Only a pull request cancels its older run: every develop run finishes, so the badge never reads "cancelled".
+    expect(text).toContain(`cancel-in-progress: \${{ github.event_name == 'pull_request' }}`);
   });
 
   it("has one CI job per required check", () => {
@@ -116,10 +120,12 @@ describe("GitHub Actions workflows", () => {
     expect(runs).toContain("npm audit --audit-level=high");
   });
 
-  it("runs CodeQL on pull requests and weekly, with the extended queries", () => {
+  it("runs CodeQL on pull requests, on pushes to develop and weekly, with the extended queries", () => {
     const codeql = loadWorkflow(".github/workflows/codeql.yml");
-    expect(triggers(codeql).sort()).toEqual(["pull_request", "schedule"]);
+    expect(triggers(codeql).sort()).toEqual(["pull_request", "push", "schedule"]);
+    expect((codeql.on as { push: unknown }).push).toEqual({ branches: ["develop"] });
     const text = readText(".github/workflows/codeql.yml");
+    expect(text).toContain(`cancel-in-progress: \${{ github.event_name == 'pull_request' }}`);
     expect(text).toContain("queries: security-extended");
     expect(text).toMatch(/language: \[javascript-typescript, actions\]/);
   });
@@ -178,6 +184,54 @@ describe("update-prs workflow", () => {
       expect(w.name).toBe(name);
       expect(triggers(w)).toContain("pull_request");
     }
+  });
+});
+
+// Workflows that write to the repository from develop: never on a pull request,
+// only GITHUB_TOKEN, and only the permissions their script needs.
+describe.each([
+  {
+    file: ".github/workflows/readme.yml",
+    job: "update",
+    cron: "2,12,22,32,42,52 * * * *",
+    script: "node scripts/readme.ts --publicar",
+    permissions: { contents: "write", "pull-requests": "write", actions: "write" },
+  },
+  {
+    file: ".github/workflows/branches.yml",
+    job: "delete-merged",
+    cron: "7,17,27,37,47,57 * * * *",
+    script: "node scripts/limpar-branches.ts",
+    permissions: { contents: "write", "pull-requests": "read" },
+  },
+])("$file", ({ file, job: jobId, cron, script, permissions }) => {
+  const wf = loadWorkflow(file);
+  const job = wf.jobs[jobId] as (typeof wf.jobs)[string] & { if?: string };
+
+  it("runs when develop moves, every 10 minutes, or by hand, never on a pull request", () => {
+    expect(wf.on).toEqual({ push: { branches: ["develop"] }, schedule: [{ cron }], workflow_dispatch: null });
+    expect(job.if).toBe("github.ref == 'refs/heads/develop'");
+  });
+
+  it("has no permission at the top and only what it needs in the job", () => {
+    expect(wf.permissions).toEqual({});
+    expect(job.permissions).toEqual(permissions);
+    expect(job.environment).toBeUndefined();
+    expect(readText(file)).not.toMatch(/secrets\./);
+  });
+
+  it("runs its script from develop without installing anything", () => {
+    const checkout = job.steps?.find((step) => step.uses?.startsWith("actions/checkout@"));
+    expect(checkout?.with?.ref).toBe("develop");
+    const runs = (job.steps ?? []).flatMap((step) => (step.run ? [step.run] : [])).join("\n");
+    expect(runs).toContain(script);
+    expect(runs).not.toMatch(/npm (ci|install)/);
+  });
+
+  it("opens an issue when it fails", () => {
+    const report = wf.jobs["report-failure"] as (typeof wf.jobs)[string] & { needs?: string };
+    expect(report.needs).toBe(jobId);
+    expect(report.permissions).toEqual({ issues: "write", actions: "read" });
   });
 });
 

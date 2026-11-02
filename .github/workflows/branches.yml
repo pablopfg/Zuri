@@ -1,0 +1,67 @@
+name: Branches
+
+# Deletes the branches whose pull request already merged (scripts/limpar-branches.ts).
+# "Automatically delete head branches" misses the merges made by auto-merge
+# with GITHUB_TOKEN, like the release pull request on chore/versao, and a merge
+# by GITHUB_TOKEN starts no push run: the run every 10 minutes catches those.
+# It never touches develop or main, a branch with an open pull request or a
+# branch with commits after its merge. GITHUB_TOKEN only; nothing here costs.
+on:
+  push:
+    branches: [develop]
+  schedule:
+    - cron: "7,17,27,37,47,57 * * * *"
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: branches
+  cancel-in-progress: false
+
+jobs:
+  delete-merged:
+    # A dispatch from another branch would run that branch's copy with write access.
+    if: github.ref == 'refs/heads/develop'
+    runs-on: ubuntu-26.04
+    timeout-minutes: 5
+    # contents: delete the branches; pull-requests: read which ones merged.
+    permissions:
+      contents: write
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: develop
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+      - name: Delete merged branches
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git config core.hooksPath /dev/null
+          node scripts/limpar-branches.ts
+
+  report-failure:
+    needs: delete-merged
+    if: always() && github.ref == 'refs/heads/develop' && (needs.delete-merged.result == 'failure' || needs.delete-merged.result == 'cancelled')
+    runs-on: ubuntu-26.04
+    timeout-minutes: 5
+    # issues: create the issue, its labels and the repeat comment; actions: read the failed steps.
+    permissions:
+      issues: write
+      actions: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: develop
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+      - name: Open or update the failure issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/issue-de-falha.ts
