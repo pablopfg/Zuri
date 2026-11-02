@@ -90,16 +90,18 @@ test("creates the owner: password rules from the server, then only the second st
   await page.getByLabel("Repita a senha").fill(`${PASSWORD}x`);
   await expect(page.getByText("As duas senhas não são iguais.")).toBeVisible();
 
-  // A short one and a breached one: the server says why, and the fields empty.
+  // A short one and a breached one: the server says why on the field, and both empty.
   for (const [weak, message] of [
-    ["curta demais", "Use pelo menos 15 caracteres."],
+    ["curta demais", /Use pelo menos 15 caracteres\./],
     ["correct horse battery staple", /vazamento/i],
   ] as const) {
     await page.getByLabel("Senha", { exact: true }).fill(weak);
     await page.getByLabel("Repita a senha").fill(weak);
     await page.getByRole("button", { name: "Criar minha conta" }).click();
-    await expect(page.getByRole("alert")).toHaveText(message);
-    await expect(page.getByLabel("Senha", { exact: true })).toHaveValue("");
+    const field = page.getByLabel("Senha", { exact: true });
+    await expect(field).toHaveAccessibleDescription(message);
+    await expect(field).toHaveValue("");
+    await expect(field).toBeFocused();
   }
 
   await page.getByLabel("Senha", { exact: true }).fill(PASSWORD);
@@ -110,6 +112,7 @@ test("creates the owner: password rules from the server, then only the second st
   // Signed in, but the second step comes first: every other address shows it too.
   await expect(page.getByRole("heading", { level: 1, name: "Proteja a sua conta" })).toBeVisible();
   await expect(page).toHaveTitle(/Proteja a sua conta/);
+  await expect(page.getByRole("list", { name: "Passos do primeiro acesso" }).locator('[aria-current="step"]')).toContainText("Segurança");
   await expectAccessible(page, "second step required");
   await page.goto("/tarefas");
   await expect(page.getByRole("heading", { level: 1, name: "Proteja a sua conta" })).toBeVisible();
@@ -133,7 +136,15 @@ test("creates the owner: password rules from the server, then only the second st
   const { secret } = (await (await setup).json()) as { secret: string };
   await page.getByLabel("Código de 6 dígitos").fill(await totpCode(secret, totpStep(Date.now())));
   await page.getByRole("button", { name: "Confirmar e ligar" }).click();
-  await page.getByRole("button", { name: "Já guardei" }).click();
+  // The server's session opens now, but the codes stay until kept: coming back from another app
+  // (a new session check) must not swap them for the app.
+  const kept = page.getByRole("button", { name: "Já guardei" });
+  await expect(kept).toBeVisible();
+  const checked = page.waitForResponse((r) => r.url().endsWith("/api/auth/session"));
+  await page.evaluate(() => document.dispatchEvent(new Event("visibilitychange")));
+  expect((await (await checked).json()).secondStepRequired).toBe(false);
+  await expect(kept).toBeVisible();
+  await kept.click();
 
   // The rest opens, with the reminder to delete the installation code.
   await expect(page.getByRole("heading", { level: 1, name: "Proteja a sua conta" })).toHaveCount(0);
@@ -154,6 +165,6 @@ test("once the owner exists, the page only recovers the access and the used code
   await enterCode(page);
   await expect(page.getByRole("alert")).toHaveText("Código inválido ou vencido.");
 
-  await page.getByRole("link", { name: "Voltar para a entrada" }).click();
+  await page.getByRole("link", { name: "Voltar para a tela de entrada" }).click();
   await expect(page).toHaveURL(/\/entrar$/);
 });

@@ -6,6 +6,7 @@ import { ptBRChat } from "./pt-BR-chat.ts";
 import { ptBRSecurity } from "./pt-BR-security.ts";
 import { ptBRServer } from "./pt-BR-server.ts";
 import { ptBRSettings } from "./pt-BR-settings.ts";
+import { ptBRNotices } from "./pt-BR-notices.ts";
 import { ptBRSetup } from "./pt-BR-setup.ts";
 
 // Default and fallback catalog. Every key must also exist in en.ts and be used in the code (npm run lint).
@@ -125,7 +126,7 @@ export const ptBRCore = {
 } as const;
 
 /** Joins catalog parts. Marked pure so a bundle that never uses the whole catalog drops the call. */
-function join<A extends object, B extends object, C extends object, D extends object, E extends object, F extends object, G extends object, H extends object, I extends object, J extends object>(
+function join<A extends object, B extends object, C extends object, D extends object, E extends object, F extends object, G extends object, H extends object, I extends object, J extends object, K extends object>(
   a: A,
   b: B,
   c: C,
@@ -136,9 +137,10 @@ function join<A extends object, B extends object, C extends object, D extends ob
   h: H,
   i: I,
   j: J,
-): A & B & C & D & E & F & G & H & I & J {
-  return { ...a, ...b, ...c, ...d, ...e, ...f, ...g, ...h, ...i, ...j };
+  k: K,
+): A & B & C & D & E & F & G & H & I & J & K {
+  return { ...a, ...b, ...c, ...d, ...e, ...f, ...g, ...h, ...i, ...j, ...k };
 }
 
 /** The whole pt-BR catalog: what the server, the tests and the lint use. */
-export const ptBR = /* @__PURE__ */ join(ptBRCore, ptBRMemory, ptBRProductivity, ptBRSecurity, ptBRAi, ptBRChat, ptBRSettings, ptBRServer, ptBRPalette, ptBRSetup);
+export const ptBR = /* @__PURE__ */ join(ptBRCore, ptBRMemory, ptBRProductivity, ptBRSecurity, ptBRAi, ptBRChat, ptBRSettings, ptBRServer, ptBRPalette, ptBRSetup, ptBRNotices);

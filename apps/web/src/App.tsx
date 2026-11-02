@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback } from "react";
+import { lazy, Suspense, useCallback, useState } from "react";
 import { Route, Routes, useNavigate } from "react-router";
 import { AppShell } from "./components/AppShell.tsx";
 import { RequireSession, SessionChecking } from "./components/RequireSession.tsx";
@@ -24,7 +24,11 @@ const NotesPage = lazy(() => import("./pages/productivity/NotesPage.tsx").then((
 /** While the password must change, or the second step must be turned on, the server refuses everything else: so does the interface. */
 function SignedIn() {
   const { session } = useSession();
-  const locked = session?.passwordChangeRequired ? <PasswordChangePage /> : session?.secondStepRequired ? <SecondStepPage /> : null;
+  // Turning the second step on opens the server's session at once, while the recovery codes are
+  // still on screen: a session check then (back from another app) must not swap them for the app.
+  // The screen holds itself until the owner says the codes are kept.
+  const [held, hold] = useState(false);
+  const locked = session?.passwordChangeRequired ? <PasswordChangePage /> : held || session?.secondStepRequired ? <SecondStepPage hold={hold} /> : null;
   if (locked) return <Suspense fallback={<SessionChecking />}>{locked}</Suspense>;
   return <AppShell />;
 }

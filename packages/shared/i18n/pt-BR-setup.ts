@@ -1,6 +1,6 @@
 // The pt-BR texts of the screens that lock the rest of the app: the first access (and the
 // recovery with a new installation code), the second step that must be turned on, the password
-// that must change, and the notices about secrets left behind. Part of the pt-BR catalog, kept
+// that must change. Part of the pt-BR catalog, kept
 // apart so the interface downloads them with those screens (rule P11).
 //
 // The first access is public: its texts (web.setup.*) never name where or on what the app runs
@@ -39,10 +39,10 @@ export const ptBRSetup = {
   "web.setup.formUntil": "Este formulário fica aberto até {time}.",
   "web.setup.recoveredTitle": "Senha nova salva",
   "web.setup.recoveredBody": "Todas as sessões abertas foram encerradas. Entre com a senha nova; a verificação em duas etapas continua valendo.",
-  "web.setup.goToLogin": "Ir para a entrada",
-  "web.setup.backToLogin": "Voltar para a entrada",
+  "web.setup.goToLogin": "Ir para a tela de entrada",
+  "web.setup.backToLogin": "Voltar para a tela de entrada",
   "web.secondStep.title": "Proteja a sua conta",
-  "web.secondStep.body": "Falta só ligar a verificação em duas etapas. Assim, mesmo quem descobrir a sua senha não entra sem o código do seu celular. O resto da Zuri abre logo depois.",
+  "web.secondStep.body": "Falta só ligar a verificação em duas etapas. Assim, mesmo quem descobrir a sua senha não entra sem o código do aplicativo autenticador. O resto da Zuri abre logo depois.",
   "web.passwordRequired.title": "Troque a sua senha",
   "web.passwordRequired.body": "A senha atual não segue as regras de segurança. Escolha uma nova para continuar; o resto da Zuri fica bloqueado até lá.",
   "web.password.current": "Senha atual",
@@ -52,6 +52,4 @@ export const ptBRSetup = {
   "web.password.mismatch": "As duas senhas não são iguais.",
   "web.password.submit": "Trocar a senha",
   "web.password.changed": "Senha trocada. As outras sessões foram encerradas.",
-  "web.shell.removePlainSecret": "A senha já está guardada na Zuri. Apague o segredo OWNER_PASSWORD no painel da Cloudflare (Workers › zuri › Configurações › Variáveis e segredos).",
-  "web.shell.removeSetupCode": "A sua conta está pronta. Por segurança, apague o segredo SETUP_CODE no painel da Cloudflare (Workers › zuri › Configurações › Variáveis e segredos). Se um dia precisar recuperar o acesso, é só gravar um código novo.",
 } as const;

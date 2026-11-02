@@ -22,6 +22,7 @@ export {
   ptBRPalette,
   ptBRServer,
   ptBRSettings,
+  ptBRNotices,
   ptBRSetup,
   t,
 } from "../i18n/index.ts";

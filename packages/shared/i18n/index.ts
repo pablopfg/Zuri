@@ -8,6 +8,7 @@ import { ptBRSecurity } from "./pt-BR-security.ts";
 import { ptBRPalette } from "./pt-BR-palette.ts";
 import { ptBRServer } from "./pt-BR-server.ts";
 import { ptBRSettings } from "./pt-BR-settings.ts";
+import { ptBRNotices } from "./pt-BR-notices.ts";
 import { ptBRSetup } from "./pt-BR-setup.ts";
 
 export type MessageKey = keyof typeof ptBR;
@@ -22,10 +23,10 @@ export const catalogs: Record<Locale, Messages> = { "pt-BR": ptBR, en };
 /**
  * The default catalog. The server carries all of it (`ptBR`); the interface
  * starts with `ptBRCore` and adds a screen's part (`ptBRAi`, `ptBRChat`, `ptBRMemory`,
- * `ptBRPalette`, `ptBRProductivity`, `ptBRSecurity`, `ptBRSettings`, `ptBRSetup`) when that screen loads.
+ * `ptBRNotices`, `ptBRPalette`, `ptBRProductivity`, `ptBRSecurity`, `ptBRSettings`, `ptBRSetup`) when that screen loads.
  * `ptBRServer` holds what only the server says: it never reaches the interface.
  */
-export { ptBR, ptBRAi, ptBRChat, ptBRCore, ptBRMemory, ptBRPalette, ptBRProductivity, ptBRSecurity, ptBRServer, ptBRSettings, ptBRSetup };
+export { ptBR, ptBRAi, ptBRChat, ptBRCore, ptBRMemory, ptBRNotices, ptBRPalette, ptBRProductivity, ptBRSecurity, ptBRServer, ptBRSettings, ptBRSetup };
 
 export type Params = Record<string, string | number>;
 

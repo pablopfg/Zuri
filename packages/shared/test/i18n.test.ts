@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { catalogs, createTranslator, DEFAULT_LOCALE, isLocale, LOCALES, loadCatalog, ptBR, ptBRAi, ptBRChat, ptBRCore, ptBRMemory, ptBRPalette, ptBRProductivity, ptBRSecurity, ptBRServer, ptBRSettings, ptBRSetup, t } from "../i18n/index.ts";
+import { catalogs, createTranslator, DEFAULT_LOCALE, isLocale, LOCALES, loadCatalog, ptBR, ptBRAi, ptBRChat, ptBRCore, ptBRMemory, ptBRNotices, ptBRPalette, ptBRProductivity, ptBRSecurity, ptBRServer, ptBRSettings, ptBRSetup, t } from "../i18n/index.ts";
 
 const placeholders = (text: string) => [...text.matchAll(/\{(\w+)\}/g)].map((m) => m[1]).sort();
 
@@ -62,8 +62,8 @@ describe("isLocale", () => {
     // pt-BR is never fetched: it is in every bundle already.
     await expect(loadCatalog("pt-BR" as "en")).rejects.toThrow("no catalog for pt-BR");
     // The whole pt-BR catalog is its core plus each screen's part, nothing more and nothing less.
-    expect({ ...ptBRCore, ...ptBRMemory, ...ptBRProductivity, ...ptBRSecurity, ...ptBRAi, ...ptBRChat, ...ptBRSettings, ...ptBRServer, ...ptBRPalette, ...ptBRSetup }).toEqual(ptBR);
-    const parts = [ptBRCore, ptBRMemory, ptBRProductivity, ptBRSecurity, ptBRAi, ptBRChat, ptBRSettings, ptBRServer, ptBRPalette, ptBRSetup].map((part) => Object.keys(part));
+    expect({ ...ptBRCore, ...ptBRMemory, ...ptBRProductivity, ...ptBRSecurity, ...ptBRAi, ...ptBRChat, ...ptBRSettings, ...ptBRServer, ...ptBRPalette, ...ptBRSetup, ...ptBRNotices }).toEqual(ptBR);
+    const parts = [ptBRCore, ptBRMemory, ptBRProductivity, ptBRSecurity, ptBRAi, ptBRChat, ptBRSettings, ptBRServer, ptBRPalette, ptBRSetup, ptBRNotices].map((part) => Object.keys(part));
     // No key in two parts: one of them would silently win.
     expect(parts.flat().length).toBe(new Set(parts.flat()).size);
     const lazy = /^(web\.(memory|tasks|notes|trash|projects|accessLog|activity|ai|chat|mfa|passkeys|sessions|unit|security|palette|setup|secondStep|passwordRequired)\.|web\.password\.(current|new|repeat|rules|mismatch|submit|changed)$|web\.shell\.remove|error\.ai|ai\.|auth\.mfa\.|auth\.password\.)/;
@@ -71,11 +71,12 @@ describe("isLocale", () => {
   });
 
   it("the public first-access texts never name where or on what the app runs (decision of 31/10/2026)", () => {
-    const keys = Object.keys(ptBRSetup).filter((key) => key.startsWith("web.setup.") || key.startsWith("web.secondStep."));
-    expect(keys.length).toBeGreaterThan(20);
+    // The whole part ships with the public screen; the server's refusals (error.*, auth.*) show on it and on the sign-in.
+    const keys = [...Object.keys(ptBRSetup), ...Object.keys(ptBR).filter((key) => key.startsWith("error.") || key.startsWith("auth."))];
+    expect(keys.length).toBeGreaterThan(60);
     for (const locale of LOCALES) {
       for (const key of keys) {
-        const text = catalogs[locale][key as keyof typeof ptBRSetup].toLowerCase();
+        const text = catalogs[locale][key as keyof typeof ptBR].toLowerCase();
         for (const name of ["cloudflare", "worker", "turnstile", "wrangler", "durable", "setup_code", "secret"]) expect(text, `${locale} ${key}`).not.toContain(name);
       }
     }

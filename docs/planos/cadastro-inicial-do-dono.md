@@ -45,6 +45,12 @@ dois divergem, vale esta lista e a seção de primeiro acesso de
 - A recuperação tem o mesmo endereço, `/primeiro-acesso`, e termina com um
   botão para a tela de entrar. A tela de entrar não ganhou link para ela: o
   guia de instalação explica o caminho.
+- A senha recusada pelo servidor aparece no próprio campo, e só ela esvazia os
+  dois campos; e-mail errado, rede fora ou pausa mantêm a senha digitada. O
+  formulário também conta a pausa no botão.
+- A lista de três passos aparece também na tela do segundo passo, com
+  "Segurança" como passo atual. Essa tela fica até "Já guardei", mesmo que a
+  sessão seja conferida de novo enquanto os códigos estão abertos.
 - Capturas geradas por `scripts/capturas-do-primeiro-acesso.ts`, que simula no
   navegador as respostas de uma instalação nova; o e2e usa um segundo servidor
   local, sem dono e com o código de instalação.

@@ -11,17 +11,18 @@ import {
   sessionStateSchema,
   setupTicketSchema,
 } from "@zuri/shared";
-import { Check, KeyRound, LockKeyhole, Mail, RotateCw } from "lucide-react";
+import { KeyRound, LockKeyhole, Mail, RotateCw } from "lucide-react";
 import { type FormEvent, type MouseEvent, useEffect, useMemo, useRef, useState } from "react";
 import { Logo } from "../../components/Logo.tsx";
 import { TurnstileWidget } from "../../components/TurnstileWidget.tsx";
-import { Button, cn, ErrorNotice, Notice, PasswordField, SelectField, Spinner, TextField, useDocumentTitle } from "../../components/ui.tsx";
+import { Button, ErrorNotice, Notice, PasswordField, SelectField, Spinner, TextField, useDocumentTitle } from "../../components/ui.tsx";
 import { useSetupStatus } from "../../hooks/setup.ts";
 import { useSession } from "../../hooks/session.tsx";
 import { ApiError, api, errorMessage } from "../../lib/api.ts";
 import { addMessages, useI18n } from "../../lib/i18n.tsx";
 import { HOME_PATH, LOGIN_PATH } from "../../lib/next.ts";
 import { LANGUAGE_NAMES, timeZones } from "../../lib/zones.ts";
+import { SetupSteps } from "./SetupSteps.tsx";
 
 addMessages(ptBRSetup);
 
@@ -30,6 +31,8 @@ type Step = { kind: "code" } | { kind: "form"; ticket: SetupTicket } | { kind: "
 interface RefusalDetails {
   retryAfter?: number;
   setup?: "expired";
+  turnstileSiteKey?: string;
+  fields?: string[];
 }
 
 /**
@@ -56,6 +59,8 @@ export function FirstAccessPage({ go }: { go: (path: string) => void }) {
   const [attempted, setAttempted] = useState(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // A refusal of the password itself (too short, breached) shows on its field.
+  const [passwordError, setPasswordError] = useState<string | null>(null);
   const [retryAt, setRetryAt] = useState<number | null>(null);
   const [now, setNow] = useState(Date.now());
 
@@ -66,7 +71,12 @@ export function FirstAccessPage({ go }: { go: (path: string) => void }) {
     staleTime: Number.POSITIVE_INFINITY,
     retry: 1,
   });
-  const siteKey = options.data?.turnstileSiteKey ?? null;
+  // A refusal may carry the key too, when the options came late or not at all.
+  const [refusedKey, setRefusedKey] = useState<string | null>(null);
+  const siteKey = refusedKey ?? options.data?.turnstileSiteKey ?? null;
+  // Until the options arrive the screen can't know whether the check is on: a try waits, so it
+  // doesn't spend one of the network's few attempts on a refusal.
+  const optionsPending = options.isPending && refusedKey === null;
   const [humanToken, setHumanToken] = useState<string | null>(null);
   const [humanRound, setHumanRound] = useState(0);
   const [humanBroken, setHumanBroken] = useState(false);
@@ -76,6 +86,7 @@ export function FirstAccessPage({ go }: { go: (path: string) => void }) {
   const codeRef = useRef<HTMLInputElement>(null);
   const emailRef = useRef<HTMLInputElement>(null);
   const passwordRef = useRef<HTMLInputElement>(null);
+  const repeatRef = useRef<HTMLInputElement>(null);
   const headingRef = useRef<HTMLHeadingElement>(null);
 
   useDocumentTitle(t(recovery ? "web.setup.recoveryTitle" : "web.setup.title"));
@@ -119,6 +130,12 @@ export function FirstAccessPage({ go }: { go: (path: string) => void }) {
     if (!(err instanceof ApiError)) return;
     const details = err.details as RefusalDetails;
     if (err.code === "RATE_LIMITED" && typeof details.retryAfter === "number") setRetryAt(Date.now() + details.retryAfter * 1000);
+    if (typeof details.turnstileSiteKey === "string" && details.turnstileSiteKey && details.turnstileSiteKey !== siteKey) {
+      setHumanRound((n) => n + 1);
+      setHumanToken(null);
+      setRefusedKey(details.turnstileSiteKey);
+      setHumanNudge(false);
+    }
   }
 
   /** The form's time ran out (or the code was used meanwhile): back to the code, with the server's words. */
@@ -126,6 +143,7 @@ export function FirstAccessPage({ go }: { go: (path: string) => void }) {
     setStep({ kind: "code" });
     setPassword("");
     setRepeat("");
+    setPasswordError(null);
     setAttempted(false);
     refused(err);
     requestAnimationFrame(() => codeRef.current?.focus());
@@ -140,7 +158,7 @@ export function FirstAccessPage({ go }: { go: (path: string) => void }) {
       codeRef.current?.focus();
       return;
     }
-    if (siteKey !== null && !humanToken) {
+    if (optionsPending || (siteKey !== null && !humanToken)) {
       setHumanNudge(true);
       return;
     }
@@ -170,16 +188,18 @@ export function FirstAccessPage({ go }: { go: (path: string) => void }) {
 
   async function submitForm(e: FormEvent) {
     e.preventDefault();
-    if (pending || step.kind !== "form") return;
+    if (pending || waitSeconds > 0 || step.kind !== "form") return;
     if (!email.trim() || !password || password !== repeat) {
       setAttempted(true);
       setError(null);
-      (email.trim() ? passwordRef : emailRef).current?.focus();
+      // The first field with something to fix takes the focus.
+      (!email.trim() ? emailRef : !password ? passwordRef : repeatRef).current?.focus();
       return;
     }
     setAttempted(false);
     setPending(true);
     setError(null);
+    setPasswordError(null);
     try {
       if (step.ticket.mode === "setup") {
         const state = sessionStateSchema.parse(
@@ -195,23 +215,30 @@ export function FirstAccessPage({ go }: { go: (path: string) => void }) {
       setRepeat("");
       setStep({ kind: "recovered" });
     } catch (err) {
-      setPassword("");
-      setRepeat("");
       if (err instanceof ApiError && ((err.details as RefusalDetails).setup === "expired" || err.code === "CONFLICT")) {
         // CONFLICT: someone finished the first access meanwhile; the code now only recovers.
         if (err.code === "CONFLICT") void status.refetch();
         backToCode(err);
         return;
       }
+      const fields = err instanceof ApiError ? ((err.details as RefusalDetails).fields ?? []) : [];
+      if (fields.includes("password")) {
+        // The password itself was refused: its field says why, and both empty for a new one.
+        setPassword("");
+        setRepeat("");
+        setPasswordError(errorMessage(err));
+        requestAnimationFrame(() => passwordRef.current?.focus());
+        return;
+      }
+      // Anything else (a wrong e-mail, the network, a pause): the password stays typed.
       refused(err);
-      passwordRef.current?.focus();
+      const wrongEmail = fields.includes("email") || (err instanceof ApiError && err.code === "INVALID_CREDENTIALS");
+      requestAnimationFrame(() => (wrongEmail ? emailRef : passwordRef).current?.focus());
     } finally {
       setPending(false);
     }
   }
 
-  const steps = recovery ? null : [t("web.setup.stepCode"), t("web.setup.stepDetails"), t("web.setup.stepSecurity")];
-  const current = step.kind === "code" ? 0 : 1;
   const emailMissing = attempted && step.kind === "form" && !email.trim();
   const passwordMissing = attempted && step.kind === "form" && !password;
   const mismatch = repeat.length > 0 && password !== repeat ? t("web.setup.mismatch") : null;
@@ -235,24 +262,7 @@ export function FirstAccessPage({ go }: { go: (path: string) => void }) {
             </h1>
             <p className="text-[0.9375rem] leading-6 text-fg-muted">{t(recovery ? "web.setup.recoveryLead" : "web.setup.lead")}</p>
           </div>
-          {steps && step.kind !== "recovered" && (
-            <ol aria-label={t("web.setup.steps")} className="grid grid-cols-3 gap-2">
-              {steps.map((label, index) => {
-                const done = index < current;
-                const active = index === current;
-                return (
-                  <li key={label} aria-current={active ? "step" : undefined} className="space-y-1.5">
-                    <span className={cn("block h-1.5 rounded-full", done || active ? "bg-accent" : "bg-border-strong")} aria-hidden />
-                    <span className={cn("flex items-center gap-1 text-xs font-medium", active ? "text-fg" : "text-fg-muted")}>
-                      {done && <Check className="h-3.5 w-3.5 text-accent-text" aria-hidden />}
-                      {label}
-                      {(done || active) && <span className="sr-only">({t(done ? "web.setup.stepDone" : "web.setup.stepNow")})</span>}
-                    </span>
-                  </li>
-                );
-              })}
-            </ol>
-          )}
+          {!recovery && step.kind !== "recovered" && <SetupSteps current={step.kind === "code" ? 0 : 1} />}
         </header>
 
         <section className="rounded-2xl border border-border bg-surface p-5 shadow-sm sm:p-6">
@@ -264,7 +274,8 @@ export function FirstAccessPage({ go }: { go: (path: string) => void }) {
                 ref={codeRef}
                 label={t("web.setup.code")}
                 hint={t("web.setup.codeHint")}
-                autoComplete="off"
+                // A one-time code, not a password: a password manager must not offer to keep it.
+                autoComplete="one-time-code"
                 autoFocus
                 maxLength={SETUP_CODE_MAX_LENGTH}
                 icon={<KeyRound aria-hidden />}
@@ -272,6 +283,11 @@ export function FirstAccessPage({ go }: { go: (path: string) => void }) {
                 value={code}
                 onChange={(e) => setCode(e.target.value)}
               />
+              {optionsPending && humanNudge && (
+                <p className="text-sm leading-6 text-danger" role="alert">
+                  {t("web.login.humanLoading")}
+                </p>
+              )}
               {siteKey !== null && (
                 <div className={humanBroken || humanNudge || humanInteractive ? "space-y-1.5" : "!mt-0"}>
                   {(humanBroken || humanNudge || humanInteractive) && (
@@ -341,11 +357,15 @@ export function FirstAccessPage({ go }: { go: (path: string) => void }) {
                 required
                 maxLength={1024}
                 icon={<LockKeyhole aria-hidden />}
-                error={passwordMissing ? t("web.setup.passwordRequired") : null}
+                error={passwordMissing ? t("web.setup.passwordRequired") : passwordError}
                 value={password}
-                onChange={(e) => setPassword(e.target.value)}
+                onChange={(e) => {
+                  setPassword(e.target.value);
+                  setPasswordError(null);
+                }}
               />
               <PasswordField
+                ref={repeatRef}
                 label={t("web.setup.passwordRepeat")}
                 autoComplete="new-password"
                 required
@@ -383,8 +403,10 @@ export function FirstAccessPage({ go }: { go: (path: string) => void }) {
                 </div>
               )}
               <p className="text-xs leading-5 text-fg-muted">{t("web.setup.formUntil", { time: dateTime(step.ticket.expiresAt) })}</p>
-              <Button type="submit" className="min-h-12 w-full" loading={pending}>
-                {t(step.ticket.mode === "setup" ? "web.setup.create" : "web.setup.recover")}
+              <Button type="submit" className="min-h-12 w-full" loading={pending} disabled={waitSeconds > 0}>
+                {waitSeconds > 0
+                  ? t("web.login.waitSeconds", { seconds: waitSeconds })
+                  : t(step.ticket.mode === "setup" ? "web.setup.create" : "web.setup.recover")}
               </Button>
               {errorLine}
             </form>

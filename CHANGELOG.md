@@ -26,7 +26,9 @@ o [SemVer](https://semver.org/lang/pt-BR/). Cada PR escreve a sua entrada em
   de qualquer outra tela. Numa instalação nova, a tela de entrar leva direto
   para ela. Depois do cadastro, a mesma tela serve para recuperar o acesso com
   um código novo e o e-mail cadastrado. O Início lembra de apagar o segredo
-  `SETUP_CODE` enquanto ele continuar gravado.
+  `SETUP_CODE` enquanto ele continuar gravado. Os códigos de recuperação ficam
+  na tela até você confirmar que os guardou, mesmo se você trocar de app no
+  meio.
 
 - Paleta de comandos com Ctrl/⌘ K, ou pelo botão Buscar na barra lateral e no
   topo do celular. Ela leva a qualquer página ou seção das configurações, cria
@@ -176,6 +178,10 @@ o [SemVer](https://semver.org/lang/pt-BR/). Cada PR escreve a sua entrada em
 - A tela de trocar a senha obrigatória e os avisos de segredo para apagar
   passaram a carregar só quando aparecem. O JavaScript inicial caiu de 139,5
   para 139,4 kB, e o teto da CI desceu junto.
+- O aviso de login fechado por falta da verificação contra robôs não cita mais
+  o nome do serviço nem um arquivo do repositório: ele aponta para o guia de
+  instalação. Os avisos de apagar segredos ganharam um pedaço próprio do
+  catálogo, que não vem com as telas públicas.
 - Os logs do servidor têm agora um formato único (`level`, `event`, `code`,
   `route`, `requestId`, `error`, `secrets`), com o `cf-ray` da requisição para
   achar o erro no painel da Cloudflare. Tudo passa por um só módulo, que

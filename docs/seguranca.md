@@ -96,14 +96,24 @@ Decisão do Pablo de 31/10/2026; plano completo em
   segredo continuar gravado, e o Início mostra o aviso para apagá-lo.
 - **A tela.** `/primeiro-acesso` carrega sob demanda. Ela não guarda o código
   depois do acerto (o campo esvazia), manda tudo por POST na mesma origem e
-  mostra só as respostas do servidor. Os textos públicos dela não citam onde
-  nem sobre o que o sistema roda; o e2e procura esses nomes na página. Até o
-  2FA ser ligado, a interface mostra só a tela de ligá-lo, como o servidor.
+  mostra só as respostas do servidor. O campo do código é marcado como código
+  de uso único (`autocomplete="one-time-code"`), para o gerenciador de senhas
+  não oferecer guardá-lo. Enquanto não sabe se a verificação contra robôs está
+  ligada, a tela segura a tentativa em vez de gastá-la numa recusa, e aprende a
+  chave pela recusa do servidor quando as opções não chegam. Os textos públicos
+  dela (e todos os `error.*` e `auth.*`, que ela e a tela de entrar mostram) não
+  citam onde nem sobre o que o sistema roda; o teste do catálogo e o e2e
+  procuram esses nomes. Os avisos de apagar segredos, que citam o painel, ficam
+  num pedaço do catálogo que só vem com a sessão aberta. Até o 2FA ser ligado, a
+  interface mostra só a tela de ligá-lo, como o servidor, e essa tela fica até
+  o dono dizer que guardou os códigos de recuperação, mesmo que a sessão seja
+  conferida de novo no meio.
 - **Desenvolvimento local.** Com um `PUBLIC_URL` http de loopback (o mesmo
   critério da IA simulada e das chaves de teste do Turnstile), a conferência de
   vazamentos responde de uma lista local de uma frase só, sem rede
-  (`apps/agent/src/auth/dev-breach.ts`). Um deploy com https sempre consulta o
-  serviço de verdade.
+  (`apps/agent/src/auth/dev-breach.ts`). Qualquer outro endereço, inclusive
+  http fora de loopback, sempre consulta o serviço de verdade; um teste confere
+  essa escolha.
 
 ## Política de senha
 
