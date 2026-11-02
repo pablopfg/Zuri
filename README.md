@@ -70,7 +70,7 @@ As capturas abaixo acompanham o tema do seu GitHub (claro ou escuro) e saem da `
     <td width="50%" valign="top">
       <picture>
         <source media="(prefers-color-scheme: dark)" srcset="docs/capturas/inicio-computador-escuro.png">
-        <img src="docs/capturas/inicio-computador-claro.png" alt="Início da Zuri no computador: cumprimento pelo horário com o nome do dono, barra lateral com Início, Conversa, Tarefas, Notas, Memória, Automações e Acessos, e cartões de Segurança e Sessão">
+        <img src="docs/capturas/inicio-computador-claro.png" alt="Início da Zuri no computador: cumprimento pelo horário com o nome do dono, barra lateral com Início, Conversa, Tarefas, Notas, Memória, Automações e Acessos e a versão no pé, e cartões de Segurança e Sessão">
       </picture>
       <p align="center"><b>Início</b>: cumprimento pelo horário, segurança da conta e sessão num relance</p>
     </td>
