@@ -21,6 +21,21 @@ export class FakeClock {
   }
 }
 
+/** A push device tied to a browser id, written straight to the table (push has its own tests). */
+export function seedPush(db: Database, browser: string): void {
+  const now = new Date().toISOString();
+  db.run(
+    `INSERT INTO zur_push_devices (id, endpoint, p256dh, auth, browser, created_at, last_seen_at) VALUES (?, ?, 'k', 'a', ?, ?, ?)`,
+    crypto.randomUUID(),
+    `https://fcm.googleapis.com/fcm/send/${crypto.randomUUID()}`,
+    browser,
+    now,
+    now,
+  );
+}
+
+export const pushCount = (db: Database) => db.one<{ n: number }>(`SELECT count(*) AS n FROM zur_push_devices`)?.n ?? 0;
+
 export const MINUTE = 60_000;
 export const HOUR = 60 * MINUTE;
 

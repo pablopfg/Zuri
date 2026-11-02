@@ -634,6 +634,20 @@ Detalhes em [avisos.md](avisos.md).
   navegador e as datas. O aparelho se liga ao navegador pelo HMAC do cookie de
   aparelho, o mesmo do registro de acessos: abrir a Zuri naquele navegador o
   mantém ativo, e 7 dias sem abrir o removem.
+- Sair da conta remove o aparelho daquele navegador (o navegador também cancela
+  a inscrição). Trocar a senha, recuperar o acesso com um código novo ou
+  redefinir a senha pelo painel remove todos os aparelhos: nenhum aparelho
+  ativado com a senha antiga continua recebendo. Uma sessão que só expira deixa
+  o aparelho até completar os 7 dias sem abrir.
+- O título e o texto perdem caracteres de controle e pedaços soltos de
+  caractere antes do corte (120 e 600 caracteres), então a mensagem sempre cabe
+  nos 4 KB que o serviço de notificação aceita.
+- O par VAPID de teste, que está no repositório público, só vale em
+  desenvolvimento local. Com outro endereço, o push fica "não configurado" até
+  o dono gravar um par próprio.
+- Cada aviso faz uma requisição por aparelho (até 3). O push faz no máximo 30
+  em 30 segundos, para nunca esgotar as 50 subrequisições por invocação do
+  plano gratuito (regra P9); o excesso de uma rajada fica só no sino.
 - O que aparece na tela bloqueada é o título e o texto do aviso, em texto puro,
   sem botões. Alerta de segurança não diz de onde veio. O service worker só abre
   páginas do próprio app.

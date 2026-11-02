@@ -279,8 +279,9 @@ export function createApi(deps: ApiDeps) {
     return Response.json({ ...deps.auth().heartbeat(c.get("session"), active), ...unread(deps) });
   });
 
-  app.post("/auth/logout", (c) => {
-    deps.auth().logout(c.get("session"), client(c));
+  app.post("/auth/logout", async (c) => {
+    const auth = deps.auth();
+    auth.logout(c.get("session"), client(c), await auth.browserId(readDeviceCookie(c.req.raw)));
     const response = new Response(null, { status: 204 });
     response.headers.append("set-cookie", sessionCookie(c.req.raw, null));
     // What this browser cached of the app goes too. Not "cookies": that would

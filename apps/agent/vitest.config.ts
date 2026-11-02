@@ -1,5 +1,12 @@
 import { cloudflareTest } from "@cloudflare/vitest-plugin";
+import { generateKeyPairSync } from "node:crypto";
 import { defineProject } from "vitest/config";
+
+// A P-256 pair made fresh for each run (Web Push, step 11b): no push service
+// ever sees it, and none is published. The published one of the end-to-end
+// tests only works in local development (src/push/webpush.ts).
+const vapid = generateKeyPairSync("ec", { namedCurve: "prime256v1" }).privateKey.export({ format: "jwk" });
+const vapidPublic = Buffer.concat([Buffer.from([4]), Buffer.from(vapid.x ?? "", "base64url"), Buffer.from(vapid.y ?? "", "base64url")]).toString("base64url");
 
 /** Test-only values: none of them is a real secret, domain or address. */
 export const TEST_ENV = {
@@ -13,9 +20,8 @@ export const TEST_ENV = {
   // test/setup-turnstile.ts answers siteverify in place of Cloudflare.
   TURNSTILE_SITE_KEY: "0x4AAAAAAAteste-site",
   TURNSTILE_SECRET_KEY: "0x4AAAAAAAteste-secret",
-  // A P-256 pair made only for the tests (Web Push, step 11b); no push service ever sees it.
-  VAPID_PUBLIC_KEY: "BArqm2bEiRY0vWr0hdrXN1eh6ibifZDca45l9kP34MtvpKnTtFebh64fsDf3d8SkgS7deK2cCQNehxkeKQyU2oE",
-  VAPID_PRIVATE_KEY: "wOOMmS0NgL81YSjmS0UwAl7PotpIuPUi0q3Z2acC0Gk",
+  VAPID_PUBLIC_KEY: vapidPublic,
+  VAPID_PRIVATE_KEY: vapid.d ?? "",
 };
 
 // The agent runs inside workerd, with the bindings of wrangler.jsonc. Nothing

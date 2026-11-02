@@ -18,7 +18,7 @@ import { DiagnosticsService } from "../diagnostics/service.ts";
 import { developmentPushFetcher } from "../push/dev-push.ts";
 import { PushDevices } from "../push/devices.ts";
 import { PushService } from "../push/service.ts";
-import { validVapidKeys, type VapidKeys } from "../push/webpush.ts";
+import { usableVapidKeys, type VapidKeys } from "../push/webpush.ts";
 import { createTurnstile, type Turnstile } from "../auth/turnstile.ts";
 import { MIN_OWNER_PASSWORD_LENGTH, parsePublicUrl, secretProblems } from "../config.ts";
 import { Database } from "../db/database.ts";
@@ -302,10 +302,9 @@ export class ZuriAgent extends Agent<WorkerEnv> {
     return [env.SESSION_SECRET, env.PASSWORD_PEPPER, env.OWNER_PASSWORD, env.OWNER_PASSWORD_HASH, env.SETUP_CODE, env.TURNSTILE_SECRET_KEY, env.TELEGRAM_BOT_TOKEN, env.VAPID_PRIVATE_KEY];
   }
 
-  /** The VAPID pair from the two secrets, or null while either is missing or malformed (push stays "not configured"). */
+  /** The VAPID pair from the two secrets, or null while either is missing, malformed or the published test pair (push stays "not configured"). */
   private vapidKeys(): VapidKeys | null {
-    const keys = { publicKey: this.env.VAPID_PUBLIC_KEY?.trim(), privateKey: this.env.VAPID_PRIVATE_KEY?.trim() };
-    return validVapidKeys(keys) ? keys : null;
+    return usableVapidKeys({ publicKey: this.env.VAPID_PUBLIC_KEY?.trim(), privateKey: this.env.VAPID_PRIVATE_KEY?.trim() }, this.development());
   }
 
   /** The Worker refuses every request without a valid PUBLIC_URL, so one is always there by now. */

@@ -128,6 +128,12 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       } catch {
         // Already signed out there, or offline: the server ends it on its own deadline.
       }
+      // The server forgot this browser's push device; the browser lets go of its subscription too.
+      void navigator.serviceWorker
+        ?.getRegistration()
+        .then((r) => r?.pushManager?.getSubscription())
+        .then((s) => s?.unsubscribe())
+        .catch(() => undefined);
     },
     [endHere],
   );

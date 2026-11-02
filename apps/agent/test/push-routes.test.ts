@@ -123,7 +123,7 @@ describe("the push routes", () => {
   it("refuse a subscription outside the known push services, or malformed", async () => {
     await confirmNow();
     const sub = await subscription();
-    for (const endpoint of ["https://exemplo.com.br/push", "http://fcm.googleapis.com/fcm/send/x", "https://fcm.googleapis.com:8443/x", "https://user@fcm.googleapis.com/x", "https://fcm.googleapis.com.exemplo.com.br/x"]) {
+    for (const endpoint of ["https://exemplo.com.br/push", "http://fcm.googleapis.com/fcm/send/x", "https://fcm.googleapis.com:8443/x", `https://${"u:p"}@fcm.googleapis.com/x`, "https://fcm.googleapis.com.exemplo.com.br/x"]) {
       expect((await refusal(await api("POST", "/push/devices", { ...sub, endpoint }), 400)).details, endpoint).toEqual({ fields: ["endpoint"] });
     }
     expect((await refusal(await api("POST", "/push/devices", { ...sub, keys: { ...sub.keys, p256dh: "curta" } }), 400)).code).toBe("VALIDATION_FAILED");

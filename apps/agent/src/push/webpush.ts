@@ -98,6 +98,18 @@ export function validVapidKeys(keys: { publicKey?: string | undefined; privateKe
   }
 }
 
+/**
+ * The pair the end-to-end tests use (playwright.config.ts). It is in a public
+ * repository, so anyone could sign with it: only local development accepts it.
+ */
+export const PUBLISHED_TEST_VAPID_PUBLIC_KEY = "BArqm2bEiRY0vWr0hdrXN1eh6ibifZDca45l9kP34MtvpKnTtFebh64fsDf3d8SkgS7deK2cCQNehxkeKQyU2oE";
+
+/** The pair push may use: well formed, and never the published test pair outside local development. */
+export function usableVapidKeys(keys: { publicKey?: string | undefined; privateKey?: string | undefined }, development: boolean): VapidKeys | null {
+  if (!validVapidKeys(keys)) return null;
+  return development || keys.publicKey !== PUBLISHED_TEST_VAPID_PUBLIC_KEY ? keys : null;
+}
+
 async function signingKey(keys: VapidKeys): Promise<CryptoKey> {
   const pub = fromBase64Url(keys.publicKey);
   const jwk: JsonWebKey = {

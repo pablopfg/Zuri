@@ -35,6 +35,7 @@ export const LOG_EVENTS = [
   "alert_tick_failed",
   "diagnostics_failed",
   "push_refused",
+  "push_burst_limit",
   "push_failed",
 ] as const;
 export type LogEvent = (typeof LOG_EVENTS)[number];

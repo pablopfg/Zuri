@@ -4,7 +4,7 @@ import type { ClientInfo } from "../src/auth/client.ts";
 import { AuthEvents } from "../src/auth/events.ts";
 import { InternalState } from "../src/db/internal-state.ts";
 import { AppError } from "../src/http/errors.ts";
-import type { PushChannel } from "../src/push/channel.ts";
+import { PUSH_BURST, type PushChannel } from "../src/push/channel.ts";
 import { PushDevices } from "../src/push/devices.ts";
 import { PushService } from "../src/push/service.ts";
 import { type ChatWorld, withChatWorld } from "./chat-world.ts";
@@ -244,6 +244,36 @@ describe("the push channel", () => {
       expect([...payload.body]).toHaveLength(PUSH_LIMITS.bodyMax);
       expect(payload.body.endsWith("…")).toBe(true);
       expect(payload).toMatchObject({ link: null, sticky: false });
+    });
+  });
+
+  it("strips control characters and lone surrogates before the cut, so the worst text still fits 4 KB", async () => {
+    await withPush(async (w) => {
+      const a = await browser();
+      w.devices.add(a.subscription, "a", null);
+      // Each \u0001 would take six bytes as JSON; 600 of them plus emoji would overflow the record.
+      const result = await w.channel.send({ notice: notice({ title: "\u0001".repeat(600) + "🙂".repeat(200), body: `linha 1\nlinha 2\t\u2028${"\u0001".repeat(600)}\uD800fim${"🙂".repeat(900)}` }), attempt: 1 });
+      expect(result).toEqual({ status: "sent" });
+      const payload = await open(w.net.posted[0]?.body ?? new Uint8Array(), a.keys, a.auth);
+      expect(payload.title).toBe(`${"🙂".repeat(PUSH_LIMITS.titleMax - 1)}…`);
+      expect(payload.body.startsWith("linha 1\nlinha 2\uFFFDfim🙂")).toBe(true);
+      expect([...payload.body]).toHaveLength(PUSH_LIMITS.bodyMax);
+      // biome-ignore lint/suspicious/noControlCharactersInRegex: checking none is left.
+      expect(payload.body).not.toMatch(/[\u0000-\u0009\u000b-\u001f\u2028]/);
+    });
+  });
+
+  it("posts at most 30 times in 30 seconds, so a burst never runs out of subrequests", async () => {
+    await withPush(async (w) => {
+      for (let i = 0; i < 3; i++) w.devices.add((await browser()).subscription, `d${i}`, null);
+      for (let i = 0; i < PUSH_BURST.posts / 3; i++) expect(await w.channel.send({ notice: notice(), attempt: 1 })).toEqual({ status: "sent" });
+      expect(await w.channel.send({ notice: notice(), attempt: 1 })).toEqual({ status: "skipped", reason: "channel_limit" });
+      expect(w.net.posted).toHaveLength(PUSH_BURST.posts);
+      w.world.clock.now += PUSH_BURST.windowMs - 1;
+      expect(await w.channel.send({ notice: notice(), attempt: 1 })).toEqual({ status: "skipped", reason: "channel_limit" });
+      w.world.clock.now += 1;
+      expect(await w.channel.send({ notice: notice(), attempt: 1 })).toEqual({ status: "sent" });
+      expect(w.net.posted).toHaveLength(PUSH_BURST.posts + 3);
     });
   });
 

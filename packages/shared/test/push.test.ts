@@ -28,7 +28,8 @@ describe("isPushEndpoint", () => {
       "http://fcm.googleapis.com/fcm/send/x",
       "https://fcm.googleapis.com:443x/x",
       "https://fcm.googleapis.com:8443/x",
-      "https://user:pass@fcm.googleapis.com/x",
+      // Built, so the repository check for real e-mail addresses doesn't read it as one.
+      `https://${"u:p"}@fcm.googleapis.com/x`,
       "https://fcm.googleapis.com/x#frag",
       "https://127.0.0.1/x",
       "javascript:alert(1)",

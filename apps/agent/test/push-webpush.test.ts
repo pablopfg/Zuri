@@ -1,6 +1,6 @@
 import { fromBase64Url, toBase64Url } from "@zuri/shared";
 import { describe, expect, it } from "vitest";
-import { encryptPush, validVapidKeys, vapidAuthorization } from "../src/push/webpush.ts";
+import { encryptPush, PUBLISHED_TEST_VAPID_PUBLIC_KEY, usableVapidKeys, validVapidKeys, vapidAuthorization } from "../src/push/webpush.ts";
 import { testEnv } from "./helpers.ts";
 
 // Web Push by hand (step 11b): the message encryption checked against the
@@ -115,6 +115,14 @@ describe("VAPID", () => {
     expect(validVapidKeys({ publicKey: keys.publicKey.slice(1), privateKey: keys.privateKey })).toBe(false);
     expect(validVapidKeys({ publicKey: keys.publicKey, privateKey: `${keys.privateKey}AA` })).toBe(false);
     expect(validVapidKeys({ publicKey: "não é base64", privateKey: keys.privateKey })).toBe(false);
+  });
+
+  it("accepts the published test pair only in local development", () => {
+    const published = { publicKey: PUBLISHED_TEST_VAPID_PUBLIC_KEY, privateKey: "wOOMmS0NgL81YSjmS0UwAl7PotpIuPUi0q3Z2acC0Gk" };
+    expect(usableVapidKeys(published, true)).toEqual(published);
+    expect(usableVapidKeys(published, false)).toBeNull();
+    expect(usableVapidKeys(keys, false)).toEqual(keys);
+    expect(usableVapidKeys({ publicKey: keys.publicKey }, true)).toBeNull();
   });
 
   it("signs a JWT for the push service's origin, valid for 12 hours, that the public key verifies", async () => {

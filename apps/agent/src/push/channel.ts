@@ -19,10 +19,26 @@ export type PushOutcome = "sent" | "gone" | "unreachable" | "error";
 
 const encoder = new TextEncoder();
 
-/** Cuts at a character, never in the middle of one. */
+/**
+ * Push's share of the 50 subrequests an invocation may make (P9: stop before
+ * 45): at most 30 posts in any 30 seconds, ten notices to three devices. The
+ * rest of a burst stays in the bell, recorded as the channel's own cap.
+ */
+export const PUSH_BURST = { posts: 30, windowMs: 30_000 } as const;
+
+/**
+ * Plain text that fits the 4 KB a push message carries: control characters
+ * (they would grow sixfold as JSON escapes) and lone surrogates go before the
+ * cut, which falls at a character, never in the middle of one. At most four
+ * bytes per kept character, so 120 + 600 of them always fit.
+ */
 const clip = (text: string, max: number) => {
-  const chars = [...text];
-  return chars.length > max ? `${chars.slice(0, max - 1).join("")}…` : text;
+  const clean = text
+    // biome-ignore lint/suspicious/noControlCharactersInRegex: removing them is the point; a line break stays.
+    .replace(/[\u0000-\u0009\u000b-\u001f\u007f-\u009f\u2028\u2029]/g, "")
+    .replace(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g, "\uFFFD");
+  const chars = [...clean];
+  return chars.length > max ? `${chars.slice(0, max - 1).join("")}…` : clean;
 };
 
 /**
@@ -33,7 +49,19 @@ const clip = (text: string, max: number) => {
 export class PushChannel implements AlertChannel {
   readonly name = "push" as const;
 
+  /** When each recent post left, for PUSH_BURST. */
+  #posts: number[] = [];
+
   constructor(private readonly deps: PushChannelDeps) {}
+
+  /** Takes room for `n` posts in the burst window, or says there is none. */
+  private room(n: number): boolean {
+    const now = (this.deps.clock ?? Date.now)();
+    this.#posts = this.#posts.filter((at) => at > now - PUSH_BURST.windowMs);
+    if (this.#posts.length + n > PUSH_BURST.posts) return false;
+    for (let i = 0; i < n; i++) this.#posts.push(now);
+    return true;
+  }
 
   state(): ChannelState {
     if (!this.deps.keys()) return "not_configured";
@@ -58,6 +86,10 @@ export class PushChannel implements AlertChannel {
     if (!keys) return { status: "skipped", reason: "not_configured" };
     const targets = this.deps.devices.targets();
     if (targets.length === 0) return { status: "skipped", reason: "no_target" };
+    if (!this.room(targets.length)) {
+      log("warn", "push_burst_limit", { count: targets.length });
+      return { status: "skipped", reason: "channel_limit" };
+    }
     const body = encoder.encode(JSON.stringify(payload));
     const outcomes = await Promise.all(targets.map((target) => this.post(target, body, keys, urgency)));
     if (outcomes.includes("sent")) return { status: "sent" };

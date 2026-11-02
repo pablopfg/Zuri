@@ -121,6 +121,16 @@ export class PushDevices {
     return this.db.run(`DELETE FROM zur_push_devices WHERE id = ?`, id).rowsWritten > 0;
   }
 
+  /** Logout: the devices of this browser stop receiving. */
+  removeBrowser(browser: string): number {
+    return this.db.run(`DELETE FROM zur_push_devices WHERE browser = ?`, browser).rowsWritten;
+  }
+
+  /** A new password or a reset: no device signed in with the old one keeps receiving. */
+  removeAll(): number {
+    return this.db.run(`DELETE FROM zur_push_devices`).rowsWritten;
+  }
+
   /** The push service took a notice for this device. */
   sent(id: string): void {
     this.db.run(`UPDATE zur_push_devices SET last_sent_at = ? WHERE id = ?`, this.now(), id);
