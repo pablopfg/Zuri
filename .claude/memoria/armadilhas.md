@@ -71,6 +71,16 @@ acrescente aqui cada armadilha nova que encontrar (sem dados pessoais).
   teste em `tests/repo/`.
 - O check `source-branch` roda o workflow da branch do PR; quem mescla na
   `main` confere a origem.
+- Push feito com o `GITHUB_TOKEN` não dispara `pull_request`: a PR ficaria sem
+  os checks exigidos. O `update-prs.yml` dispara `ci.yml` e `codeql.yml` por
+  `workflow_dispatch` na branch. O mesmo token também não pode enviar mudança
+  em `.github/workflows/`; nesse caso ele só comenta na PR.
+- O `update-prs.yml` pode enviar um commit de merge para a sua branch a
+  qualquer momento. Faça `git pull --no-rebase origin <branch>` antes de cada
+  push; nunca force push para "limpar" esse commit.
+- O GitHub ignora `merge=union` e drivers do `.gitattributes` no botão de
+  merge e no cálculo de conflito. Por isso a resolução de acréscimos fica no
+  script, e não no `.gitattributes`.
 
 ## Testes
 

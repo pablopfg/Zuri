@@ -21,11 +21,23 @@ export const catalogs: Record<Locale, Messages> = { "pt-BR": ptBR, en };
 
 /**
  * The default catalog. The server carries all of it (`ptBR`); the interface
- * starts with `ptBRCore` and adds a screen's part (`ptBRAi`, `ptBRChat`, `ptBRMemory`,
- * `ptBRPalette`, `ptBRProductivity`, `ptBRSecurity`, `ptBRSettings`, `ptBRGreeting`) when that screen loads.
+ * starts with `ptBRCore` and adds a screen's part when that screen loads.
  * `ptBRServer` holds what only the server says: it never reaches the interface.
+ * One name per line, so two pull requests that add a part add separate lines.
  */
-export { ptBR, ptBRAi, ptBRChat, ptBRCore, ptBRGreeting, ptBRMemory, ptBRPalette, ptBRProductivity, ptBRSecurity, ptBRServer, ptBRSettings };
+export {
+  ptBR,
+  ptBRCore,
+  ptBRAi,
+  ptBRChat,
+  ptBRMemory,
+  ptBRProductivity,
+  ptBRSecurity,
+  ptBRPalette,
+  ptBRServer,
+  ptBRSettings,
+  ptBRGreeting,
+};
 
 export type Params = Record<string, string | number>;
 

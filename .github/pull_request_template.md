@@ -52,7 +52,7 @@ Tela alterada: mostre antes e depois. Sem mudança visível: escreva "Sem mudan�
 ## Checklist
 
 - [ ] O título segue o Conventional Commits (`feat(bot): …`, `fix(auth): …`), com o texto em pt-BR
-- [ ] `CHANGELOG.md` atualizado em "Não lançado", ou o rótulo `sem-changelog` foi adicionado
+- [ ] Changelog em `changelog/nao-lancado/<assunto>.md`, ou o rótulo `sem-changelog` foi adicionado
 - [ ] `README.md` atualizado (mapa das etapas, funcionalidades, capturas) quando o PR muda funcionalidade, etapa, tela ou arquitetura
 - [ ] Capturas de tela (computador e celular, claro e escuro) na descrição quando o PR cria ou muda uma tela, ou "Sem mudança visível"
 - [ ] Migrations só de acréscimo; migrations e segredos novos descritos no grupo "Atualização"
