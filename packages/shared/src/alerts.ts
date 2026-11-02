@@ -41,6 +41,8 @@ export const NOTICE_KINDS = [
   "watch.health",
   "diagnostic.repeated",
   "diagnostic.new",
+  "alerts.lowered",
+  "alerts.raised",
   "security",
 ] as const;
 export type NoticeKind = (typeof NOTICE_KINDS)[number];
@@ -135,6 +137,46 @@ export const WATCH = {
   digestItems: 10,
 } as const;
 
+/**
+ * The priority that learns (spec, step 11): what the owner keeps ignoring goes
+ * down a level, what they always open at once goes up, at most to high. Never
+ * security, reminders or critical notices; at most one level a week per source.
+ */
+export const LEARNING = {
+  /** Notices of a source looked at: created in the last 14 days, but at least a day ago (time to be read). */
+  windowMs: 14 * 24 * HOUR,
+  settleMs: 24 * HOUR,
+  /** Fewer than this in the window and nothing changes. */
+  minNotices: 5,
+  /** Share ignored (never opened, or told to stop insisting) that lowers the source. */
+  ignoredShare: 0.8,
+  /** Share opened this fast that raises it. */
+  quickShare: 0.8,
+  quickMs: 15 * MINUTE,
+  /** At most one level per source in this long. */
+  changeEveryMs: 7 * 24 * HOUR,
+  /** The review runs at most this often, in the watchers' round. */
+  reviewEveryMs: 24 * HOUR,
+  /** Lowest and highest shift from what the source asks: high can reach low, low can reach high. */
+  minShift: -2,
+  maxShift: 2,
+  /** Sources remembered; past this, the ones changed longest ago go. */
+  sourcesKept: 200,
+} as const;
+
+/** A source whose priority the owner's habits changed, as Settings > Notices lists it. */
+export interface LearnedPriority {
+  key: string;
+  /** The last notice's title, in the owner's language at the time. Plain text. */
+  label: string;
+  /** Levels away from what the source asks for: negative is lower. */
+  shift: number;
+  changedAt: string;
+}
+
+/** A source's key in DELETE /api/alerts/learning/:key: a notice kind, or "automation:" and its id. */
+export const learningKeySchema = /* @__PURE__ */ z.string().regex(/^(?:[a-z][A-Za-z0-9.]{0,40}|automation:[0-9a-f-]{36})$/);
+
 /** The digest's default time and whether the watchers run, in Settings > Notices. */
 export const DEFAULT_DIGEST_TIME = "07:30";
 
@@ -218,6 +260,7 @@ export type ChannelState = "ready" | "not_configured" | "no_target";
 export interface AlertOverview {
   deliveries: AlertDelivery[];
   channels: Record<AlertChannelName, ChannelState>;
+  learned: LearnedPriority[];
 }
 
 /** Pages of the app a notice may open. Anything else is dropped: a notice never carries an address someone else chose. */

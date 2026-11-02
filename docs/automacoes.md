@@ -10,6 +10,8 @@ A etapa 10 trouxe três tipos de automação, todos no fuso do dono (Configuraç
 
 Os horários possíveis são: uma vez, todo dia, dias da semana, um dia do mês e a cada N horas (de 1 a 744).
 
+Cada automação tem também a prioridade dos seus avisos (`priority`: baixa, normal ou alta; padrão normal, desde a etapa 11d). Baixa fica só no sino; alta insiste. As ferramentas do chat criam sempre com normal, e a prioridade que aprende pode mover a de uma rotina (veja [Avisos](avisos.md#prioridade-que-aprende)).
+
 ## Onde fica o código
 
 - `packages/shared/src/schedule.ts`: `nextRun` e `upcomingRuns`, sem Zod, porque a tela usa os dois na prévia.
@@ -19,7 +21,7 @@ Os horários possíveis são: uma vez, todo dia, dias da semana, um dia do mês 
 - `apps/agent/src/tools/automations.ts`: as ferramentas do chat.
 - `apps/agent/src/api/automations.ts`: as rotas `/api/automations*`.
 - `apps/web/src/pages/automations/`: a tela `/automacoes`, carregada sob demanda.
-- Migration 9: `zur_automations` e `zur_automation_runs`.
+- Migration 9: `zur_automations` e `zur_automation_runs`. Migration 13: coluna `priority`.
 
 ## Como o horário funciona
 

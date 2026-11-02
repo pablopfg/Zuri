@@ -31,6 +31,10 @@ test("a reminder: create with the preview, run now, pause, edit and delete @mobi
   await form.getByLabel("Texto do lembrete").fill("Tomar o remédio da pressão");
   // "Todo dia" at 09:00 is the default; the next three runs show before saving.
   await form.getByLabel("Horário").fill("08:15");
+  // Normal by default; high says the Zuri calls again.
+  await expect(form.getByLabel("Prioridade dos avisos")).toHaveValue("normal");
+  await form.getByLabel("Prioridade dos avisos").selectOption("high");
+  await expect(form.getByText(/chama de novo até duas vezes/)).toBeVisible();
   await expect(form.getByText("Próximas execuções")).toBeVisible();
   await expect(form.getByRole("listitem")).toHaveCount(3);
   await expectAccessible(page, "nova automação");
@@ -73,6 +77,7 @@ test("a reminder: create with the preview, run now, pause, edit and delete @mobi
   const edit = page.getByRole("dialog", { name: "Editar automação" });
   await expect(edit.getByLabel("Nome")).toHaveValue(name);
   await expect(edit.getByLabel("Quando")).toHaveValue("weekly");
+  await expect(edit.getByLabel("Prioridade dos avisos")).toHaveValue("high");
   await edit.getByLabel("Quando").selectOption("monthly");
   await edit.getByLabel("Dia do mês").fill("31");
   await expect(edit.getByText("Nos meses mais curtos, roda no último dia.")).toBeVisible();
