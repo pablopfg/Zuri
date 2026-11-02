@@ -1,7 +1,11 @@
 import { memo } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { useI18n } from "../lib/i18n.tsx";
+import { ptBRMarkdown } from "@zuri/shared";
+import { addMessages, useI18n } from "../lib/i18n.tsx";
+
+// The renderer's pt-BR texts travel with it, not in the first bundle (rule P11).
+addMessages(ptBRMarkdown);
 
 /** Only these schemes become links; anything else (javascript:, data:, vbscript:) stays plain text. */
 const SAFE_LINK = /^(https?:|mailto:)/i;

@@ -42,6 +42,7 @@ import {
   sessionCookie,
   setupCookie,
 } from "./http.ts";
+import { type AutomationDeps, registerAutomationRoutes } from "./automations.ts";
 import { type ChatDeps, registerChatRoutes } from "./chat.ts";
 import { registerMemoryRoutes } from "./memory.ts";
 import { registerProductivityRoutes } from "./productivity.ts";
@@ -64,6 +65,8 @@ export interface ApiDeps {
   productivity(): Productivity;
   /** Memories with history, over the same database. */
   memories(): MemoryService;
+  /** Automations and their runs (step 10). */
+  automations(): AutomationDeps;
   /** Today's AI use against the limits (step 8). */
   aiUsage(): UsageReport;
   /** The chat, its proposals and voice input (step 9). */
@@ -295,7 +298,11 @@ export function createApi(deps: ApiDeps) {
     const patch = await readJson(c.req.raw, settingsUpdateSchema, 4 * 1024);
     // Longer sessions weaken a stolen one: the session limits ask for the password typed recently.
     if (SESSION_FIELDS.some((field) => field in patch)) deps.auth().requireRecentAuth(c.get("session"));
-    return Response.json(deps.settings().update(patch));
+    const before = patch.timeZone === undefined ? null : deps.settings().field("timeZone");
+    const settings = deps.settings().update(patch);
+    // A new zone moves every wall-clock time: each automation's next run is computed again.
+    if (before !== null && settings.timeZone !== before) await deps.automations().service.rescheduleAll();
+    return Response.json(settings);
   });
 
   // ---------- Access activity ----------
@@ -365,6 +372,7 @@ export function createApi(deps: ApiDeps) {
   registerProductivityRoutes(app, deps.productivity);
   registerMemoryRoutes(app, deps.memories);
   registerChatRoutes(app, deps.chat);
+  registerAutomationRoutes(app, deps.automations);
 
   // Step 8: what the AI used today and the last 7 days. Read only: the limits change through /settings.
   app.get("/usage", () => Response.json(deps.aiUsage()));

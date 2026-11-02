@@ -23,7 +23,9 @@ export type InternalKey =
   | "setup_seen"
   | "setup_tries"
   | "setup_alerted_at"
-  | "setup_second_step_required";
+  | "setup_second_step_required"
+  // The one alarm of the automations: "<UTC ISO>|<schedule id>" (step 10).
+  | "automation_alarm";
 
 export class InternalState {
   constructor(private readonly db: Database) {}

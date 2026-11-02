@@ -1,5 +1,5 @@
 import { ptBRSettings } from "@zuri/shared";
-import { Bell, Bot, ChevronLeft, ChevronRight, Database, Plug, Shield, User } from "lucide-react";
+import { Bell, Bot, ChevronLeft, ChevronRight, Clock, Database, Plug, Shield, User } from "lucide-react";
 import { useSyncExternalStore } from "react";
 import { Link, NavLink, Navigate, useParams } from "react-router";
 import { cn, PageHeader } from "../components/ui.tsx";
@@ -74,6 +74,25 @@ export function SettingsPage() {
                 </Link>
               </li>
             ))}
+          </ul>
+        </nav>
+        {/* The phone's bottom bar holds five places: Automations is reached from here (and from the search). */}
+        <nav aria-label={t("web.settings.morePages")}>
+          <ul className="overflow-hidden rounded-2xl border border-border bg-surface shadow-sm">
+            <li>
+              <Link to="/automacoes" aria-describedby="secao-automacoes" className="flex min-h-16 items-center gap-3 px-4 py-3 hover:bg-raised">
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-accent-soft text-accent-text" aria-hidden>
+                  <Clock className="h-[1.125rem] w-[1.125rem]" />
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block font-medium">{t("web.nav.automations")}</span>
+                  <span id="secao-automacoes" className="block text-sm text-fg-muted" aria-hidden>
+                    {t("web.settings.hint.automations")}
+                  </span>
+                </span>
+                <ChevronRight className="h-4 w-4 shrink-0 text-fg-muted" aria-hidden />
+              </Link>
+            </li>
           </ul>
         </nav>
       </>

@@ -9,6 +9,8 @@ import { ptBRSettings } from "./pt-BR-settings.ts";
 import { ptBRGreeting } from "./pt-BR-greeting.ts";
 import { ptBRNotices } from "./pt-BR-notices.ts";
 import { ptBRSetup } from "./pt-BR-setup.ts";
+import { ptBRAutomations } from "./pt-BR-automations.ts";
+import { ptBRMarkdown } from "./pt-BR-markdown.ts";
 
 // Default and fallback catalog. Every key must also exist in en.ts and be used in the code (npm run lint).
 // The texts of the lazy screens live in their own files (pt-BR-memory.ts, pt-BR-productivity.ts,
@@ -17,14 +19,12 @@ export const ptBRCore = {
   "app.name": "Zuri",
   "error.internal": "Algo deu errado. Seus dados estão seguros; tente de novo.",
   "format.dateTime": "{date} às {time}",
-  "auth.passkey.needsMfa": "Ligue antes a verificação em duas etapas com um aplicativo autenticador. Os códigos de recuperação dele são o caminho de volta se você perder as passkeys.",
   "web.loading": "Carregando…",
   "web.retry": "Tentar de novo",
   "web.cancel": "Cancelar",
   "web.close": "Fechar",
   "web.save": "Salvar",
   "web.saved": "Salvo.",
-  "web.copied": "Copiado",
   "web.error.network": "Sem conexão com a Zuri. Confira a internet e tente de novo.",
   "web.session.checking": "Conferindo a sua sessão…",
   "web.nav.main": "Navegação principal",
@@ -98,7 +98,6 @@ export const ptBRCore = {
   "web.crash.reload": "Recarregar",
   "web.password.show": "Mostrar senha",
   "web.password.hide": "Ocultar senha",
-  "web.settings.title": "Configurações",
   "web.mfaReminder.body": "A verificação em duas etapas está desligada. Ligue para proteger a sua conta.",
   "web.mfaReminder.short": "Duas etapas desligadas",
   "web.mfaReminder.action": "Ligar agora",
@@ -117,11 +116,9 @@ export const ptBRCore = {
   "web.nav.accessLog": "Acessos",
   "web.nav.tasks": "Tarefas",
   "web.nav.notes": "Notas",
-  "web.markdown.image": "[imagem: {alt}]",
-  "web.markdown.done": "Feito",
-  "web.markdown.open": "A fazer",
   "web.nav.memory": "Memória",
   "web.nav.chat": "Conversa",
+  "web.nav.automations": "Automações",
 } as const;
 
 /** The intersection of every part's type, so each key stays a literal key. */
@@ -152,4 +149,6 @@ export const ptBR = /* @__PURE__ */ join(
   ptBRGreeting,
   ptBRSetup,
   ptBRNotices,
+  ptBRAutomations,
+  ptBRMarkdown,
 );

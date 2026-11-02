@@ -375,4 +375,55 @@ describe("the Free plan budget of each route", () => {
       });
     }
   });
+
+  it("automations: the list, a page of the history and a new one read and write about one page, out of 50 automations and 2,000 runs", async () => {
+    const ids = await runInDurableObject(owner(), async (agent: ZuriAgent) => {
+      const { automations, db } = agent.store;
+      const made: string[] = [];
+      for (let i = 0; i < 49; i++) {
+        made.push((await automations.create({ name: `Lembrete ${i}`, kind: "reminder", message: "m", schedule: { type: "daily", time: "08:00" } }, "app")).id);
+      }
+      db.transaction(() => {
+        for (let i = 0; i < 2_000; i++) {
+          db.run(
+            `INSERT INTO zur_automation_runs (id, automation_id, automation_name, kind, trigger, status, started_at) VALUES (?, ?, 'Lembrete', 'reminder', 'manual', 'success', ?)`,
+            crypto.randomUUID(),
+            made[i % made.length] as string,
+            new Date(Date.UTC(2026, 0, 1) + i * 60_000).toISOString(),
+          );
+        }
+      });
+      return made;
+    });
+    const list = await cost("GET", "/automations");
+    expect(list.status).toBe(200);
+    // Every automation (at most 500) plus the counters: the whole list is one page.
+    expect(list.read).toBeLessThanOrEqual(49 * 2 + 10);
+    expect(list.written).toBe(0);
+    const runs = await cost("GET", "/automations/runs");
+    expect(runs.status).toBe(200);
+    expect(runs.read).toBeLessThanOrEqual(40);
+    const created = await cost("POST", "/automations", { name: "Mais um", kind: "reminder", message: "m", schedule: { type: "daily", time: "09:00" } });
+    expect(created.status).toBe(201);
+    expect(created.read).toBeLessThanOrEqual(80);
+    expect(created.written).toBeLessThanOrEqual(15);
+    // A run now writes its row (with indexes and the counter) and the automation's bookkeeping; trimming the history reads one counter.
+    const ran = await cost("POST", `/automations/${ids[0]}/run`);
+    expect(ran.status).toBe(200);
+    expect(ran.read).toBeLessThanOrEqual(18);
+    expect(ran.written).toBeLessThanOrEqual(25);
+
+    // The alarm: one due automation costs a handful of rows, whatever the size of the history.
+    const wake = await runInDurableObject(owner(), async (agent: ZuriAgent) => {
+      const { db, automations } = agent.store;
+      db.run(`UPDATE zur_automations SET next_run = ? WHERE id = ?`, new Date(Date.now() - 1_000).toISOString(), ids[1] as string);
+      const before = { ...db.usage };
+      await agent.runAutomations({}, { id: "none" });
+      const usage = { read: db.usage.rowsRead - before.rowsRead, written: db.usage.rowsWritten - before.rowsWritten };
+      for (const id of ids) await automations.delete(id);
+      return usage;
+    });
+    expect(wake.read).toBeLessThanOrEqual(40);
+    expect(wake.written).toBeLessThanOrEqual(30);
+  });
 });

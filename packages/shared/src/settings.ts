@@ -68,6 +68,7 @@ export const settingsSchema = /* @__PURE__ */ z
     aiMaxToolCalls: range(AI_LIMIT_RANGES.aiMaxToolCalls),
     aiMaxIterations: range(AI_LIMIT_RANGES.aiMaxIterations),
     aiMaxContextTokens: range(AI_LIMIT_RANGES.aiMaxContextTokens),
+    aiScheduledRunsPerDay: range(AI_LIMIT_RANGES.aiScheduledRunsPerDay),
     /** How the owner likes to be called; "" until they say. */
     ownerName,
   })
@@ -97,5 +98,6 @@ export const DEFAULT_SETTINGS: Settings = /* @__PURE__ */ Object.freeze({
   aiMaxToolCalls: AI_LIMIT_RANGES.aiMaxToolCalls.default,
   aiMaxIterations: AI_LIMIT_RANGES.aiMaxIterations.default,
   aiMaxContextTokens: AI_LIMIT_RANGES.aiMaxContextTokens.default,
+  aiScheduledRunsPerDay: AI_LIMIT_RANGES.aiScheduledRunsPerDay.default,
   ownerName: "",
 });

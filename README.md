@@ -70,7 +70,7 @@ As capturas abaixo acompanham o tema do seu GitHub (claro ou escuro) e saem da `
     <td width="50%" valign="top">
       <picture>
         <source media="(prefers-color-scheme: dark)" srcset="docs/capturas/inicio-computador-escuro.png">
-        <img src="docs/capturas/inicio-computador-claro.png" alt="Início da Zuri no computador: cumprimento pelo horário com o nome do dono, barra lateral com Início, Conversa, Tarefas, Notas, Memória e Acessos, e cartões de Segurança e Sessão">
+        <img src="docs/capturas/inicio-computador-claro.png" alt="Início da Zuri no computador: cumprimento pelo horário com o nome do dono, barra lateral com Início, Conversa, Tarefas, Notas, Memória, Automações e Acessos, e cartões de Segurança e Sessão">
       </picture>
       <p align="center"><b>Início</b>: cumprimento pelo horário, segurança da conta e sessão num relance</p>
     </td>
@@ -162,12 +162,13 @@ O que está na `develop` hoje, etapa por etapa. "extra" marca melhorias feitas f
 | 🧠 | **Memória** | Fatos que você guarda, edita e apaga. O que muda vira histórico (atual, incerto ou passado), e conflitos vão para uma fila de revisão. | 7 |
 | 📊 | **IA com medição** | Workers AI com contador por chamada e um teto único de 9.000 Neurons por dia, com aviso claro ao chegar nele. | 8 |
 | 💬 | **Conversa com ferramentas** | Respostas em tempo real. O agente cria e organiza tarefas, notas e memórias; o que apaga ou reescreve vira um cartão para você aprovar, e planos de tarefas só viram tarefas depois da sua confirmação. Também aceita voz. | 9 |
+| ⏰ | **Automações** | Lembretes, o resumo das tarefas e rotinas da Zuri, por dia, semana, mês ou a cada algumas horas, sempre no seu fuso. A rotina que a Zuri sugere na conversa só roda depois que você aprova, e um reinício nunca faz nada rodar duas vezes. | 10 |
 
 ## 🔭 O que vem a seguir
 
 | | Funcionalidade | O que faz | Etapa |
 | :---: | --- | --- | :---: |
-| ⏰ | **Automações e avisos** | Lembretes, resumos e rotinas de IA; central de avisos com push, e-mail e prioridade. | 10–11 |
+| 🔔 | **Central de avisos** | Os resultados das automações e os alertas num só lugar, com push, e-mail e prioridade. | 11 |
 | 🤖 | **Bot do Telegram** | Painel de administração no bolso: consultas sem IA, conversa por texto e voz (arquivo acima do limite só com a sua confirmação), aprovações com passkey e modo de bloqueio. | 12–16 |
 | 🔌 | **Integrações** | Busca semântica, servidores MCP, Google Agenda, acesso remoto para o n8n e monitor de sites, todos opcionais. | 17–22 |
 | 💾 | **Backup e instalação** | Backup e importação, guia de instalação só pelo navegador e auditoria final. | 23–25 |
@@ -250,7 +251,7 @@ O orçamento de cada cota está em [docs/arquitetura/orcamento-free-tier.md](doc
 | | 7 | Memória e histórico | ✅ |
 | | 8 | Provedor de IA e medição de uso | ✅ |
 | | 9 | Chat com ferramentas | ✅ |
-| | 10 | Automações | ⬜ |
+| | 10 | Automações | ✅ |
 | | 11 | Central de avisos, push e e-mail | ⬜ |
 | **C · Bot do Telegram** | 12 | Fundação do bot | ⬜ |
 | | 13 | Avisos no Telegram | ⬜ |
