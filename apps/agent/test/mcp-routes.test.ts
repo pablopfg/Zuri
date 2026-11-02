@@ -87,7 +87,7 @@ describe("/api/mcp", () => {
   it("refuses unsafe or malformed addresses before any request", async () => {
     for (const url of [
       "http://mcp.exemplo.com.br/mcp",
-      "https://user:pass@mcp.exemplo.com.br/mcp",
+      "https://user:pass@exemplo.com.br/mcp",
       "https://mcp.exemplo.com.br:8443/mcp",
       "https://127.0.0.1/mcp",
       "https://10.1.2.3/mcp",

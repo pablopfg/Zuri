@@ -15,7 +15,7 @@ describe("endpointUrl and the private-address checks", () => {
     expect(endpointUrl(" https://mcp.exemplo.com.br/mcp ", { development: false })?.href).toBe("https://mcp.exemplo.com.br/mcp");
     for (const raw of [
       "http://mcp.exemplo.com.br/mcp",
-      "https://a:b@mcp.exemplo.com.br/",
+      "https://a:b@exemplo.com.br/",
       "https://mcp.exemplo.com.br/#x",
       "https://mcp.exemplo.com.br:444/",
       "https://localhost/",
