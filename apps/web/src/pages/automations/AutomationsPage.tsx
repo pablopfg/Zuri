@@ -11,7 +11,7 @@ import {
   type ScheduleType,
   upcomingRuns,
 } from "@zuri/shared";
-import { Bell, AlarmClock, History, ListChecks, Pause, Pencil, Play, Plus, WandSparkles, Trash2 } from "lucide-react";
+import { AlarmClock, Bell, History, ListChecks, Pause, Pencil, Play, Plus, Trash2, WandSparkles, Zap } from "lucide-react";
 import { type FormEvent, type ReactNode, useEffect, useId, useMemo, useState } from "react";
 import { useToast } from "../../components/Toaster.tsx";
 import { Button, Card, cn, Dialog, EmptyState, ErrorNotice, PageHeader, SelectField, Spinner, TextAreaField, TextField } from "../../components/ui.tsx";
@@ -195,29 +195,32 @@ function AutomationRow({ automation, onEdit, onDelete }: { automation: Automatio
       return t(value ? "web.automations.paused" : "web.automations.resumed");
     });
   return (
-    <li id={automationAnchor(automation.id)} aria-labelledby={titleId} className="flex scroll-mt-24 flex-col gap-3 p-4 sm:flex-row sm:items-center">
-      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-accent-soft text-accent-text" aria-hidden>
-        <Icon className="h-5 w-5" />
-      </span>
-      <div className="min-w-0 flex-1 space-y-1">
-        <div className="flex flex-wrap items-center gap-2">
-          <h3 id={titleId} className="min-w-0 truncate font-medium">
-            {automation.name}
-          </h3>
-          <Badge tone={STATUS_TONE[automation.status]}>{t(STATUS_LABEL[automation.status])}</Badge>
-          {automation.kind === "agent_prompt" && automation.sentinel && <Badge>{t("web.automations.quiet")}</Badge>}
+    <li id={automationAnchor(automation.id)} aria-labelledby={titleId} className="flex scroll-mt-24 flex-col gap-2 p-4 sm:flex-row sm:items-center sm:gap-3">
+      {/* On a phone the icon and the text share a line, and the actions take the next one. */}
+      <div className="flex min-w-0 flex-1 items-start gap-3 sm:items-center">
+        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-accent-soft text-accent-text" aria-hidden>
+          <Icon className="h-5 w-5" />
+        </span>
+        <div className="min-w-0 flex-1 space-y-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <h3 id={titleId} className="min-w-0 truncate font-medium">
+              {automation.name}
+            </h3>
+            <Badge tone={STATUS_TONE[automation.status]}>{t(STATUS_LABEL[automation.status])}</Badge>
+            {automation.kind === "agent_prompt" && automation.sentinel && <Badge>{t("web.automations.quiet")}</Badge>}
+          </div>
+          <p className="text-sm text-fg-muted">
+            {t(KIND_LABEL[automation.kind])} · {describeSchedule(automation.schedule, t, timeZone, dateTime)}
+          </p>
+          <p className="flex flex-wrap gap-x-3 text-xs text-fg-muted">
+            {automation.nextRunAt && <span>{t("web.automations.next", { when: dateTime(automation.nextRunAt) })}</span>}
+            {automation.lastRunAt && <span>{t("web.automations.last", { when: dateTime(automation.lastRunAt) })}</span>}
+            {automation.origin === "chat" && <span>{t("web.automations.fromChat")}</span>}
+          </p>
         </div>
-        <p className="text-sm text-fg-muted">
-          {t(KIND_LABEL[automation.kind])} · {describeSchedule(automation.schedule, t, timeZone, dateTime)}
-        </p>
-        <p className="flex flex-wrap gap-x-3 text-xs text-fg-muted">
-          {automation.nextRunAt && <span>{t("web.automations.next", { when: dateTime(automation.nextRunAt) })}</span>}
-          {automation.lastRunAt && <span>{t("web.automations.last", { when: dateTime(automation.lastRunAt) })}</span>}
-          {automation.origin === "chat" && <span>{t("web.automations.fromChat")}</span>}
-        </p>
       </div>
       {/* biome-ignore lint/a11y/useSemanticElements: a row of buttons, not form fields: a fieldset would add a frame and a legend. */}
-      <div role="group" aria-label={t("web.automations.actionsFor", { name: automation.name })} className="-ml-2 flex shrink-0 items-center sm:ml-0">
+      <div role="group" aria-label={t("web.automations.actionsFor", { name: automation.name })} className="flex shrink-0 items-center pl-10 sm:pl-0">
         <IconButton
           label={t("web.automations.runNow")}
           busy={busy === "run"}
@@ -228,11 +231,11 @@ function AutomationRow({ automation, onEdit, onDelete }: { automation: Automatio
             })
           }
         >
-          <Play />
+          <Zap />
         </IconButton>
         {paused ? (
           <IconButton label={t("web.automations.resume")} busy={busy === "pause"} onClick={() => void setPaused(false)}>
-            <AlarmClock />
+            <Play />
           </IconButton>
         ) : (
           <IconButton label={t("web.automations.pause")} busy={busy === "pause"} onClick={() => void setPaused(true)}>

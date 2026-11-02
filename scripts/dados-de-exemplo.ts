@@ -1,5 +1,5 @@
 /**
- * Sample data for screenshots: invented tasks, notes and memories, never the
+ * Sample data for screenshots: invented tasks, notes, memories and automations, never the
  * owner's. Shared by capturas-do-readme.ts and capturas-da-interface.ts.
  */
 import type { Page } from "@playwright/test";
@@ -73,6 +73,23 @@ export async function seed(page: Page, base: string): Promise<{ conversationId: 
     ],
   };
   const conversationId = await chat(`call propose_task_plan ${JSON.stringify(plan)}`);
+  // Automations (step 10): a reminder, the morning digest with one run in the history, a paused
+  // one, and a routine the assistant proposed that waits for approval.
+  const reminder = await post("/api/automations", { name: "Remédio da pressão", kind: "reminder", message: "Tomar o remédio da pressão com água.", schedule: { type: "daily", time: "08:00" } });
+  const digest = await post("/api/automations", { name: "Resumo da manhã", kind: "task_digest", schedule: { type: "weekly", days: [1, 2, 3, 4, 5], time: "07:30" } });
+  await post(`/api/automations/${digest.automation?.id}/run`, {});
+  await post(`/api/automations/${reminder.automation?.id}/run`, {});
+  const rent = await post("/api/automations", { name: "Pagar o aluguel", kind: "reminder", message: "O aluguel vence amanhã.", schedule: { type: "monthly", day: 31, time: "09:00" } });
+  const paused = await page.request.patch(`${base}/api/automations/${rent.automation?.id}`, { headers: CSRF, data: { paused: true } });
+  if (!paused.ok()) throw new Error(`pause: ${paused.status()}`);
+  const routine = {
+    name: "Revisão de sexta",
+    prompt: "Veja minhas tarefas da semana e me diga o que ficou atrasado e o que posso adiar.",
+    schedule: { type: "weekly", days: [5], time: "17:00" },
+    quiet: true,
+  };
+  const proposed = await chat(`call propose_ai_routine ${JSON.stringify(routine)}`);
+  await page.request.delete(`${base}/api/conversations/${proposed}`, { headers: CSRF });
   const renamed = await page.request.patch(`${base}/api/conversations/${conversationId}`, { headers: CSRF, data: { title: "Organizar a mudança" } });
   if (!renamed.ok()) throw new Error(`rename: ${renamed.status()}`);
   return { conversationId };
