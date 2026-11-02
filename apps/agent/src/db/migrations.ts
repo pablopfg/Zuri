@@ -629,6 +629,26 @@ export const MIGRATIONS: readonly Migration[] = [
       `CREATE TRIGGER IF NOT EXISTS zur_counts_alert_deliveries_delete AFTER DELETE ON zur_alert_deliveries BEGIN UPDATE zur_counts SET n = n - 1 WHERE kind = 'alert_deliveries'; END`,
     ],
   },
+  {
+    version: 12,
+    name: "push_devices",
+    statements: [
+      // Devices that receive push notices (step 11b): at most three, dropped after
+      // seven days without opening the app or when the push service says the
+      // subscription is gone. The endpoint and keys never leave the server. Not in
+      // the backup: a restored installation subscribes its devices again.
+      `CREATE TABLE IF NOT EXISTS zur_push_devices (
+        id TEXT PRIMARY KEY,
+        endpoint TEXT NOT NULL UNIQUE,
+        p256dh TEXT NOT NULL,
+        auth TEXT NOT NULL,
+        user_agent TEXT NOT NULL DEFAULT '',
+        created_at TEXT NOT NULL,
+        last_seen_at TEXT NOT NULL,
+        last_sent_at TEXT
+      )`,
+    ],
+  },
 ];
 
 export const LATEST_SCHEMA_VERSION = MIGRATIONS.at(-1)?.version ?? 0;

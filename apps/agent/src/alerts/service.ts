@@ -532,6 +532,8 @@ const SECURITY_TEXT: Record<SecurityAlertEvent, Text> = {
   recovery_code_used: { title: "notice.security.recovery_code_used.title", body: "notice.security.recovery_code_used.body" },
   passkey_added: { title: "notice.security.passkey_added.title", body: "notice.security.passkey_added.body" },
   passkey_removed: { title: "notice.security.passkey_removed.title", body: "notice.security.passkey_removed.body" },
+  push_added: { title: "notice.security.push_added.title", body: "notice.security.push_added.body" },
+  push_removed: { title: "notice.security.push_removed.title", body: "notice.security.push_removed.body" },
   setup_failure: { title: "notice.security.setup_failure.title", body: "notice.security.setup_failure.body" },
   setup_locked: { title: "notice.security.setup_locked.title", body: "notice.security.setup_locked.body" },
   owner_created: { title: "notice.security.owner_created.title", body: "notice.security.owner_created.body" },

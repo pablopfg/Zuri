@@ -441,7 +441,8 @@ describe("the Free plan budget of each route", () => {
     // A run now writes its row (with indexes and the counter) and the automation's bookkeeping; trimming the history reads one counter.
     const ran = await cost("POST", `/automations/${ids[0]}/run`);
     expect(ran.status).toBe(200);
-    expect(ran.read).toBeLessThanOrEqual(18);
+    // The reminder's notice also asks the push channel whether any device is there (one count).
+    expect(ran.read).toBeLessThanOrEqual(20);
     expect(ran.written).toBeLessThanOrEqual(25);
 
     // The alarm: one due automation costs a handful of rows, whatever the size of the history.

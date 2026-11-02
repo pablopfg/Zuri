@@ -381,7 +381,7 @@ export function createApi(deps: ApiDeps) {
   registerChatRoutes(app, deps.chat);
   registerAutomationRoutes(app, deps.automations);
   const notices = deps.notices;
-  if (notices) registerNoticeRoutes(app, () => notices());
+  if (notices) registerNoticeRoutes(app, () => notices(), client);
 
   // Step 8: what the AI used today and the last 7 days. Read only: the limits change through /settings.
   app.get("/usage", () => Response.json(deps.aiUsage()));

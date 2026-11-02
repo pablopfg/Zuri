@@ -92,6 +92,7 @@ describe("the migration list", () => {
       9: "bc70a4e518b48d148475ac3881abb565015f4f21b69c26c36a28054c47429c91",
       10: "e1033d98cc925094806c0b7829568e64c0a3cbdeef9df30fba265f4879b5102d",
       11: "fa7a411f3603944c4ac983fea3d0958275f683c89795325df12f71b77dd49a4d",
+      12: "81d0c751bd27a5c7c109103d785479bfd92cf8edc93b06169890cdd3c85d3999",
     };
     for (const m of MIGRATIONS) {
       const digest = createHash("sha256").update(statementText(m).replace(/\r\n/g, "\n")).digest("hex");
@@ -107,7 +108,7 @@ describe("migrate", () => {
       expect(zurObjects(db)).toEqual([]);
 
       expect(migrate(db)).toBe(LATEST_SCHEMA_VERSION);
-      expect(schemaVersion(db)).toBe(11);
+      expect(schemaVersion(db)).toBe(12);
       // FTS5 keeps shadow tables of its own (zur_notes_fts_data and others): only ours are listed.
       expect(zurObjects(db).filter((name) => !/^table:zur_(notes|memories)_fts_/.test(name))).toEqual([
         "table:zur_activity",
@@ -204,6 +205,7 @@ describe("migrate", () => {
         "index:zur_pending_actions_conversation",
         "index:zur_pending_actions_created",
         "table:zur_projects",
+        "table:zur_push_devices",
         "table:zur_recovery_codes",
         "table:zur_schema_version",
         "table:zur_sessions",
@@ -334,7 +336,7 @@ describe("migrate", () => {
     await withEmptyDatabase("from-10", (db) => {
       expect(migrate(db, MIGRATIONS.slice(0, 10))).toBe(10);
       db.run(`INSERT INTO zur_auth_events (at, last_at, kind, alert_pending) VALUES (1, 1, 'password_changed', 1)`);
-      expect(migrate(db)).toBe(11);
+      expect(migrate(db, MIGRATIONS.slice(0, 11))).toBe(11);
       // The alerts recorded before step 11 wait to be told.
       expect(db.one(`SELECT alert_pending FROM zur_auth_events`)).toEqual({ alert_pending: 1 });
       const count = (kind: string) => db.one<{ n: number }>(`SELECT n FROM zur_counts WHERE kind = ?`, kind)?.n;
@@ -371,6 +373,21 @@ describe("migrate", () => {
       expect(() =>
         db.run(`INSERT INTO zur_diagnostics (id, fingerprint, source, code, error_name, day, window_start, first_at, last_at) VALUES ('d2', 'f', 'api', 'X', 'E', 'd', 'w', 'a', 'b')`),
       ).toThrow();
+    });
+  });
+
+  it("upgrades a database at version 11 to 12: push devices, one row per endpoint, the notices kept", async () => {
+    await withEmptyDatabase("from-11", (db) => {
+      expect(migrate(db, MIGRATIONS.slice(0, 11))).toBe(11);
+      db.run(`INSERT INTO zur_notices (id, kind, category, priority, created_at) VALUES ('n1', 'watch.health', 'system', 'normal', 'x')`);
+      expect(migrate(db)).toBe(12);
+      expect(db.one(`SELECT id FROM zur_notices`)).toEqual({ id: "n1" });
+      const device = (id: string, endpoint: string) =>
+        db.run(`INSERT INTO zur_push_devices (id, endpoint, p256dh, auth, created_at, last_seen_at) VALUES (?, ?, 'k', 'a', 'x', 'x')`, id, endpoint);
+      device("p1", "https://fcm.googleapis.com/fcm/send/a");
+      expect(db.one(`SELECT user_agent, last_sent_at FROM zur_push_devices`)).toEqual({ user_agent: "", last_sent_at: null });
+      // The same browser can't be stored twice.
+      expect(() => device("p2", "https://fcm.googleapis.com/fcm/send/a")).toThrow();
     });
   });
 
