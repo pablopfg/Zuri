@@ -26,7 +26,7 @@ import { AppError } from "../http/errors.ts";
 import { log } from "../log.ts";
 import type { TelegramCallbacks } from "./callbacks.ts";
 import { type BotCommand, TelegramApiError, TelegramClient } from "./client.ts";
-import type { Confirmed, SendCodeOutcome, TelegramConfirmations } from "./confirmations.ts";
+import { type Confirmed, isCodeShaped, type SendCodeOutcome, type TelegramConfirmations } from "./confirmations.ts";
 import { type IncomingAudio, type IncomingTurn, isLargeFileData, type Started, type TelegramConversation } from "./conversation.ts";
 import type { PrivateLink, TelegramLinks } from "./links.ts";
 import { ReadLock } from "./read-lock.ts";
@@ -424,7 +424,7 @@ export class TelegramService {
     }
     if (!locked) {
       this.deps.links.audit("command", "destravar", "already");
-      await this.#say(link.chatId, "telegram.unlock.already", { horas: this.#lock.hours() });
+      await this.#say(link.chatId, "telegram.unlock.already", { hora: this.#hour(this.#lock.openUntil(this.deps.links.private() ?? link)) });
       return;
     }
     const blocked = confirmations.lockedUntil();
@@ -492,7 +492,7 @@ export class TelegramService {
     const confirmations = this.deps.confirmations;
     if (!confirmations || message.forwarded || own === "") return false;
     const check = message.replyToId === undefined ? ({ status: "none" } as const) : await confirmations.checkCode(message.replyToId, own);
-    const looksLikeCode = /^\s*\d{6}\s*$/.test(own);
+    const looksLikeCode = isCodeShaped(own);
     if (check.status === "none" && !(looksLikeCode && confirmations.codesRecently())) return false;
     if (message.message_id !== undefined) {
       await this.client()
@@ -566,8 +566,17 @@ export class TelegramService {
   }
 
   /** "23:40" in the owner's language and time zone. */
+  /** HH:MM in the owner's time zone; with the day too when it isn't today (the lock can be up to 72 h away). */
   #hour(ms: number): string {
-    return new Intl.DateTimeFormat(this.deps.locale(), { hour: "2-digit", minute: "2-digit", timeZone: this.deps.timeZone?.() ?? "UTC" }).format(ms);
+    const timeZone = this.deps.timeZone?.() ?? "UTC";
+    const day = (at: number) => new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" }).format(at);
+    const withDay = day(ms) !== day(Date.now());
+    return new Intl.DateTimeFormat(this.deps.locale(), {
+      ...(withDay ? { day: "2-digit", month: "2-digit" } : {}),
+      hour: "2-digit",
+      minute: "2-digit",
+      timeZone,
+    }).format(ms);
   }
 
   async #answer(callbackId: string | null, key?: MessageKey): Promise<void> {

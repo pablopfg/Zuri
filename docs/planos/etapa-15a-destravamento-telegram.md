@@ -216,6 +216,9 @@ Auditoria: orientação (a completa da área fica na 16).
 - O 60/h conta só mensagens que começam com `/`; toques em botões não contam.
 - Código de 6 dígitos solto (fora do `force_reply`) é apagado e ignorado enquanto houver código mandado na última hora.
 - Coluna a mais `reply_message_id` em `zur_telegram_approvals`, como `display_name` na etapa 12.
+- Cada código por e-mail vale 5 minutos a partir do próprio e-mail e move o fim do pedido para essa hora (um fim só para a página e o código). Com 3 envios por hora, um pedido dura no máximo uns 15 minutos.
+- A espera de 60 s entre e-mails é do bot inteiro, não do pedido: um `/destravar` novo não a zera.
+- O botão no aviso de trava (seção "Trava de leitura do bot" da especificação) fica para a 15b, junto com os comandos.
 
 ## 14. Entrevista com o Pablo
 

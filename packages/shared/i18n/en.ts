@@ -1330,7 +1330,7 @@ export const en: Messages = {
   "telegram.unlock.blockedShort": "Too many wrong tries. Try later.",
   "telegram.unlock.noMethod": "To unlock, add a passkey or set up e-mail in the app.",
   "telegram.unlock.needsAdmin": "To unlock through the bot, your Telegram account id still has to be set in the installation.",
-  "telegram.unlock.already": "Reading is already unlocked. It locks by itself after {horas} h without use.",
+  "telegram.unlock.already": "Reading is already unlocked until {hora}. Using the bot can push the lock back.",
   "telegram.unlock.emailFailed": "I couldn't send the e-mail right now. Try again in a bit or use the passkey.",
   "telegram.unlock.emailLimit": "I've sent too many codes today. Use the passkey or try tomorrow.",
   "telegram.arquivo.grande.pergunta": "This audio is {duracao} and {tamanho}, over my limit of {limite}. Transcribing it should take about {neurons} Neurons, and {restantes} are left today. Do you want me to process it anyway?",

@@ -250,6 +250,8 @@ describe("the webhook's gates", () => {
       await inOwner((agent) => agent.store.telegram.enqueue(update(ownerText, id())));
     }
     botCalls.length = 0;
+    // Those 100 messages used up the hour's 30: a new hour, so the answer shows.
+    await inOwner((agent) => agent.store.db.run(`DELETE FROM zur_settings WHERE key = 'telegram_chat_window'`));
     await deliver(update(ownerText, first));
     expect(sent()).toHaveLength(1);
     const stored = await inOwner((agent) => agent.store.db.one<{ value: string }>(`SELECT value FROM zur_settings WHERE key = 'telegram_seen_update_ids'`));

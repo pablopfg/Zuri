@@ -203,8 +203,8 @@ Cada destravamento aparece em Acessos e gera um aviso de segurança, uma vez.
 
 | Regra | Valor |
 | --- | --- |
-| Validade do link e do código | 5 minutos, uso único |
-| Reenvio do código | depois de 1 minuto, até 3 por hora |
+| Validade do link e do código | 5 minutos, uso único; cada código novo vale 5 minutos a partir do e-mail e encerra o pedido junto |
+| Reenvio do código | depois de 1 minuto (mesmo com um `/destravar` novo), até 3 por hora |
 | E-mails de confirmação | 10 por dia, numa cota separada da dos avisos |
 | Confirmações erradas | 5 em 15 minutos travam as confirmações pelo bot por 1 hora, com alerta de segurança (1 por dia) |
 | Comandos | 60 por hora |

@@ -200,21 +200,25 @@ export class TelegramConfirmations {
     const row = this.deps.db.one<ConfirmationRow>(`SELECT * FROM zur_telegram_approvals WHERE id = ?`, id);
     if (row?.status !== "open" || this.#codeDeadline(row) <= at) return "expired";
     if (!this.deps.email.configured()) return "not_configured";
-    if (row.last_email_at !== null && at - Date.parse(row.last_email_at) < TELEGRAM_LIMITS.emailResendMs) return "wait";
+    // The wait is the bot's, not the row's: a new /destravar doesn't start it over.
     const sends = this.#emailSends(at);
+    const last = sends.at(-1);
+    if (last !== undefined && at - last < TELEGRAM_LIMITS.emailResendMs) return "wait";
     if (sends.length >= TELEGRAM_LIMITS.emailSendsPerHour) return "hourly";
     const code = randomCode();
     const written = this.deps.db.run(
-      `UPDATE zur_telegram_approvals SET email_code_hash = ?, email_sends = email_sends + 1, last_email_at = ? WHERE id = ? AND status = 'open'`,
+      // Each code is good for 5 minutes, and the confirmation ends with it: one end for the page and the code.
+      `UPDATE zur_telegram_approvals SET email_code_hash = ?, email_sends = email_sends + 1, last_email_at = ?, expires_at = ? WHERE id = ? AND status = 'open'`,
       await this.#codeHash(row.id, code),
       this.#iso(at),
+      this.#iso(at + TELEGRAM_LIMITS.confirmTtlMs),
       row.id,
     );
     if (written.rowsWritten === 0) return "expired";
     const outcome = await this.deps.email.send(code, TELEGRAM_LIMITS.confirmTtlMs / 60_000);
     if (outcome !== "sent") {
       // Not sent: no code is good, and the wait doesn't apply.
-      this.deps.db.run(`UPDATE zur_telegram_approvals SET email_code_hash = NULL, last_email_at = ? WHERE id = ?`, row.last_email_at, row.id);
+      this.deps.db.run(`UPDATE zur_telegram_approvals SET email_code_hash = NULL, last_email_at = ?, expires_at = ? WHERE id = ?`, row.last_email_at, row.expires_at, row.id);
       return outcome;
     }
     this.deps.state.set("telegram_confirm_email_sends", [...sends, at].join(","));
@@ -234,10 +238,11 @@ export class TelegramConfirmations {
   async checkCode(replyTo: number, text: string): Promise<CodeCheck> {
     const row = this.deps.db.one<ConfirmationRow>(`SELECT * FROM zur_telegram_approvals WHERE reply_message_id = ? ORDER BY created_at DESC LIMIT 1`, replyTo);
     if (!row) return { status: "none" };
+    const code = text.replace(/\s+/g, "");
+    // Only something shaped like a code is one: any other answer to that message is an ordinary message.
+    if (!isCodeShaped(code)) return { status: row.status === "open" ? "not_a_code" : "none" };
     if (this.lockedUntil() !== null) return { status: "locked" };
     if (row.status !== "open" || row.email_code_hash === null || this.#codeDeadline(row) <= this.#now()) return { status: "expired" };
-    const code = text.replace(/\s+/g, "");
-    if (!new RegExp(`^\\d{${TELEGRAM_LIMITS.emailCodeDigits}}$`).test(code)) return { status: "not_a_code" };
     this.deps.db.run(`UPDATE zur_telegram_approvals SET attempts = attempts + 1 WHERE id = ?`, row.id);
     if (!timingSafeEqualText(await this.#codeHash(row.id, code), row.email_code_hash)) {
       return { status: this.#failure() ? "locked" : "wrong" };
@@ -264,9 +269,9 @@ export class TelegramConfirmations {
     return { id: row.id, purpose: row.purpose, messageId: row.message_id };
   }
 
-  /** The e-mailed code's end: 5 minutes from its e-mail (before any e-mail, the row's own end). */
+  /** The e-mailed code's end: the row's own, which each e-mail sets 5 minutes ahead. */
   #codeDeadline(row: ConfirmationRow): number {
-    return row.last_email_at === null ? Date.parse(row.expires_at) : Date.parse(row.last_email_at) + TELEGRAM_LIMITS.confirmTtlMs;
+    return Date.parse(row.expires_at);
   }
 
   #emailSends(at: number): number[] {
@@ -342,4 +347,9 @@ function randomCode(): string {
     const value = crypto.getRandomValues(new Uint32Array(1))[0] ?? limit;
     if (value < limit) return String(value % range).padStart(TELEGRAM_LIMITS.emailCodeDigits, "0");
   }
+}
+
+/** 6 digits once the spaces are out ("123 456" too): how the bot tells a code from a message. */
+export function isCodeShaped(text: string): boolean {
+  return new RegExp(`^\\d{${TELEGRAM_LIMITS.emailCodeDigits}}$`).test(text.replace(/\s+/g, ""));
 }

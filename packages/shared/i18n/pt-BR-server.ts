@@ -234,7 +234,7 @@ export const ptBRServer = {
   "telegram.unlock.blockedShort": "Muitas tentativas erradas. Tente mais tarde.",
   "telegram.unlock.noMethod": "Para destravar, cadastre uma passkey ou configure o e-mail no app.",
   "telegram.unlock.needsAdmin": "Para destravar pelo bot, falta informar o id da sua conta do Telegram na instalação.",
-  "telegram.unlock.already": "A leitura já está liberada. Ela trava sozinha depois de {horas} h sem uso.",
+  "telegram.unlock.already": "A leitura já está liberada até {hora}. Usar o bot pode adiar a trava.",
   "telegram.unlock.emailFailed": "Não consegui mandar o e-mail agora. Tente de novo daqui a pouco ou use a passkey.",
   "telegram.unlock.emailLimit": "Já mandei códigos demais hoje. Use a passkey ou tente amanhã.",
   "telegram.arquivo.grande.pergunta": "Esse áudio tem {duracao} e {tamanho}, acima do meu limite de {limite}. Transcrever deve gastar uns {neurons} Neurons, e hoje ainda sobram {restantes}. Quer que eu processe mesmo assim?",

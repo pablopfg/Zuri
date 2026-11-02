@@ -49,6 +49,13 @@ export class ReadLock {
     return this.clock() - since > this.hours() * HOUR_MS;
   }
 
+  /** Until when reading stays open with no more use (ms): the later of the unlock's end and the last use plus the hours. */
+  openUntil(link: PrivateLink): number {
+    const since = Date.parse(link.lastUsedAt ?? link.confirmedAt ?? link.linkedAt);
+    const byUse = Number.isFinite(since) ? since + this.hours() * HOUR_MS : this.clock();
+    return Math.max(byUse, this.unlockedUntil() ?? 0);
+  }
+
   /** The owner confirmed: reading opens for 12 hours from now, and this counts as use. Returns until when (ISO). */
   unlock(): string {
     const until = new Date(this.clock() + TELEGRAM_LIMITS.unlockMs).toISOString();

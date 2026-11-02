@@ -163,3 +163,16 @@ test("a failure that may pass offers to try again", async ({ page }) => {
   await page.getByRole("button", { name: "Tentar de novo" }).click();
   await expect(page.getByRole("button", { name: "Confirmar com passkey" })).toBeVisible();
 });
+
+test.describe("in English", () => {
+  test.use({ locale: "en-US" });
+
+  test("follows the browser's language before any sign-in", async ({ page }) => {
+    await passkeyPrompt(page);
+    await page.route("**/api/approvals/telegram/options", (route) => route.fulfill({ json: OPTIONS }));
+    await page.goto(`/aprovar#${TOKEN}`);
+    await expect(page.getByRole("heading", { level: 1, name: "Unlock the Telegram bot" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Confirm with a passkey" })).toBeFocused();
+    await expectAccessible(page, "aprovar em inglês");
+  });
+});

@@ -291,7 +291,8 @@ describe("/destravar", () => {
   it("says reading is open when it isn't locked, and asks nothing", async () => {
     await linkOwner();
     await deliver(text("/destravar"));
-    expect(texts()).toEqual(["A leitura já está liberada. Ela trava sozinha depois de 12 h sem uso."]);
+    expect(texts()).toHaveLength(1);
+    expect(texts()[0]).toMatch(/^A leitura já está liberada até (\d{2}\/\d{2}, )?\d{2}:\d{2}\. Usar o bot pode adiar a trava\.$/);
     expect(await inOwner((agent) => agent.store.db.all(`SELECT id FROM zur_telegram_approvals`))).toEqual([]);
   });
 
@@ -350,7 +351,8 @@ describe("the e-mailed code", () => {
     expect(sent("deleteMessage").map((c) => c.body.message_id)).toEqual([(answer.message as { message_id: number }).message_id]);
     const edited = sent("editMessageText")[0];
     expect(edited?.body.message_id).toBe(3000 + 1);
-    expect(String(edited?.body.text)).toMatch(/^Leitura liberada até \d{2}:\d{2}\.$/);
+    // 12 h ahead: the day comes too when it isn't today.
+    expect(String(edited?.body.text)).toMatch(/^Leitura liberada até (\d{2}\/\d{2}, )?\d{2}:\d{2}\.$/);
     expect(question).toBeDefined();
     expect(prompts).toHaveLength(0);
     await deliver(text("Oi"));
@@ -395,6 +397,21 @@ describe("the e-mailed code", () => {
     expect((await audit()).at(-1)).toMatchObject({ kind: "unlock", name: "code", result: "loose" });
   });
 
+  it("with reading open, a loose code with a space is still deleted, and other answers to the question are ordinary messages", async () => {
+    await linkOwner();
+    await idle(13 * HOUR);
+    const { emailData } = await askUnlock();
+    const { code, replyTo } = await askCode(emailData);
+    await deliver(reply(code, replyTo));
+    botCalls.length = 0;
+    await deliver(text(`${code.slice(0, 3)} ${code.slice(3)}`));
+    expect(sent("deleteMessage")).toHaveLength(1);
+    expect(prompts).toHaveLength(0);
+    await deliver(reply("valeu! e a minha agenda de hoje?", replyTo));
+    expect(sent("deleteMessage")).toHaveLength(1);
+    expect(prompts).toHaveLength(1);
+  });
+
   it("is sent again only after 60 s and 3 times an hour", async () => {
     await linkOwner();
     await idle(13 * HOUR);
@@ -404,7 +421,13 @@ describe("the e-mailed code", () => {
     await tap(emailData);
     expect(answers()).toEqual(["Espere um minuto para pedir outro código."]);
     expect(mails).toHaveLength(1);
-    const rewind = () => inOwner((agent) => agent.store.db.run(`UPDATE zur_telegram_approvals SET last_email_at = ?`, new Date(Date.now() - 61_000).toISOString()));
+    // The wait follows the bot's own list of sends: move them all 61 s back.
+    const rewind = () =>
+      inOwner((agent) => {
+        const state = new InternalState(agent.store.db);
+        const sends = String(state.get<string>("telegram_confirm_email_sends") ?? "").split(",").filter(Boolean);
+        state.set("telegram_confirm_email_sends", sends.map((at) => Number(at) - 61_000).join(","));
+      });
     await rewind();
     await askCode(emailData);
     await rewind();
@@ -415,6 +438,18 @@ describe("the e-mailed code", () => {
     await tap(emailData);
     expect(answers()).toEqual(["Já mandei 3 códigos nesta hora. Use a passkey ou tente mais tarde."]);
     expect(mails).toHaveLength(3);
+  });
+
+  it("a new /destravar doesn't start the 60 s over", async () => {
+    await linkOwner();
+    await idle(13 * HOUR);
+    const first = await askUnlock();
+    await askCode(first.emailData);
+    const second = await askUnlock();
+    botCalls.length = 0;
+    await tap(second.emailData);
+    expect(answers()).toEqual(["Espere um minuto para pedir outro código."]);
+    expect(mails).toHaveLength(1);
   });
 
   it("keeps to its own 10 a day, apart from the notices' e-mails", async () => {
@@ -449,12 +484,15 @@ describe("the e-mailed code", () => {
     expect(mails).toHaveLength(1);
   });
 
-  it("expires 5 minutes after its e-mail", async () => {
+  it("expires 5 minutes after its e-mail, and the whole request with it", async () => {
     await linkOwner();
     await idle(13 * HOUR);
     const { emailData } = await askUnlock();
     const { code, replyTo } = await askCode(emailData);
-    await inOwner((agent) => agent.store.db.run(`UPDATE zur_telegram_approvals SET last_email_at = ?`, new Date(Date.now() - TELEGRAM_LIMITS.confirmTtlMs).toISOString()));
+    // Each code sets the request's one end: 5 minutes from its e-mail.
+    const row = await inOwner((agent) => agent.store.db.one<{ expires_at: string; last_email_at: string }>(`SELECT expires_at, last_email_at FROM zur_telegram_approvals`));
+    expect(Date.parse(row?.expires_at ?? "") - Date.parse(row?.last_email_at ?? "")).toBe(TELEGRAM_LIMITS.confirmTtlMs);
+    await inOwner((agent) => agent.store.db.run(`UPDATE zur_telegram_approvals SET expires_at = ?`, new Date(Date.now() - 1).toISOString()));
     botCalls.length = 0;
     await deliver(reply(code, replyTo));
     expect(texts()).toEqual(["Esse pedido venceu. Toque em /destravar de novo."]);
@@ -472,10 +510,11 @@ describe("five wrong confirmations", () => {
     const wrong = code === "000000" ? "111111" : "000000";
     botCalls.length = 0;
     for (let i = 0; i < TELEGRAM_LIMITS.confirmFailuresMax - 1; i++) await deliver(reply(wrong, replyTo));
+    expect(texts()).toHaveLength(TELEGRAM_LIMITS.confirmFailuresMax - 1);
     expect(texts().every((t) => t.startsWith("Esse não é o código certo"))).toBe(true);
     expect(await events("telegram_confirm_locked")).toBe(0);
     await deliver(reply(wrong, replyTo));
-    expect(texts()).toContainEqual(expect.stringMatching(/^Muitas tentativas erradas\. Por segurança, só dá para confirmar pelo bot de novo às \d{2}:\d{2}\.$/));
+    expect(texts()).toContainEqual(expect.stringMatching(/^Muitas tentativas erradas\. Por segurança, só dá para confirmar pelo bot de novo às (\d{2}\/\d{2}, )?\d{2}:\d{2}\.$/));
     // The alert reached the private chat too, without buttons (it is answered only in the app).
     expect(texts()).toContainEqual(expect.stringContaining("Tentativas erradas no bot do Telegram"));
     expect(await events("telegram_confirm_locked")).toBe(1);
@@ -493,6 +532,8 @@ describe("five wrong confirmations", () => {
       const state = new InternalState(agent.store.db);
       state.set("telegram_confirm_locked_until", new Date(Date.now() - 1).toISOString());
     });
+    // A minute later, so the next code can go out.
+    await inOwner((agent) => new InternalState(agent.store.db).set("telegram_confirm_email_sends", String(Date.now() - 61_000)));
     const again = await askUnlock();
     const second = await askCode(again.emailData);
     for (let i = 0; i < TELEGRAM_LIMITS.confirmFailuresMax; i++) await deliver(reply(second.code === "000000" ? "111111" : "000000", second.replyTo));
@@ -621,6 +662,14 @@ describe("the /aprovar page", () => {
     await linkOwner();
     expect((await page("options", { token: "curto" })).status).toBe(400);
     expect((await page("options", { token: "A".repeat(43), extra: 1 })).status).toBe(400);
+    // Over each route's ceiling (1 KB and 32 KB), refused before anything is read further.
+    for (const res of [
+      await page("options", { token: "A".repeat(43), pad: "x".repeat(1024) }),
+      await page("verify", { token: "A".repeat(43), credential: { pad: "x".repeat(32 * 1024) } }),
+    ]) {
+      expect(res.status).toBe(400);
+      expect(apiErrorSchema.parse(await res.json()).message).toBe("O pedido é grande demais.");
+    }
     const noCsrf = await call(`${ORIGIN}/api/approvals/telegram/options`, { method: "POST", headers: { "content-type": "application/json", "cf-connecting-ip": IP }, body: JSON.stringify({ token: "A".repeat(43) }) });
     expect(noCsrf.status).toBe(403);
   });
