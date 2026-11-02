@@ -312,15 +312,68 @@ export function renderVersionFile(version: string): string {
 
 /** Text posted on GitHub with "@name" outside code turned inert, so a release or its pull request never notifies anyone. */
 export function noMentions(text: string): string {
+  // Only a closed span on one line is code: a lone backtick (in a title, say) must not leave the rest of the text live.
   return text
-    .split("`")
+    .split(/(`[^`\n]+`)/)
     .map((part, i) => (i % 2 === 0 ? part.replace(/@(?=[A-Za-z0-9])/g, "@\u200b") : part))
-    .join("`");
+    .join("");
 }
 
-/** Notes of a GitHub release: the section of the version, with the merge line. */
-export function releaseNotes(v: Version): string {
-  return noMentions(`${renderMeta(v)}\n\n${v.body.trim()}\n\nHistórico completo: [CHANGELOG.md](${REPO_URL}/blob/${BASE_BRANCH}/CHANGELOG.md)\n`);
+/**
+ * The oldest version with a tag and a pre-release. GitHub refuses GITHUB_TOKEN a
+ * tag on a commit whose workflow files differ from develop's ("refusing to allow
+ * a GitHub App to create or update workflow ... without workflows permission"),
+ * and that is every merge before #68 (0.15.5). Those versions live only in
+ * CHANGELOG.md, with their commit and pull request (docs/agente/versionamento.md).
+ */
+export const FIRST_TAGGED_VERSION = "0.15.5";
+
+/** Icons of the changelog groups in the release notes; CHANGELOG.md keeps the plain headings. */
+const GROUP_ICONS: Record<string, string> = { Adicionado: "✨", Alterado: "🔄", Corrigido: "🐛", Segurança: "🔒", Atualização: "⬆️" };
+
+/** What a compare link starts from: the tag of the previous version, or its commit when that version has no tag. */
+export function compareBase(previous: Pick<Version, "version" | "commit">): string {
+  return compareVersions(previous.version, FIRST_TAGGED_VERSION) >= 0 ? `v${previous.version}` : previous.commit;
+}
+
+/** Link to the changes between the previous version and this one (all commits up to it for the first version). */
+export function compareLink(v: Pick<Version, "version">, previous: Pick<Version, "version" | "commit"> | null): string {
+  if (!previous) return `[Todos os commits até a v${v.version}](${REPO_URL}/commits/v${v.version})`;
+  const base = compareBase(previous);
+  const label = base.startsWith("v") ? base : base.slice(0, 7);
+  return `[\`${label}...v${v.version}\`](${REPO_URL}/compare/${base}...v${v.version})`;
+}
+
+/**
+ * Notes of a GitHub release, in one layout for every version: the title of the
+ * merge, a table with when it was merged, the pull request and the commit, the
+ * groups of the section and, at the end, the comparison with the previous
+ * version. The workflow rewrites the notes of a release that differ from this.
+ */
+export function releaseNotes(v: Version, previous: Pick<Version, "version" | "commit"> | null): string {
+  const [year, month, day] = v.date.split("-");
+  const pr = v.pr === null ? "sem PR" : `[#${v.pr}](${REPO_URL}/pull/${v.pr})`;
+  const body = v.body
+    .trim()
+    .replace(/^### (.+)$/gm, (line, group: string) => (GROUP_ICONS[group] ? `### ${GROUP_ICONS[group]} ${group}` : line));
+  return noMentions(
+    [
+      `## ${v.title}`,
+      "",
+      "| Mesclada em | Pull request | Commit |",
+      "| :-- | :-- | :-- |",
+      `| ${day}/${month}/${year} às ${v.time} (${v.offset}) | ${pr} | [\`${v.commit.slice(0, 7)}\`](${REPO_URL}/commit/${v.commit}) |`,
+      "",
+      body,
+      "",
+      "---",
+      "",
+      `**Histórico completo:** ${compareLink(v, previous)}`,
+      "",
+      `Pré-release de desenvolvimento da \`${BASE_BRANCH}\`, não é deploy. Todas as versões estão no [CHANGELOG.md](${REPO_URL}/blob/${BASE_BRANCH}/CHANGELOG.md).`,
+      "",
+    ].join("\n"),
+  );
 }
 
 /** The release title is the tag alone; what the merge did is in the notes (Pablo, 02/11/2026). */
@@ -425,12 +478,13 @@ if (import.meta.main) {
     console.log(`versao: wrote ${current} into ${versionFiles(root).join(", ")}`);
   } else if (notes >= 0) {
     const wanted = (process.argv[notes + 1] ?? "").replace(/^v/, "");
-    const found = parseChangelog(readFileSync(join(root, "CHANGELOG.md"), "utf8")).versions.find((v) => v.version === wanted);
+    const versions = parseChangelog(readFileSync(join(root, "CHANGELOG.md"), "utf8")).versions;
+    const found = versions.find((v) => v.version === wanted);
     if (!found) {
       console.error(`version ${wanted} is not in CHANGELOG.md`);
       process.exit(1);
     }
-    process.stdout.write(releaseNotes(found));
+    process.stdout.write(releaseNotes(found, versions[versions.indexOf(found) + 1] ?? null));
   } else {
     const plan = computePlan(root);
     for (const v of plan.pending) console.log(`${v.version}  ${v.commit.slice(0, 7)}  ${v.date} ${v.time} (${v.offset})  ${v.title}`);
