@@ -252,8 +252,9 @@ zur_telegram_links(id TEXT PRIMARY KEY, kind TEXT CHECK(kind IN ('private','grou
 zur_telegram_link_codes(code_hash TEXT PRIMARY KEY, expires_at TEXT NOT NULL, failed_attempts INTEGER NOT NULL DEFAULT 0)
 zur_telegram_callbacks(id TEXT PRIMARY KEY /* 12 bytes base64url */, action TEXT NOT NULL, target_type TEXT, target_id TEXT, message_id INTEGER, expires_at TEXT NOT NULL, used_at TEXT)
 zur_telegram_approvals(id TEXT PRIMARY KEY, purpose TEXT CHECK(purpose IN ('approval','unlock')), pending_action_id TEXT, target_hash TEXT, message_id INTEGER, method TEXT CHECK(method IN ('passkey','email')), page_token_hmac TEXT, webauthn_challenge BLOB, email_code_hash TEXT, email_sends INTEGER NOT NULL DEFAULT 0, last_email_at TEXT, attempts INTEGER NOT NULL DEFAULT 0, status TEXT CHECK(status IN ('open','confirmed','failed','expired')), created_at TEXT NOT NULL, expires_at TEXT NOT NULL)
+zur_telegram_pending_files(id TEXT PRIMARY KEY /* 12 bytes base64url, o mesmo do callback */, chat_id INTEGER NOT NULL, file_id TEXT NOT NULL, kind TEXT CHECK(kind IN ('voice','audio')), size_bytes INTEGER, duration_s INTEGER, neurons_estimate REAL, message_id INTEGER, created_at TEXT NOT NULL, expires_at TEXT NOT NULL, used_at TEXT)
 zur_telegram_task_lists(chat_id INTEGER PRIMARY KEY, items TEXT /* JSON nº -> task_id */, expires_at TEXT NOT NULL)
-zur_telegram_audit(id INTEGER PRIMARY KEY, at TEXT NOT NULL, kind TEXT /* command|callback|approval|unlock|lockdown */, name TEXT, result TEXT)
+zur_telegram_audit(id INTEGER PRIMARY KEY, at TEXT NOT NULL, kind TEXT /* command|callback|approval|unlock|lockdown|large_file */, name TEXT, result TEXT)
 ```
 
 Em `settings`: `telegram_seen_update_ids` (JSON, 100), `bot_unlocked_until`, `bot_read_lock_hours`, `lockdown_until`, `lockdown_source`, `lockdown_exited_at`, `telegram_menu_version`. A coluna `origin` (`app`, `telegram`, `import`) entra em `zur_memories`.
@@ -273,7 +274,8 @@ Valores conferidos em `packages/shared/src/constants.ts` e `storage.ts` do Talor
 | Tokens de saída | 1.024 | até 4.096 |
 | IA paga por dia (US$) | 2 | até 50 |
 | Voz no app | 60 s e 2 MB por clipe | — |
-| Voz no bot | 5 min e 5 MB por mensagem | — |
+| Voz no bot | 5 min e 5 MB por mensagem; acima disso a Zuri pergunta antes de processar | — |
+| Arquivo acima do limite no bot | Pergunta com validade de 10 min; teto rígido de 20 MB (download da Bot API), do áudio que sobra no dia e dos Neurons que sobram no dia | — |
 | Áudio por dia (app + bot) | 3.600 s | — |
 | Sessão: inatividade / sem aba / máximo | 30 min / 5 min / 6 h | 5–60 min / 3–15 min / 1–24 h |
 | Memórias / tarefas / notas / projetos | 10.000 / 20.000 / 5.000 / 1.000 | — |
@@ -485,8 +487,8 @@ O comportamento completo está na seção "Bot do Telegram do administrador"; aq
 **Etapa 14 · Conversa e voz** (`feat(telegram): conversa com o agente por texto e voz`)
 
 - Chat privado vira conversa do app (`source: telegram`), um turno por vez, 3 min de limite, "digitando…", formatação em HTML do Telegram com escape, divisão em blocos de 4.096 caracteres.
-- Voz e arquivos de áudio até 5 min e 5 MB, mesmo teto diário do app, áudio nunca guardado.
-- Aceite: conversa aparece na lista do app; desligar a conversa faz o bot nem baixar o áudio.
+- Voz e arquivos de áudio até 5 min e 5 MB, mesmo teto diário do app, áudio nunca guardado. Acima disso, a Zuri avisa e pergunta se processa mesmo assim (seção "Arquivo acima do limite" do bot); acima do teto rígido, explica o motivo e não pergunta.
+- Aceite: conversa aparece na lista do app; desligar a conversa faz o bot nem baixar o áudio; arquivo acima do limite só é baixado depois do toque do dono em **Processar mesmo assim**, dentro da validade.
 
 **Etapa 15 · Comandos administrativos** (`feat(telegram): adiciona comandos de consulta e ação rápida`)
 
@@ -596,7 +598,36 @@ Listar sessões e tokens não pede confirmação forte (só a trava de leitura).
 - **Subrequisições.** O plano Free permite 50 subrequisições externas por invocação. Cada turno conta as suas e para com aviso antes de 45. O "digitando…" (`sendChatAction`) é reenviado a cada 5 s no primeiro minuto, no máximo 12 vezes por turno.
 - Um turno por vez; 3 min de limite; resposta em HTML do Telegram com escape de `<`, `>` e `&`, links desarmados, divisão em 4.096 caracteres sem quebrar tags.
 - **Conteúdo de terceiros.** Mensagens encaminhadas (`forward_origin`), citações (`quote`, `external_reply`), respostas a mensagens de outra pessoa, nomes de arquivo e legendas de mensagens encaminhadas entram no prompt como `<data source="telegram_forward">`, nunca como instrução, e nunca executam comandos.
-- Voz e arquivo de áudio: até 5 min e 5 MB, recusa antes do download quando a duração informada passa, corte no meio do download aos 5 MB, transcrição pelo mesmo serviço do app, eco "🎙️ \<texto>" antes da resposta.
+- Voz e arquivo de áudio: até 5 min e 5 MB processa direto. Acima disso, nada é baixado antes da confirmação do dono (veja "Arquivo acima do limite"). O download confere o tamanho de novo e corta no meio se passar do que foi informado ou do teto rígido. Transcrição pelo mesmo serviço do app, eco "🎙️ \<texto>" antes da resposta.
+
+### Arquivo acima do limite
+
+Decisão do Pablo (02/11/2026): arquivo que passa do limite não é recusado de vez. A Zuri avisa quanto passou e pergunta se processa mesmo assim, porque às vezes o arquivo precisa ser processado. Vale para voz e áudio (etapa 14) e para qualquer processamento futuro do conteúdo de fotos e documentos (leitura por visão, N5, ou leitura de documento), que segue a mesma regra quando for aprovado.
+
+**Limite padrão e teto rígido.** O limite padrão (5 min e 5 MB para áudio) é o que roda sem perguntar. O teto rígido é o que não dá para processar no plano gratuito, nem com confirmação. Ele é o menor destes valores:
+
+- 20 MB: o maior arquivo que a Bot API deixa um bot baixar por `getFile` (confirmar em core.telegram.org/bots/api antes da etapa 14);
+- o áudio que ainda sobra no dia (3.600 s por dia, app + bot);
+- os Neurons que ainda sobram no teto de 9.000 do dia, pela estimativa de `audioNeurons(duração)`;
+- o que o Whisper do Workers AI aceita numa chamada e o que cabe na memória (128 MB) e no limite de 3 min do turno. A etapa 14 confere esses números na documentação e mede no teste; se o Whisper aceitar menos que 20 MB por chamada, a etapa divide o áudio em partes ou baixa o teto, e registra a escolha no PR.
+
+**Fluxo.**
+
+1. Chega um áudio acima do limite padrão. O bot lê `file_size` e `duration` da atualização, sem baixar nada, e estima os Neurons.
+2. Abaixo do teto rígido: grava `zur_telegram_pending_files` e um callback `v1:large_file:<id opaco>` (o `file_id` nunca vai no botão) e responde com a pergunta e dois botões, **Processar mesmo assim** e **Deixar pra lá**. A pergunta diz o tamanho, a duração, o limite, o custo estimado em Neurons e quanto sobra no dia.
+3. Acima do teto rígido: não pergunta. Explica qual teto passou e o que fazer (dividir o arquivo, esperar o teto do dia zerar, mandar pelo app quando couber).
+4. Toque em **Processar mesmo assim**, do dono, dentro de 10 min e uma vez só: o servidor confere de novo a cota do dia (reserva no `UsageMeter` antes de baixar) e só então baixa, transcreve e responde como um áudio comum. Se a cota acabou no meio tempo, explica em vez de processar.
+5. **Deixar pra lá**, validade vencida ou segundo toque: nada é baixado. Vencido responde "Esse pedido expirou. Se ainda quiser, envie o arquivo de novo."; segundo toque responde "Esse arquivo já foi tratado.".
+
+**Regras.** Só existe um pedido aberto por chat: um arquivo novo acima do limite substitui o anterior. A pergunta segue todas as travas do bot (conta do vínculo, chat privado, trava de leitura, conversa ligada); com a conversa desligada, o bot não pergunta nem baixa. A confirmação é um toque simples, sem passkey ou e-mail, porque só gasta cota do próprio dono e não muda dado. Cada pergunta, confirmação, recusa e expiração vai para `zur_telegram_audit` com `kind = large_file`, sem `file_id` nem nome de arquivo. O nome do arquivo, quando aparece na pergunta, é texto de terceiro: sai escapado e nunca entra no prompt como instrução.
+
+**Textos (catálogo de i18n, pt-BR).**
+
+- `telegram.arquivo.grande.pergunta`: "Esse áudio tem {duracao} e {tamanho}, acima do meu limite de {limite}. Transcrever deve gastar uns {neurons} Neurons, e hoje ainda sobram {restantes}. Quer que eu processe mesmo assim?"
+- `telegram.arquivo.grande.processar`: "Processar mesmo assim" · `telegram.arquivo.grande.cancelar`: "Deixar pra lá" · `telegram.arquivo.grande.cancelado`: "Tudo bem, deixei esse arquivo de lado."
+- `telegram.arquivo.teto.telegram`: "Esse arquivo tem {tamanho}, e o Telegram só me deixa baixar até 20 MB. Se der, divida em partes menores e me envie de novo."
+- `telegram.arquivo.teto.cota`: "Esse áudio precisa de mais do que sobrou da minha cota de hoje ({restantes}). A cota zera às {hora}; depois disso, é só me enviar de novo."
+- `telegram.arquivo.expirou` e `telegram.arquivo.ja_tratado`: os textos do passo 5.
 - **Foto ou documento.** Com legenda: a legenda vira uma nota com a linha "Anexo recebido pelo Telegram: \<tipo>, \<tamanho> (não guardado)"; para conversar sobre ela, o dono envia texto em seguida. Sem legenda: o bot responde "Envie uma legenda para eu guardar como nota". A imagem só é lida por um modelo de visão se o Pablo aprovar (N5) e só é guardada com R2 aprovado (N4).
 - Quando o agente propõe algo que pede aprovação, o bot mostra a prévia montada pelo servidor e o botão **Aprovar**.
 
@@ -686,7 +717,7 @@ Um Mini App do Telegram pode abrir telas da interface (Tarefas e Notas) dentro d
 
 Nenhum teste chama a Cloudflare, o Telegram ou provedores de IA de verdade. Um *smoke test* com conta real só roda por `workflow_dispatch` manual, atrás de um ambiente protegido.
 
-**Fixtures obrigatórias do Telegram** (JSON gravados em `apps/agent/test/fixtures/telegram/`): texto do dono; comando com `@bot`; `/start` com código certo e errado; conta estranha; grupo estranho; `callback_query` do dono e de outro membro do grupo; voz com `duration` 301; documento de 6 MB; foto com e sem legenda; mensagem encaminhada; `edited_message`; `my_chat_member` (bot adicionado e removido). O cliente falso da Bot API simula `ok:false` 429 com `retry_after`, 400 "message is not modified" e 403 "bot was blocked by the user".
+**Fixtures obrigatórias do Telegram** (JSON gravados em `apps/agent/test/fixtures/telegram/`): texto do dono; comando com `@bot`; `/start` com código certo e errado; conta estranha; grupo estranho; `callback_query` do dono e de outro membro do grupo; voz com `duration` 301 (pergunta, confirma, cancela, vence, segundo toque, toque de outro membro do grupo); áudio de 21 MB (teto rígido, sem pergunta); documento de 6 MB; foto com e sem legenda; mensagem encaminhada; `edited_message`; `my_chat_member` (bot adicionado e removido). O cliente falso da Bot API simula `ok:false` 429 com `retry_after`, 400 "message is not modified" e 403 "bot was blocked by the user".
 
 ### CI/CD
 
