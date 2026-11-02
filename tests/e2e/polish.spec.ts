@@ -1,3 +1,4 @@
+import type { Response } from "@playwright/test";
 import { expect, test } from "./fixtures.ts";
 import { openSettingsSection, PASSWORD, signIn } from "./ui-helpers.ts";
 
@@ -51,14 +52,21 @@ test("the password can be revealed before typing it", async ({ page }) => {
 });
 
 test("the home page's first bundle carries no settings code", async ({ page }) => {
-  const scripts: string[] = [];
-  page.on("response", async (response) => {
-    if (response.url().endsWith(".js")) scripts.push(await response.text());
-  });
+  // Issue #71: a read still running when the test ended failed with "response.text: Test
+  // ended". Each body is read as it comes, the listener stops once the page is idle (a
+  // script that comes later, a lazy route's prefetch, would start a read nobody waits for),
+  // and the test waits for every read it started.
+  const reads: Promise<string>[] = [];
+  const onResponse = (response: Response) => {
+    if (response.url().endsWith(".js")) reads.push(response.text());
+  };
+  page.on("response", onResponse);
   await page.goto("/");
   await signIn(page);
   await expect(page).toHaveTitle("Início · Zuri");
   await page.waitForLoadState("networkidle");
+  page.off("response", onResponse);
+  const scripts = await Promise.all(reads);
   expect(scripts.length).toBeGreaterThan(0);
   // getModuleCount is the QR code library's (settings only); navigator.credentials.get is the passkey one's.
   for (const code of scripts) {

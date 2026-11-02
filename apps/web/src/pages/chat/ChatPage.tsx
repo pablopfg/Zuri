@@ -338,12 +338,17 @@ function ConversationOptions({ conversation, disabled }: { conversation: Convers
     setPending(true);
     try {
       const result = await api<{ conversation: Conversation }>(`/conversations/${conversation.id}`, { method: "PATCH", body: { title: name } });
+      // A read that left before the rename (the one a turn starts, say) would land later
+      // with the old title and undo it on screen: drop those before writing the new one.
+      await qc.cancelQueries({ queryKey: LIST_KEY });
       qc.setQueryData<ConversationPage>(pageKey(conversation.id), (current) => (current ? { ...current, conversation: result.conversation } : current));
       qc.setQueryData<InfiniteData<{ conversations: Conversation[] }>>(LIST_KEY, (current) =>
         current
           ? { ...current, pages: current.pages.map((p) => ({ ...p, conversations: p.conversations.map((c) => (c.id === conversation.id ? result.conversation : c)) })) }
           : current,
       );
+      // Read again what was dropped (a list that missed a new conversation, say); these reads leave after the rename.
+      void qc.invalidateQueries({ queryKey: LIST_KEY });
       close();
       toast(t("web.chat.renamed"));
     } catch (failure) {
