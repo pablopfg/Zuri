@@ -71,6 +71,7 @@ agentes podem ler as mesmas skills nos repositórios de origem, no commit fixado
 - PR que cria ou muda uma tela traz na descrição capturas de como ela ficou (computador e celular, claro e escuro), geradas com `node scripts/capturas-da-interface.ts` e gravadas em `docs/capturas/pr/<assunto>/`. Veja `.claude/rules/capturas.md`.
 - Preencha `.github/pull_request_template.md`, inclusive a matriz de rastreabilidade e o relatório de auditoria.
 - Conflito: traga a `develop`, resolva preservando os dois lados, rode tudo de novo.
+- PRs abertas para a `develop` não ficam paradas: a passada de merge confere, atualiza, resolve conflitos e mescla na ordem certa. Critérios e ordem em [docs/agente/merge-de-prs.md](docs/agente/merge-de-prs.md).
 - Ao terminar: skills `verificar`, `revisao-qa` e `auditoria-seguranca`, nessa ordem, e corrija o que elas acharem.
 
 ## Como evitar erros
