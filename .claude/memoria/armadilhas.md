@@ -257,6 +257,12 @@ acrescente aqui cada armadilha nova que encontrar (sem dados pessoais).
   próprio: `{ ...a, ...b }` dentro da chamada `/* @__PURE__ */` impediu o
   descarte e levou o catálogo inteiro para o inicial (+11 KB). Meça com 3
   casas (`toFixed(3)` numa cópia do `check-bundle-size.ts`).
+- Etapa 17: o `RefreshCw` do cartão da busca semântica também estava na Memória
+  e virou pedaço comum (+21 bytes). A PR passou com 1 byte de sobra, e a PR
+  automática de versão (0.23.0) estourou o teto só porque o número da versão
+  mudou. Antes de abrir a PR, confira o total exato em bytes e deixe pelo menos
+  20 bytes de folga. Ícone já usado em outra tela sob demanda conta como
+  pedaço novo; troque por um do inicial (`RotateCw`, `Clock`).
 - O axe rodando no meio da animação de entrada (opacidade baixa) acusa
   contraste falso. `expectAccessible` espera as animações finitas terminarem.
 

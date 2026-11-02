@@ -20,7 +20,7 @@ import {
   type UsageKind,
   type UsageReport,
 } from "@zuri/shared";
-import { Bot, ExternalLink, FlaskConical, RefreshCw } from "lucide-react";
+import { Bot, ExternalLink, FlaskConical, RotateCw } from "lucide-react";
 import { type FormEvent, useEffect, useId, useState } from "react";
 import { Switch } from "../../components/Switch.tsx";
 import { Button, Card, cn, ErrorNotice, Notice, SelectField, Spinner, TextField } from "../../components/ui.tsx";
@@ -554,7 +554,7 @@ function SemanticBody({ status }: { status: SemanticStatus }) {
             </div>
           ) : (
             <Button variant="secondary" onClick={() => setConfirming(true)}>
-              <RefreshCw className="h-4 w-4" aria-hidden />
+              <RotateCw className="h-4 w-4" aria-hidden />
               {t("web.ai.semantic.redo")}
             </Button>
           )}
