@@ -66,12 +66,13 @@ enfileiraria todas as PRs. Com o check vermelho, o auto-merge espera.
 Quando o resultado muda:
 
 - **A mais antiga entra:** a `develop` muda, o `Update PRs` traz a `develop`
-  para a mais nova, dispara a CI e o `merge-order`, e o check passa.
+  para a mais nova, aprova a CI e o `merge-order` do commit novo, e o check
+  passa.
 - **A mais antiga é fechada, sai do rascunho ou passa a mudar outros
   arquivos:** nada acontece na PR mais nova, então o `Update PRs` também roda
   a cada 15 minutos e, a cada rodada, recalcula o `merge-order` de toda PR
-  aberta para a `develop`. Onde o último resultado não bate (ou não existe),
-  ele dispara o check de novo naquela branch. Isso também cobre a PR com o
+  aberta para a `develop`. Onde o último resultado não bate, ele reexecuta a
+  execução de `pull_request` do check naquela branch. Isso também cobre a PR com o
   rótulo `sem-atualizacao-automatica` e a `develop` que mudou workflows. Fica
   uma janela de até 15 minutos em que uma PR mais nova, já verde, pode entrar
   na frente de uma mais antiga que acabou de sair do rascunho.
@@ -106,17 +107,31 @@ base `develop` (menos rascunho, branch de fork e PR com o rótulo
    criado dos dois lados, link simbólico, quebra de linha CRLF e qualquer
    outro arquivo (inclusive `i18n/index.ts`, que tem lógica) ficam para uma
    pessoa. Se um arquivo precisa de pessoa, nada é resolvido naquela rodada.
-3. Envia o commit e dispara `ci.yml` e `codeql.yml` na branch. O push feito
-   pelo token do GitHub Actions não dispara a CI da PR, por isso o disparo
-   manual: são os mesmos jobs, e os checks exigidos aparecem no commit novo.
+3. Envia o commit e aprova as execuções que o próprio push criou. O push do
+   `github-actions[bot]` gera as execuções de `pull_request` (CI, CodeQL e
+   Merge order), mas o GitHub as segura como "action_required" até alguém
+   aprovar, porque o repositório pede aprovação para colaborador de fora e o
+   bot conta como um. O script espera elas aparecerem (até uns 40 s) e aprova
+   só as do bot, no commit que ele enviou, da própria branch (nunca de fork).
+   Disparar a CI por `workflow_dispatch` não serve: os checks aparecem verdes
+   no commit, mas o ruleset só conta os de `pull_request`, e o merge fica em
+   "Expected" (caso da #60, 02/11/2026).
 4. Deixa um único comentário na PR, editado a cada rodada (edição não
    notifica): o que resolveu sozinho, ou os arquivos que precisam de uma
    pessoa. Quando a `develop` muda arquivos de `.github/workflows/`, o token
    não pode enviar; o comentário avisa e a atualização fica manual. Push
    recusado pelo GitHub também vira aviso.
 5. Uma PR que falha não para as outras; a rodada termina vermelha para
-   alguém ver. Se o disparo da CI falhou depois do push, a rodada seguinte
-   percebe o commit de merge sem CI e dispara de novo.
+   alguém ver. Se a aprovação falhou ou alguma execução não apareceu, o
+   comentário "A CI deste commit está parada esperando aprovação" avisa, e a
+   rodada seguinte (no máximo 15 minutos depois) tenta aprovar de novo. Se
+   continuar parado, aprove na mão: Actions, a execução, "Approve and run".
+   Quem não pode aprovar (uma thread, por exemplo) tem outra saída: pôr o
+   rótulo `sem-atualizacao-automatica` na PR para o bot parar de enviar
+   commits nela e trazer a `develop` com o próprio push (`git merge
+   origin/develop` ou `node scripts/atualizar-prs.ts --local`). Push de
+   pessoa ou de thread roda a CI sem precisar de aprovação. Tire o rótulo
+   depois do merge, se a PR continuar aberta.
 
 O workflow só resolve conflito de acréscimo em arquivo de lista. Conflito em
 código (duas PRs mudando as mesmas linhas de `prompt.ts`, por exemplo) não

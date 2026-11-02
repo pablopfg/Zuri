@@ -9,7 +9,9 @@ import {
   isSafeBranchName,
   MERGE_MESSAGE,
   mergeBase,
-  needsDispatch,
+  approveHeldRuns,
+  PR_WORKFLOWS,
+  type WorkflowRun,
   notify,
   NOTICE_MARKER,
   noticeBody,
@@ -156,6 +158,13 @@ describe("noticeBody", () => {
     expect(noticeBody({ kind: "push-failed" }, "abc1234")).toContain("recusada");
   });
 
+  it("asks for approval of the held runs, naming them safely", () => {
+    const body = noticeBody({ kind: "approval", runs: ["CI", "a`b@c"] }, "abc1234");
+    expect(body).toContain("esperando aprovação");
+    expect(body).toContain("`CI`, `a_b_c`");
+    expect(body).toContain("docs/configuracao-github.md");
+  });
+
   it("lists what was resolved", () => {
     expect(noticeBody({ kind: "resolved", files: ["CHANGELOG.md"] }, "abc1234")).toContain("`CHANGELOG.md`");
   });
@@ -200,12 +209,84 @@ describe("notify and needsDispatch (fake gh)", () => {
     expect(writes()).toEqual(["POST repos/dono/zuri/issues/7/comments"]);
   });
 
-  it("dispatches again only for its own merge without a CI run", () => {
-    expect(needsDispatch(fake([], 0), "a".repeat(40), MERGE_MESSAGE)).toBe(true);
-    expect(needsDispatch(fake([], 2), "a".repeat(40), MERGE_MESSAGE)).toBe(false);
-    calls.length = 0;
-    expect(needsDispatch(fake([], 0), "a".repeat(40), "feat: something")).toBe(false);
-    expect(calls).toEqual([]);
+});
+
+describe("approveHeldRuns (fake gh)", () => {
+  const SHA = "a".repeat(40);
+  const run = (id: number, name: string, extra: Partial<WorkflowRun> = {}): WorkflowRun => ({
+    id,
+    name,
+    event: "pull_request",
+    status: "completed",
+    conclusion: "action_required",
+    head_sha: SHA,
+    created_at: "2026-11-02T09:03:08Z",
+    actor: { login: "github-actions[bot]" },
+    head_repository: { full_name: "dono/zuri" },
+    ...extra,
+  });
+  /** Each read returns the next list (GitHub creates the runs a few seconds after the push). */
+  const fake = (reads: WorkflowRun[][], refuse: number[] = []) => {
+    const approved: number[] = [];
+    let read = 0;
+    const exec = (_cmd: string, args: string[]) => {
+      const path = args.at(-1) ?? "";
+      const approve = path.match(/actions\/runs\/(\d+)\/approve$/);
+      if (approve) {
+        const id = Number(approve[1]);
+        if (refuse.includes(id)) throw new Error("403");
+        approved.push(id);
+        return "";
+      }
+      expect(path).toBe(`repos/dono/zuri/actions/runs?head_sha=${SHA}&event=pull_request&per_page=100`);
+      return JSON.stringify({ workflow_runs: reads[Math.min(read++, reads.length - 1)] });
+    };
+    return { ctx: { repository: "dono/zuri", exec }, approved, reads: () => read };
+  };
+  const all = () => Object.values(PR_WORKFLOWS).map((name, i) => run(i + 1, name));
+  const noWait = { sleep: () => undefined };
+
+  it("approves every run its own push started", () => {
+    const { ctx, approved } = fake([all()]);
+    expect(approveHeldRuns(ctx, SHA, noWait)).toEqual({ approved: ["CI", "CodeQL", "Merge order"], failed: [], missing: [] });
+    expect(approved).toEqual([1, 2, 3]);
+  });
+
+  it("waits for GitHub to create the runs, then gives up and names what is missing", () => {
+    const waits: number[] = [];
+    const { ctx, reads } = fake([[], [run(1, "CI")], all()]);
+    expect(approveHeldRuns(ctx, SHA, { sleep: (ms) => waits.push(ms) }).missing).toEqual([]);
+    expect(reads()).toBe(3);
+    expect(waits).toEqual([5000, 5000]);
+    const never = fake([[run(1, "CI")]]);
+    expect(approveHeldRuns(never.ctx, SHA, { attempts: 3, ...noWait })).toEqual({
+      approved: ["CI"],
+      failed: [],
+      missing: ["CodeQL", "Merge order"],
+    });
+  });
+
+  it("never approves a run someone else started, a fork's, another commit's or one already running", () => {
+    const { ctx, approved } = fake([
+      [
+        run(1, "CI", { actor: { login: "outra-pessoa" } }),
+        run(2, "CodeQL", { head_repository: { full_name: "outra/zuri" } }),
+        run(3, "Merge order", { conclusion: "success" }),
+        run(4, "CI", { head_sha: "b".repeat(40) }),
+        run(5, "CI", { event: "workflow_dispatch" }),
+      ],
+    ]);
+    const result = approveHeldRuns(ctx, SHA, { attempts: 1 });
+    expect(approved).toEqual([]);
+    expect(result.approved).toEqual([]);
+    // The fork's and the other commit's runs do not count as present either.
+    expect(result.missing).toEqual(["CodeQL"]);
+  });
+
+  it("reports a refused approval without stopping the others", () => {
+    const { ctx, approved } = fake([all()], [2]);
+    expect(approveHeldRuns(ctx, SHA, noWait)).toEqual({ approved: ["CI", "Merge order"], failed: ["CodeQL"], missing: [] });
+    expect(approved).toEqual([1, 3]);
   });
 });
 
