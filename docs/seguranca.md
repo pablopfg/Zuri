@@ -63,7 +63,7 @@ Decisão do Pablo de 31/10/2026; plano completo em
   e-mail errado) conta para a rede de onde veio, antes de qualquer espera, para
   que tentativas enviadas juntas não furem o limite. 5 em 15 minutos fazem a
   rede esperar (429 `RATE_LIMITED` com `Retry-After`). 20 em 24 horas bloqueiam
-  a rede até o fim desse dia, com um evento `setup_locked` marcado para alerta.
+  a rede até a mais antiga delas completar 24 horas, com um evento `setup_locked` marcado para alerta.
   Uma tentativa certa devolve a vaga. O palpite de outra pessoa nunca pausa a
   rede do dono. Depois que a hora começou, cada 20 erros somando todas as
   redes também geram alerta. Os alertas do primeiro acesso saem no máximo um a
