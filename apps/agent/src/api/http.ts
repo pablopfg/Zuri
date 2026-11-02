@@ -143,7 +143,14 @@ async function readBodyBytes(body: ReadableStream<Uint8Array> | null, maxBytes: 
   const chunks: Uint8Array[] = [];
   let total = 0;
   for (;;) {
-    const { done, value } = await reader.read();
+    let chunk: ReadableStreamReadResult<Uint8Array>;
+    try {
+      chunk = await reader.read();
+    } catch {
+      // The client went away mid-body: a bad request, never a shorter body or an internal error.
+      throw new AppError("VALIDATION_FAILED", undefined, { fields: ["_body"] });
+    }
+    const { done, value } = chunk;
     if (done) break;
     total += value.byteLength;
     if (total > maxBytes) {

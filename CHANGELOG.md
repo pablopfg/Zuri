@@ -243,8 +243,8 @@ o [SemVer](https://semver.org/lang/pt-BR/). Cada PR escreve a sua entrada em
 - O servidor não registra mais "Can't read from request stream after response
   has been sent" quando recusa um pedido sem ler o corpo (login sem o cabeçalho
   de segurança, de outra origem ou sem sessão). O Worker agora lê o corpo
-  inteiro antes de repassar, e recusa logo um corpo maior que o de um clipe de
-  voz. O e2e e o Lighthouse passam a falhar se o servidor registrar qualquer
+  inteiro antes de repassar e recusa logo um corpo maior que o de uma nota (ou
+  que o de um clipe, na rota de voz). O e2e e o Lighthouse passam a falhar se o servidor registrar qualquer
   erro não tratado.
 - Errar a senha ou o código num diálogo de confirmação não encerra mais a
   sessão: a mensagem aparece no diálogo e você tenta de novo.

@@ -202,9 +202,10 @@ acrescente aqui cada armadilha nova que encontrar (sem dados pessoais).
   depois que a resposta saiu. Cancelar o corpo no objeto não resolve, e repassar
   por um fluxo próprio também não (cortar o fluxo derruba a resposta do objeto;
   deixar aberto gera `Uncaught undefined` com corpo em partes). A saída é
-  `withBodyRead` (`src/gates/body.ts`): o Worker lê o corpo inteiro, com teto
-  `API_BODY_MAX_BYTES`, antes de repassar. Rota nova que leia corpo maior que
-  um clipe de voz precisa subir esse teto. O e2e falha se o Worker logar
+  `withBodyRead` (`src/gates/body.ts`): o Worker lê o corpo inteiro antes de
+  repassar, com teto por caminho (`bodyLimitFor`: clipe de voz só em
+  `/api/transcribe`, o tamanho de uma nota nas demais). Rota nova com limite
+  maior que esse precisa subir o teto e o teste de `body-read.test.ts`. O e2e falha se o Worker logar
   `Uncaught` (`tests/e2e/worker-log.ts`). Arquivo de entrada do Worker
   (`src/index.ts`) não pode exportar constante: o workerd recusa subir.
 - No `wrangler dev`, corpo de vários MB recusado antes de chegar todo faz o

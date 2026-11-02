@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { API_BODY_MAX_BYTES, withBodyRead } from "../src/gates/body.ts";
+import { CHAT_BODY_MAX_BYTES, MEMORY_BODY_MAX_BYTES, NOTE_BODY_MAX_BYTES, TASK_BODY_MAX_BYTES, VOICE_BASE64_MAX } from "@zuri/shared";
+import { API_BODY_MAX_BYTES, bodyLimitFor, VOICE_BODY_MAX_BYTES, VOICE_PATH, withBodyRead } from "../src/gates/body.ts";
 import { CSRF, call, errorBody, ORIGIN } from "./helpers.ts";
 
 // The Worker reads each API body whole before the object gets it. Handed over as
@@ -26,8 +27,8 @@ function chunked(bytes: Uint8Array) {
   return { stream, state };
 }
 
-function post(body: BodyInit | null, headers: Record<string, string> = {}): Request {
-  return new Request(`${ORIGIN}/api/auth/login`, { method: "POST", headers: { "content-type": "application/json", ...headers }, body, duplex: "half" } as RequestInit);
+function post(body: BodyInit | null, headers: Record<string, string> = {}, path = "/api/auth/login"): Request {
+  return new Request(`${ORIGIN}${path}`, { method: "POST", headers: { "content-type": "application/json", ...headers }, body, duplex: "half" } as RequestInit);
 }
 
 async function refusal(work: Promise<unknown>) {
@@ -79,7 +80,7 @@ describe("withBodyRead", () => {
     expect(state.sent).toBeLessThan(API_BODY_MAX_BYTES * 2);
   });
 
-  it("fails, never hands on a shorter body, when the client goes away mid-body", async () => {
+  it("refuses as a bad request, never hands on a shorter body, when the client goes away mid-body", async () => {
     let sent = false;
     const broken = new ReadableStream<Uint8Array>({
       pull(controller) {
@@ -88,12 +89,25 @@ describe("withBodyRead", () => {
         controller.enqueue(new TextEncoder().encode('{"email":'));
       },
     });
-    await expect(withBodyRead(post(broken))).rejects.toThrow("client went away");
+    expect(await refusal(withBodyRead(post(broken)))).toMatchObject({ code: "VALIDATION_FAILED" });
   });
 
-  it("is above the largest body any route reads (a voice clip)", async () => {
-    const { VOICE_BASE64_MAX } = await import("@zuri/shared");
-    expect(API_BODY_MAX_BYTES).toBeGreaterThan(VOICE_BASE64_MAX);
+  it("reads a voice clip's size only on the voice route", async () => {
+    expect(bodyLimitFor(VOICE_PATH)).toBe(VOICE_BODY_MAX_BYTES);
+    expect(bodyLimitFor(`${VOICE_PATH}/`)).toBe(VOICE_BODY_MAX_BYTES);
+    for (const path of ["/api/auth/login", "/api/notes", "/api/chat", "/api/transcribe-x", "/api/x/transcribe"]) {
+      expect(bodyLimitFor(path), path).toBe(API_BODY_MAX_BYTES);
+    }
+    const clip = new Uint8Array(VOICE_BODY_MAX_BYTES).fill(97);
+    expect((await (await withBodyRead(post(clip, {}, VOICE_PATH))).arrayBuffer()).byteLength).toBe(VOICE_BODY_MAX_BYTES);
+    expect(await refusal(withBodyRead(post(clip, {}, "/api/auth/login")))).toMatchObject({ code: "VALIDATION_FAILED" });
+  });
+
+  it("is at least every route's own limit, so no route is cut short at the Worker", () => {
+    expect(VOICE_BODY_MAX_BYTES).toBe(VOICE_BASE64_MAX + 1024);
+    for (const limit of [NOTE_BODY_MAX_BYTES, TASK_BODY_MAX_BYTES, CHAT_BODY_MAX_BYTES, MEMORY_BODY_MAX_BYTES, 96 * 1024, 48 * 1024]) {
+      expect(API_BODY_MAX_BYTES).toBeGreaterThanOrEqual(limit);
+    }
   });
 });
 
