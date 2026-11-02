@@ -616,6 +616,52 @@ Detalhes em [avisos.md](avisos.md).
 - Contadores, deduplicação e limites por canal impedem que uma falha em laço
   vire uma enxurrada de avisos ou de escritas no banco.
 
+### Notificação no aparelho (Web Push)
+
+- A mensagem é cifrada no servidor só para o navegador inscrito (RFC 8291,
+  `aes128gcm`, uma chave efêmera e um sal novos por mensagem) e assinada com a
+  chave VAPID da instalação (RFC 8292, ES256, válida por 12 h). O serviço de
+  notificação do navegador só vê texto cifrado. A cifra confere byte a byte com
+  o vetor de teste da RFC.
+- O servidor só envia para os serviços de notificação conhecidos (Google,
+  Mozilla, Apple e Microsoft), por HTTPS, sem porta, usuário ou fragmento, e
+  não segue redirecionamento. Uma inscrição apontando para outro endereço é
+  recusada na entrada: ninguém escolhe para onde o servidor posta.
+- Até 3 aparelhos. Ativar ou remover um aparelho pede a senha digitada há pouco
+  e vira alerta de segurança nos outros canais, porque um aparelho a mais lê
+  todos os avisos e um aparelho a menos silencia o dono.
+- O endereço e as chaves da inscrição ficam só no servidor; a tela vê o id, o
+  navegador e as datas. O aparelho se liga ao navegador pelo HMAC do cookie de
+  aparelho, o mesmo do registro de acessos: abrir a Zuri naquele navegador o
+  mantém ativo. Ele sai depois de 7 dias completos sem abrir (o "visto por
+  último" só é gravado uma vez por dia, então o corte real fica entre 7 e 8
+  dias).
+- A notificação é sempre discreta (decisão do dono): a tela bloqueada mostra
+  "Zuri" e "Você tem um aviso novo" ou "um aviso importante". O título e o
+  texto do aviso nem saem do servidor; o conteúdo só aparece no app. Não há
+  botões, e o service worker só abre páginas do próprio app.
+- Quando o dono clica em Sair, o aparelho daquele navegador é removido e o
+  navegador cancela a inscrição. A saída automática por inatividade não mexe
+  no aparelho. Trocar a senha, recuperar o acesso com um código novo ou
+  redefinir a senha pelo painel aposenta todos os aparelhos: eles somem da
+  lista e só recebem o alerta de segurança dessa mudança, porque o dono precisa
+  saber de uma troca que não fez. 15 minutos depois, na rodada seguinte do
+  alarme, são apagados.
+- Se o serviço de notificação responde 404 ou 410 (inscrição encerrada) ou 403
+  (inscrição feita com outro par VAPID), o aparelho é removido e pode ser
+  ativado de novo.
+- A chave do aparelho precisa ser um ponto válido da curva P-256; uma chave
+  inválida é recusada na entrada em vez de ocupar uma das 3 vagas.
+- O par VAPID de teste, que está no repositório público, só vale em
+  desenvolvimento local. Com outro endereço, o push fica "não configurado" até
+  o dono gravar um par próprio.
+- Cada aviso faz uma requisição por aparelho (até 3). O push faz no máximo 30
+  em 30 segundos, para nunca esgotar as 50 subrequisições por invocação do
+  plano gratuito (regra P9). Alertas de segurança têm uma reserva de mais 9
+  (três alertas para três aparelhos). O que passar disso fica só no sino.
+- Em desenvolvimento local o servidor cifra e assina, mas não posta para
+  nenhum serviço (`src/push/dev-push.ts`).
+
 ## Logs da Cloudflare
 
 Os logs do Worker (`observability` no `wrangler.jsonc`) guardam cada

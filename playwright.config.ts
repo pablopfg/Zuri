@@ -45,7 +45,9 @@ export default defineConfig({
         `--var OWNER_EMAIL:dono@exemplo.com.br --var 'OWNER_PASSWORD_HASH:${E2E_PASSWORD_HASH}' ` +
         // Cloudflare's always-pass Turnstile test keys: accepted only over loopback,
         // where the Worker answers their test token without the network (tests/e2e/fixtures.ts).
-        "--var TURNSTILE_SITE_KEY:1x00000000000000000000AA --var TURNSTILE_SECRET_KEY:1x0000000000000000000000000000000AA" +
+        "--var TURNSTILE_SITE_KEY:1x00000000000000000000AA --var TURNSTILE_SECRET_KEY:1x0000000000000000000000000000000AA " +
+        // A P-256 pair made only for the tests (Web Push): over loopback the Worker never posts to a push service.
+        "--var VAPID_PUBLIC_KEY:BArqm2bEiRY0vWr0hdrXN1eh6ibifZDca45l9kP34MtvpKnTtFebh64fsDf3d8SkgS7deK2cCQNehxkeKQyU2oE --var VAPID_PRIVATE_KEY:wOOMmS0NgL81YSjmS0UwAl7PotpIuPUi0q3Z2acC0Gk" +
         // A copy of everything the Worker prints, for the check after the run, and
         // all of it back on stderr: Playwright shows only the server's stderr.
         // Appending (the file was just removed): the second server writes to it too,

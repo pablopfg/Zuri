@@ -153,6 +153,26 @@ Com o Cloudflare Access ligado (`ACCESS_TEAM_DOMAIN` e `ACCESS_AUD`), o
 `/primeiro-acesso` fica atrás dele como o resto do Zuri, sem exceção. É
 gratuito para uma pessoa e recomendado, mas não obrigatório.
 
+## Notificação no aparelho (opcional)
+
+Para os avisos aparecerem no celular ou no computador com a Zuri fechada, a
+instalação precisa de um par de chaves VAPID. Ele é gratuito e não depende de
+nenhum serviço externo além do serviço de notificação do próprio navegador.
+
+1. No seu computador, na pasta do repositório: `node scripts/gerar-chaves-vapid.ts`.
+   O script imprime duas linhas e não grava nada.
+2. Grave cada valor como segredo: `VAPID_PUBLIC_KEY` e `VAPID_PRIVATE_KEY`
+   (`npx wrangler secret put VAPID_PUBLIC_KEY` dentro de `apps/agent`, e o mesmo
+   para a outra).
+3. Em **Configurações > Avisos**, toque em **Receber avisos neste aparelho** em
+   cada aparelho (até 3). No iPhone e no iPad, adicione a Zuri à tela de início
+   antes.
+
+Sem as duas chaves, a notificação no aparelho aparece como "Ainda não
+disponível" e os avisos continuam no sino. Trocar o par depois faz cada
+aparelho ativar de novo. A chave privada nunca chega ao navegador; a pública,
+sim, porque é ela que o navegador usa para assinar a inscrição.
+
 ## IP certo no registro de acessos
 
 O registro usa o cabeçalho `CF-Connecting-IP`, que a Cloudflare define na

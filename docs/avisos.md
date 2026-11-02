@@ -6,21 +6,24 @@ três partes:
 
 | Parte | O que entrega | Situação |
 | --- | --- | --- |
-| 11a | Central de avisos, insistência, alertas de acesso, resultados das automações, vigias, resumo do dia e a aba Diagnóstico | este PR |
-| 11b | Notificação no aparelho (Web Push com VAPID), e-mail (`SEND_EMAIL`), recuperação de senha por e-mail, canais por categoria | próxima |
-| 11c | Prioridade que aprende e campo de prioridade nas automações | depois da 11b |
+| 11a | Central de avisos, insistência, alertas de acesso, resultados das automações, vigias, resumo do dia e a aba Diagnóstico | mesclada |
+| 11b | Notificação no aparelho (Web Push com VAPID) e canais por tipo de aviso | este PR |
+| 11c | E-mail (`SEND_EMAIL`) e recuperação de senha por e-mail | próxima |
+| 11d | Prioridade que aprende e campo de prioridade nas automações | depois da 11c |
 
 ## Onde fica o código
 
 - `packages/shared/src/alerts.ts`: prioridades, categorias, canais, tipos de aviso, limites (`ALERT_LIMITS`, `ESCALATION`, `WATCH`, `DIAGNOSTIC_LIMITS`) e schemas das rotas.
 - `apps/agent/src/alerts/service.ts`: `AlertService` cria, lista, marca como lido, silencia e apaga avisos; entrega aos canais; faz a insistência.
-- `apps/agent/src/alerts/channels.ts`: a interface `AlertChannel` que push, Telegram e e-mail vão implementar (11b e 13).
+- `apps/agent/src/alerts/channels.ts`: a interface `AlertChannel` que push (11b), e-mail (11c) e Telegram (13) implementam.
+- `apps/agent/src/push/`: a cifra e a assinatura do Web Push (`webpush.ts`), os aparelhos (`devices.ts`), o canal (`channel.ts`) e o que a aba usa (`service.ts`).
 - `apps/agent/src/alerts/security.ts`: transforma os eventos de acesso marcados para alerta em avisos críticos.
 - `apps/agent/src/alerts/watchers.ts`: os vigias e o resumo do dia.
 - `apps/agent/src/alerts/automations.ts`: o que cada execução de automação vira (aviso, aviso de sistema ou falha no Diagnóstico).
 - `apps/agent/src/diagnostics/service.ts`: o registro próprio de falhas.
 - `apps/agent/src/api/notices.ts`: as rotas `/api/notices*`, `/api/alerts` e `/api/diagnostics*`.
-- `apps/web/src/components/NotificationCenter.tsx` (sino, no pacote inicial) e `NoticesPanel.tsx` (painel, sob demanda); `pages/settings/AlertsTab.tsx` e `DiagnosticsTab.tsx`.
+- `apps/web/src/components/NotificationCenter.tsx` (sino, no pacote inicial) e `NoticesPanel.tsx` (painel, sob demanda); `pages/settings/AlertsTab.tsx` (com `PushCard.tsx` e `RoutesCard.tsx`) e `DiagnosticsTab.tsx`; `public/sw.js` mostra a notificação.
+- Migration 12: `zur_push_devices`.
 - Migration 11: `zur_notices`, `zur_alert_keys`, `zur_alert_deliveries`, `zur_diagnostics` e os contadores `notices`, `security_notices`, `notices_unread` e `alert_deliveries`.
 
 ## O que vira aviso
@@ -49,9 +52,42 @@ Título e texto são escritos pelo servidor no idioma do dono. O texto que vem d
 automação é guardado como dado e mostrado como texto puro; o link de um aviso só
 pode apontar para uma das páginas da lista `NOTICE_LINKS`.
 
+## Notificação no aparelho
+
+- Configurações › Avisos › **Receber avisos neste aparelho** pede a permissão do
+  navegador, inscreve com a chave pública VAPID e manda a inscrição ao servidor
+  (`POST /api/push/devices`, com a senha digitada há pouco). Até 3 aparelhos.
+- A notificação é sempre discreta (decisão do Pablo, 02/11): mostra "Zuri" e
+  "Você tem um aviso novo" (ou "um aviso importante", para prioridade alta e
+  crítica). O título e o texto do aviso ficam no servidor e só aparecem no app.
+  O link segue só da lista `NOTICE_LINKS`. Prioridade alta ou crítica sai com
+  urgência alta, fica na tela até o dono agir e toca de novo a cada insistência.
+- Resposta 404, 410 ou 403 (outro par VAPID) do serviço de notificação apaga o
+  aparelho na hora. 429 e
+  5xx contam como "o destino não respondeu"; o aviso conta como enviado quando
+  pelo menos um aparelho o recebeu.
+- O aparelho se mantém pela checagem de sessão do navegador dele (uma escrita
+  por dia, no máximo); depois de 7 dias completos sem abrir a Zuri ele sai, na
+  rodada do alarme.
+- Clicar em Sair remove o aparelho daquele navegador; a saída automática por
+  inatividade não remove. Trocar ou redefinir a senha aposenta todos: eles só
+  recebem o alerta dessa troca e são apagados 15 minutos depois.
+- O push faz no máximo 30 envios em 30 segundos, mais 9 de reserva para
+  alertas de segurança (regra P9).
+- **Mandar um teste** manda uma notificação a todos os aparelhos, 3 por hora.
+- Sem `VAPID_PUBLIC_KEY` e `VAPID_PRIVATE_KEY` o canal fica "Ainda não
+  disponível" (guia em [configuracao-cloudflare.md](configuracao-cloudflare.md)).
+
+## Canais por tipo de aviso
+
+A aba mostra uma tabela com cada tipo de aviso (lembretes, resumos, rotinas,
+tarefas, sistema, segurança e eventos da agenda) e cada canal. O padrão manda
+tudo para o push e o Telegram; segurança vai sempre por todos e não muda. Os
+limites por canal (padrão 6 por hora e 30 por dia) ficam logo abaixo.
+
 ## Insistência e reconhecimento
 
-- Aviso alto ou crítico entregue a um canal fora do app (a partir da 11b) é
+- Aviso alto ou crítico entregue a um canal fora do app (push, desde a 11b) é
   mandado de novo em +15 min e +60 min. Sem resposta em 75 min, fica "sem
   resposta". No máximo 20 avisos insistindo ao mesmo tempo, e duas tentativas
   nunca saem com menos de 15 min entre elas.
@@ -119,5 +155,5 @@ recente ou falha se repetindo) e cada tipo de falha dos últimos 30 dias.
 ## Logs
 
 Erros dos canais, das rodadas e do próprio Diagnóstico saem pelo módulo único de
-log (`alert_delivery_failed`, `alert_tick_failed`, `diagnostics_failed`), só com
-nomes e códigos. Gravar uma falha nunca lança erro.
+log (`alert_delivery_failed`, `alert_tick_failed`, `diagnostics_failed`,
+`push_refused` com o status HTTP, `push_failed`), só com nomes e códigos. Gravar uma falha nunca lança erro.

@@ -30,6 +30,7 @@ import type { Database } from "../db/database.ts";
 import type { InternalState } from "../db/internal-state.ts";
 import type { SettingsRepository } from "../db/settings.ts";
 import { AppError } from "../http/errors.ts";
+import { PushDevices } from "../push/devices.ts";
 import { type ClientInfo, stripControl } from "./client.ts";
 import { AuthEvents } from "./events.ts";
 import { LoginLimiter } from "./login-limiter.ts";
@@ -142,6 +143,8 @@ export class AuthService {
   readonly twoStep: TwoStep;
   readonly passkeys: Passkeys;
   readonly setupCode: SetupCode;
+  /** Push devices end with the password that added them, and with the logout of their browser. */
+  readonly #push: PushDevices;
   readonly #clock: () => number;
   #synced: Promise<void> | undefined;
 
@@ -157,6 +160,7 @@ export class AuthService {
     this.twoStep = new TwoStep(deps.db, deps.state, { pepper: deps.secrets.pepper, sessionSecret: deps.secrets.sessionSecret }, this.#clock);
     this.passkeys = new Passkeys(deps.db, deps.state, this.#clock);
     this.setupCode = new SetupCode(deps.state, deps.secrets, this.#clock);
+    this.#push = new PushDevices(deps.db, this.#clock);
   }
 
   /** The owner's e-mail: the one typed at the first access, else the OWNER_EMAIL secret, else none. */
@@ -237,6 +241,7 @@ export class AuthService {
         this.twoStep.dropChallenges();
         // Browsers known to the old password stop being trusted with the new one.
         this.events.forgetDevices();
+        this.#push.retireAll();
         this.events.record("credentials_reset", null, { alert: true, reason: newPepper ? "pepper" : "password" });
         // A new pepper is the full reset (lost password and phone): the sealed
         // secret can't be opened with it anyway, so the second step goes too.
@@ -611,9 +616,26 @@ export class AuthService {
     };
   }
 
-  logout(row: SessionRow, client: ClientInfo): void {
-    this.sessions.revoke(row.id);
-    this.events.record("logout", client, { session: row.id.slice(0, 16) });
+  /**
+   * Ends this session. The push devices of this browser go too: a shared
+   * computer someone signed out of must not keep showing the owner's notices.
+   */
+  logout(row: SessionRow, client: ClientInfo, browser: string | null = null): void {
+    this.deps.db.transaction(() => {
+      this.sessions.revoke(row.id);
+      this.events.record("logout", client, { session: row.id.slice(0, 16) });
+      // Shown in the activity, without an alert: the owner did it here.
+      if (browser && this.#push.removeBrowser(browser) > 0) this.events.record("push_removed", client, { session: row.id.slice(0, 16), reason: "logout" });
+    });
+  }
+
+  /**
+   * The browser's id from its device cookie (the HMAC the access log uses), or
+   * null without a well-formed cookie. Push ties a device to its browser with it.
+   */
+  async browserId(cookie: string | null): Promise<string | null> {
+    if (!cookie || !/^[A-Za-z0-9_-]{43}$/.test(cookie)) return null;
+    return this.deviceId(cookie);
   }
 
   /** Sensitive actions (rule 7) call this: the password typed in the last 15 minutes of this session. */
@@ -719,6 +741,7 @@ export class AuthService {
       this.twoStep.dropChallenges();
       // A browser that knew the old password is new again (its next sign-in is an alert).
       this.events.forgetDevices();
+      this.#push.retireAll();
       this.events.record("password_changed", client, { session: next.row.id.slice(0, 16), alert: true });
     });
     return { token: next.token, session: next.row };
@@ -886,6 +909,7 @@ export class AuthService {
       this.sessions.revokeAll();
       this.twoStep.dropChallenges();
       this.events.forgetDevices();
+      this.#push.retireAll();
       this.events.record("access_recovered", client, { alert: true });
       return true;
     });
