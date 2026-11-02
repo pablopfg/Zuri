@@ -241,8 +241,9 @@ export function releaseNotes(v: Version): string {
   return noMentions(`${renderMeta(v)}\n\n${v.body.trim()}\n\nHistórico completo: [CHANGELOG.md](${REPO_URL}/blob/${BASE_BRANCH}/CHANGELOG.md)\n`);
 }
 
-export function releaseName(v: Version): string {
-  return noMentions(`v${v.version} · ${v.title}`);
+/** The release title is the tag alone; what the merge did is in the notes (Pablo, 02/11/2026). */
+export function releaseName(v: Pick<Version, "version">): string {
+  return `v${v.version}`;
 }
 
 type Git = (...args: string[]) => string;

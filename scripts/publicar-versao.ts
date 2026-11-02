@@ -8,31 +8,41 @@
 //    chore/versao and keeps one pull request "chore(release): …" open for it,
 //    with auto-merge. develop only changes through pull requests (rulesets).
 //
-// It never pushes to develop or main, never deletes a tag and never edits a
-// release that already exists. A tag that points to another commit stops the
+// It never pushes to develop or main and never deletes a tag. The only change
+// to a release that already exists is its title, set to the tag alone. A tag that points to another commit stops the
 // run so a person looks at it.
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { approveHeldRuns, authEnv, OPT_OUT_LABEL, run, sleepMs, tryRun } from "./atualizar-prs.ts";
-import { applyPlan, BASE_BRANCH, computePlan, noMentions, releaseName, releaseNotes, VERSION_FILE, type Version } from "./versao.ts";
+import { applyPlan, BASE_BRANCH, compareVersions, computePlan, noMentions, releaseName, releaseNotes, VERSION_FILE, type Version } from "./versao.ts";
 
 export const RELEASE_BRANCH = "chore/versao";
 /** Kept off the automatic update: this workflow rewrites the branch from develop itself. */
 export const RELEASE_LABEL = OPT_OUT_LABEL;
 /** GitHub limits how fast content is created; a pause between releases keeps the backfill under it. */
 const RELEASE_PAUSE_MS = 1500;
+/**
+ * The oldest version with a tag and a pre-release. GitHub refuses GITHUB_TOKEN a
+ * tag on a commit whose workflow files differ from develop's ("refusing to allow
+ * a GitHub App to create or update workflow ... without workflows permission"),
+ * and that is every merge before #68 (0.15.5). Those versions live only in
+ * CHANGELOG.md, with their commit and pull request (docs/agente/versionamento.md).
+ */
+export const FIRST_TAGGED_VERSION = "0.15.5";
 
 export interface ReleaseWork {
   /** Versions that need a release (and the tag, when it is missing), oldest first. */
   create: Version[];
+  /** Releases that exist with a title other than the tag alone, made before titles were only the version. */
+  rename: string[];
   /** Tags that already point to another commit. */
   conflicts: string[];
 }
 
 /** What to create so every version has its tag and pre-release. */
-export function releaseWork(versions: Version[], tags: Map<string, string>, releases: Set<string>): ReleaseWork {
-  const work: ReleaseWork = { create: [], conflicts: [] };
+export function releaseWork(versions: Version[], tags: Map<string, string>, releases: ReadonlyMap<string, string>): ReleaseWork {
+  const work: ReleaseWork = { create: [], rename: [], conflicts: [] };
   for (const v of versions) {
     const tag = `v${v.version}`;
     const sha = tags.get(tag);
@@ -40,7 +50,9 @@ export function releaseWork(versions: Version[], tags: Map<string, string>, rele
       work.conflicts.push(`${tag} points to ${sha.slice(0, 7)}, CHANGELOG.md says ${v.commit.slice(0, 7)}`);
       continue;
     }
-    if (!releases.has(tag)) work.create.push(v);
+    const name = releases.get(tag);
+    if (name === undefined) work.create.push(v);
+    else if (name !== releaseName(v)) work.rename.push(tag);
   }
   return work;
 }
@@ -62,6 +74,16 @@ export function pullRequestBody(pending: Version[]): string {
     "",
     "Sem mudança visível além do número da versão no Diagnóstico.",
   ].join("\n"));
+}
+
+/** The versions that get a tag and a pre-release: FIRST_TAGGED_VERSION and newer. */
+export function taggable(versions: Version[]): Version[] {
+  return versions.filter((v) => compareVersions(v.version, FIRST_TAGGED_VERSION) >= 0);
+}
+
+/** `sha:refs/tags/vX.Y.Z` for each version whose tag does not exist yet. */
+export function tagRefspecs(versions: Version[], tags: ReadonlyMap<string, string>): string[] {
+  return versions.filter((v) => !tags.has(`v${v.version}`)).map((v) => `${v.commit}:refs/tags/v${v.version}`);
 }
 
 /** True when `current` is a single commit on `base` with the same tree as `head`. */
@@ -99,24 +121,61 @@ function main(root: string): number {
   const versions = [...[...plan.changelog.versions].reverse(), ...plan.pending];
 
   // 1. Tags and pre-releases.
-  const releases = new Set(
-    (JSON.parse(gh(["api", "--paginate", "--slurp", `repos/${repository}/releases?per_page=100`])) as { tag_name: string }[][])
+  const releases = new Map(
+    (JSON.parse(gh(["api", "--paginate", "--slurp", `repos/${repository}/releases?per_page=100`])) as { tag_name: string; name: string | null }[][])
       .flat()
-      .map((r) => r.tag_name),
+      .map((r) => [r.tag_name, r.name ?? ""] as const),
   );
-  const work = releaseWork(versions, tags, releases);
+  const work = releaseWork(taggable(versions), tags, releases);
+  if (work.conflicts.length === 0) {
+    // Tags go by git push, never by the releases API: the API refuses GITHUB_TOKEN a tag on a commit whose
+    // workflow files differ from develop's (HTTP 403 "Resource not accessible by integration", run of #76).
+    // The commits are already on develop, so the push adds no object and creates nothing but the names.
+    const refspecs = tagRefspecs(work.create, tags);
+    if (refspecs.length > 0) {
+      // Each ref is accepted or refused on its own; the ones refused are reported below.
+      const pushed = tryRun(() => remote(["push", "origin", ...refspecs]));
+      console.log(pushed.ok ? `tags pushed: ${refspecs.length}` : `some tags refused:\n${pushed.out.trim()}`);
+      for (const [name, sha] of parseLsRemoteTags(remote(["ls-remote", "--tags", "origin"]))) tags.set(name, sha);
+    }
+  }
+  let releaseFailures = 0;
   const dir = mkdtempSync(join(tmpdir(), "notas-"));
   try {
-    for (const [i, v] of work.create.entries()) {
+    for (const [i, v] of (work.conflicts.length === 0 ? work.create : []).entries()) {
+      if (!tags.has(`v${v.version}`)) {
+        releaseFailures++;
+        console.log(`::error::tag v${v.version} could not be created on ${v.commit.slice(0, 7)}`);
+        continue;
+      }
       if (i > 0) sleepMs(RELEASE_PAUSE_MS);
       const notes = join(dir, `${v.version}.md`);
       writeFileSync(notes, releaseNotes(v));
       // A version in development is a pre-release: it is never "Latest" and nothing is deployed.
-      gh(["release", "create", `v${v.version}`, "--repo", repository, "--target", v.commit, "--title", releaseName(v), "--notes-file", notes, "--prerelease"]);
-      console.log(`release v${v.version} created on ${v.commit.slice(0, 7)}`);
+      // --verify-tag: the tag pushed above, never a new one made by the API.
+      const created = tryRun(() =>
+        gh(["release", "create", `v${v.version}`, "--repo", repository, "--verify-tag", "--title", releaseName(v), "--notes-file", notes, "--prerelease"]),
+      );
+      if (created.ok) {
+        console.log(`release v${v.version} created on ${v.commit.slice(0, 7)}`);
+      } else {
+        // One release failing never stops the changelog pull request; the run still ends red.
+        releaseFailures++;
+        console.log(`::error::release v${v.version} not created: ${created.out.trim().split("\n").at(-1)}`);
+      }
     }
   } finally {
     rmSync(dir, { recursive: true, force: true });
+  }
+  // Only the title changes: the tag, the notes and the pre-release mark stay as they are.
+  for (const tag of work.conflicts.length === 0 ? work.rename : []) {
+    const renamed = tryRun(() => gh(["release", "edit", tag, "--repo", repository, "--title", tag]));
+    if (renamed.ok) {
+      console.log(`release ${tag}: title set to ${tag}`);
+    } else {
+      releaseFailures++;
+      console.log(`::error::release ${tag} not renamed: ${renamed.out.trim().split("\n").at(-1)}`);
+    }
   }
   if (work.conflicts.length > 0) {
     // A tag and the changelog disagree: nothing more is written until a person looks (docs/agente/versionamento.md).
@@ -136,7 +195,7 @@ function main(root: string): number {
     } else {
       console.log(`changelog up to date (${plan.changelog.versions[0]?.version ?? "no version"})`);
     }
-    return work.conflicts.length;
+    return releaseFailures;
   }
   applyPlan(root, plan);
   const title = pullRequestTitle(plan.pending);
@@ -169,7 +228,7 @@ function main(root: string): number {
   console.log(`#${number}: approved ${approval.approved.join(", ") || "none"}${approval.missing.length ? `; missing ${approval.missing.join(", ")}` : ""}`);
   const merge = tryRun(() => gh(["pr", "merge", String(number), "--repo", repository, "--auto", "--squash"]));
   console.log(merge.ok ? `#${number}: auto-merge on` : `#${number}: auto-merge not enabled: ${merge.out.trim()}`);
-  return work.conflicts.length + approval.failed.length;
+  return releaseFailures + approval.failed.length;
 }
 
 if (import.meta.main) {
