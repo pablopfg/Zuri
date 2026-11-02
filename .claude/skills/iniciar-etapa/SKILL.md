@@ -1,6 +1,6 @@
 ---
 name: iniciar-etapa
-description: Começa uma etapa da especificação do Zuri - lê a etapa, confere dependências e decisões, estuda a referência no Talorys e escreve o plano antes de codar. Use ao iniciar qualquer etapa (ex. "inicie a etapa 7").
+description: Começa uma etapa da especificação do Zuri - lê a etapa, confere dependências e decisões, estuda a referência no Talorys e escreve o plano detalhado (skill planejar) antes de codar. Use ao iniciar qualquer etapa (ex. "inicie a etapa 7").
 ---
 
 # Iniciar uma etapa
@@ -10,7 +10,7 @@ description: Começa uma etapa da especificação do Zuri - lê a etapa, confere
 3. **Decisões.** Confira em `.claude/memoria/decisoes.md` as decisões que a etapa usa (N1 a N12). Uma decisão sem padrão bloqueia: pergunte ao dono com uma recomendação.
 4. **Referência.** Leia só os arquivos do Talorys indicados (clone de leitura fora deste repositório), achando os trechos com `grep -n` antes de abrir. Anote a decisão de segurança por trás de cada um.
 5. **Desenho.** Use `mattpocock-skills:codebase-design` para decidir módulos e fronteiras, e `mattpocock-skills:domain-modeling` para termos novos (glossário) e decisões de arquitetura (ADR em `docs/adr/`). Dúvida de API externa: skills `cloudflare:*` ou `mattpocock-skills:research`. Tela nova ou redesenho: `frontend-design:frontend-design` para o plano visual, dentro da identidade de `docs/interface.md`.
-6. **Plano** (no PR em rascunho ou na conversa): arquivos que vai criar ou mudar, rotas, migrations, chaves de i18n, testes por critério de aceite (matriz), riscos e o que fica fora.
+6. **Plano**: rode a skill `planejar`. Ela escreve `docs/planos/etapa-NN-<assunto>.md` no modelo `docs/planos/modelo-de-plano.md` (contexto, fluxos, limites, custo, segurança, testes por critério de aceite, riscos e o que fica fora) e entrevista o Pablo quando faltar decisão dele. A parte que depende de resposta pendente não começa.
 7. Crie a branch `feat/etapa-NN-<assunto>` a partir da `develop` atualizada e implemente com `mattpocock-skills:tdd` (o teste de cada critério de aceite nasce vermelho antes do código) e `ponytail:ponytail` (a menor mudança completa, sem abstração nem dependência que ninguém pediu; nunca corta teste, validação, segurança, i18n ou docs).
 8. Durante o trabalho, rode só os testes do arquivo que mudou; a suíte completa roda uma vez no fim, pelo `verificar`.
 9. Ao terminar: `verificar` → `revisao-qa` → `auditoria-seguranca` → `preparar-pr` → `proxima-etapa`.
