@@ -2,6 +2,13 @@
 
 <!-- O que este PR faz e por quê, em pt-BR. -->
 
+## Issues
+
+<!-- Uma linha "Closes #N" por issue que esta PR corrige (o GitHub fecha a issue no merge na develop).
+Sem issue: escreva "Nenhuma". Issue só citada, sem correção: "Ref. #N". -->
+
+Closes #
+
 ## Etapa
 
 <!-- Número e nome da etapa da especificação (docs/especificacao.md), e as dependências já mescladas. -->

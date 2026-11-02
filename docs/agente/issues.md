@@ -71,7 +71,27 @@ Use a skill `abrir-issue` (`.claude/skills/abrir-issue/`). Em resumo:
 - Erro **dentro** do escopo da PR: corrija na PR, sem issue.
 - Erro **fora** do escopo (outra área, etapa futura, teste instável herdado,
   algo visto na `develop`): procure duplicada e abra a issue com o modelo.
-- Na PR que corrigir, escreva `Closes #N` na descrição.
+- Na PR que corrigir, escreva `Closes #N` na seção "Issues" da descrição
+  (veja "Fechamento automático" abaixo).
+
+### Fechamento automático
+
+A `develop` é a branch padrão do repositório, e o GitHub fecha sozinho a
+issue citada com `Closes #N`, `Fixes #N` ou `Resolves #N` na descrição da PR
+quando ela é mesclada nela, inclusive com squash. Não precisa de workflow nem
+de token. Regras:
+
+- uma linha por issue (`Closes #71` e `Closes #72`, não `Closes #71, #72`);
+- só a descrição da PR conta para isso; a palavra num commit só vale se o
+  commit cair na branch padrão;
+- `Ref. #N` cita sem fechar (correção parcial ou só relacionada);
+- o fechamento acontece uma vez, no merge. Issue reaberta à mão depois fica
+  aberta até outra PR fechá-la;
+- se a branch padrão deixar de ser a `develop`, isso para de funcionar nas
+  PRs para a `develop`: revise esta seção antes de trocar.
+
+Issue corrigida por uma PR que esqueceu o `Closes`: feche à mão com um
+comentário citando a PR (`Corrigida pela #N`).
 
 Busca de duplicadas: `gh api -X GET search/issues -f q='repo:pablopfg/Zuri is:issue is:open label:erro <termos>'`.
 
