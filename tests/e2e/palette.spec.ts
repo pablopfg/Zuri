@@ -14,7 +14,7 @@ test("Ctrl K opens the palette, which loads only then, and the keyboard goes to 
   });
   await page.goto("/");
   await signIn(page);
-  await expect(page.getByRole("heading", { level: 1, name: "Olá!" })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: /^(Bom dia|Boa tarde|Boa noite)/ })).toBeVisible();
   expect(paletteCode).toEqual([]);
 
   await page.keyboard.press("Control+k");
@@ -66,7 +66,7 @@ test("the search finds a task and opens it, and one letter asks the server nothi
   const title = `Renovar o passaporte ${test.info().project.name}`;
   await page.goto("/");
   await signIn(page);
-  await expect(page.getByRole("heading", { level: 1, name: "Olá!" })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: /^(Bom dia|Boa tarde|Boa noite)/ })).toBeVisible();
   const created = await page.request.post("/api/tasks", { headers: CSRF, data: { title } });
   expect(created.ok()).toBe(true);
 

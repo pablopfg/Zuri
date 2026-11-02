@@ -3,7 +3,7 @@
 export const ptBRSecurity = {
   "web.activity.seeAll": "Ver todos os acessos",
   "web.accessLog.title": "Acessos",
-  "web.accessLog.description": "Cada tentativa de entrar no Zuri: o IP, o lugar e a rede que a Cloudflare viu, o navegador e o que aconteceu. Fica guardado por 90 dias.",
+  "web.accessLog.description": "Cada tentativa de entrar na Zuri: o IP, o lugar e a rede que a Cloudflare viu, o navegador e o que aconteceu. Fica guardado por 90 dias.",
   "web.accessLog.period": "Período",
   "web.accessLog.period.1": "Últimas 24 horas",
   "web.accessLog.period.7": "Últimos 7 dias",
