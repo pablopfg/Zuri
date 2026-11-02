@@ -82,6 +82,8 @@ export const settingsSchema = /* @__PURE__ */ z
     alertRoutes: alertRoutesSchema,
     alertPerHour: range(ALERT_LIMITS.perHour),
     alertPerDay: range(ALERT_LIMITS.perDay),
+    /** Step 11d: the priority that learns from what the owner opens and ignores. */
+    alertLearning: z.boolean(),
   })
   .strict();
 
@@ -118,4 +120,5 @@ export const DEFAULT_SETTINGS: Settings = /* @__PURE__ */ Object.freeze({
   alertRoutes: { ...DEFAULT_ALERT_ROUTES } as Settings["alertRoutes"],
   alertPerHour: ALERT_LIMITS.perHour.default,
   alertPerDay: ALERT_LIMITS.perDay.default,
+  alertLearning: true,
 });

@@ -337,6 +337,7 @@ describe("automation runs in the notice center", () => {
     schedule: { type: "daily", time: "10:00" },
     status: "active",
     sentinel: false,
+    priority: "normal",
     origin: "app",
     nextRunAt: null,
     lastRunAt: null,
@@ -374,6 +375,51 @@ describe("automation runs in the notice center", () => {
       ]);
       expect(list[0]?.body).toBe("Beber água");
       expect(w.diagnostics.report().entries.map((e) => [e.source, e.code, e.errorName])).toEqual([["automation", "AI_UNAVAILABLE", "Routine"]]);
+    });
+  });
+
+  it("gives a result the automation's priority and its own source for the priority that learns", async () => {
+    await withWatchers(async (w) => {
+      const high = { ...automation("agent_prompt"), priority: "high" as const };
+      noticeForRun(w.alerts, w.diagnostics, high, { status: "success", result: "Importante" });
+      noticeForRun(w.alerts, w.diagnostics, { ...automation("task_digest"), priority: "low" as const }, { status: "success", result: "Resumo" });
+      const rows = w.world.db.all<{ priority: string; learn_key: string | null }>(`SELECT priority, learn_key FROM zur_notices ORDER BY rowid`);
+      expect(rows).toEqual([
+        { priority: "high", learn_key: `automation:${high.id}` },
+        { priority: "low", learn_key: expect.stringMatching(/^automation:/) },
+      ]);
+    });
+  });
+});
+
+describe("the priority that learns, on the watchers' round", () => {
+  it("reviews once a day and tells the owner, with a low notice, what changed", async () => {
+    await withWatchers(async (w) => {
+      for (let i = 0; i < 5; i++) {
+        w.alerts.raise({ kind: "watch.taskStalled", category: "tasks", priority: "normal", params: { title: "Tarefa" } });
+        w.world.clock.now += 3_600_000;
+      }
+      w.world.clock.now += 24 * 3_600_000;
+      round(w);
+      const told = notices(w).filter((n) => n.kind === "alerts.lowered");
+      expect(told).toEqual([{ kind: "alerts.lowered", priority: "low", params: JSON.stringify({ name: "Tarefas paradas" }), body: null }]);
+      expect(w.alerts.page().notices[0]).toMatchObject({ title: "Menos prioridade para: Tarefas paradas", link: "/configuracoes/avisos" });
+      // The next round, the same day, doesn't review again.
+      w.world.clock.now += 15 * 60_000;
+      w.alerts.learning.reset("watch.taskStalled");
+      round(w);
+      expect(notices(w).filter((n) => n.kind === "alerts.lowered")).toHaveLength(1);
+    });
+  });
+
+  it("stays quiet while turned off", async () => {
+    await withWatchers(async (w) => {
+      w.settings.alertLearning = false;
+      for (let i = 0; i < 5; i++) w.alerts.raise({ kind: "watch.taskStalled", category: "tasks", priority: "normal", params: { title: "Tarefa" } });
+      w.world.clock.now += 2 * 24 * 3_600_000;
+      round(w);
+      expect(notices(w).some((n) => n.kind.startsWith("alerts."))).toBe(false);
+      expect(new InternalState(w.world.db).get("alert_learning_at")).toBeUndefined();
     });
   });
 });

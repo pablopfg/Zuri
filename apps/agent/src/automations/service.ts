@@ -4,6 +4,7 @@ import {
   AUTOMATION_CATCH_UP_MS,
   AUTOMATION_LIMITS,
   type Automation,
+  type AutomationPriority,
   type AutomationCounts,
   type AutomationKind,
   type AutomationList,
@@ -59,6 +60,7 @@ interface AutomationRow {
   schedule: string;
   status: AutomationStatus;
   sentinel: number;
+  priority: AutomationPriority;
   origin: AutomationOrigin;
   next_run: string | null;
   last_run_at: string | null;
@@ -207,8 +209,8 @@ export class AutomationService {
         next = this.firstRun(data.schedule);
       }
       this.db.run(
-        `INSERT INTO zur_automations (id, name, kind, message, schedule, status, sentinel, origin, next_run, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO zur_automations (id, name, kind, message, schedule, status, sentinel, priority, origin, next_run, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         id,
         data.name,
         data.kind,
@@ -216,6 +218,7 @@ export class AutomationService {
         JSON.stringify(data.schedule),
         pending ? "pending_approval" : "active",
         data.sentinel ? 1 : 0,
+        data.priority,
         origin,
         next,
         at,
@@ -254,11 +257,12 @@ export class AutomationService {
         this.firstRun(schedule);
       }
       this.db.run(
-        `UPDATE zur_automations SET name = ?, message = ?, schedule = ?, sentinel = ?, status = ?, next_run = ?, updated_at = ? WHERE id = ?`,
+        `UPDATE zur_automations SET name = ?, message = ?, schedule = ?, sentinel = ?, priority = ?, status = ?, next_run = ?, updated_at = ? WHERE id = ?`,
         patch.name ?? current.name,
         message,
         JSON.stringify(schedule),
         sentinel ? 1 : 0,
+        patch.priority ?? current.priority,
         status,
         next,
         new Date(this.now()).toISOString(),
@@ -620,6 +624,8 @@ function present(row: AutomationRow): Automation {
     schedule: parseSchedule(row.schedule),
     status: row.status,
     sentinel: row.sentinel === 1,
+    // An older row (or one a test wrote by hand) reads as normal.
+    priority: row.priority ?? "normal",
     origin: row.origin,
     nextRunAt: row.status === "active" ? row.next_run : null,
     lastRunAt: row.last_run_at,

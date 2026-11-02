@@ -74,7 +74,28 @@ export class Watchers {
       this.deps.alerts.raise({ kind: "watch.health", category: "system", priority: "critical", dedupeKey: "watch-health", dedupeMs: DAY });
     }
     if (settings.digestEnabled) this.digest(settings, nowMs, digestAt);
+    this.learn(nowMs);
     return true;
+  }
+
+  /** The priority that learns: its daily review rides on this round, and each change becomes a low notice. */
+  private learn(nowMs: number): void {
+    const stored = this.deps.state.get<string>("alert_learning_at");
+    const last = typeof stored === "string" && !Number.isNaN(Date.parse(stored)) ? Date.parse(stored) : null;
+    const changes = this.deps.alerts.learning.review(last);
+    if (changes === null) return;
+    this.deps.state.set("alert_learning_at", new Date(nowMs).toISOString());
+    for (const change of changes) {
+      this.deps.alerts.raise({
+        kind: change.direction === "down" ? "alerts.lowered" : "alerts.raised",
+        category: "system",
+        priority: "low",
+        params: { name: change.label },
+        link: "/configuracoes/avisos",
+        // Its own source never learns: what it says is about the others.
+        source: null,
+      });
+    }
   }
 
   /** Today's digest time as an instant (the owner's zone; a time skipped by daylight saving moves forward). */
