@@ -15,7 +15,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { approveHeldRuns, authEnv, OPT_OUT_LABEL, run, sleepMs, tryRun } from "./atualizar-prs.ts";
-import { applyPlan, BASE_BRANCH, compareVersions, computePlan, noMentions, releaseName, releaseNotes, VERSION_FILE, type Version } from "./versao.ts";
+import { applyPlan, BASE_BRANCH, compareVersions, computePlan, noMentions, releaseName, releaseNotes, type Version, versionFiles } from "./versao.ts";
 
 export const RELEASE_BRANCH = "chore/versao";
 /** Kept off the automatic update: this workflow rewrites the branch from develop itself. */
@@ -66,7 +66,7 @@ export function pullRequestTitle(pending: Version[]): string {
 export function pullRequestBody(pending: Version[]): string {
   const list = pending.map((v) => `- **${v.version}** · ${v.date} ${v.time} (${v.offset}) · ${v.commit.slice(0, 7)} · ${v.title}`);
   return noMentions([
-    "Aberta pelo workflow de versão (`.github/workflows/versao.yml`). Escreve no `CHANGELOG.md` a seção de cada merge que ainda não tinha uma, apaga os arquivos de `changelog/nao-lancado/` que viraram seção e atualiza `packages/shared/src/version.ts`.",
+    "Aberta pelo workflow de versão (`.github/workflows/versao.yml`). Escreve no `CHANGELOG.md` a seção de cada merge que ainda não tinha uma, apaga os arquivos de `changelog/nao-lancado/` que viraram seção e escreve a versão nova em `packages/shared/src/version.ts`, nos `package.json` e no `package-lock.json`.",
     "",
     ...list,
     "",
@@ -201,7 +201,7 @@ function main(root: string): number {
   const title = pullRequestTitle(plan.pending);
   const base = git(["rev-parse", "HEAD"]).trim();
   git(["checkout", "-B", RELEASE_BRANCH]);
-  git(["add", "-A", "--", "CHANGELOG.md", VERSION_FILE, "changelog/"]);
+  git(["add", "-A", "--", "CHANGELOG.md", ...versionFiles(root), "changelog/"]);
   git(["commit", "-m", title]);
   let head = git(["rev-parse", "HEAD"]).trim();
   // Same base and same files as the branch already there: no push, so its CI keeps running instead of starting over every hour.

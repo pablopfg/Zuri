@@ -33,7 +33,10 @@ import {
   renderChangelog,
   renderVersionFile,
   type Version,
+  versionFiles,
+  versionMismatches,
   versionsByCommit,
+  writeVersion,
 } from "../../scripts/versao.ts";
 import { fragmentProblems, readFragments } from "../../scripts/changelog.ts";
 import { loadWorkflow, readText } from "./helpers.ts";
@@ -69,6 +72,19 @@ describe("CHANGELOG.md in the repository", () => {
   it("has the version of the system on top, the same as APP_VERSION", () => {
     expect(changelog.versions[0]?.version).toBe(APP_VERSION);
     expect(readText("packages/shared/src/version.ts")).toBe(renderVersionFile(APP_VERSION));
+  });
+
+  it("carries the same version in version.ts, every package.json and package-lock.json", () => {
+    const root = join(import.meta.dirname, "../..");
+    expect(versionFiles(root)).toEqual([
+      "packages/shared/src/version.ts",
+      "package.json",
+      "packages/shared/package.json",
+      "apps/agent/package.json",
+      "apps/web/package.json",
+      "package-lock.json",
+    ]);
+    expect(versionMismatches(root, APP_VERSION)).toEqual([]);
   });
 
   it("has one section per merge, each with its own commit and tag", () => {
@@ -312,6 +328,108 @@ describe("release pull request", () => {
   });
 });
 
+describe("writeVersion and versionMismatches", () => {
+  const dirs: string[] = [];
+  afterEach(() => {
+    for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true });
+  });
+  const json = (value: unknown) => `${JSON.stringify(value, null, 2)}\n`;
+  const project = () => {
+    const dir = mkdtempSync(join(tmpdir(), "versao-"));
+    dirs.push(dir);
+    const put = (file: string, text: string) => {
+      mkdirSync(dirname(join(dir, file)), { recursive: true });
+      writeFileSync(join(dir, file), text);
+    };
+    put("packages/shared/src/version.ts", renderVersionFile("0.1.0"));
+    put("package.json", json({ name: "zuri", version: "0.1.0", private: true, workspaces: ["packages/shared", "apps/web", "apps/gone"] }));
+    // "apps/gone" is listed but has no package.json: reported by versionMismatches, skipped by writeVersion.
+    put("packages/shared/package.json", json({ name: "@zuri/shared", version: "0.1.0", dependencies: { zod: "4.6.7" } }));
+    put("apps/web/package.json", json({ name: "@zuri/web", version: "0.1.0" }));
+    put(
+      "package-lock.json",
+      json({
+        name: "zuri",
+        version: "0.1.0",
+        lockfileVersion: 3,
+        packages: {
+          "": { name: "zuri", version: "0.1.0" },
+          "packages/shared": { name: "@zuri/shared", version: "0.1.0" },
+          "apps/web": { name: "@zuri/web", version: "0.1.0" },
+          "node_modules/zod": { version: "4.6.7" },
+        },
+      }),
+    );
+    return { dir, read: (file: string) => readFileSync(join(dir, file), "utf8") };
+  };
+
+  it("lists the files that exist and reports a workspace without package.json, such as a glob", () => {
+    const { dir } = project();
+    expect(versionFiles(dir)).toEqual(["packages/shared/src/version.ts", "package.json", "packages/shared/package.json", "apps/web/package.json", "package-lock.json"]);
+    expect(versionMismatches(dir, "0.1.0")).toEqual(['workspace "apps/gone": no package.json (list each workspace by its path, without globs)']);
+    const root = JSON.parse(readFileSync(join(dir, "package.json"), "utf8"));
+    writeFileSync(join(dir, "package.json"), json({ ...root, workspaces: ["packages/shared", "apps/*"] }));
+    expect(versionMismatches(dir, "0.1.0")).toEqual(['workspace "apps/*": no package.json (list each workspace by its path, without globs)']);
+  });
+
+  it("writes the version everywhere and changes nothing else, not even a dependency on the same number", () => {
+    const { dir, read } = project();
+    const before = versionFiles(dir).map(read);
+    writeVersion(dir, "0.2.3");
+    expect(versionMismatches(dir, "0.2.3")).toEqual([expect.stringMatching(/^workspace "apps\/gone"/)]);
+    const after = versionFiles(dir).map(read);
+    // Only the version lines differ, so the diff of the release pull request stays small.
+    for (const [i, text] of after.entries()) {
+      const was = (before[i] ?? "").split("\n");
+      const changed = text.split("\n").filter((line, n) => line !== was[n]);
+      expect(changed.length).toBeGreaterThan(0);
+      for (const line of changed) expect(line).toMatch(/"version": "0\.2\.3"|APP_VERSION = "0\.2\.3"/);
+    }
+    expect(JSON.parse(read("package-lock.json")).packages["node_modules/zod"].version).toBe("4.6.7");
+  });
+
+  it("names each file and lockfile entry left behind", () => {
+    const { dir, read } = project();
+    writeFileSync(join(dir, "apps/web/package.json"), read("apps/web/package.json").replace("0.1.0", "0.0.0"));
+    const lock = JSON.parse(read("package-lock.json"));
+    lock.packages["packages/shared"].version = "0.0.9";
+    delete lock.packages["apps/web"];
+    writeFileSync(join(dir, "package-lock.json"), json(lock));
+    writeFileSync(join(dir, "packages/shared/src/version.ts"), 'export const APP_VERSION = "0.1.0";\n');
+    expect(versionMismatches(dir, "0.1.0")).toEqual([
+      'workspace "apps/gone": no package.json (list each workspace by its path, without globs)',
+      'packages/shared/src/version.ts: "0.1.0, not as scripts/versao.ts writes it" instead of "0.1.0"',
+      'apps/web/package.json: "0.0.0" instead of "0.1.0"',
+      'package-lock.json packages["packages/shared"]: "0.0.9" instead of "0.1.0"',
+      'package-lock.json packages["apps/web"]: null instead of "0.1.0"',
+    ]);
+  });
+
+  it("fails npm run lint through --conferir and fixes the files through --sincronizar", () => {
+    expect(JSON.parse(readText("package.json")).scripts.lint).toContain("node scripts/versao.ts --conferir");
+    const { dir, read } = project();
+    writeFileSync(join(dir, "package.json"), json({ ...JSON.parse(read("package.json")), workspaces: ["packages/shared", "apps/web"] }));
+    writeFileSync(join(dir, "CHANGELOG.md"), renderChangelog({ intro: "I.", versions: [version({ version: "0.1.1" })] }));
+    mkdirSync(join(dir, "scripts"));
+    // Copies, not links: Node runs a linked script from where it really is, which is this repository.
+    for (const file of ["versao.ts", "changelog.ts"]) writeFileSync(join(dir, "scripts", file), readText(`scripts/${file}`));
+    const cli = (flag: string) => {
+      try {
+        return { code: 0, out: execFileSync(process.execPath, [join(dir, "scripts/versao.ts"), flag], { encoding: "utf8", stdio: "pipe" }) };
+      } catch (error) {
+        const failed = error as { status: number; stderr: string };
+        return { code: failed.status, out: failed.stderr };
+      }
+    };
+    const check = cli("--conferir");
+    expect(check.code).toBe(1);
+    expect(check.out).toContain('package.json: "0.1.0" instead of "0.1.1"');
+    expect(cli("--sincronizar").code).toBe(0);
+    expect(versionMismatches(dir, "0.1.1")).toEqual([]);
+    expect(cli("--conferir")).toEqual({ code: 0, out: "versao: 5 files on 0.1.1\n" });
+  });
+});
+
 describe("computePlan and applyPlan on a real repository", () => {
   const dirs: string[] = [];
   afterEach(() => {
@@ -361,6 +479,7 @@ describe("computePlan and applyPlan on a real repository", () => {
     write(dir, "CHANGELOG.md", renderChangelog({ intro: "Intro.", versions: [] }));
     write(dir, "changelog/nao-lancado/.gitkeep", "");
     write(dir, "packages/shared/src/version.ts", renderVersionFile("0.0.0"));
+    write(dir, "package.json", '{\n  "name": "zuri",\n  "version": "0.0.0"\n}\n');
     const first = commit(dir, "chore: prepara o repositório (#1)", "2026-10-30T22:15:05-03:00");
     write(dir, "changelog/nao-lancado/etapa-1.md", "<!-- versao: minor -->\n### Adicionado\n\n- Worker.\n");
     const second = commit(dir, "feat: cria o Worker (#6)", "2026-10-31T01:46:24Z");
@@ -382,6 +501,7 @@ describe("computePlan and applyPlan on a real repository", () => {
     applyPlan(dir, plan);
     expect(existsSync(join(dir, "changelog/nao-lancado/etapa-1.md"))).toBe(false);
     expect(readFileSync(join(dir, "packages/shared/src/version.ts"), "utf8")).toBe(renderVersionFile("0.1.1"));
+    expect(readFileSync(join(dir, "package.json"), "utf8")).toBe('{\n  "name": "zuri",\n  "version": "0.1.1"\n}\n');
     const written = parseChangelog(readFileSync(join(dir, "CHANGELOG.md"), "utf8"));
     expect(written.versions.map((v) => v.version)).toEqual(["0.1.1", "0.1.0", "0.0.1"]);
 

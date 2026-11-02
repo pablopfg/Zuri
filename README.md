@@ -70,7 +70,7 @@ As capturas abaixo acompanham o tema do seu GitHub (claro ou escuro) e saem da `
     <td width="50%" valign="top">
       <picture>
         <source media="(prefers-color-scheme: dark)" srcset="docs/capturas/inicio-computador-escuro.png">
-        <img src="docs/capturas/inicio-computador-claro.png" alt="Início da Zuri no computador: cumprimento pelo horário com o nome do dono, barra lateral com Início, Conversa, Tarefas, Notas, Memória, Automações e Acessos, e cartões de Segurança e Sessão">
+        <img src="docs/capturas/inicio-computador-claro.png" alt="Início da Zuri no computador: cumprimento pelo horário com o nome do dono, barra lateral com Início, Conversa, Tarefas, Notas, Memória, Automações e Acessos e a versão no pé, e cartões de Segurança e Sessão">
       </picture>
       <p align="center"><b>Início</b>: cumprimento pelo horário, segurança da conta e sessão num relance</p>
     </td>
@@ -348,7 +348,7 @@ Leia o [CONTRIBUTING.md](CONTRIBUTING.md) e o [AGENTS.md](AGENTS.md). Em resumo:
 - Branch a partir da `develop` e PR sempre para a `develop`. A `main` só recebe releases.
 - Título em Conventional Commits, com o texto em pt-BR (`feat(telegram): adiciona o comando /hoje`).
 - Testes junto com o código, changelog num arquivo em `changelog/nao-lancado/`, este README atualizado e o modelo de PR preenchido.
-- Cada merge na `develop` vira uma versão 0.x com tag e pré-release no GitHub; a versão em uso aparece em Configurações > Diagnóstico ([como funciona](docs/agente/versionamento.md)).
+- Cada merge na `develop` vira uma versão 0.x com tag e pré-release no GitHub; a versão em uso aparece no pé do menu lateral (no celular, no pé da lista de Configurações) e em Configurações > Diagnóstico, e é a mesma em todos os `package.json` e no `package-lock.json` ([como funciona](docs/agente/versionamento.md)).
 - Todo texto visível em pt-BR e en, pelo catálogo de i18n.
 
 ## 🌎 In English

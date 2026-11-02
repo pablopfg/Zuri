@@ -1,3 +1,4 @@
+import { APP_VERSION } from "@zuri/shared";
 import { Brain, Clock, House, ListTodo, LogOut, MessageCircle, NotebookPen, PanelLeftClose, PanelLeftOpen, Search, Settings, ShieldCheck } from "lucide-react";
 import { lazy, type ReactNode, Suspense, useEffect, useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router";
@@ -158,6 +159,8 @@ export function AppShell() {
               <Label text={t("web.nav.signOut")} hidden={collapsed} />
             </button>
           </Tip>
+          {/* The version in use, quiet at the foot (CHANGELOG.md); the narrow rail keeps it for screen readers only. */}
+          <p className={cn("px-3 pt-1 text-xs text-fg-muted", collapsed && "sr-only")}>{t("web.nav.version", { version: APP_VERSION })}</p>
         </div>
       </aside>
 
