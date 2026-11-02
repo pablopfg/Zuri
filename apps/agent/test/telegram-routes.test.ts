@@ -396,13 +396,15 @@ describe("linking the owner's account", () => {
     expect((await json<TelegramStatus>(await api("GET", "/telegram"), 200)).state).toBe("ready");
   });
 
-  it("Connect, Confirm, Unlink and the settings ask for the password typed recently; a stale session can't", async () => {
+  it("Connect, Confirm, Unlink, the group and the settings ask for the password typed recently; a stale session can't", async () => {
     await inOwner((agent) => agent.store.db.run(`UPDATE zur_sessions SET confirmed_at = ?`, Date.now() - 16 * 60_000));
     for (const [method, path] of [
       ["POST", "/telegram/connect"],
       ["POST", "/telegram/confirm"],
       ["DELETE", "/telegram"],
       ["PATCH", "/telegram"],
+      ["POST", "/telegram/group"],
+      ["DELETE", "/telegram/group"],
     ] as const) {
       const body = method === "PATCH" ? { readLockHours: 72 } : undefined;
       expect(apiErrorSchema.parse(await json(await api(method, path, body), 403)).code, path).toBe("RECENT_AUTH_REQUIRED");
@@ -419,6 +421,8 @@ describe("linking the owner's account", () => {
       ["POST", "/telegram/connect"],
       ["POST", "/telegram/confirm"],
       ["POST", "/telegram/test"],
+      ["POST", "/telegram/group"],
+      ["DELETE", "/telegram/group"],
     ] as const) {
       const anonymous = await call(`${ORIGIN}/api${path}`, { method, headers: headers(false) });
       expect(anonymous.status, `${method} ${path}`).toBe(401);

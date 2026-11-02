@@ -94,8 +94,13 @@ const SEND_TIMEOUT_MS = 30_000;
 const STUCK_SENDING_MS = 5 * 60_000;
 /** The most a notice's body keeps, in characters. */
 const BODY_MAX = 4_000;
-/** Insisting notices handled per wake; the rest wait for the next one (set at once). */
-const TRIES_PER_WAKE = 10;
+/**
+ * Notices sent per wake, snoozed ones coming back and insisting tries
+ * together; the rest wait for the next wake (set at once). Each send can take
+ * several subrequests (push to each device, Telegram, e-mail), and one wake has
+ * 50 on the Free plan.
+ */
+const SENDS_PER_WAKE = 5;
 const HOUR = 3_600_000;
 const DAY = 24 * HOUR;
 /** "Adiar 1 h": the notice comes back this much later. */
@@ -343,11 +348,12 @@ export class AlertService {
    */
   async escalate(): Promise<number> {
     const nowMs = this.now();
-    this.wakeSnoozed(nowMs);
+    const woken = this.wakeSnoozed(nowMs);
+    if (woken >= SENDS_PER_WAKE) return 0;
     const due = this.db.all<NoticeRow>(
       `SELECT * FROM zur_notices WHERE escalation = 'active' AND next_attempt_at <= ? ORDER BY next_attempt_at LIMIT ?`,
       iso(nowMs),
-      TRIES_PER_WAKE,
+      SENDS_PER_WAKE - woken,
     );
     let tries = 0;
     for (const row of due) {
@@ -379,11 +385,13 @@ export class AlertService {
    * same priority, no learning), sent and insisting like any other. Each one is
    * claimed in the statement that clears its time, so it comes back once.
    */
-  private wakeSnoozed(nowMs: number): void {
-    const due = this.db.all<NoticeRow>(`SELECT * FROM zur_notices WHERE snoozed_until IS NOT NULL AND snoozed_until <= ? ORDER BY snoozed_until LIMIT ?`, iso(nowMs), TRIES_PER_WAKE);
+  private wakeSnoozed(nowMs: number): number {
+    const due = this.db.all<NoticeRow>(`SELECT * FROM zur_notices WHERE snoozed_until IS NOT NULL AND snoozed_until <= ? ORDER BY snoozed_until LIMIT ?`, iso(nowMs), SENDS_PER_WAKE);
+    let woken = 0;
     for (const row of due) {
       const { rowsWritten } = this.db.run(`UPDATE zur_notices SET snoozed_until = NULL WHERE id = ? AND snoozed_until = ?`, row.id, row.snoozed_until ?? "");
       if (rowsWritten === 0) continue;
+      woken++;
       let params: NoticeParams = {};
       try {
         const parsed: unknown = JSON.parse(row.params);
@@ -402,6 +410,7 @@ export class AlertService {
         source: null,
       });
     }
+    return woken;
   }
 
   // ---------- The owner's answers ----------

@@ -361,6 +361,7 @@ export class TelegramService {
     }
     if (!this.deps.callbacks.consume(found.noticeId)) {
       await answer("telegram.notice.handled");
+      await clearButtons();
       return;
     }
     const result = await this.deps.alerts().respondOutOfBand(found.noticeId, found.action);

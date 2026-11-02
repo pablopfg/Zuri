@@ -305,6 +305,21 @@ describe("formatNotice", () => {
     expect([...formatNotice(notice("t".repeat(5000), "b".repeat(9000)), 3, true, "pt-BR")].length).toBeLessThan(TELEGRAM_LIMITS.messageMax);
   });
 
+  it("also disarms what only Telegram makes tappable: commands, mentions and other schemes, in title and text", () => {
+    const [title, body] = formatNotice(notice("/start abc @golpista_bot", "Toque /unlink_all, fale com @suporte_zuri ou abra tg://resolve?domain=x e ftp://exemplo.com"), 1, true, "pt-BR").split("\n");
+    for (const line of [title, body]) {
+      expect(line).not.toMatch(/(^|\s)\/[A-Za-z]/);
+      expect(line).not.toMatch(/(^|\s)@[A-Za-z]/);
+    }
+    expect(title).toBe("\u2215start abc \uFF20golpista_bot");
+    expect(body).toContain("tg[:]//resolve?domain=x");
+    expect(body).toContain("ftp[:]//exemplo[.]com");
+    expect(body).not.toMatch(/[a-z]:\/\//i);
+    // What isn't a command, a mention or a link stays as written.
+    const [, plain] = formatNotice(notice("T", "Tarefas 3/5, a/b, nome@exemplo, hxxps já desarmado"), 1, true, "pt-BR").split("\n");
+    expect(plain).toBe("Tarefas 3/5, a/b, nome@exemplo, hxxps já desarmado");
+  });
+
   it("puts a title on one line, so it can't fake the footer, and words the footer in English too", () => {
     expect(formatNotice(notice("Linha 1\n\nTarefas · Crítica", ""), 2, false, "en").split("\n")).toEqual([
       "Linha 1 Tarefas · Crítica",
@@ -422,6 +437,8 @@ describe("the buttons", () => {
     expect(answers().filter((text) => text === "Este aviso já foi tratado.")).toHaveLength(1);
     expect(await inOwner((agent) => agent.store.db.all(`SELECT result FROM zur_telegram_audit WHERE kind = 'callback'`))).toHaveLength(2);
     expect(["acknowledged", "muted"]).toContain((await noticeRow(notice.id))?.escalation);
+    // Whichever tap lost, its message loses the buttons too.
+    expect(sent("editMessageReplyMarkup")).toHaveLength(2);
   });
 });
 
@@ -467,6 +484,48 @@ describe("insisting through Telegram", () => {
     expect(String(messages[2]?.body.text)).toContain("Tentativa 3 de 3");
     expect(String(messages[0]?.body.text)).not.toContain("Tentativa");
   });
+  it("sends at most 5 notices per wake, snoozed ones coming back first; the rest go on the next wake", async () => {
+    const counts = await inOwner(async (agent) => {
+      const { db } = agent.store;
+      let now = Date.parse("2026-11-02T12:00:00.000Z");
+      const delivered: string[] = [];
+      const alerts = new AlertService(db, agent.store.productivity.storage, {
+        locale: () => "pt-BR",
+        settings: () => agent.store.settings.get(),
+        channels: () => [
+          {
+            name: "telegram",
+            state: () => "ready",
+            send: async (m) => {
+              delivered.push(m.notice.id);
+              return { status: "sent" };
+            },
+          },
+        ],
+        rearm: async () => undefined,
+        clock: () => now,
+      });
+      for (let i = 0; i < 4; i++) alerts.raise(routine("critical", `Insiste ${i}`));
+      const snoozed: string[] = [];
+      for (let i = 0; i < 3; i++) snoozed.push((alerts.raise(routine("critical", `Adiado ${i}`)) as Notice).id);
+      await alerts.settled();
+      for (const noticeId of snoozed) await alerts.respondOutOfBand(noticeId, "snooze");
+      now += 61 * 60_000;
+      db.run(`UPDATE zur_notices SET next_attempt_at = ? WHERE escalation = 'active'`, new Date(now - 1000).toISOString());
+      const before = db.one<{ n: number }>(`SELECT count(*) AS n FROM zur_notices`)?.n ?? 0;
+      delivered.length = 0;
+      const first = await alerts.escalate();
+      await alerts.settled();
+      const sentFirst = delivered.length;
+      const afterFirst = db.one<{ n: number }>(`SELECT count(*) AS n FROM zur_notices`)?.n ?? 0;
+      delivered.length = 0;
+      const second = await alerts.escalate();
+      await alerts.settled();
+      return { first, second, comeBack: afterFirst - before, sentFirst, sentSecond: delivered.length };
+    });
+    // Wake 1: the 3 snoozed come back and 2 tries go (5); wake 2: the other 2 tries.
+    expect(counts).toEqual({ first: 2, second: 2, comeBack: 3, sentFirst: 5, sentSecond: 2 });
+  });
 });
 
 describe("the notices' group", () => {
@@ -509,6 +568,32 @@ describe("the notices' group", () => {
     expect(await snapshot()).toBe(before);
     expect(sent("leaveChat").map((c) => c.body.chat_id)).toEqual([GROUP, GROUP]);
     expect((await json<TelegramStatus>(await api("GET", "/telegram"), 200)).group).toBeNull();
+  });
+
+  it("a group code past its 10 minutes, or one already used, links nothing: the bot leaves", async () => {
+    await linkOwner();
+    const startIn = (chat: number, code: string, messageId: number) =>
+      deliver({ message: { message_id: messageId, date: 1, from: { id: OWNER, is_bot: false, first_name: "Dono" }, chat: { id: chat, type: "supergroup", title: "Grupo" }, text: `/start ${code}` } });
+    // Expired: the owner, with the right code, a second too late.
+    const expired = new URL((await json<TelegramGroupCode>(await api("POST", "/telegram/group"), 200)).link).searchParams.get("startgroup") ?? "";
+    await inOwner((agent) => {
+      const row = agent.store.db.one<{ value: string }>(`SELECT value FROM zur_settings WHERE key = 'telegram_group_code'`);
+      const [hash] = (JSON.parse(row?.value ?? '""') as string).split("|");
+      agent.store.db.run(`UPDATE zur_settings SET value = ? WHERE key = 'telegram_group_code'`, JSON.stringify(`${hash}|${new Date(Date.now() - 1000).toISOString()}`));
+    });
+    await startIn(GROUP, expired, 1);
+    expect(sent("leaveChat").map((c) => c.body.chat_id)).toEqual([GROUP]);
+    expect((await json<TelegramStatus>(await api("GET", "/telegram"), 200)).group).toBeNull();
+    // Used: a code that linked one group can't link another.
+    botCalls.length = 0;
+    const used = new URL((await json<TelegramGroupCode>(await api("POST", "/telegram/group"), 200)).link).searchParams.get("startgroup") ?? "";
+    await startIn(GROUP, used, 2);
+    const linked = await json<TelegramStatus>(await api("GET", "/telegram"), 200);
+    expect(linked.group?.title).toBe("Grupo");
+    expect(linked.groupCodeExpiresAt).toBeNull();
+    await startIn(GROUP - 1, used, 3);
+    expect(sent("leaveChat").map((c) => c.body.chat_id)).toEqual([GROUP - 1]);
+    expect((await json<TelegramStatus>(await api("GET", "/telegram"), 200)).group?.title).toBe("Grupo");
   });
 
   it("someone else adding the bot to a group: it leaves at once", async () => {

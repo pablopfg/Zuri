@@ -168,11 +168,23 @@ export function formatNotice(
   full: boolean,
   locale: Locale,
 ): string {
-  const title = clip(disarmLinks(clip(oneLine(notice.title), TELEGRAM_LIMITS.alertTitleMax)), TELEGRAM_LIMITS.alertTitleMax);
-  const body = full ? clip(disarmLinks(clip(notice.body.trim(), TELEGRAM_LIMITS.alertBodyMax)), TELEGRAM_LIMITS.alertBodyMax) : t(locale, "telegram.notice.discreet");
+  const title = clip(disarm(clip(oneLine(notice.title), TELEGRAM_LIMITS.alertTitleMax)), TELEGRAM_LIMITS.alertTitleMax);
+  const body = full ? clip(disarm(clip(notice.body.trim(), TELEGRAM_LIMITS.alertBodyMax)), TELEGRAM_LIMITS.alertBodyMax) : t(locale, "telegram.notice.discreet");
   const footer = [t(locale, CATEGORY_NAME[notice.category]), t(locale, PRIORITY_NAME[notice.priority])];
   if (attempt > 1) footer.push(t(locale, "telegram.notice.attempt", { n: attempt, total: ESCALATION.tries }));
   return [title, body, "", footer.join(" · ")].filter((line, i) => i !== 1 || line !== "").join("\n");
+}
+
+/**
+ * Links disarmed, plus what only Telegram turns into something to tap: a bot
+ * command (`/start`), a mention (`@someone`) and any other scheme (`tg://`).
+ * The look-alike characters keep the text readable without making it a link.
+ */
+export function disarm(text: string): string {
+  return disarmLinks(text)
+    .replace(/\b(?!hxxps?:)([a-z][a-z0-9+.-]*):\/\//gi, "$1[:]//")
+    .replace(/(?<![\p{L}\p{N}_/])\/(?=[A-Za-z0-9_])/gu, "\u2215")
+    .replace(/(?<![\p{L}\p{N}_])@(?=[A-Za-z0-9_])/gu, "\uFF20");
 }
 
 /** A title stays on one line, so it can't fake the footer or another notice. */
