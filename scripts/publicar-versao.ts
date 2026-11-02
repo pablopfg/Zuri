@@ -15,13 +15,21 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { approveHeldRuns, authEnv, OPT_OUT_LABEL, run, sleepMs, tryRun } from "./atualizar-prs.ts";
-import { applyPlan, BASE_BRANCH, computePlan, noMentions, releaseName, releaseNotes, VERSION_FILE, type Version } from "./versao.ts";
+import { applyPlan, BASE_BRANCH, compareVersions, computePlan, noMentions, releaseName, releaseNotes, VERSION_FILE, type Version } from "./versao.ts";
 
 export const RELEASE_BRANCH = "chore/versao";
 /** Kept off the automatic update: this workflow rewrites the branch from develop itself. */
 export const RELEASE_LABEL = OPT_OUT_LABEL;
 /** GitHub limits how fast content is created; a pause between releases keeps the backfill under it. */
 const RELEASE_PAUSE_MS = 1500;
+/**
+ * The oldest version with a tag and a pre-release. GitHub refuses GITHUB_TOKEN a
+ * tag on a commit whose workflow files differ from develop's ("refusing to allow
+ * a GitHub App to create or update workflow ... without workflows permission"),
+ * and that is every merge before #68 (0.15.5). Those versions live only in
+ * CHANGELOG.md, with their commit and pull request (docs/agente/versionamento.md).
+ */
+export const FIRST_TAGGED_VERSION = "0.15.5";
 
 export interface ReleaseWork {
   /** Versions that need a release (and the tag, when it is missing), oldest first. */
@@ -62,6 +70,11 @@ export function pullRequestBody(pending: Version[]): string {
     "",
     "Sem mudança visível além do número da versão no Diagnóstico.",
   ].join("\n"));
+}
+
+/** The versions that get a tag and a pre-release: FIRST_TAGGED_VERSION and newer. */
+export function taggable(versions: Version[]): Version[] {
+  return versions.filter((v) => compareVersions(v.version, FIRST_TAGGED_VERSION) >= 0);
 }
 
 /** `sha:refs/tags/vX.Y.Z` for each version whose tag does not exist yet. */
@@ -109,7 +122,7 @@ function main(root: string): number {
       .flat()
       .map((r) => r.tag_name),
   );
-  const work = releaseWork(versions, tags, releases);
+  const work = releaseWork(taggable(versions), tags, releases);
   if (work.conflicts.length === 0) {
     // Tags go by git push, never by the releases API: the API refuses GITHUB_TOKEN a tag on a commit whose
     // workflow files differ from develop's (HTTP 403 "Resource not accessible by integration", run of #76).

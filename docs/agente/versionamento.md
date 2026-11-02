@@ -26,7 +26,8 @@ A versão vale em três lugares, sempre iguais (um teste em
 - `packages/shared/src/version.ts` (`APP_VERSION`), escrito pelo script a
   partir dela e mostrado em Configurações > Diagnóstico ("Versão da Zuri") e
   no formulário de "Relatar no GitHub";
-- a tag `vX.Y.Z` no commit do merge, com a pré-release do GitHub.
+- a tag `vX.Y.Z` no commit do merge, com a pré-release do GitHub (a partir da
+  0.15.5; veja "Histórico").
 
 O `version.ts` só muda quando a PR `chore(release):` mescla, minutos depois do
 merge. Por isso o build do commit marcado com `vX.Y.Z` ainda mostra a versão
@@ -140,5 +141,13 @@ Localmente: `node scripts/versao.ts` mostra o que falta escrever,
 O `CHANGELOG.md` foi refeito em 02/11/2026 a partir das 69 PRs mescladas na
 `develop` até a #73: cada item do changelog antigo e de `changelog/nao-lancado/`
 voltou para a PR que o escreveu, as etapas 0 a 13 subiram o número do meio e o
-resto o último. As tags e pré-releases dessas versões foram criadas pelo
-primeiro run do workflow.
+resto o último.
+
+As tags e pré-releases começam na **0.15.5** (#68), constante
+`FIRST_TAGGED_VERSION` de `scripts/publicar-versao.ts`. O GitHub não deixa o
+`GITHUB_TOKEN` criar uma tag num commit cujos arquivos de `.github/workflows/`
+diferem dos da `develop` ("refusing to allow a GitHub App to create or update
+workflow … without `workflows` permission"), e todas as versões antes da #68
+estão nesse caso. Elas ficam só no `CHANGELOG.md`, com o commit e a PR de cada
+uma. Daqui em diante isso não se repete: o workflow cria a tag logo depois do
+merge, quando os workflows do commit ainda são os da `develop`.

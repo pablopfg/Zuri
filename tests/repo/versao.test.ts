@@ -4,7 +4,16 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { APP_VERSION } from "../../packages/shared/src/version.ts";
 import { afterEach, describe, expect, it } from "vitest";
-import { isSameRelease, parseLsRemoteTags, pullRequestBody, pullRequestTitle, releaseWork, tagRefspecs } from "../../scripts/publicar-versao.ts";
+import {
+  FIRST_TAGGED_VERSION,
+  isSameRelease,
+  parseLsRemoteTags,
+  pullRequestBody,
+  pullRequestTitle,
+  releaseWork,
+  tagRefspecs,
+  taggable,
+} from "../../scripts/publicar-versao.ts";
 import {
   applyPlan,
   bumpVersion,
@@ -256,6 +265,13 @@ describe("releaseWork", () => {
     const work = releaseWork([a], new Map([["v0.1.0", sha("f")]]), new Set());
     expect(work.create).toEqual([]);
     expect(work.conflicts[0]).toMatch(/v0\.1\.0 points to fffffff/);
+  });
+
+  it("tags only from the first version GitHub lets the workflow tag", () => {
+    const old = version({ version: "0.15.4" });
+    const first = version({ version: FIRST_TAGGED_VERSION });
+    const later = version({ version: "0.15.10" });
+    expect(taggable([old, first, later])).toEqual([first, later]);
   });
 
   it("pushes by git only the tags still missing, each on its merge commit", () => {
