@@ -10,7 +10,7 @@ import { isValidCalendarDate, MAX_DATE_YEAR, zonedParts, zonedTimeToUtc } from "
  * bot asks instead of guessing. No AI: words and numbers only.
  */
 
-export type AmbiguousReason = "same_weekday" | "past_date" | "period" | "past";
+export type AmbiguousReason = "same_weekday" | "past_date" | "period" | "past" | "unclear";
 
 export type When =
   | { kind: "ok"; at: string; local: string; hasTime: boolean }
@@ -38,7 +38,9 @@ const MAX_PHRASE_WORDS = 12;
 const MAX_DAYS = 366;
 const WEEKDAYS: Record<string, number> = { domingo: 0, segunda: 1, terca: 2, quarta: 3, quinta: 4, sexta: 5, sabado: 6 };
 /** Words that may sit between or before the date's parts ("na sexta às 9h", "para amanhã"). */
-const CONNECTORS = new Set(["a", "as", "de", "da", "do", "no", "na", "em", "para", "pra", "ate", "e", "o"]);
+const CONNECTORS = new Set(["a", "as", "ao", "de", "da", "do", "no", "na", "em", "para", "pra", "ate", "e", "o", "pela", "pelo"]);
+/** A word that reads like part of a date or an hour: left next to a date, the date was not fully understood. */
+const DATE_LIKE = /^(\d{1,2}(h\d{0,2}|:\d{2}h?)|meio(-dia)?|meia(-noite)?|manha|tarde|noite|madrugada|ao|as|pela|pelo)$/;
 const TIME = /^(\d{1,2})(?:h(\d{2})?|:(\d{2})h?)$/;
 const DATE = /^(\d{1,2})\/(\d{1,2})(?:\/(\d{4}))?$/;
 
@@ -126,13 +128,20 @@ function phrase(words: readonly string[]): Parts | null {
     } else if (TIME.test(word)) {
       const [, h, m1, m2] = TIME.exec(word) ?? [];
       const hour = Number(h);
-      const minute = Number(m1 ?? m2 ?? 0);
-      if (hour > 23 || minute > 59 || !set("time", { hour, minute }, "time")) return null;
+      let minute = Number(m1 ?? m2 ?? 0);
       i += 1;
+      // "9h e meia": half past.
+      if (minute === 0 && words[i] === "e" && words[i + 1] === "meia") {
+        minute = 30;
+        i += 2;
+      }
+      if (hour > 23 || minute > 59 || !set("time", { hour, minute }, "time")) return null;
     } else if (word === "as" && next !== undefined && /^\d{1,2}$/.test(next) && Number(next) <= 23) {
       // "às 9": the hour without the "h".
-      if (!set("time", { hour: Number(next), minute: 0 }, "time")) return null;
       i += 2;
+      const half = words[i] === "e" && words[i + 1] === "meia";
+      if (half) i += 2;
+      if (!set("time", { hour: Number(next), minute: half ? 30 : 0 }, "time")) return null;
     } else if (word === "meio-dia" || (word === "meio" && next === "dia")) {
       if (!set("period", "midday", "period")) return null;
       i += word === "meio" ? 2 : 1;
@@ -151,6 +160,11 @@ function phrase(words: readonly string[]): Parts | null {
   return parts;
 }
 
+export interface ResolveOptions {
+  /** /nova: "hoje" with no hour after 09:00 is due at 23:59 instead of asking. */
+  endOfToday?: boolean;
+}
+
 interface Day {
   year: number;
   month: number;
@@ -167,7 +181,7 @@ const pad = (n: number) => String(n).padStart(2, "0");
 const compare = (a: Day, b: Day) => a.year - b.year || a.month - b.month || a.day - b.day;
 
 /** Turns the parts into an instant in the owner's zone, or says why it is ambiguous; null for a day that doesn't exist. */
-function resolve(parts: Parts, ref: Date, timeZone: string): When | null {
+function resolve(parts: Parts, ref: Date, timeZone: string, options: ResolveOptions = {}): When | null {
   if (parts.minutes !== undefined) {
     // Rounded up to the next whole minute, so "daqui a 5 minutos" is never 4.
     const at = new Date(Math.ceil((ref.getTime() + parts.minutes * 60_000) / 60_000) * 60_000);
@@ -179,8 +193,12 @@ function resolve(parts: Parts, ref: Date, timeZone: string): When | null {
   const time = parts.time ? { ...parts.time } : null;
   if (parts.period && parts.period !== "morning") {
     if (!time) return { kind: "ambiguous", reason: "period", suggestion: null };
+    // "12h da noite" could be midnight or noon: asked, not guessed.
+    if (parts.period === "night" && time.hour === 12) return { kind: "ambiguous", reason: "period", suggestion: null };
     if ((parts.period === "afternoon" || parts.period === "night") && time.hour >= 1 && time.hour <= 11) time.hour += 12;
   }
+  // "21h da manhã" is no time of day.
+  if (parts.period === "morning" && time && time.hour >= 12) return null;
   const minutesNow = now.hour * 60 + now.minute;
   const ahead = (t: { hour: number; minute: number }) => t.hour * 60 + t.minute > minutesNow;
   let day: Day;
@@ -230,11 +248,15 @@ function resolve(parts: Parts, ref: Date, timeZone: string): When | null {
     day = today;
   }
   const hasTime = time !== null;
-  const clock = time ?? { hour: DEFAULT_HOUR, minute: 0 };
+  let clock = time ?? { hour: DEFAULT_HOUR, minute: 0 };
+  // A task for today with no hour, after 09:00: due at the end of the day (a reminder still asks).
+  if (!time && options.endOfToday && compare(day, today) === 0 && !ahead(clock)) clock = { hour: 23, minute: 59 };
   const at = zonedTimeToUtc({ ...day, hour: clock.hour, minute: clock.minute }, timeZone);
   if (!at) return null;
   if (at.getTime() <= ref.getTime()) return { kind: "ambiguous", reason: "past", suggestion: null };
-  return { kind: "ok", at: at.toISOString(), local: `${day.year}-${pad(day.month)}-${pad(day.day)}T${pad(clock.hour)}:${pad(clock.minute)}`, hasTime };
+  // The wall clock the instant really has: a time skipped by daylight saving moves forward, and `local` follows it.
+  const p = zonedParts(at, timeZone);
+  return { kind: "ok", at: at.toISOString(), local: `${p.year}-${pad(p.month)}-${pad(p.day)}T${pad(p.hour)}:${pad(p.minute)}`, hasTime };
 }
 
 /** The whole text as a date ("amanhã 9h"); null when it is not one. */
@@ -250,25 +272,37 @@ export function parseWhen(text: string, ref: Date, timeZone: string): When | nul
  * at its start ("amanhã 9h pagar a luz"); the longest phrase wins. `rest` is
  * the text without it, as the owner wrote it. Null when neither end has one.
  */
-export function extractWhen(text: string, ref: Date, timeZone: string, where: "start" | "end" | "either" = "either"): { when: When; rest: string } | null {
+export function extractWhen(
+  text: string,
+  ref: Date,
+  timeZone: string,
+  where: "start" | "end" | "either" = "either",
+  options: ResolveOptions = {},
+): { when: When; rest: string } | null {
   const tokens = [...text.matchAll(/\S+/g)].map((m) => ({ word: fold(m[0]), start: m.index, end: m.index + m[0].length }));
   const words = tokens.map((token) => token.word);
   const tryRange = (from: number, to: number) => {
     if (to <= from || words.slice(from, to).some((word) => word === "")) return null;
     const parts = phrase(words.slice(from, to));
-    return parts ? resolve(parts, ref, timeZone) : null;
+    return parts ? resolve(parts, ref, timeZone, options) : null;
   };
+  const unclear: When = { kind: "ambiguous", reason: "unclear", suggestion: null };
   // A date phrase is a few words ("sexta da semana que vem às 9h"): only the ends are tried, so a long text costs no more.
   if (where !== "start") {
     for (let from = Math.max(0, tokens.length - MAX_PHRASE_WORDS); from < tokens.length; from += 1) {
       const when = tryRange(from, tokens.length);
-      if (when) return { when, rest: text.slice(0, tokens[from]?.start ?? 0).trim() };
+      if (!when) continue;
+      // "almoço ao meio-dia amanhã": a word of the date left behind; asked, never cut.
+      if (DATE_LIKE.test(words[from - 1] ?? "")) return { when: unclear, rest: "" };
+      return { when, rest: text.slice(0, tokens[from]?.start ?? 0).trim() };
     }
   }
   if (where !== "end") {
     for (let to = Math.min(tokens.length, MAX_PHRASE_WORDS); to > 0; to -= 1) {
       const when = tryRange(0, to);
-      if (when) return { when, rest: text.slice(tokens[to - 1]?.end ?? 0).trim() };
+      if (!when) continue;
+      if (DATE_LIKE.test(words[to] ?? "")) return { when: unclear, rest: "" };
+      return { when, rest: text.slice(tokens[to - 1]?.end ?? 0).trim() };
     }
   }
   return null;

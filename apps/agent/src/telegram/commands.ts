@@ -6,6 +6,7 @@ import {
   localDayBounds,
   type MessageKey,
   NOTE_TITLE_MAX,
+  SEARCH_MAX,
   type Notice,
   t,
   type Task,
@@ -33,8 +34,9 @@ const HOUR_MS = 60 * MINUTE_MS;
 const LIST_TTL_MS = HOUR_MS;
 const UNDO_TTL_MS = 5 * MINUTE_MS;
 const BUTTON_TTL_MS = 24 * HOUR_MS;
-/** How long the bot waits for the right date after Corrigir. */
+/** How long the bot waits for the right date after Corrigir, and how many of its questions it remembers. */
 const FIX_TTL_MS = 10 * MINUTE_MS;
+const FIX_KEPT = 5;
 /** Items per block in /hoje and per kind in /buscar (spec), and lines in the lists. */
 const BLOCK_MAX = 5;
 const LIST_MAX = 10;
@@ -71,8 +73,8 @@ export interface Out {
 export interface TapOutcome {
   /** The short answer on top of the chat (answerCallbackQuery). */
   answer?: string;
-  /** The buttons that stay under the message: the tapped one leaves. */
-  keyboard?: Button[][];
+  /** The buttons that stay under the message: the tapped one leaves (undefined: left as they are). */
+  keyboard?: Button[][] | undefined;
   out?: Out;
   /** The Destravar button: the service runs /destravar. */
   unlock?: boolean;
@@ -234,6 +236,7 @@ export class TelegramCommands {
   #search(args: string): Out {
     const term = args.trim();
     if (!term) return this.#argument("telegram.cmd.buscar.exemplo");
+    if ([...term].length > SEARCH_MAX) return { text: this.#t("telegram.cmd.buscar.longo", { max: SEARCH_MAX }) };
     const tasks = this.deps.productivity.tasks.list({ q: term, limit: BLOCK_MAX + 1 });
     const notes = this.deps.productivity.notes.list({ q: term, limit: BLOCK_MAX + 1 });
     const memories = this.deps.memories.list({ q: term, status: "current", limit: BLOCK_MAX + 1 }).memories;
@@ -348,7 +351,7 @@ export class TelegramCommands {
   #newTask(args: string): Out {
     const text = args.trim();
     if (!text) return this.#argument("telegram.cmd.nova.exemplo");
-    const found = extractWhen(text, new Date(this.#clock()), this.deps.timeZone());
+    const found = extractWhen(text, new Date(this.#clock()), this.deps.timeZone(), "either", { endOfToday: true });
     if (found && found.when.kind === "ambiguous") return this.#ambiguous(found.when);
     const title = cleanTitle(found ? found.rest : text, TASK_TITLE_MAX);
     if (!title) return this.#argument("telegram.cmd.nova.exemplo");
@@ -366,25 +369,29 @@ export class TelegramCommands {
   #done(args: string): Out {
     const n = /^\s*(\d{1,2})\s*$/.exec(args)?.[1];
     if (n === undefined) return this.#argument("telegram.cmd.feito.exemplo");
-    const id = this.#numbered()[Number(n) - 1];
-    if (!id) return { text: this.#t("telegram.cmd.feito.semLista") };
-    return this.#complete(id);
+    const numbered = this.#numbered();
+    if (numbered.length === 0) return { text: this.#t("telegram.cmd.feito.semLista") };
+    const id = numbered[Number(n) - 1];
+    if (!id) return { text: this.#t("telegram.cmd.feito.foraDaLista", { n: numbered.length }) };
+    return this.#complete(id).out;
   }
 
-  #complete(id: string): Out {
+  /** Completes the task; `done` says whether this call completed it. */
+  #complete(id: string): { out: Out; done: boolean } {
     let task: Task;
     try {
       task = this.deps.productivity.tasks.get(id);
     } catch {
-      return { text: this.#t("telegram.cmd.sumiu") };
+      return { out: { text: this.#t("telegram.cmd.sumiu") }, done: false };
     }
-    if (task.status === "done") return { text: this.#t("telegram.cmd.feito.jaFeita", { titulo: this.#line(task.title) }) };
+    if (task.status === "done") return { out: { text: this.#t("telegram.cmd.feito.jaFeita", { titulo: this.#line(task.title) }) }, done: false };
     this.deps.productivity.tasks.update(id, { status: "done" });
     const undo = this.deps.buttons.create("task_undo", `${id}|${task.status}`, UNDO_TTL_MS);
-    return {
+    const out: Out = {
       text: this.#t("telegram.cmd.feito.ok", { titulo: this.#line(task.title) }),
       keyboard: [[{ text: this.#t("telegram.cmd.botao.desfazer"), callback_data: undo }]],
     };
+    return { out, done: true };
   }
 
   /** The ids of the last /tarefas, while its hour lasts. */
@@ -469,7 +476,8 @@ export class TelegramCommands {
     const action = /^v1:([a-z_]+):/.exec(data)?.[1] as CommandAction | undefined;
     if (locked && action !== "unlock") return { locked: true, answer: this.#t("telegram.lock.lockedShort") };
     const found = this.deps.buttons.take(data);
-    const without = keyboard ? withoutButton(keyboard, data) : [];
+    // A keyboard that couldn't be read is left as it is, never wiped.
+    const without = keyboard ? withoutButton(keyboard, data) : undefined;
     if (found.status !== "ok") {
       const key: MessageKey = found.status === "used" ? "telegram.cmd.botao.usado" : found.status === "expired" ? "telegram.cmd.botao.expirou" : "telegram.cmd.sumiu";
       return { answer: this.#t(key), ...(found.status === "unknown" ? {} : { keyboard: without }) };
@@ -479,8 +487,8 @@ export class TelegramCommands {
         case "unlock":
           return { unlock: true, keyboard: without };
         case "task_done": {
-          const out = this.#complete(found.targetId);
-          return { answer: this.#t("telegram.cmd.botao.feitoOk"), keyboard: without, out };
+          const { out, done } = this.#complete(found.targetId);
+          return { ...(done ? { answer: this.#t("telegram.cmd.botao.feitoOk") } : {}), keyboard: without, out };
         }
         case "task_later":
           return { ...this.#later(found.targetId), keyboard: without };
@@ -553,7 +561,11 @@ export class TelegramCommands {
     return {
       text: this.#t("telegram.cmd.corrigir.pergunta"),
       forceReply: this.#t("telegram.cmd.corrigir.placeholder"),
-      sent: (messageId) => this.deps.state.set("telegram_fix", `${messageId}|${kind}|${id}|${this.#clock() + FIX_TTL_MS}`),
+      sent: (messageId) => {
+        const open = fixQuestions(this.deps.state.get<unknown>("telegram_fix")).slice(-(FIX_KEPT - 1));
+        open.push({ messageId, kind, id, expires: this.#clock() + FIX_TTL_MS, used: false });
+        this.deps.state.set("telegram_fix", writeFixQuestions(open));
+      },
     };
   }
 
@@ -562,18 +574,17 @@ export class TelegramCommands {
    * Only the date changes. Null when the message answers nothing of this.
    */
   async fix(replyToId: number | undefined, text: string): Promise<Out | null> {
-    const stored = this.deps.state.get<unknown>("telegram_fix");
-    if (replyToId === undefined || typeof stored !== "string") return null;
-    const [messageId, kind, id, expires] = stored.split("|");
-    if (Number(messageId) !== replyToId || !id) return null;
-    if (this.#clock() > Number(expires)) {
-      this.deps.state.delete("telegram_fix");
-      return { text: this.#t("telegram.cmd.botao.expirou") };
-    }
+    const questions = fixQuestions(this.deps.state.get<unknown>("telegram_fix"));
+    const question = questions.find((item) => item.messageId === replyToId);
+    if (replyToId === undefined || !question) return null;
+    const { kind, id } = question;
+    if (question.used) return { text: this.#t("telegram.cmd.corrigir.usada") };
+    if (this.#clock() > question.expires) return { text: this.#t("telegram.cmd.botao.expirou") };
     const when = parseWhen(text, new Date(this.#clock()), this.deps.timeZone());
     if (!when) return this.#argument("telegram.cmd.corrigir.exemplo");
     if (when.kind === "ambiguous") return this.#ambiguous(when);
-    this.deps.state.delete("telegram_fix");
+    question.used = true;
+    this.deps.state.set("telegram_fix", writeFixQuestions(questions));
     try {
       if (kind === "task") this.deps.productivity.tasks.update(id, { dueAt: when.at });
       else await this.deps.automations.update(id, { schedule: { type: "once", at: when.local } });
@@ -600,6 +611,8 @@ export class TelegramCommands {
         return { text: this.#t("telegram.date.periodo") };
       case "past":
         return { text: this.#t("telegram.date.passado") };
+      case "unclear":
+        return { text: this.#t("telegram.date.incompleta") };
     }
   }
 
@@ -689,4 +702,28 @@ function stringParams(details: Record<string, unknown> | undefined): Record<stri
     if (typeof value === "number" || (typeof value === "string" && value.length <= 40)) out[key] = value;
   }
   return out;
+}
+
+interface FixQuestion {
+  messageId: number;
+  kind: "task" | "reminder";
+  id: string;
+  expires: number;
+  used: boolean;
+}
+
+/** The last Corrigir questions: "<message id>|<task|reminder>|<id>|<expires ms>|<0|1>" joined by ";". */
+export function fixQuestions(stored: unknown): FixQuestion[] {
+  if (typeof stored !== "string" || stored === "") return [];
+  const out: FixQuestion[] = [];
+  for (const item of stored.split(";")) {
+    const [messageId, kind, id, expires, used] = item.split("|");
+    if (!Number.isSafeInteger(Number(messageId)) || (kind !== "task" && kind !== "reminder") || !id) continue;
+    out.push({ messageId: Number(messageId), kind, id, expires: Number(expires), used: used === "1" });
+  }
+  return out;
+}
+
+function writeFixQuestions(questions: FixQuestion[]): string {
+  return questions.map((q) => `${q.messageId}|${q.kind}|${q.id}|${q.expires}|${q.used ? 1 : 0}`).join(";");
 }

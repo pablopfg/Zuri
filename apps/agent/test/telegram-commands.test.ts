@@ -340,8 +340,9 @@ describe("quick actions", () => {
     // The question was answered: another reply to it goes to the conversation, not to the date.
     botCalls.length = 0;
     await deliver(reply("amanhã 7h", questionId));
-    expect(lastText()).not.toMatch(/^Data corrigida/);
-    expect((await audit()).filter((a) => a.name === "corrigir")).toHaveLength(2);
+    expect(lastText()).toBe("Essa pergunta já foi respondida. Para mudar de novo, toque em Corrigir data outra vez.");
+    expect(prompts).toHaveLength(0);
+    expect((await audit()).filter((a) => a.name === "corrigir")).toHaveLength(3);
   });
 
   it("/nova without a date, with an ambiguous one, and without text", async () => {
@@ -370,7 +371,7 @@ describe("quick actions", () => {
     await addTask("Primeira");
     await addTask("Segunda", null, { status: "in_progress" });
     await command("/tarefas");
-    expect(await command("/feito 3")).toBe("Esse número não está na sua última lista, ou ela já venceu. Mande /tarefas para ver os números de novo.");
+    expect(await command("/feito 3")).toBe("A última lista vai de 1 a 2. Mande /feito com um desses números.");
     expect(await command("/feito 2")).toBe("Concluída: Segunda");
     const undo = buttons(lastSent())[0];
     expect(undo?.text).toBe("Desfazer");
@@ -573,6 +574,7 @@ describe("buttons", () => {
     botCalls.length = 0;
     await tap(rows[0]?.[0]?.callback_data ?? "", rows);
     expect(lastText()).toBe("Esse item não existe mais.");
+    expect(answers()).toEqual([undefined]);
     await tap(rows[0]?.[1]?.callback_data ?? "", rows);
     expect(answers().at(-1)).toBe("Esse item não existe mais.");
   });
@@ -635,6 +637,8 @@ describe("edges", () => {
     });
     await deliver(reply("sexta 10h", questionId));
     expect(lastText()).toBe("Esse botão venceu. Peça a lista de novo.");
+    // The fake Bot API reuses message ids between tests' clears: start the next question afresh.
+    await inOwner((agent) => agent.store.db.run(`DELETE FROM zur_settings WHERE key = 'telegram_fix'`));
     const second = await askFix();
     await inOwner((agent) => agent.store.db.run(`DELETE FROM zur_tasks`));
     await deliver(reply("sexta 10h", second));
@@ -652,6 +656,8 @@ describe("edges", () => {
     expect(answers()).toEqual(["Essa já estava concluída: Uma"]);
     await tap(rows[0]?.[0]?.callback_data ?? "", rows);
     expect(lastText()).toBe("Essa já estava concluída: Uma");
+    // The quick answer never says "Concluída" when nothing was completed.
+    expect(answers()[1]).toBeUndefined();
     await inOwner((agent) => agent.store.productivity.tasks.update(task.id, { status: "todo" }));
     await command("/feito 1");
     const undo = buttons(lastSent())[0]?.callback_data ?? "";
@@ -768,6 +774,57 @@ describe("audit fixes", () => {
     expect(await command(`/nova ${"a ".repeat(2000)}amanhã 9h`)).toMatch(/^Tarefa criada: /);
     expect(await command(`/nova amanhã ${"de ".repeat(1300)}x`)).toMatch(/^Tarefa criada: /);
     expect(Date.now() - started).toBeLessThan(5_000);
+  });
+});
+
+describe("QA fixes", () => {
+  it("/feito outside the list's numbers says how far it goes", async () => {
+    await linkOwner();
+    await addTask("Uma");
+    await addTask("Outra");
+    await command("/tarefas");
+    expect(await command("/feito 0")).toBe("A última lista vai de 1 a 2. Mande /feito com um desses números.");
+    expect(await command("/feito 3")).toBe("A última lista vai de 1 a 2. Mande /feito com um desses números.");
+  });
+
+  it("/buscar with a term over 200 characters says so", async () => {
+    await linkOwner();
+    expect(await command(`/buscar ${"a".repeat(201)}`)).toBe("Esse termo é longo demais. Use até 200 caracteres.");
+  });
+
+  it("two Corrigir questions: the older one still fixes its own task", async () => {
+    await linkOwner();
+    await command("/nova primeira amanhã 9h");
+    const first = buttons(lastSent())[0]?.callback_data ?? "";
+    await command("/nova segunda amanhã 9h");
+    const second = buttons(lastSent())[0]?.callback_data ?? "";
+    botCalls.length = 0;
+    await tap(first);
+    const firstQuestion = 5000 + botCalls.indexOf(lastSent() as BotCall) + 1;
+    await tap(second);
+    await deliver(reply("sexta 10h", firstQuestion));
+    expect(lastText()).toMatch(/^Data corrigida para .+10:00\.$/);
+    const due = (await tasks()).map((t) => new Intl.DateTimeFormat("pt-BR", { timeZone: "America/Sao_Paulo", hour: "2-digit", minute: "2-digit" }).format(Date.parse(t.due_at ?? "")));
+    expect(due).toEqual(["10:00", "09:00"]);
+  });
+
+  it("/lembrar with a date it can't read whole asks instead of cutting it", async () => {
+    await linkOwner();
+    expect(await command("/lembrar amanhã ao meio-dia almoço com a Ana")).toBe("Que horas? Mande de novo com a hora, por exemplo: amanhã 15h.");
+    expect(await command("/lembrar amanhã madrugada ligar")).toBe("Não entendi a data inteira. Mande de novo só com dia e hora, por exemplo: amanhã 12h.");
+    expect(await command("/lembrar amanhã às 9 e meia ligar")).toMatch(/^Lembrete criado: ligar\nPara .+09:30\.$/);
+    expect(await command("/lembrar amanhã pela manhã 7h tomar remédio")).toMatch(/^Lembrete criado: tomar remédio\nPara .+07:00\.$/);
+  });
+
+  it("a tap whose keyboard can't be read leaves the buttons alone", async () => {
+    await linkOwner();
+    await addTask("Uma");
+    await command("/tarefas");
+    const done = keyboard(lastSent())[0]?.[0]?.callback_data ?? "";
+    botCalls.length = 0;
+    await tap(done, [[{ text: "Jogo" } as Button]]);
+    expect(sent("editMessageReplyMarkup")).toHaveLength(0);
+    expect((await tasks())[0]?.status).toBe("done");
   });
 });
 

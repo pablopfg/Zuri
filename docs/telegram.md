@@ -252,7 +252,9 @@ Valem "hoje", "amanhã", "depois de amanhã", dias da semana com ou sem
 "sexta que vem" é a sexta da semana seguinte). Sem hora, vale 09:00. A Zuri
 pergunta em vez de adivinhar quando o dia da semana é hoje e não tem hora,
 quando "5/11" já passou neste ano ("Quis dizer 05/11/2027?"), quando aparece
-"meio-dia", "tarde" ou "noite" sem hora, e quando a data já passou.
+"meio-dia", "tarde" ou "noite" sem hora, quando sobra uma palavra de data
+que ela não entendeu e quando a data já passou. Em `/nova`, "hoje" sem hora
+depois das 09:00 vence às 23:59.
 
 ### Fotos e documentos
 

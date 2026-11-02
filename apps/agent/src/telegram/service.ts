@@ -26,7 +26,7 @@ import { AppError } from "../http/errors.ts";
 import { log } from "../log.ts";
 import { isCommandData, type TelegramCallbacks } from "./callbacks.ts";
 import { type BotCommand, TelegramApiError, TelegramClient } from "./client.ts";
-import { type Attachment, type Button, OPEN_COMMANDS, type Out, TelegramCommands } from "./commands.ts";
+import { type Attachment, type Button, fixQuestions, OPEN_COMMANDS, type Out, TelegramCommands } from "./commands.ts";
 import { type Confirmed, isCodeShaped, type SendCodeOutcome, type TelegramConfirmations } from "./confirmations.ts";
 import { type IncomingAudio, type IncomingTurn, isLargeFileData, type Started, type TelegramConversation } from "./conversation.ts";
 import type { PrivateLink, TelegramLinks } from "./links.ts";
@@ -520,11 +520,11 @@ export class TelegramService {
     if (fixed) await this.#send(link.chatId, fixed);
   }
 
-  /** Whether a reply answers the bot's Corrigir question. */
+  /** Whether a reply answers one of the bot's Corrigir questions (open, used or expired: never sent to the agent). */
   #isFixReply(replyToId: number): boolean {
-    const stored = this.deps.state.get<unknown>("telegram_fix");
-    return typeof stored === "string" && Number(stored.split("|")[0]) === replyToId;
+    return fixQuestions(this.deps.state.get<unknown>("telegram_fix")).some((question) => question.messageId === replyToId);
   }
+
 
   /** "Reading is locked", with the Destravar button (spec: the button under a locked command). */
   async #sayLocked(chatId: number): Promise<void> {

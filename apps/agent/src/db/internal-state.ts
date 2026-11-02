@@ -67,7 +67,7 @@ export type InternalKey =
   | "telegram_confirm_email_sends"
   | "email_confirm_window"
   // Step 15b: the numbers of the last /tarefas ("<ms>|<id>,<id>…", valid 1 hour) and the date
-  // the owner is correcting ("<message id>|<task|reminder>|<id>|<expires ms>").
+  // the owner is correcting (the last 5 Corrigir questions, see fixQuestions in telegram/commands.ts).
   | "telegram_task_numbers"
   | "telegram_fix";
 

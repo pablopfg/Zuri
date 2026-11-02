@@ -172,7 +172,13 @@ Sem mudança visível na interface web: "Sem mudança visível".
   "sexta da semana que vem" é a sexta da semana seguinte.
 - Dia da semana igual a hoje com hora ainda por vir é hoje; com hora passada é
   a semana que vem.
-- Data e hora já passadas (ex. "hoje 8h" às 10h) viram pergunta.
+- Data e hora já passadas (ex. "hoje 8h" às 10h) viram pergunta. Exceção:
+  em `/nova`, "hoje" sem hora depois das 09:00 vence às 23:59 do dia.
+- Palavra de data que sobra junto da frase ("amanhã madrugada ligar") faz a
+  Zuri pedir a data de novo, em vez de cortar o texto. "9 e meia" vale 09:30;
+  "12h da noite" é perguntado.
+- O bot guarda as 5 últimas perguntas de Corrigir; responder a uma já usada
+  avisa e não vai para a conversa.
 - Lembrete do bot nasce com origem `app` (foi o dono quem pediu, sem IA).
 - `/avisos` mostra os 10 mais novos e marca os que ainda insistem; travado,
   mostra categoria, prioridade e hora, sem título.

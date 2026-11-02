@@ -54,6 +54,10 @@ describe("the bot's date grammar", () => {
     ["amanhã 8h da noite", "2026-11-03T20:00"],
     ["amanhã de manhã", "2026-11-03T09:00"],
     ["amanhã às 12h da tarde", "2026-11-03T12:00"],
+    ["amanhã às 9 e meia", "2026-11-03T09:30"],
+    ["amanhã 9h e meia", "2026-11-03T09:30"],
+    ["amanhã pela manhã 7h", "2026-11-03T07:00"],
+    ["amanhã ao meio-dia 12h", "2026-11-03T12:00"],
   ])("%s → %s", (text, expected) => {
     expect(local(text)).toBe(expected);
   });
@@ -79,6 +83,7 @@ describe("the bot's date grammar", () => {
     expect(parseWhen("hoje à noite", REF, ZONE)).toEqual(ambiguous("period"));
     expect(parseWhen("meio-dia", REF, ZONE)).toEqual(ambiguous("period"));
     expect(parseWhen("amanhã meio dia", REF, ZONE)).toEqual(ambiguous("period"));
+    expect(parseWhen("amanhã 12h da noite", REF, ZONE)).toEqual(ambiguous("period"));
     expect(parseWhen("hoje 8h", REF, ZONE)).toEqual(ambiguous("past"));
     expect(parseWhen("hoje", REF, ZONE)).toEqual(ambiguous("past"));
     expect(parseWhen("5/11/2025", REF, ZONE)).toEqual(ambiguous("past"));
@@ -107,6 +112,7 @@ describe("the bot's date grammar", () => {
       "daqui a 5 semanas",
       "daqui a 5 minutos 9h",
       "à tarde à noite",
+      "amanhã 21h da manhã",
       "às",
       "amanhã às",
       "semana que vem semana que vem",
@@ -146,3 +152,29 @@ describe("a date inside the text", () => {
     expect(extractWhen("dentista segunda", REF, ZONE)).toEqual({ rest: "dentista", when: ambiguous("same_weekday") });
   });
 });
+
+describe("daylight saving and the extras", () => {
+  it("a time skipped by daylight saving moves forward, and `local` says so", () => {
+    // New York jumps from 02:00 to 03:00 on 8 March 2026.
+    const ref = new Date("2026-03-07T15:00:00.000Z");
+    expect(parseWhen("amanhã 2h30", ref, "America/New_York")).toMatchObject({ kind: "ok", local: "2026-03-08T03:30", at: "2026-03-08T07:30:00.000Z" });
+    // A 25-hour day: 1:30 happens twice and the first one is taken.
+    expect(parseWhen("amanhã 1h30", new Date("2026-10-31T15:00:00.000Z"), "America/New_York")).toMatchObject({ at: "2026-11-01T05:30:00.000Z" });
+  });
+
+  it("asks when a word of the date is left next to it", () => {
+    expect(extractWhen("amanhã madrugada ligar", REF, ZONE, "start")).toEqual({ when: ambiguous("unclear"), rest: "" });
+    expect(extractWhen("almoço madrugada amanhã", REF, ZONE, "end")).toEqual({ when: ambiguous("unclear"), rest: "" });
+  });
+
+  it("/nova: today with no hour after 09:00 is due at the end of the day", () => {
+    expect(extractWhen("pagar hoje", REF, ZONE, "either", { endOfToday: true })).toMatchObject({ rest: "pagar", when: { local: "2026-11-02T23:59", hasTime: false } });
+    expect(extractWhen("pagar hoje", new Date("2026-11-02T11:00:00.000Z"), ZONE, "either", { endOfToday: true })).toMatchObject({ when: { local: "2026-11-02T09:00" } });
+  });
+
+  it("reads only the ends of a long text", () => {
+    expect(extractWhen(`${"de ".repeat(3000)}amanhã`, REF, ZONE)).toMatchObject({ when: { local: "2026-11-03T09:00" } });
+    expect(extractWhen(`amanhã ${"de ".repeat(3000)}x`, REF, ZONE, "start")).toMatchObject({ when: { local: "2026-11-03T09:00" } });
+  });
+});
+
