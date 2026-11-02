@@ -104,7 +104,7 @@ sempre vazio; o teste do repositório falha se alguém escrever ali.
 5. Se outra PR entrar antes, o próximo run refaz a branch e a mesma PR passa
    a cobrir as duas versões. Quando ela mescla, o merge dela não vira versão
    (título `chore(release):`), e o `CHANGELOG.md` fica em dia. A branch
-   `chore/versao` é apagada em até 15 minutos pelo workflow `Branches`
+   `chore/versao` é apagada em até 10 minutos pelo workflow `Branches`
    (`scripts/limpar-branches.ts`): o "Automatically delete head branches" do
    GitHub não apaga a branch de uma PR mesclada por auto-merge do
    `GITHUB_TOKEN`. Se ela fechar sem mesclar ("Nada a versionar"), o próprio

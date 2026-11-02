@@ -193,14 +193,14 @@ describe.each([
   {
     file: ".github/workflows/readme.yml",
     job: "update",
-    cron: "2,17,32,47 * * * *",
+    cron: "2,12,22,32,42,52 * * * *",
     script: "node scripts/readme.ts --publicar",
     permissions: { contents: "write", "pull-requests": "write", actions: "write" },
   },
   {
     file: ".github/workflows/branches.yml",
     job: "delete-merged",
-    cron: "7,22,37,52 * * * *",
+    cron: "7,17,27,37,47,57 * * * *",
     script: "node scripts/limpar-branches.ts",
     permissions: { contents: "write", "pull-requests": "read" },
   },
@@ -208,7 +208,7 @@ describe.each([
   const wf = loadWorkflow(file);
   const job = wf.jobs[jobId] as (typeof wf.jobs)[string] & { if?: string };
 
-  it("runs when develop moves, every 15 minutes, or by hand, never on a pull request", () => {
+  it("runs when develop moves, every 10 minutes, or by hand, never on a pull request", () => {
     expect(wf.on).toEqual({ push: { branches: ["develop"] }, schedule: [{ cron }], workflow_dispatch: null });
     expect(job.if).toBe("github.ref == 'refs/heads/develop'");
   });

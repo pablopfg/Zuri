@@ -6,13 +6,13 @@ name: README
 # one pull request "docs(readme): …" on chore/readme-automatico with auto-merge
 # (Pablo authorized these merges). Its own merge starts no run (a merge by
 # GITHUB_TOKEN never does) and the next run finds nothing to change, so it
-# cannot loop. A stage pull request opened or merged shows within 15 minutes.
+# cannot loop. A stage pull request opened or merged shows within 10 minutes.
 # Never pushes to develop or main. GITHUB_TOKEN only; nothing here costs.
 on:
   push:
     branches: [develop]
   schedule:
-    - cron: "2,17,32,47 * * * *"
+    - cron: "2,12,22,32,42,52 * * * *"
   workflow_dispatch:
 
 permissions: {}

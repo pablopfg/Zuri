@@ -3,14 +3,14 @@ name: Branches
 # Deletes the branches whose pull request already merged (scripts/limpar-branches.ts).
 # "Automatically delete head branches" misses the merges made by auto-merge
 # with GITHUB_TOKEN, like the release pull request on chore/versao, and a merge
-# by GITHUB_TOKEN starts no push run: the run every 15 minutes catches those.
+# by GITHUB_TOKEN starts no push run: the run every 10 minutes catches those.
 # It never touches develop or main, a branch with an open pull request or a
 # branch with commits after its merge. GITHUB_TOKEN only; nothing here costs.
 on:
   push:
     branches: [develop]
   schedule:
-    - cron: "7,22,37,52 * * * *"
+    - cron: "7,17,27,37,47,57 * * * *"
   workflow_dispatch:
 
 permissions: {}

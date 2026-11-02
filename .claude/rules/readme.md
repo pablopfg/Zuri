@@ -32,7 +32,7 @@ PR só interno (refatoração, teste, CI) não mexe no README. Na dúvida, mexa.
 
 ## O que se atualiza sozinho
 
-O workflow `README` (`.github/workflows/readme.yml`, `scripts/readme.ts`) roda a cada merge na `develop` e a cada 15 minutos. Ele reescreve:
+O workflow `README` (`.github/workflows/readme.yml`, `scripts/readme.ts`) roda a cada merge na `develop` e a cada 10 minutos. Ele reescreve:
 
 - a coluna Situação do mapa, entre `<!-- inicio:etapas … -->` e `<!-- fim:etapas -->`: ✅ quando o `progresso.md` diz "mesclada" (ou diz "em revisão" e a PR da etapa já mesclou), 🚧 com PR `feat/etapa-NN-…` aberta ou "em andamento"/"em revisão", ⬜ no resto;
 - o selo `etapas-N de T` (T = linhas do mapa), "A Zuri sai em T etapas", "As etapas 0 a X estão na `develop`" e "in T steps; steps 0 to X are merged".
