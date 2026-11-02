@@ -140,6 +140,11 @@ recente ou falha se repetindo) e cada tipo de falha dos últimos 30 dias.
   quando uma página quebra, uma vez por tipo a cada carregamento, até 20 por
   hora no servidor. A rota recusa qualquer outro campo.
 - "Marcar como resolvida" zera a contagem do dia; a próxima falha reabre.
+- "Relatar no GitHub" abre numa aba nova o formulário de erro do repositório
+  já preenchido com o código, a origem, a rota, as contagens, as datas (ao
+  minuto, em UTC) e a referência sem o data center. O dono confere, escolhe
+  onde aconteceu e envia; o servidor não manda nada
+  (`docs/agente/issues.md`).
 - O "dia" das contagens (hoje, 20 no dia) é o dia UTC, o mesmo do teto de IA:
   em São Paulo ele vira às 21:00.
 - A mesma falha repetida em menos de 5 s é somada na memória e gravada junto

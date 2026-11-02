@@ -115,11 +115,23 @@ test("Settings > Diagnóstico shows a screen's failure by name only, and marks i
   await expect(entry.getByText(/^Tela/)).toBeVisible();
   // Only the screen: the record's id in the path never reaches the log.
   await expect(entry.getByText("/notas/id", { exact: true })).toBeVisible();
+  // Reporting opens GitHub's filled-in form in a new tab; nothing is sent from here.
+  const report = entry.getByRole("link", { name: "Relatar no GitHub (abre em outra aba)" });
+  await expect(report).toHaveAttribute("target", "_blank");
+  await expect(report).toHaveAttribute("rel", "noopener noreferrer");
+  const href = new URL((await report.getAttribute("href")) ?? "");
+  expect(`${href.origin}${href.pathname}`).toBe("https://github.com/pablopfg/Zuri/issues/new");
+  expect(href.searchParams.get("template")).toBe("erro.yml");
+  expect(href.searchParams.get("title")).toBe(`[erro] CLIENT_ERROR ${name} (tela)`);
+  expect(href.searchParams.get("contexto")).toContain("Rota: /notas/id");
+  expect(href.toString()).not.toContain("0b8f8a52");
+  await expect(page.getByText(/^Relatar no GitHub abre o formulário público de erro/)).toBeVisible();
   await expectAccessible(page, "diagnóstico");
   expect(await tooSmallControls(page), "every control of Settings > Diagnóstico is a 44 px target").toEqual([]);
   await entry.getByRole("button", { name: "Marcar como resolvida" }).click();
   await expect(toast(page, "Falha marcada como resolvida.")).toBeVisible();
   await expect(entry.getByText(/^Resolvida em /)).toBeVisible();
+  await expect(entry.getByRole("link", { name: /Relatar no GitHub/ })).toHaveCount(0);
 });
 
 /**

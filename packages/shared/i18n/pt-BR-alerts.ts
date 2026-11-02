@@ -127,6 +127,9 @@ export const ptBRAlerts = {
   "web.diagnostics.lastAt": "Última vez em {when}",
   "web.diagnostics.ref": "Referência: {ref}",
   "web.diagnostics.resolve": "Marcar como resolvida",
+  "web.diagnostics.report": "Relatar no GitHub",
+  "web.diagnostics.reportNewTab": "(abre em outra aba)",
+  "web.diagnostics.reportHint": "Relatar no GitHub abre o formulário público de erro já preenchido com o código, a origem, a rota, as contagens, as datas e a referência da falha. Você confere e escolhe onde aconteceu antes de enviar.",
   "web.diagnostics.resolved": "Resolvida em {when}",
   "web.diagnostics.resolvedToast": "Falha marcada como resolvida.",
 } as const;
