@@ -207,6 +207,19 @@ Execute a etapa 16 da especificação ("Aprovações seguras e modo de bloqueio"
 - PR para develop com o relatório de auditoria completo, link e resultado dos testes.
 ```
 
+Dividida em 16a (aprovações, PR mesclada) e 16b. Bloco da 16b:
+
+```text
+Execute a etapa 16b da especificação ("Aprovações seguras e modo de bloqueio", segunda parte). A 16a (aprovações pelo bot) já está na develop.
+
+- Leia docs/planos/etapa-16-aprovacoes-telegram.md e acrescente nele os critérios da 16b. Releia "Modo de bloqueio", "Reconhecimento cruzado dos alertas de segurança" e a tabela de comandos.
+- Comandos /acessos, /sessoes, /encerrar_sessoes, /tokens, /pausar_rotinas e /bloquear. Os três de ação rodam com confirmação por botão, sem passkey nem e-mail, e entram em OPEN_COMMANDS (nunca pedem destravamento). Menu do bot na versão 5.
+- Modo de bloqueio: estado lockdown_until, lockdown_source e lockdown_exited_at em settings; GET /api/lockdown e POST /api/lockdown/exit; login na primeira hora só com código de recuperação; tela Sair do bloqueio; rebloqueio em 24 h suspende o vínculo; aprovações e conversa recusadas durante o bloqueio. Os tokens remotos chegam na etapa 20: deixe o gancho de suspensão pronto e /tokens com o estado vazio.
+- Alerta causado pelo bot só se reconhece no app, com senha digitada nos últimos 15 minutos.
+- Cada item de aceite vira teste, inclusive: /bloquear com a IA fora do ar, alerta causado pelo bot que não se reconhece pelo bot, e rebloqueio em 24 h que suspende o vínculo. Migração 18 é a próxima livre.
+- Rode a auditoria completa com o auditor-seguranca e também /security-review. Corrija tudo que for alto ou médio antes do PR.
+```
+
 ---
 
 ## Fase D · Paridade com o Talorys (paralelas entre si)

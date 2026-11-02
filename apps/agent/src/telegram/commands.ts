@@ -78,6 +78,8 @@ export interface TapOutcome {
   out?: Out;
   /** The Destravar button: the service runs /destravar. */
   unlock?: boolean;
+  /** The Aprovar button (step 16): the service asks to confirm this proposal. */
+  approve?: string;
   /** The tap needs reading unlocked. */
   locked?: boolean;
 }
@@ -486,6 +488,9 @@ export class TelegramCommands {
       switch (found.action) {
         case "unlock":
           return { unlock: true, keyboard: without };
+        // Aprovar stays under the card: asking again reuses the open confirmation.
+        case "approve":
+          return { approve: found.targetId };
         case "task_done": {
           const { out, done } = this.#complete(found.targetId);
           return { ...(done ? { answer: this.#t("telegram.cmd.botao.feitoOk") } : {}), keyboard: without, out };

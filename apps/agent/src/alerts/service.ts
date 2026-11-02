@@ -660,6 +660,7 @@ const SECURITY_TEXT: Record<SecurityAlertEvent, Text> = {
   telegram_group_linked: { title: "notice.security.telegram_group_linked.title", body: "notice.security.telegram_group_linked.body" },
   telegram_unlocked: { title: "notice.security.telegram_unlocked.title", body: "notice.security.telegram_unlocked.body" },
   telegram_confirm_locked: { title: "notice.security.telegram_confirm_locked.title", body: "notice.security.telegram_confirm_locked.body" },
+  telegram_approved: { title: "notice.security.telegram_approved.title", body: "notice.security.telegram_approved.body" },
   setup_failure: { title: "notice.security.setup_failure.title", body: "notice.security.setup_failure.body" },
   setup_locked: { title: "notice.security.setup_locked.title", body: "notice.security.setup_locked.body" },
   owner_created: { title: "notice.security.owner_created.title", body: "notice.security.owner_created.body" },

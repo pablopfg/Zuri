@@ -609,7 +609,7 @@ describe("no AI", () => {
   it("/ajuda lists the commands", async () => {
     await linkOwner();
     const help = await command("/ajuda");
-    for (const name of ["/hoje", "/tarefas", "/nova", "/feito", "/lembrar", "/nota", "/buscar", "/memoria", "/rotinas", "/avisos", "/uso", "/status", "/backup", "/destravar"]) {
+    for (const name of ["/hoje", "/tarefas", "/nova", "/feito", "/lembrar", "/nota", "/buscar", "/memoria", "/rotinas", "/avisos", "/uso", "/status", "/backup", "/destravar", "/aprovar"]) {
       expect(help).toContain(name);
     }
   });

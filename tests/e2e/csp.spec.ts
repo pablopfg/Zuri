@@ -23,7 +23,7 @@ test("no page breaks the Content Security Policy @mobile", async ({ page }) => {
   await page.goto("/primeiro-acesso");
   await expect(page.getByRole("heading", { level: 1, name: "Recuperar o acesso" })).toBeVisible();
   await page.goto("/aprovar");
-  await expect(page.getByRole("heading", { level: 1, name: "Destravar o bot do Telegram" })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: "Confirmar pelo Telegram" })).toBeVisible();
   await page.goto("/entrar");
   await expect(page.getByRole("button", { name: "Entrar" })).toBeVisible();
   await signIn(page);

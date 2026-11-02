@@ -682,12 +682,13 @@ describe("the edges of a turn", () => {
     expect(prompts).toHaveLength(0);
   });
 
-  it("shows a proposal with Abrir no app, pointing at the conversation", async () => {
+  it("shows a proposal with Abrir no app when the bot can't confirm it (no passkey, no e-mail)", async () => {
     await linkOwner();
     const taskId = await inOwner((agent) => agent.store.productivity.tasks.create({ title: "Academia" }).id);
     await deliver(text(`call delete_task {"task":"${taskId}"}`));
     const last = sent().at(-1);
-    expect(String(last?.body.text)).toBe("Deixei uma proposta para você conferir e aprovar no app.");
+    // The preview from the database, never the model's words (step 16).
+    expect(String(last?.body.text)).toMatch(/^Proposta da Zuri: apagar a tarefa\nItem: Academia\nVale até \d{2}:\d{2}\.$/);
     const conversationId = (await json<{ conversations: { id: string }[] }>(await api("GET", "/conversations"), 200)).conversations[0]?.id;
     expect(buttons(last)).toEqual([{ text: "Abrir no app", url: `${ORIGIN}/conversa/${conversationId}` }]);
     // Nothing was deleted: the approval stays in the app.
