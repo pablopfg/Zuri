@@ -34,7 +34,11 @@ export type InternalKey =
   | "alert_digest_day"
   | "diagnostics_client_window"
   // Step 11b: the test push notices of this hour.
-  | "push_test_window";
+  | "push_test_window"
+  // Step 11c: e-mails sent in the last 24 hours, the recovery link and the requests for one per network.
+  | "email_sent_window"
+  | "recovery_link"
+  | "recovery_requests";
 
 export class InternalState {
   constructor(private readonly db: Database) {}

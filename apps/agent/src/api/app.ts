@@ -18,6 +18,9 @@ import {
   setupCodeRequestSchema,
   setupOwnerRequestSchema,
   setupRecoverRequestSchema,
+  recoveryCheckSchema,
+  recoveryCompleteSchema,
+  recoveryRequestSchema,
   type SetupTicket,
   type UsageReport,
 } from "@zuri/shared";
@@ -240,6 +243,31 @@ export function createApi(deps: ApiDeps) {
       return response;
     }),
   );
+
+  // ---------- Password recovery by e-mail (step 11c, no session) ----------
+
+  app.get("/auth/recovery", async () => Response.json(await deps.auth().recoveryStatus()));
+
+  // Always 202, whatever the e-mail: the answer never says whether it is the owner's.
+  app.post("/auth/recovery", async (c) => {
+    const input = await readJson(c.req.raw, recoveryRequestSchema, 4 * 1024);
+    await deps.auth().requestRecovery(input, client(c));
+    return new Response(null, { status: 202 });
+  });
+
+  app.post("/auth/recovery/check", async (c) => {
+    const { token } = await readJson(c.req.raw, recoveryCheckSchema, 1024);
+    return Response.json(await deps.auth().checkRecovery(token));
+  });
+
+  app.post("/auth/recovery/complete", async (c) => {
+    const input = await readJson(c.req.raw, recoveryCompleteSchema, 4 * 1024);
+    await deps.auth().completeRecovery(input, client(c));
+    const response = new Response(null, { status: 204 });
+    // Every session ended: this browser's cookie opens nothing any more.
+    response.headers.append("set-cookie", sessionCookie(c.req.raw, null));
+    return response;
+  });
 
   app.use("*", async (c, next) => {
     const token = readSessionCookie(c.req.raw);

@@ -2,7 +2,7 @@ import { runInDurableObject } from "cloudflare:test";
 import type { ZuriAgent } from "../src/agent/zuri-agent.ts";
 import type { ClientInfo } from "../src/auth/client.ts";
 import type { RelyingParty } from "../src/auth/passkeys.ts";
-import { type AuthSecrets, AuthService, type SignedIn } from "../src/auth/service.ts";
+import { type AuthDeps, type AuthSecrets, AuthService, type SignedIn } from "../src/auth/service.ts";
 import type { Turnstile, TurnstileResult } from "../src/auth/turnstile.ts";
 import { Database } from "../src/db/database.ts";
 import { InternalState } from "../src/db/internal-state.ts";
@@ -108,6 +108,8 @@ export interface HarnessOptions {
   /** As outside local development: no Turnstile means no sign-in. */
   turnstileMandatory?: boolean;
   clock?: FakeClock;
+  /** The recovery e-mail (step 11c); left out, the service has none. */
+  recoveryMail?: AuthDeps["recoveryMail"];
 }
 
 const baseSecrets = (): AuthSecrets => ({
@@ -146,6 +148,7 @@ export function withAuth<T>(name: string, fn: (h: Harness) => Promise<T> | T, op
           return breached.answer;
         },
         relyingParty: options.relyingParty ?? TEST_RP,
+        recoveryMail: options.recoveryMail ?? null,
       });
     const events = () => db.all<ReturnType<Harness["events"]>[number]>(`SELECT * FROM zur_auth_events ORDER BY id`);
     const service = build();

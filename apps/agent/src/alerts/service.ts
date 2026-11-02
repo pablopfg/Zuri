@@ -538,6 +538,7 @@ const SECURITY_TEXT: Record<SecurityAlertEvent, Text> = {
   setup_locked: { title: "notice.security.setup_locked.title", body: "notice.security.setup_locked.body" },
   owner_created: { title: "notice.security.owner_created.title", body: "notice.security.owner_created.body" },
   access_recovered: { title: "notice.security.access_recovered.title", body: "notice.security.access_recovered.body" },
+  password_recovered: { title: "notice.security.password_recovered.title", body: "notice.security.password_recovered.body" },
 };
 
 /** Title and body from the catalog; a stored body (the owner's or the agent's text) wins over the catalog's. */

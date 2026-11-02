@@ -1,4 +1,4 @@
-import { DEFAULT_LOCALE, isPasswordHash, isUsableSetupCode, type Locale } from "@zuri/shared";
+import { DEFAULT_LOCALE, isPasswordHash, isUsableSetupCode, type Locale, RECOVERY_PATH, t } from "@zuri/shared";
 import { Agent } from "agents";
 import { chooseChain, CircuitBreaker, MeteredAI, ProviderChain, UsageMeter } from "../ai/index.ts";
 import type { AIProvider } from "../ai/provider.ts";
@@ -15,6 +15,8 @@ import { flushSecurityAlerts } from "../alerts/security.ts";
 import { AlertService } from "../alerts/service.ts";
 import { Watchers } from "../alerts/watchers.ts";
 import { DiagnosticsService } from "../diagnostics/service.ts";
+import { EmailChannel } from "../email/channel.ts";
+import { EmailSender, emailAddress } from "../email/sender.ts";
 import { developmentPushFetcher } from "../push/dev-push.ts";
 import { PushDevices } from "../push/devices.ts";
 import { PushService } from "../push/service.ts";
@@ -342,6 +344,16 @@ export class ZuriAgent extends Agent<WorkerEnv> {
         breached: (password) => breachCheckFor(this.development())(password),
         // Passkeys belong to the host they were made on: always PUBLIC_URL's, never the request's.
         relyingParty: { rpId: this.publicUrl().hostname, origin: this.publicUrl().origin },
+        // The link travels in the fragment: it never reaches a server log, ours or a proxy's.
+        recoveryMail: {
+          available: () => email.configured(),
+          send: async (token) => {
+            const locale = this.locale();
+            const link = `${this.publicUrl().origin}${RECOVERY_PATH}#${token}`;
+            const outcome = await email.send({ subject: t(locale, "notice.email.recovery.subject"), text: t(locale, "notice.email.recovery.body", { link }), security: true });
+            return outcome === "sent";
+          },
+        },
       });
       const productivity = new Productivity(db, { timeZone: () => settings.get().timeZone });
       // The trash's 30 days also end while nobody opens it: checked each time the object wakes.
@@ -351,6 +363,13 @@ export class ZuriAgent extends Agent<WorkerEnv> {
       const actions = new PendingActionRepository(db);
       const plans = new TaskPlanService(db, productivity, () => settings.field("timeZone"));
       const state = new InternalState(db);
+      const email = new EmailSender({
+        binding: () => env.SEND_EMAIL ?? null,
+        from: () => emailAddress(env.ALERT_EMAIL_FROM),
+        to: () => emailAddress(auth.ownerEmail()),
+        locale: () => this.locale(),
+        state,
+      });
       const push = new PushService({
         devices: new PushDevices(db),
         state,
@@ -365,8 +384,8 @@ export class ZuriAgent extends Agent<WorkerEnv> {
       const alerts: AlertService = new AlertService(db, productivity.storage, {
         locale: () => this.locale(),
         settings: () => settings.get(),
-        // E-mail plugs in here next, Telegram in step 13.
-        channels: () => [push.channel],
+        // Telegram plugs in here in step 13.
+        channels: () => [push.channel, new EmailChannel({ sender: email, locale: () => this.locale(), origin: () => this.publicUrl().origin })],
         rearm: () => automations.rearm(),
       });
       const diagnostics = new DiagnosticsService(db, state, { alerts: () => alerts, release: () => env.CF_VERSION_METADATA?.id ?? null });

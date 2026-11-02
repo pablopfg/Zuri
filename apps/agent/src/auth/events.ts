@@ -33,6 +33,7 @@ const OWNER_KINDS: readonly AuthEventKind[] = [
   "passkey_removed",
   "push_added",
   "push_removed",
+  "password_recovered",
 ];
 /** Repeated refusals from one network in the window fold into one row with a count. */
 const FOLDED_KINDS: readonly AuthEventKind[] = ["login_rate_limited", "login_turnstile", "setup_failure"];

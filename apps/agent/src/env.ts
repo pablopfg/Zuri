@@ -26,4 +26,11 @@ export type WorkerEnv = Env & {
   /** Web Push (step 11b): the installation's P-256 key pair, both base64url (scripts/gerar-chaves-vapid.ts). Both or neither. */
   VAPID_PUBLIC_KEY?: string;
   VAPID_PRIVATE_KEY?: string;
+  /**
+   * E-mail (step 11c): the send_email binding, restricted at deploy to the
+   * owner's verified address (ZURI_ALERT_EMAIL_TO), and the sender, an address
+   * on the domain with Email Routing. Both or neither.
+   */
+  SEND_EMAIL?: SendEmail;
+  ALERT_EMAIL_FROM?: string;
 };
