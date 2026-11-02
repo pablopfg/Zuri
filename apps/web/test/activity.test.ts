@@ -30,6 +30,7 @@ describe("the access log's helpers", () => {
     expect(reasonLabels(" missing ,credentials,,x")).toEqual(["web.accessLog.reason.missing"]);
     expect(reasonLabels("__proto__,constructor")).toEqual([]);
     expect(reasonLabels("code,daily_cap")).toEqual(["web.accessLog.reason.daily_cap"]);
+    expect(reasonLabels("link_sent")).toEqual(["web.accessLog.reason.link_sent"]);
   });
 
   it("groups and flags kinds the way the badges show them", () => {

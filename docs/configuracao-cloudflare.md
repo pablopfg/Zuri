@@ -123,7 +123,8 @@ grave um código **novo** e comece de novo.
 
 ### Recuperar o acesso
 
-Esqueceu a senha? Grave um `SETUP_CODE` **diferente** de todos os anteriores e
+Esqueceu a senha? Com o e-mail configurado (veja [E-mail](#e-mail-opcional)),
+use "Esqueci minha senha" na tela de entrada. Sem ele, grave um `SETUP_CODE` **diferente** de todos os anteriores e
 abra `https://zuri.exemplo.com.br/primeiro-acesso`. Com o dono já criado, a
 tela só recupera o acesso: o código novo, o e-mail cadastrado e uma senha
 nova. Os dados e as configurações ficam, todas as sessões terminam, os
@@ -172,6 +173,27 @@ Sem as duas chaves, a notificação no aparelho aparece como "Ainda não
 disponível" e os avisos continuam no sino. Trocar o par depois faz cada
 aparelho ativar de novo. A chave privada nunca chega ao navegador; a pública,
 sim, porque é ela que o navegador usa para assinar a inscrição.
+
+## E-mail (opcional)
+
+O e-mail traz avisos e o link de senha nova da tela "Esqueci minha senha". Ele
+usa o Email Routing da Cloudflare e só manda para endereços de destino
+verificados na conta, o que é gratuito em todos os planos.
+
+1. Em **Email › Email Routing** do seu domínio, ligue o Email Routing e
+   verifique o seu e-mail pessoal como endereço de destino.
+2. Grave o remetente, um endereço do domínio com Email Routing, como segredo:
+   `npx wrangler secret put ALERT_EMAIL_FROM` dentro de `apps/agent` (por
+   exemplo `zuri@exemplo.com.br`). Fica como segredo para o domínio não ir para o
+   repositório.
+3. O binding `SEND_EMAIL` com `destination_address` é gerado pelo deploy a partir
+   da variável `ZURI_ALERT_EMAIL_TO` do ambiente `production` do GitHub (etapa
+   24). O endereço nunca entra no `wrangler.jsonc`.
+
+O destino é sempre o e-mail cadastrado na Zuri; o binding restrito ao endereço
+verificado garante isso também do lado da Cloudflare. Sem o binding ou o
+remetente, o e-mail aparece como "Ainda não disponível" e a recuperação de senha
+continua pelo código de instalação.
 
 ## IP certo no registro de acessos
 

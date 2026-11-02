@@ -64,6 +64,7 @@ export const SECURITY_ALERT_EVENTS = [
   "setup_locked",
   "owner_created",
   "access_recovered",
+  "password_recovered",
 ] as const satisfies readonly AuthEventKind[];
 export type SecurityAlertEvent = (typeof SECURITY_ALERT_EVENTS)[number];
 

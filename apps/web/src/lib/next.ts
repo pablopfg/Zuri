@@ -3,6 +3,8 @@ export const HOME_PATH = "/";
 export const LOGIN_PATH = "/entrar";
 /** The first access (and the recovery with a new installation code). */
 export const FIRST_ACCESS_PATH = "/primeiro-acesso";
+/** Password recovery by e-mail; the same path as RECOVERY_PATH in @zuri/shared, which the server puts in the link. */
+export const RECOVERY_PATH = "/recuperar-senha";
 
 /**
  * The page to open after signing in, from the `?next=` of the sign-in screen.

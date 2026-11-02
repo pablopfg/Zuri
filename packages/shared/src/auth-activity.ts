@@ -40,6 +40,8 @@ export const AUTH_EVENT_KINDS = [
   "setup_locked",
   "owner_created",
   "access_recovered",
+  "recovery_requested",
+  "password_recovered",
 ] as const;
 export type AuthEventKind = (typeof AUTH_EVENT_KINDS)[number];
 
