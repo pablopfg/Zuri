@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { catalogs, createTranslator, DEFAULT_LOCALE, isLocale, LOCALES, loadCatalog, ptBR, ptBRAi, ptBRChat, ptBRCore, ptBRGreeting, ptBRMemory, ptBRNotices, ptBRPalette, ptBRProductivity, ptBRSecurity, ptBRServer, ptBRSettings, ptBRSetup, t } from "../i18n/index.ts";
+import * as i18n from "../i18n/index.ts";
+import { catalogs, createTranslator, DEFAULT_LOCALE, isLocale, LOCALES, loadCatalog, ptBR, ptBRCore, ptBRSetup, t } from "../i18n/index.ts";
 
 const placeholders = (text: string) => [...text.matchAll(/\{(\w+)\}/g)].map((m) => m[1]).sort();
 
@@ -62,8 +63,14 @@ describe("isLocale", () => {
     // pt-BR is never fetched: it is in every bundle already.
     await expect(loadCatalog("pt-BR" as "en")).rejects.toThrow("no catalog for pt-BR");
     // The whole pt-BR catalog is its core plus each screen's part, nothing more and nothing less.
-    expect({ ...ptBRCore, ...ptBRMemory, ...ptBRProductivity, ...ptBRSecurity, ...ptBRAi, ...ptBRChat, ...ptBRSettings, ...ptBRServer, ...ptBRPalette, ...ptBRGreeting, ...ptBRSetup, ...ptBRNotices }).toEqual(ptBR);
-    const parts = [ptBRCore, ptBRMemory, ptBRProductivity, ptBRSecurity, ptBRAi, ptBRChat, ptBRSettings, ptBRServer, ptBRPalette, ptBRGreeting, ptBRSetup, ptBRNotices].map((part) => Object.keys(part));
+    // Every part the package exports (ptBRCore, ptBRAi, ptBRChat…), so a new part needs no change here.
+    const exported = Object.entries(i18n)
+      .filter(([name]) => /^ptBR[A-Z]/.test(name))
+      .map(([, part]) => part as Record<string, string>);
+    expect(exported.length).toBeGreaterThan(1);
+    expect(exported).toContain(ptBRCore);
+    expect(Object.assign({}, ...exported)).toEqual(ptBR);
+    const parts = exported.map((part) => Object.keys(part));
     // No key in two parts: one of them would silently win.
     expect(parts.flat().length).toBe(new Set(parts.flat()).size);
     const lazy = /^(web\.(memory|tasks|notes|trash|projects|accessLog|activity|ai|chat|mfa|passkeys|sessions|unit|security|palette|greeting|setup|secondStep|passwordRequired)\.|web\.password\.(current|new|repeat|rules|mismatch|submit|changed)$|web\.shell\.remove|error\.ai|ai\.|auth\.mfa\.|auth\.password\.)/;
