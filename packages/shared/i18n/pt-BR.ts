@@ -38,6 +38,7 @@ export const ptBRCore = {
   "web.nav.signOutConfirmTitle": "Sair da Zuri?",
   "web.nav.collapse": "Recolher menu",
   "web.nav.expand": "Expandir menu",
+  "web.nav.version": "Versão {version}",
   "web.login.email": "E-mail",
   "web.login.password": "Senha",
   "web.login.submit": "Entrar",

@@ -4,7 +4,9 @@
 // can resolve automatically (#52 before #50, 02/11/2026). This check fails
 // while an older open pull request into develop, not a draft, changes the
 // same files. Files whose conflicts update-prs.yml resolves on its own
-// (changelog, README, memory, docs, text catalogs) do not count.
+// (changelog, README, memory, docs, text catalogs) do not count, and neither
+// does the release pull request (chore/versao, publicar-versao.ts): it is
+// rebuilt from develop every run and only changes the version lines.
 //
 // The check reads only: no comment, no merge. Its result can go stale (the
 // older pull request is closed, leaves draft, changes files), so
@@ -18,6 +20,7 @@
 import { execFileSync } from "node:child_process";
 import { appendFileSync } from "node:fs";
 import { BASE_BRANCH, isAdditiveFile, isHeldForBot, pullRequestRuns, type Run } from "./atualizar-prs.ts";
+import { RELEASE_BRANCH } from "./publicar-versao.ts";
 
 /** Label that lets a pull request go ahead of an older one (a stale or blocked PR); then re-run the check. */
 export const OVERRIDE_LABEL = "fora-de-ordem";
@@ -79,6 +82,9 @@ export interface Context {
 }
 
 const isFork = (ctx: Context, pr: OpenPullRequest) => pr.head.repo?.full_name !== ctx.repository;
+// The version pull request touches package.json and package-lock.json, which dependency updates also change:
+// it neither waits on them (a Dependabot PR can stay open for days) nor holds them.
+const isRelease = (ctx: Context, pr: OpenPullRequest) => pr.head.ref === RELEASE_BRANCH && !isFork(ctx, pr);
 
 function openPullRequests(ctx: Context): OpenPullRequest[] {
   return api(ctx, `repos/${ctx.repository}/pulls?state=open&per_page=100`) as OpenPullRequest[];
@@ -116,7 +122,8 @@ export function checkOrder(ctx: Context, target: { number?: number; branch?: str
 function verdictFor(ctx: Context, current: OpenPullRequest, open: readonly OpenPullRequest[]): Verdict {
   if (current.base.ref !== BASE_BRANCH) return { status: "pass", reason: `base é ${current.base.ref}` };
   if (current.labels.some((label) => label.name === OVERRIDE_LABEL)) return { status: "pass", reason: `rótulo ${OVERRIDE_LABEL}` };
-  const older = open.filter((pr) => pr.number < current.number && !pr.draft && !isFork(ctx, pr) && pr.base.ref === BASE_BRANCH);
+  if (isRelease(ctx, current)) return { status: "pass", reason: "PR de versão" };
+  const older = open.filter((pr) => pr.number < current.number && !pr.draft && !isFork(ctx, pr) && !isRelease(ctx, pr) && pr.base.ref === BASE_BRANCH);
   if (older.length === 0) return { status: "pass", reason: "nenhuma PR mais antiga aberta" };
   const blockers = findBlockers(
     { number: current.number, files: changedFiles(ctx, current.number) },

@@ -348,7 +348,7 @@ Leia o [CONTRIBUTING.md](CONTRIBUTING.md) e o [AGENTS.md](AGENTS.md). Em resumo:
 - Branch a partir da `develop` e PR sempre para a `develop`. A `main` só recebe releases.
 - Título em Conventional Commits, com o texto em pt-BR (`feat(telegram): adiciona o comando /hoje`).
 - Testes junto com o código, changelog num arquivo em `changelog/nao-lancado/`, este README atualizado e o modelo de PR preenchido.
-- Cada merge na `develop` vira uma versão 0.x com tag e pré-release no GitHub; a versão em uso aparece em Configurações > Diagnóstico ([como funciona](docs/agente/versionamento.md)).
+- Cada merge na `develop` vira uma versão 0.x com tag e pré-release no GitHub; a versão em uso aparece no pé do menu lateral (no celular, no pé da lista de Configurações) e em Configurações > Diagnóstico, e é a mesma em todos os `package.json` e no `package-lock.json` ([como funciona](docs/agente/versionamento.md)).
 - Todo texto visível em pt-BR e en, pelo catálogo de i18n.
 
 ## 🌎 In English

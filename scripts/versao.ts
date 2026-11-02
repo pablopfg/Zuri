@@ -6,10 +6,13 @@
 // have no section yet, numbers them (an etapa bumps the minor, anything else
 // the patch, SemVer 0.x until the first release on main), writes their
 // sections from their files in changelog/nao-lancado/, removes those files and
-// writes the version into packages/shared/src/version.ts.
+// writes the version into every file that carries it (versionFiles: version.ts,
+// each package.json of the workspace and package-lock.json).
 //
 //   node scripts/versao.ts              prints the versions still to write
 //   node scripts/versao.ts --gravar     writes them (the versao.yml workflow does this)
+//   node scripts/versao.ts --conferir   fails when a file carries a version other than CHANGELOG.md's (npm run lint)
+//   node scripts/versao.ts --sincronizar writes CHANGELOG.md's version into those files
 //   node scripts/versao.ts --notas X    prints the notes of version X (for its GitHub release)
 import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -22,6 +25,7 @@ export const BASE_BRANCH = "develop";
 export const TIME_ZONE = "America/Sao_Paulo";
 export const UNRELEASED = "## [Não lançado]";
 export const VERSION_FILE = "packages/shared/src/version.ts";
+export const LOCK_FILE = "package-lock.json";
 /** The squash title of the pull request the workflow opens: never a version of its own. */
 export const RELEASE_SUBJECT = /^chore\(release\):/;
 
@@ -224,6 +228,67 @@ export function planVersions(last: string, merges: Merge[], tagged: ReadonlyMap<
     });
 }
 
+/** The package.json of the root and of each workspace that exists (the "workspaces" field of the root lists paths, not globs). */
+function packageFiles(root: string): string[] {
+  const rootFile = join(root, "package.json");
+  if (!existsSync(rootFile)) return [];
+  const workspaces: unknown = JSON.parse(readFileSync(rootFile, "utf8")).workspaces;
+  const paths = Array.isArray(workspaces) ? workspaces.filter((w): w is string => typeof w === "string") : [];
+  return ["package.json", ...paths.map((w) => `${w}/package.json`)].filter((file) => existsSync(join(root, file)));
+}
+
+/** Every file that carries the version of the system, relative to the root: the release pull request writes them all. */
+export function versionFiles(root: string): string[] {
+  return [VERSION_FILE, ...packageFiles(root), ...(existsSync(join(root, LOCK_FILE)) ? [LOCK_FILE] : [])];
+}
+
+type Json = Record<string, unknown>;
+const readJson = (root: string, file: string): Json => JSON.parse(readFileSync(join(root, file), "utf8")) as Json;
+// npm writes both files with two spaces and a final newline: written the same way, only the version lines change.
+const writeJson = (root: string, file: string, value: Json) => writeFileSync(join(root, file), `${JSON.stringify(value, null, 2)}\n`);
+
+/** The entries of package-lock.json that repeat a version: its top, the root package ("") and each workspace. */
+function lockEntries(root: string, lock: Json): { name: string; entry: Json | undefined }[] {
+  const packages = (lock.packages ?? {}) as Record<string, Json | undefined>;
+  const workspaces = packageFiles(root)
+    .slice(1)
+    .map((file) => file.replace(/\/package\.json$/, ""));
+  return [
+    { name: "", entry: lock },
+    { name: 'packages[""]', entry: packages[""] },
+    ...workspaces.map((w) => ({ name: `packages["${w}"]`, entry: packages[w] })),
+  ];
+}
+
+/** Writes `version` into version.ts, every package.json and package-lock.json, leaving everything else as it was. */
+export function writeVersion(root: string, version: string): void {
+  writeFileSync(join(root, VERSION_FILE), renderVersionFile(version));
+  for (const file of packageFiles(root)) writeJson(root, file, { ...readJson(root, file), version });
+  if (!existsSync(join(root, LOCK_FILE))) return;
+  const lock = readJson(root, LOCK_FILE);
+  for (const { entry } of lockEntries(root, lock)) if (entry) entry.version = version;
+  writeJson(root, LOCK_FILE, lock);
+}
+
+/** One line per file (or lockfile entry) whose version is not `version`; empty when all agree. */
+export function versionMismatches(root: string, version: string): string[] {
+  const problems: string[] = [];
+  const check = (where: string, found: unknown) => {
+    if (found !== version) problems.push(`${where}: ${JSON.stringify(found ?? null)} instead of "${version}"`);
+  };
+  // version.ts must be exactly what the script writes, not only carry the number.
+  const versionFile = join(root, VERSION_FILE);
+  const text = existsSync(versionFile) ? readFileSync(versionFile, "utf8") : "";
+  const found = /APP_VERSION = "([^"]*)"/.exec(text)?.[1] ?? "nothing";
+  check(VERSION_FILE, text === renderVersionFile(version) ? version : `${found}, not as scripts/versao.ts writes it`);
+  for (const file of packageFiles(root)) check(file, readJson(root, file).version);
+  if (existsSync(join(root, LOCK_FILE))) {
+    const lock = readJson(root, LOCK_FILE);
+    for (const { name, entry } of lockEntries(root, lock)) check(name ? `${LOCK_FILE} ${name}` : LOCK_FILE, entry?.version);
+  }
+  return problems;
+}
+
 export function renderVersionFile(version: string): string {
   return `// Written by scripts/versao.ts when a merge into develop gets its version: do not edit by hand.\n// The history of each version is in CHANGELOG.md (docs/agente/versionamento.md).\nexport const APP_VERSION = "${version}";\n`;
 }
@@ -318,12 +383,12 @@ export function computePlan(root: string, git: Git = gitIn(root), ref = "HEAD", 
   return { changelog, pending, consumed };
 }
 
-/** Writes the pending versions into CHANGELOG.md and version.ts and removes their fragments. */
+/** Writes the pending versions into CHANGELOG.md and every version file and removes their fragments. */
 export function applyPlan(root: string, plan: Plan): Changelog {
   const changelog: Changelog = { intro: plan.changelog.intro, versions: [...[...plan.pending].reverse(), ...plan.changelog.versions] };
   writeFileSync(join(root, "CHANGELOG.md"), renderChangelog(changelog));
   const latest = changelog.versions[0];
-  if (latest) writeFileSync(join(root, VERSION_FILE), renderVersionFile(latest.version));
+  if (latest) writeVersion(root, latest.version);
   for (const path of plan.consumed) rmSync(join(root, path));
   return changelog;
 }
@@ -331,7 +396,17 @@ export function applyPlan(root: string, plan: Plan): Changelog {
 if (import.meta.main) {
   const root = join(import.meta.dirname, "..");
   const notes = process.argv.indexOf("--notas");
-  if (notes >= 0) {
+  if (process.argv.includes("--conferir")) {
+    const current = parseChangelog(readFileSync(join(root, "CHANGELOG.md"), "utf8")).versions[0]?.version ?? "0.0.0";
+    const problems = versionMismatches(root, current);
+    for (const problem of problems) console.error(`versao: ${problem} (node scripts/versao.ts --sincronizar)`);
+    if (problems.length > 0) process.exit(1);
+    console.log(`versao: ${versionFiles(root).length} files on ${current}`);
+  } else if (process.argv.includes("--sincronizar")) {
+    const current = parseChangelog(readFileSync(join(root, "CHANGELOG.md"), "utf8")).versions[0]?.version ?? "0.0.0";
+    writeVersion(root, current);
+    console.log(`versao: wrote ${current} into ${versionFiles(root).join(", ")}`);
+  } else if (notes >= 0) {
     const wanted = (process.argv[notes + 1] ?? "").replace(/^v/, "");
     const found = parseChangelog(readFileSync(join(root, "CHANGELOG.md"), "utf8")).versions.find((v) => v.version === wanted);
     if (!found) {
