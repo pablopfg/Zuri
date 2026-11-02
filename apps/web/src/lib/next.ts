@@ -5,6 +5,8 @@ export const LOGIN_PATH = "/entrar";
 export const FIRST_ACCESS_PATH = "/primeiro-acesso";
 /** Password recovery by e-mail; the same path as RECOVERY_PATH in @zuri/shared, which the server puts in the link. */
 export const RECOVERY_PATH = "/recuperar-senha";
+/** The bot's confirmation page; the same path as APPROVE_PATH in @zuri/shared, which the bot puts in its button. */
+export const APPROVE_PATH = "/aprovar";
 
 /**
  * The page to open after signing in, from the `?next=` of the sign-in screen.

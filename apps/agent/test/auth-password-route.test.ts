@@ -85,6 +85,9 @@ const PUBLIC = new Set([
   "GET /api/health",
   // Telegram's webhook: no session, only its secret header (step 12).
   "POST /api/telegram/webhook",
+  // The bot's /aprovar page: no session, only a one-time token and a passkey (step 15a).
+  "POST /api/approvals/telegram/options",
+  "POST /api/approvals/telegram/verify",
   "POST /api/auth/login",
   "POST /api/auth/mfa",
   "POST /api/auth/mfa/passkey/options",

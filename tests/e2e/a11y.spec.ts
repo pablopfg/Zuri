@@ -21,6 +21,11 @@ for (const scheme of ["light", "dark"] as const) {
       await expect(page.getByRole("heading", { level: 1, name: "Recuperar o acesso" })).toBeVisible();
       await expectAccessible(page, "primeiro-acesso");
       expect(await tooSmallControls(page)).toEqual([]);
+      // The bot's confirmation page (step 15a), without a token: nothing is asked of the server.
+      await page.goto("/aprovar");
+      await expect(page.getByRole("heading", { name: "Este link não serve mais" })).toBeVisible();
+      await expectAccessible(page, "aprovar");
+      expect(await tooSmallControls(page)).toEqual([]);
       await page.goto("/entrar");
 
       await signIn(page);

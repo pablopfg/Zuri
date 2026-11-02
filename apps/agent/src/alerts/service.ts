@@ -46,6 +46,8 @@ export interface RaiseInput {
   dedupeKey?: string;
   dedupeMs?: number;
   origin?: NoticeOrigin;
+  /** False: a high or critical notice goes out once and doesn't insist (a security event the owner just confirmed). */
+  insist?: boolean;
   /**
    * Where the notice comes from, for the priority that learns: an automation's
    * results learn apart ("automation:<id>"); left out, the kind is the source;
@@ -210,7 +212,7 @@ export class AlertService {
       return true;
     });
     if (!created) return null;
-    this.track(this.deliver(row, 1));
+    this.track(this.deliver(row, 1, input.insist !== false));
     return this.present(row);
   }
 
@@ -257,7 +259,7 @@ export class AlertService {
    * closed with what happened. After the first try, a high or critical notice
    * that reached someone starts insisting.
    */
-  private async deliver(row: NoticeRow, attempt: number): Promise<void> {
+  private async deliver(row: NoticeRow, attempt: number, insist = true): Promise<void> {
     const locale = this.deps.locale();
     const notice = this.present(row, locale);
     const counted = attempt === 1 && row.priority !== "critical" && row.category !== "reminders";
@@ -291,7 +293,7 @@ export class AlertService {
         if (result.status === "sent" && !channel.firstTryOnly) reached = true;
       }),
     );
-    if (attempt === 1 && reached && (row.priority === "high" || row.priority === "critical")) await this.startInsisting(row);
+    if (attempt === 1 && insist && reached && (row.priority === "high" || row.priority === "critical")) await this.startInsisting(row);
   }
 
   private record(row: NoticeRow, channel: AlertChannelName, attempt: number, status: DeliveryStatus, reason: DeliveryReason | null, counted: boolean): number {
@@ -656,6 +658,8 @@ const SECURITY_TEXT: Record<SecurityAlertEvent, Text> = {
   telegram_linked: { title: "notice.security.telegram_linked.title", body: "notice.security.telegram_linked.body" },
   telegram_unlinked: { title: "notice.security.telegram_unlinked.title", body: "notice.security.telegram_unlinked.body" },
   telegram_group_linked: { title: "notice.security.telegram_group_linked.title", body: "notice.security.telegram_group_linked.body" },
+  telegram_unlocked: { title: "notice.security.telegram_unlocked.title", body: "notice.security.telegram_unlocked.body" },
+  telegram_confirm_locked: { title: "notice.security.telegram_confirm_locked.title", body: "notice.security.telegram_confirm_locked.body" },
   setup_failure: { title: "notice.security.setup_failure.title", body: "notice.security.setup_failure.body" },
   setup_locked: { title: "notice.security.setup_locked.title", body: "notice.security.setup_locked.body" },
   owner_created: { title: "notice.security.owner_created.title", body: "notice.security.owner_created.body" },

@@ -250,6 +250,8 @@ describe("the webhook's gates", () => {
       await inOwner((agent) => agent.store.telegram.enqueue(update(ownerText, id())));
     }
     botCalls.length = 0;
+    // Those 100 messages used up the hour's 30: a new hour, so the answer shows.
+    await inOwner((agent) => agent.store.db.run(`DELETE FROM zur_settings WHERE key = 'telegram_chat_window'`));
     await deliver(update(ownerText, first));
     expect(sent()).toHaveLength(1);
     const stored = await inOwner((agent) => agent.store.db.one<{ value: string }>(`SELECT value FROM zur_settings WHERE key = 'telegram_seen_update_ids'`));
@@ -271,7 +273,13 @@ describe("linking the owner's account", () => {
       drop_pending_updates: true,
       max_connections: 1,
     });
-    expect(sent("setMyCommands")[0]?.body).toEqual({ commands: [{ command: "ajuda", description: "O que eu faço por aqui" }] });
+    expect(sent("setMyCommands")[0]?.body).toEqual({
+      commands: [
+        { command: "ajuda", description: "O que eu faço por aqui" },
+        { command: "destravar", description: "Liberar a leitura por 12 h" },
+        { command: "nova_conversa", description: "Começar uma conversa nova" },
+      ],
+    });
     // Only the HMAC is stored, never the code.
     const stored = await inOwner((agent) => agent.store.db.all<{ code_hash: string }>(`SELECT code_hash FROM zur_telegram_link_codes`));
     expect(stored).toHaveLength(1);

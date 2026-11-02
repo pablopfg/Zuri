@@ -14,6 +14,7 @@ import { ptBRSetup } from "./pt-BR-setup.ts";
 import { ptBRAutomations } from "./pt-BR-automations.ts";
 import { ptBRMarkdown } from "./pt-BR-markdown.ts";
 import { ptBRAlerts } from "./pt-BR-alerts.ts";
+import { ptBRApprove } from "./pt-BR-approve.ts";
 
 export type MessageKey = keyof typeof ptBR;
 export type Messages = Record<MessageKey, string>;
@@ -47,6 +48,7 @@ export {
   ptBRAutomations,
   ptBRMarkdown,
   ptBRAlerts,
+  ptBRApprove,
 };
 
 export type Params = Record<string, string | number>;

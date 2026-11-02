@@ -50,6 +50,7 @@ import { type ChatDeps, registerChatRoutes } from "./chat.ts";
 import { registerMemoryRoutes } from "./memory.ts";
 import { type NoticeDeps, registerNoticeRoutes } from "./notices.ts";
 import { registerProductivityRoutes } from "./productivity.ts";
+import { registerApprovalRoutes } from "./approvals.ts";
 import { registerTelegramRoutes, registerTelegramWebhook, type TelegramDeps } from "./telegram.ts";
 import { log, rayOf, routeLabel } from "../log.ts";
 
@@ -275,6 +276,10 @@ export function createApi(deps: ApiDeps) {
     response.headers.append("set-cookie", sessionCookie(c.req.raw, null));
     return response;
   });
+
+  // ---------- The bot's confirmation page, /aprovar (step 15, no session) ----------
+
+  if (telegram) registerApprovalRoutes(app, () => telegram(), client);
 
   app.use("*", async (c, next) => {
     const token = readSessionCookie(c.req.raw);

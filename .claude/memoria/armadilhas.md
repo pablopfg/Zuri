@@ -103,6 +103,17 @@ acrescente aqui cada armadilha nova que encontrar (sem dados pessoais).
   a todo serviço que olha a hora (`Productivity`, `AutomationService`...). Na
   etapa 10, o `Productivity` sem `clock` usava a hora real: o teste do resumo
   passou num dia e falhou dois dias depois.
+- `fsModuleCache: false` precisa ficar em `apps/agent/vitest.config.ts`. Sem
+  ele a cobertura do agente cai abaixo do piso de 99% sem nenhum teste mudar
+  (etapa 14).
+- Ids de `zur_auth_events` voltam a ser usados depois de apagar linhas num
+  teste; a chave de deduplicação dos alertas (`zur_alert_keys`) usa o id, então
+  um alerta novo some calado. Limpe as duas tabelas juntas (etapa 15a).
+- Alerta de segurança gerado dentro de uma atualização do bot só sai em
+  `flushSecurityAlerts`. Sem o hook `afterUpdate` do `TelegramService`, ele
+  esperava a próxima requisição do app (etapa 15a).
+- Em e2e, `page.goto("/rota#token")` estando já em `/rota` só troca o hash, sem
+  recarregar. Passe por `about:blank` antes.
 
 ## Agents SDK
 

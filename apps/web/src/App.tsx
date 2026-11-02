@@ -4,7 +4,7 @@ import { AppShell } from "./components/AppShell.tsx";
 import { RequireSession, SessionChecking } from "./components/RequireSession.tsx";
 import { Spinner } from "./components/ui.tsx";
 import { useSession } from "./hooks/session.tsx";
-import { FIRST_ACCESS_PATH, LOGIN_PATH, RECOVERY_PATH } from "./lib/next.ts";
+import { APPROVE_PATH, FIRST_ACCESS_PATH, LOGIN_PATH, RECOVERY_PATH } from "./lib/next.ts";
 import { HomePage } from "./pages/HomePage.tsx";
 import { LoginPage } from "./pages/LoginPage.tsx";
 import { NotFoundPage } from "./pages/NotFoundPage.tsx";
@@ -21,6 +21,7 @@ const PasswordChangePage = lazy(() => import("./pages/PasswordChangePage.tsx").t
 const SecondStepPage = lazy(() => import("./pages/setup/SecondStepPage.tsx").then((m) => ({ default: m.SecondStepPage })));
 const FirstAccessPage = lazy(() => import("./pages/setup/FirstAccessPage.tsx").then((m) => ({ default: m.FirstAccessPage })));
 const RecoveryPage = lazy(() => import("./pages/setup/RecoveryPage.tsx").then((m) => ({ default: m.RecoveryPage })));
+const ApprovePage = lazy(() => import("./pages/ApprovePage.tsx").then((m) => ({ default: m.ApprovePage })));
 const NotesPage = lazy(() => import("./pages/productivity/NotesPage.tsx").then((m) => ({ default: m.NotesPage })));
 
 /** While the password must change, or the second step must be turned on, the server refuses everything else: so does the interface. */
@@ -66,6 +67,15 @@ export function App() {
         element={
           <Suspense fallback={<SessionChecking />}>
             <Recovery />
+          </Suspense>
+        }
+      />
+      {/* The bot's confirmation by passkey (step 15): no session, the token in the fragment is the key. */}
+      <Route
+        path={APPROVE_PATH}
+        element={
+          <Suspense fallback={<SessionChecking />}>
+            <ApprovePage />
           </Suspense>
         }
       />

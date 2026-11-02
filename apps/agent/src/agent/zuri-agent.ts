@@ -24,6 +24,7 @@ import { usableVapidKeys, type VapidKeys } from "../push/webpush.ts";
 import { developmentTelegramFetcher } from "../telegram/dev-telegram.ts";
 import { TelegramCallbacks } from "../telegram/callbacks.ts";
 import { TelegramChannel } from "../telegram/channel.ts";
+import { TelegramConfirmations } from "../telegram/confirmations.ts";
 import { TelegramConversation } from "../telegram/conversation.ts";
 import { TelegramLinks } from "../telegram/links.ts";
 import { TelegramService } from "../telegram/service.ts";
@@ -481,11 +482,35 @@ export class ZuriAgent extends Agent<WorkerEnv> {
         timeZone: () => settings.field("timeZone"),
         origin: () => this.publicUrl().origin,
       });
+      // Confirmations made outside Telegram (step 15): the passkey on /aprovar or a code by e-mail.
+      const telegramConfirmations = new TelegramConfirmations({
+        db,
+        state,
+        passkeys: auth.passkeys,
+        relyingParty: () => auth.relyingParty,
+        email: {
+          configured: () => email.configured(),
+          send: (code, minutes) => {
+            const locale = this.locale();
+            return email.send({
+              subject: t(locale, "notice.email.unlock.subject"),
+              text: t(locale, "notice.email.unlock.body", { code, minutes }),
+              security: true,
+              quota: "confirmations",
+            });
+          },
+        },
+        events: auth.events,
+        sessionSecret: () => env.SESSION_SECRET,
+      });
       const telegram = new TelegramService({
         links: telegramLinks,
         callbacks: telegramCallbacks,
         alerts: () => alerts,
         conversation: telegramConversation,
+        confirmations: telegramConfirmations,
+        timeZone: () => settings.field("timeZone"),
+        afterUpdate: () => flushSecurityAlerts(db, alerts),
         state,
         events: auth.events,
         token: () => telegramToken(env.TELEGRAM_BOT_TOKEN),

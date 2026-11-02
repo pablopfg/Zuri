@@ -6,7 +6,14 @@ import type { AlertService } from "./service.ts";
  * Events the bot itself causes: their alert stops insisting only when answered
  * in the app, never through the bot (spec, "Reconhecimento cruzado").
  */
-const BOT_CAUSED: readonly SecurityAlertEvent[] = ["telegram_group_linked"];
+const BOT_CAUSED: readonly SecurityAlertEvent[] = ["telegram_group_linked", "telegram_unlocked", "telegram_confirm_locked"];
+
+/**
+ * Events told once, without insisting: the owner just confirmed with a passkey
+ * or an e-mailed code, so one notice on every channel is enough to catch the
+ * case where it wasn't them (owner's choice, step 15a).
+ */
+const TOLD_ONCE: readonly SecurityAlertEvent[] = ["telegram_unlocked"];
 
 /** Rows taken per call: a flood of refusals can't make one request do unbounded work. */
 const PER_FLUSH = 20;
@@ -39,6 +46,7 @@ export function flushSecurityAlerts(db: Database, alerts: AlertService): number 
         origin: (BOT_CAUSED as readonly string[]).includes(row.kind) ? "bot" : "web",
         dedupeKey: `auth-event:${row.id}`,
         dedupeMs: 7 * 24 * 3_600_000,
+        insist: !(TOLD_ONCE as readonly string[]).includes(row.kind),
       });
       if (notice) raised++;
     }

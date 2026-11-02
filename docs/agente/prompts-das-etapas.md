@@ -192,6 +192,7 @@ Execute a etapa 15 da especificação ("Comandos administrativos"). Confira ante
 
 - Cada comando da lista tem teste, e nenhum gasta pedido de IA (teste que confere o contador). Siga a "Gramática de datas do bot" para /nova e /lembrar.
 - Inclua a trava de leitura de 12 h (N10), /destravar e /backup (só o link para a tela). Fotos e documentos seguem N4: a legenda vira nota e o arquivo não é guardado. Se algum dia o conteúdo deles for processado (N5 ou leitura de documento), arquivo acima do limite segue a mesma pergunta da etapa 14.
+- Dividida em 15a (trava de leitura, /destravar, /nova_conversa e 60 comandos por hora; plano docs/planos/etapa-15a-destravamento-telegram.md) e 15b (o resto). Na 15b, leia a seção "Notas para a 15b" do progresso antes de começar.
 - Fluxo completo de etapa, PR para develop, link e resultado dos testes.
 ```
 
