@@ -1,4 +1,4 @@
-# Prompts das etapas seguintes (1 a 25, com a 19b)
+# Prompts das etapas seguintes (1 a 26, com a 19b)
 
 Depois que o PR da etapa 0 estiver mesclado, envie um prompt por vez, na ordem.
 
@@ -17,7 +17,7 @@ Depois que o PR da etapa 0 estiver mesclado, envie um prompt por vez, na ordem.
 | B · Assistente na web | 6, 7, 8 → 9 → 10 → 11 | 6, 7 e 8 entre si |
 | C · Bot do Telegram | 12 → 13, 14, 15 → 16 | 13 e 14 entre si, depois da 12 |
 | D · Paridade | 17, 18, 19 → 19b, 20, 22 (21 só com OK) | Todas entre si, depois da 11; a 19b depois da 19 |
-| E · Fechamento | 23 → 24 → 25 | A 24 pode começar depois da 5 |
+| E · Fechamento | 23 → 24 → 26 → 25 | A 24 pode começar depois da 5; a 26 espera todas as outras (menos a 25) |
 
 ---
 
@@ -325,13 +325,27 @@ Execute a etapa 24 da especificação ("Deploy e guia de instalação").
 - PR para develop, link e resultado dos testes. Depois de mesclado, me diga como abrir o PR de release develop → main e o que conferir no primeiro deploy.
 ```
 
+### Etapa 26 · Revisão de textos e experiência *(depois da 24, antes da 25)*
+
+```text
+Execute a etapa 26 ("Revisão de textos e experiência"), planejada em docs/planos/revisao-de-textos-e-experiencia.md. Só comece com as etapas 0 a 24 mescladas (e qualquer etapa nova do cronograma, menos a 25).
+
+- Pedido do Pablo (02/11/2026): textos de botões, ações, notificações, alertas, menus, erros e estados vazios padronizados e sem marcas de texto de IA, mais humanos, com inspiração (sem copiar) no ChatGPT, no Gemini e no Claude; e a reorganização de UI/UX que o inventário apontar.
+- Siga o plano na ordem: inventário de todas as chaves (pt-BR, en e bot) com capturas "antes" de todas as telas; lint de microcopy na CI (glossário, "com sucesso", "Ops", travessão, "!" fora do cumprimento); reescrita por superfície; componentes (Dialog com X no canto por padrão, confirmação que repete o verbo e foca Cancelar, menu ⋯, faixa dispensável); reorganização só onde o inventário mostrar.
+- Skills: humanizer:humanizer em todo texto, design:ux-copy quando ajudar, frontend-design:frontend-design no plano das telas que mudarem de layout, ponytail:ponytail na implementação e ponytail:ponytail-review no QA.
+- Fale como a Zuri só onde é a voz dela (conversa, cumprimento, resumos, bot); texto de sistema é neutro. Nada de infraestrutura nas telas de uso (exceções no plano). A notificação push continua discreta (sem título nem texto do aviso).
+- Mudança grande de navegação ou de nome de seção é decisão do Pablo: pergunte com uma recomendação e as capturas.
+- Pode dividir em 26a (catálogo e lint), 26b (componentes) e 26c (reorganização), uma PR cada. Capturas antes e depois de todas as telas mudadas; e2e, axe, Lighthouse ≥ 95 e teto do JS inicial.
+- Fluxo completo de etapa, PR para develop, link e resultado dos testes. Depois de mesclada, siga para a etapa 25.
+```
+
 ### Etapa 25 · Auditoria final e testes de ponta a ponta
 
 ```text
 Execute a etapa 25 da especificação ("Auditoria final e testes de ponta a ponta").
 
 - Auditoria completa do repositório inteiro com as skills auditoria-seguranca e revisao-qa, os subagentes auditor-seguranca, qa-senior e revisor-cloudflare, e /security-review. Não é só o diff.
-- E2E de todas as telas, teste do webhook do Telegram com atualizações reais gravadas (sem token real), e uma matriz de rastreabilidade final: cada critério de aceite das 26 etapas ligado ao seu teste.
+- E2E de todas as telas, teste do webhook do Telegram com atualizações reais gravadas (sem token real), e uma matriz de rastreabilidade final: cada critério de aceite das etapas 0 a 26 e da 19b ligado ao seu teste.
 - Confira os itens D1 a D9 de docs/planos/troca-de-provedores-e-protecao-de-dados.md e rode o teste canário em todas as origens de dados (D10).
 - Corrija tudo que for alto ou médio. O que ficar baixo vai para uma lista no PR com a sua recomendação.
 - PR para develop com o relatório completo, link e resultado dos testes.

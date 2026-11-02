@@ -6,7 +6,7 @@
 
 </div>
 
-O Zuri é um assistente de um único dono, construído em 26 etapas a partir da
+O Zuri é um assistente de um único dono, construído em 28 etapas a partir da
 [especificação](docs/especificacao.md). Contribuições são bem-vindas, desde que
 sigam as regras abaixo.
 
