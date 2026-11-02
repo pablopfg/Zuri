@@ -1,10 +1,9 @@
 name: CodeQL
 
 # Advanced setup: keep GitHub's CodeQL "default setup" off, or this workflow fails.
-# workflow_dispatch: update-prs.yml starts it after pushing to a PR branch.
+# A push by update-prs.yml starts the pull_request run held for approval; that workflow approves it.
 on:
   pull_request:
-  workflow_dispatch:
   schedule:
     - cron: "17 9 * * 1"
 

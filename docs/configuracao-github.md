@@ -42,7 +42,12 @@ Em **Settings → Actions → General**:
 - **Actions permissions:** marque **Require actions to be pinned to a
   full-length commit SHA**.
 - **Fork pull request workflows from outside collaborators:** **Require
-  approval for all external contributors**.
+  approval for all external contributors**. Essa opção também segura as
+  execuções que o push do `github-actions[bot]` cria nas branches das PRs
+  (workflow `Update PRs`). Não afrouxe: o próprio workflow aprova só as
+  execuções que ele mesmo criou. Se uma PR ficar com "A CI deste commit está
+  parada esperando aprovação", aprove em **Actions**, na execução, com
+  **Approve and run**.
 - **Workflow permissions:** **Read repository contents and packages
   permissions** e desmarque **Allow GitHub Actions to create and approve pull
   requests**.
