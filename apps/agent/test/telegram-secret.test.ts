@@ -4,7 +4,7 @@ import { isTelegramWebhookSecret, telegramWebhookSecret } from "../src/gates/tel
 describe("Telegram webhook secret", () => {
   it("is derived from SESSION_SECRET in the alphabet Telegram accepts", async () => {
     const a = await telegramWebhookSecret("segredo-a".repeat(4));
-    expect(a).toMatch(/^[A-Za-z0-9_-]{43}$/);
+    expect(a).toMatch(/^[0-9a-f]{64}$/);
     expect(await telegramWebhookSecret("segredo-a".repeat(4))).toBe(a);
     expect(await telegramWebhookSecret("segredo-b".repeat(4))).not.toBe(a);
   });

@@ -571,6 +571,8 @@ const SECURITY_TEXT: Record<SecurityAlertEvent, Text> = {
   passkey_removed: { title: "notice.security.passkey_removed.title", body: "notice.security.passkey_removed.body" },
   push_added: { title: "notice.security.push_added.title", body: "notice.security.push_added.body" },
   push_removed: { title: "notice.security.push_removed.title", body: "notice.security.push_removed.body" },
+  telegram_linked: { title: "notice.security.telegram_linked.title", body: "notice.security.telegram_linked.body" },
+  telegram_unlinked: { title: "notice.security.telegram_unlinked.title", body: "notice.security.telegram_unlinked.body" },
   setup_failure: { title: "notice.security.setup_failure.title", body: "notice.security.setup_failure.body" },
   setup_locked: { title: "notice.security.setup_locked.title", body: "notice.security.setup_locked.body" },
   owner_created: { title: "notice.security.owner_created.title", body: "notice.security.owner_created.body" },

@@ -40,7 +40,17 @@ export type InternalKey =
   | "recovery_link"
   | "recovery_requests"
   | "recovery_issued"
-  | "alert_learning_at";
+  | "alert_learning_at"
+  // Step 12, the bot: update_ids already handled (the last 100, comma separated), what was registered
+  // with Telegram (webhook and menu, by version), the bot's @, the test messages of this hour, the code
+  // ended by wrong tries, and the read lock's hours (step 15).
+  | "telegram_seen_update_ids"
+  | "telegram_webhook"
+  | "telegram_menu_version"
+  | "telegram_bot"
+  | "telegram_test_window"
+  | "telegram_code_invalidated"
+  | "bot_read_lock_hours";
 
 export class InternalState {
   constructor(private readonly db: Database) {}

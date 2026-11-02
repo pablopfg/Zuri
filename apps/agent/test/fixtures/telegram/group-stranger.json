@@ -1,0 +1,10 @@
+{
+  "update_id": 3000,
+  "message": {
+    "message_id": 30,
+    "date": 1793612400,
+    "from": { "id": 777002, "is_bot": false, "first_name": "Membro" },
+    "chat": { "id": -1001234567890, "type": "supergroup", "title": "Grupo qualquer" },
+    "text": "olá bot"
+  }
+}

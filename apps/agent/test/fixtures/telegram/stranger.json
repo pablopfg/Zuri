@@ -1,0 +1,10 @@
+{
+  "update_id": 2000,
+  "message": {
+    "message_id": 20,
+    "date": 1793612400,
+    "from": { "id": 777001, "is_bot": false, "first_name": "Estranho", "username": "estranho_exemplo" },
+    "chat": { "id": 777001, "type": "private", "first_name": "Estranho" },
+    "text": "/start CODE"
+  }
+}

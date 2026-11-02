@@ -12,7 +12,7 @@
 [![Licença: MIT](https://img.shields.io/badge/licen%C3%A7a-MIT-0b0f19)](LICENSE)
 [![Roda na Cloudflare](https://img.shields.io/badge/roda%20na-Cloudflare-f38020?logo=cloudflare&logoColor=white)](https://developers.cloudflare.com/workers/)
 [![Plano Free](https://img.shields.io/badge/plano%20Free-compat%C3%ADvel-22c55e)](#-plano-free-sem-surpresa-na-fatura)
-[![Etapas](https://img.shields.io/badge/etapas-10%20de%2028-22c55e)](#️-mapa-das-etapas)
+[![Etapas](https://img.shields.io/badge/etapas-12%20de%2028-22c55e)](#️-mapa-das-etapas)
 [![Sem telemetria](https://img.shields.io/badge/telemetria-nenhuma-0b0f19)](#-segurança-e-privacidade)
 [![Node.js 24+](https://img.shields.io/badge/node-24%2B-339933?logo=nodedotjs&logoColor=white)](.nvmrc)
 
@@ -24,7 +24,7 @@ de um Durable Object e conversa com você pelo navegador e, em breve, pelo Teleg
 </div>
 
 > [!NOTE]
-> **Em construção.** A Zuri sai em 28 etapas, uma por PR, a partir da [especificação](docs/especificacao.md). As etapas 0 a 11 estão na `develop`, da conversa com o agente às automações e à central de avisos. O [mapa das etapas](#️-mapa-das-etapas) mostra o que já existe e o que vem a seguir; o estado detalhado fica em [`progresso.md`](.claude/memoria/progresso.md).
+> **Em construção.** A Zuri sai em 28 etapas, uma por PR, a partir da [especificação](docs/especificacao.md). As etapas 0 a 12 estão na `develop`, da conversa com o agente às automações, à central de avisos e à fundação do bot do Telegram. O [mapa das etapas](#️-mapa-das-etapas) mostra o que já existe e o que vem a seguir; o estado detalhado fica em [`progresso.md`](.claude/memoria/progresso.md).
 
 ## Sumário
 
@@ -168,13 +168,14 @@ O que está na `develop` hoje, etapa por etapa. "extra" marca melhorias feitas f
 | 🩺 | **Diagnóstico** | Em Configurações, as falhas dos últimos 30 dias por tipo (nunca o que você escreveu), com aviso quando uma falha se repete ou aparece numa versão nova, e um botão que abre o relato do problema no GitHub já preenchido. | 11 |
 | 📲 | **Notificação no aparelho** | Os avisos chegam ao celular ou ao computador com a Zuri fechada, em até 3 aparelhos, cifrados de ponta a ponta e discretos na tela bloqueada (o conteúdo fica no app). Você escolhe o que vai para cada canal, e um aparelho novo pede a senha e avisa nos outros. | 11 |
 | 📧 | **E-mail e "Esqueci minha senha"** | Avisos também por e-mail, com assunto discreto e no máximo 10 por dia (4 guardados para segurança). Na tela de entrada, um link de 30 minutos no seu e-mail cria uma senha nova, pedindo o código do autenticador quando a verificação em duas etapas está ligada. | 11 |
+| 🤖 | **Bot do Telegram conectado** | Em Configurações > Avisos, um código de uso único liga a sua conta do Telegram ao bot, e o vínculo só vale depois de você confirmar a conta no app com a senha. O bot só atende essa conta, só no chat privado, ignora mensagens repetidas e sai de grupos; quem não é você não recebe resposta nem deixa nada gravado. | 12 |
 | 🎯 | **Prioridade que aprende** | O tipo de aviso que você quase sempre deixa de lado desce um nível, e o que você abre logo sobe, no máximo um nível por semana e sempre com "Desfazer". Lembretes e segurança nunca mudam, e cada automação tem a sua prioridade. | 11 |
 
 ## 🔭 O que vem a seguir
 
 | | Funcionalidade | O que faz | Etapa |
 | :---: | --- | --- | :---: |
-| 🤖 | **Bot do Telegram** | Painel de administração no bolso: consultas sem IA, conversa por texto e voz (arquivo acima do limite só com a sua confirmação), aprovações com passkey e modo de bloqueio. | 12–16 |
+| 🤖 | **Bot do Telegram** | Painel de administração no bolso: avisos com botões, consultas sem IA, conversa por texto e voz (arquivo acima do limite só com a sua confirmação), aprovações com passkey e modo de bloqueio. | 13–16 |
 | 🔌 | **Integrações** | Busca semântica, servidores MCP, Google Agenda, Google Contatos por etiqueta, acesso remoto para o n8n e monitor de sites, todos opcionais. | 17–22 |
 | 💾 | **Backup e instalação** | Backup e importação, guia de instalação só pelo navegador e auditoria final. | 23–25 |
 
@@ -258,7 +259,7 @@ O orçamento de cada cota está em [docs/arquitetura/orcamento-free-tier.md](doc
 | | 9 | Chat com ferramentas | ✅ |
 | | 10 | Automações | ✅ |
 | | 11 | Central de avisos, push e e-mail | ✅ |
-| **C · Bot do Telegram** | 12 | Fundação do bot | ⬜ |
+| **C · Bot do Telegram** | 12 | Fundação do bot | ✅ |
 | | 13 | Avisos no Telegram | ⬜ |
 | | 14 | Conversa e voz | ⬜ |
 | | 15 | Comandos administrativos | ⬜ |

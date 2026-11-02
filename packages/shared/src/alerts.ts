@@ -62,6 +62,8 @@ export const SECURITY_ALERT_EVENTS = [
   "passkey_removed",
   "push_added",
   "push_removed",
+  "telegram_linked",
+  "telegram_unlinked",
   "setup_failure",
   "setup_locked",
   "owner_created",

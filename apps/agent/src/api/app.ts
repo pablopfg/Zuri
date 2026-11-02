@@ -50,6 +50,7 @@ import { type ChatDeps, registerChatRoutes } from "./chat.ts";
 import { registerMemoryRoutes } from "./memory.ts";
 import { type NoticeDeps, registerNoticeRoutes } from "./notices.ts";
 import { registerProductivityRoutes } from "./productivity.ts";
+import { registerTelegramRoutes, registerTelegramWebhook, type TelegramDeps } from "./telegram.ts";
 import { log, rayOf, routeLabel } from "../log.ts";
 
 export interface ApiEnv {
@@ -77,6 +78,8 @@ export interface ApiDeps {
   chat(): ChatDeps;
   /** The notice center and the failure log (step 11). Absent only in tests of other routes. */
   notices?(): NoticeDeps;
+  /** The Telegram bot (step 12). Absent only in tests of other routes. */
+  telegram?(): TelegramDeps;
   /** True when a password secret is set, so the health check can answer without opening the database. */
   passwordSecretSet(): boolean;
   /** True when a usable SETUP_CODE is set: the first access can still be done. Absent is false. */
@@ -129,6 +132,10 @@ export function createApi(deps: ApiDeps) {
     }
     return Response.json({ ok: true });
   });
+
+  // Telegram's webhook: no cookie and no Origin, only the secret header (checked inside).
+  const telegram = deps.telegram;
+  if (telegram) registerTelegramWebhook(app, () => telegram());
 
   app.use("*", async (c, next) => {
     checkCsrf(c.req.raw, deps.origin());
@@ -421,6 +428,7 @@ export function createApi(deps: ApiDeps) {
   registerAutomationRoutes(app, deps.automations);
   const notices = deps.notices;
   if (notices) registerNoticeRoutes(app, () => notices(), client);
+  if (telegram) registerTelegramRoutes(app, () => telegram(), client);
 
   // Step 8: what the AI used today and the last 7 days. Read only: the limits change through /settings.
   app.get("/usage", () => Response.json(deps.aiUsage()));

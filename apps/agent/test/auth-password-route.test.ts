@@ -76,13 +76,15 @@ function registeredRoutes(): string[] {
   const unused = () => {
     throw new Error("not used");
   };
-  const app = createApi({ locale: () => "pt-BR", auth: unused, settings: unused, productivity: unused, memories: unused, automations: unused, aiUsage: unused, chat: unused, passwordSecretSet: () => true, origin: () => ORIGIN, development: () => false });
+  const app = createApi({ locale: () => "pt-BR", auth: unused, settings: unused, productivity: unused, memories: unused, automations: unused, aiUsage: unused, chat: unused, notices: unused, telegram: unused, passwordSecretSet: () => true, origin: () => ORIGIN, development: () => false });
   return [...new Set(app.routes.filter((r) => r.method !== "ALL").map((r) => `${r.method} ${r.path}`))];
 }
 
 /** Routes that never need a session: health and the steps of signing in. */
 const PUBLIC = new Set([
   "GET /api/health",
+  // Telegram's webhook: no session, only its secret header (step 12).
+  "POST /api/telegram/webhook",
   "POST /api/auth/login",
   "POST /api/auth/mfa",
   "POST /api/auth/mfa/passkey/options",

@@ -1,5 +1,5 @@
-import { AGENT_INSTANCE_NAME, LOGIN_OPTIONS_PATH, type LoginOptions } from "@zuri/shared";
-import { checkCsrf } from "./api/http.ts";
+import { AGENT_INSTANCE_NAME, LOGIN_OPTIONS_PATH, type LoginOptions, TELEGRAM_LIMITS } from "@zuri/shared";
+import { checkCsrf, readBodyLimited } from "./api/http.ts";
 import { CLIENT_GEO_HEADER, geoFromCf } from "./auth/client.ts";
 import { TURNSTILE_ORIGIN, turnstileSiteKey } from "./auth/turnstile.ts";
 import { type Config, readConfig, secretProblems } from "./config.ts";
@@ -76,6 +76,7 @@ async function handle(request: Request, env: WorkerEnv): Promise<Response> {
     if (url.pathname === "/api/health") log("warn", "not_configured", { secrets: secretProblems(env) });
     return refuse(new AppError("NOT_CONFIGURED"));
   }
+  if (url.pathname === TELEGRAM_WEBHOOK_PATH) return withApiHeaders(await telegramWebhook(request, url, env));
   // What the sign-in form draws, answered here: public settings need no Durable
   // Object request (they count on the Free plan, and anyone can ask for them).
   if (url.pathname === LOGIN_OPTIONS_PATH && (request.method === "GET" || request.method === "HEAD")) {
@@ -93,6 +94,44 @@ async function handle(request: Request, env: WorkerEnv): Promise<Response> {
   return withApiHeaders(withoutRawErrors(await agent.fetch(withClientGeo(withoutInternalHeaders(await withBodyRead(request))))));
 }
 
+
+/**
+ * Telegram's webhook (step 12), checked here before it costs an object request:
+ * POST, a bot configured, the secret header compared in constant time (403
+ * without it) and at most 64 KB (413). Only the body and the header go on, in a
+ * fresh request: nothing else Telegram (or anyone) sent reaches the object. The
+ * object answers 200 at once and handles the update in its own queue.
+ */
+async function telegramWebhook(request: Request, url: URL, env: WorkerEnv): Promise<Response> {
+  if (request.method !== "POST" || !env.TELEGRAM_BOT_TOKEN) {
+    await request.body?.cancel();
+    return errorResponse(new AppError("NOT_FOUND"));
+  }
+  const secret = request.headers.get(TELEGRAM_SECRET_HEADER);
+  if (!(await isTelegramWebhookSecret(secret, env.SESSION_SECRET))) {
+    await request.body?.cancel();
+    return errorResponse(new AppError("FORBIDDEN"));
+  }
+  let body: Uint8Array;
+  try {
+    body = await readBodyLimited(request, TELEGRAM_LIMITS.updateMaxBytes);
+  } catch (error) {
+    const refused = errorResponse(error);
+    // Over 64 KB is "too large" (413), as the contract says; any other read failure stays a 400.
+    const tooLarge = error instanceof AppError && error.messageKey === "error.bodyTooLarge";
+    return tooLarge ? new Response(refused.body, { status: 413, headers: refused.headers }) : refused;
+  }
+  const agent = env.AGENT.getByName(AGENT_INSTANCE_NAME);
+  const forwarded = new Request(new URL(TELEGRAM_WEBHOOK_PATH, url.origin), {
+    method: "POST",
+    headers: { "content-type": "application/json", [TELEGRAM_SECRET_HEADER]: secret ?? "" },
+    body,
+  });
+  const answer = await agent.fetch(forwarded);
+  void answer.body?.cancel();
+  // A failure inside the object asks Telegram to try again (the update_id is only kept once handled).
+  return new Response(null, { status: answer.status >= 500 ? 500 : 200 });
+}
 
 function isApiPath(pathname: string): boolean {
   return pathname === "/api" || pathname.startsWith("/api/");

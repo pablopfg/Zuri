@@ -195,6 +195,30 @@ verificado garante isso também do lado da Cloudflare. Sem o binding ou o
 remetente, o e-mail aparece como "Ainda não disponível" e a recuperação de senha
 continua pelo código de instalação.
 
+## Bot do Telegram (opcional)
+
+O bot fala só com a sua conta do Telegram. Criar o bot é gratuito e o token
+nunca passa pelo GitHub.
+
+1. No Telegram, abra o **@BotFather**, mande `/newbot`, escolha o nome de
+   exibição (por exemplo, Zuri) e um usuário que termine em `bot` (por exemplo,
+   `zuri_exemplo_bot`). Ele responde com o token. Não cole o token em conversa
+   nenhuma.
+2. Ainda no BotFather, mande `/setjoingroups` e escolha **Disable** enquanto
+   não usar o grupo de avisos.
+3. Descubra o id numérico da sua conta (por exemplo, mandando qualquer
+   mensagem ao **@userinfobot**).
+4. Em **Workers e Pages > zuri > Configurações > Variáveis e segredos**, grave
+   como **Secret** o `TELEGRAM_BOT_TOKEN` (o token) e o `TELEGRAM_ADMIN_ID` (o
+   número). Pelo terminal: `npx wrangler secret put TELEGRAM_BOT_TOKEN` e
+   `npx wrangler secret put TELEGRAM_ADMIN_ID` dentro de `apps/agent`.
+5. Na Zuri, em **Configurações > Avisos**, toque em **Conectar** no cartão do
+   Telegram, abra o link no celular e confirme a conta no app.
+
+O próprio Worker registra o webhook no Telegram quando você toca em Conectar
+(o segredo do cabeçalho vem do `SESSION_SECRET`). Trocou o token, o domínio ou o
+`SESSION_SECRET`? Toque em **Reconectar**. Detalhes em [telegram.md](telegram.md).
+
 ## IP certo no registro de acessos
 
 O registro usa o cabeçalho `CF-Connecting-IP`, que a Cloudflare define na

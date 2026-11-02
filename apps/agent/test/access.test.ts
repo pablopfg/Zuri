@@ -153,10 +153,9 @@ describe("gate 3: Cloudflare Access in the Worker", () => {
     const post = (headers: Record<string, string>, overrides: Record<string, string> = env, url = webhook) =>
       call(url, { method: "POST", headers, body: "{}" }, overrides);
 
-    // Past Access: the API answers (its CSRF check, until the webhook route exists in step 12).
+    // Past Access: the webhook takes the update (step 12) and answers 200 at once.
     const passed = await post({ "x-telegram-bot-api-secret-token": secret });
-    expect(passed.status).toBe(403);
-    expect((await errorBody(passed)).code).toBe("CSRF_FAILED");
+    expect(passed.status).toBe(200);
 
     for (const [label, res] of [
       ["no header", await post({})],
@@ -165,7 +164,7 @@ describe("gate 3: Cloudflare Access in the Worker", () => {
       ["with cookie", await post({ "x-telegram-bot-api-secret-token": secret, cookie: "a=b" })],
       ["with authorization", await post({ "x-telegram-bot-api-secret-token": secret, authorization: "Bearer x" })],
       ["other path", await post({ "x-telegram-bot-api-secret-token": secret }, env, `${ORIGIN}/api/health`)],
-      ["bot off", await post({ "x-telegram-bot-api-secret-token": secret }, ACCESS_ENV)],
+      ["bot off", await post({ "x-telegram-bot-api-secret-token": secret }, { ...ACCESS_ENV, TELEGRAM_BOT_TOKEN: undefined } as unknown as Record<string, string>)],
       // Without the required secrets there is no trusted key to derive the header from.
       ["secrets missing", await post({ "x-telegram-bot-api-secret-token": secret }, { ...env, PASSWORD_PEPPER: "curto" })],
     ] as const) {

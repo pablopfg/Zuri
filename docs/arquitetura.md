@@ -77,6 +77,8 @@ Segredos sobrevivem ao deploy.
 | `OWNER_PASSWORD_HASH` | segredo | não* | `pbkdf2$100000$<sal>$<hash>`, feito com o `PASSWORD_PEPPER` |
 | `TURNSTILE_SITE_KEY`, `TURNSTILE_SECRET_KEY` | segredo | sim (fora do local) | Os dois, do widget do Turnstile; sem eles (ou com as chaves de teste) o login fica fechado com `NOT_CONFIGURED`. Passo a passo em `docs/configuracao-cloudflare.md` |
 | `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` | segredo | não | Os dois, gerados com `node scripts/gerar-chaves-vapid.ts` (base64url: o ponto P-256 de 65 bytes e o escalar de 32). Sem eles, ou malformados, a notificação no aparelho fica "Ainda não disponível" |
+| `TELEGRAM_BOT_TOKEN` | segredo | não | O token do @BotFather (`123456789:AA…`). Sem ele, ou malformado, o cartão do Telegram fica "não configurado". O segredo do webhook sai do `SESSION_SECRET` (HMAC), então não há outro segredo para gravar. Passo a passo em `docs/telegram.md` |
+| `TELEGRAM_ADMIN_ID` | segredo | não (recomendado) | O id numérico da sua conta do Telegram. Com ele, o bot não ouve nenhuma outra conta, nem com o código certo; os comandos de segurança e as aprovações (etapas 15 e 16) exigem que ele exista. Gravado com erro (não é só dígitos), o bot não ouve conta nenhuma |
 | `ACCESS_TEAM_DOMAIN`, `ACCESS_AUD` | segredo | não | Os dois ou nenhum |
 | `DEFAULT_TIMEZONE`, `AGENT_NAME` | variável | sim | Já vêm no `wrangler.jsonc` |
 
