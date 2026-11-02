@@ -40,6 +40,8 @@ export const LOG_EVENTS = [
   "push_failed",
   "telegram_update_failed",
   "telegram_send_failed",
+  "telegram_turn_failed",
+  "telegram_download_failed",
 ] as const;
 export type LogEvent = (typeof LOG_EVENTS)[number];
 

@@ -49,9 +49,12 @@ export type InternalKey =
   | "telegram_menu_version"
   | "telegram_bot"
   | "telegram_test_window"
+  | "telegram_chat_window"
   | "telegram_code_invalidated"
   // Step 13: the group's one-time code (HMAC and expiry).
   | "telegram_group_code"
+  // Step 14: the app conversation the bot's chat writes to.
+  | "telegram_conversation"
   | "bot_read_lock_hours";
 
 export class InternalState {

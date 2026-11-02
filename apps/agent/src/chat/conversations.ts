@@ -10,7 +10,9 @@ import {
   type MessageSource,
   type MessageStatus,
   MESSAGES_PAGE,
+  QUOTED_KINDS,
   t,
+  TELEGRAM_LIMITS,
   TOOL_NAMES,
   type ToolActivity,
 } from "@zuri/shared";
@@ -42,10 +44,37 @@ export interface MessageRow {
   source: MessageSource;
   /** 1 when the fallback model gave the answer (migration 10). */
   fallback: number;
+  /** Someone else's text sent along from Telegram, JSON (migration 16); null for most messages. */
+  quoted: string | null;
   created_at: string;
 }
 
-const MESSAGE_COLUMNS = `rowid AS seq, id, conversation_id, role, content, tools, status, error_code, error_key, source, fallback, created_at`;
+const MESSAGE_COLUMNS = `rowid AS seq, id, conversation_id, role, content, tools, status, error_code, error_key, source, fallback, quoted, created_at`;
+
+export type Quoted = NonNullable<ChatMessage["quoted"]>;
+
+/**
+ * Quoted text as stored, checked on the way out like the tools: anything not
+ * of the expected shape is dropped, and nothing grows past the limits.
+ */
+export function decodeQuoted(json: string | null): Quoted {
+  if (!json) return [];
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(json);
+  } catch {
+    return [];
+  }
+  if (!Array.isArray(parsed)) return [];
+  const out: Quoted = [];
+  for (const item of parsed.slice(0, TELEGRAM_LIMITS.quotedItems)) {
+    if (!item || typeof item !== "object") continue;
+    const { kind, text } = item as { kind?: unknown; text?: unknown };
+    if (typeof text !== "string" || !text || !(QUOTED_KINDS as readonly unknown[]).includes(kind)) continue;
+    out.push({ kind: kind as Quoted[number]["kind"], text: [...text].slice(0, TELEGRAM_LIMITS.quotedMax).join("") });
+  }
+  return out;
+}
 
 /** Longest stored summary: it goes into every prompt of the conversation. */
 export const SUMMARY_MAX = 2_000;
@@ -185,6 +214,8 @@ export class ConversationRepository {
     id?: string;
     /** The fallback model gave this answer. */
     fallback?: boolean;
+    /** Someone else's text sent along (step 14). */
+    quoted?: Quoted;
   }): ChatMessage {
     // A conversation deleted while its answer was being written takes no more messages (no orphan rows).
     this.row(input.conversationId);
@@ -193,8 +224,8 @@ export class ConversationRepository {
     const id = input.id ?? crypto.randomUUID();
     this.db.transaction(() => {
       this.db.run(
-        `INSERT INTO zur_messages (id, conversation_id, role, content, tools, status, error_code, error_key, source, fallback, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO zur_messages (id, conversation_id, role, content, tools, status, error_code, error_key, source, fallback, quoted, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         id,
         input.conversationId,
         input.role,
@@ -205,6 +236,7 @@ export class ConversationRepository {
         input.error?.key ?? null,
         input.source ?? "app",
         input.fallback === true && input.role === "assistant" ? 1 : 0,
+        input.quoted?.length ? JSON.stringify(decodeQuoted(JSON.stringify(input.quoted))) : null,
         at,
       );
       this.db.run(`UPDATE zur_conversations SET updated_at = ? WHERE id = ?`, at, input.conversationId);
@@ -274,6 +306,7 @@ export class ConversationRepository {
       error: row.error_code && key ? { code: row.error_code as ApiErrorCode, message: t(this.locale(), key) } : null,
       source: row.source,
       ...(row.fallback === 1 ? { fallback: true as const } : {}),
+      ...(row.quoted ? { quoted: decodeQuoted(row.quoted) } : {}),
       createdAt: row.created_at,
     };
   }

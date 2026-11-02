@@ -22,6 +22,7 @@ import { AppError } from "../http/errors.ts";
 import { log } from "../log.ts";
 import type { TelegramCallbacks } from "./callbacks.ts";
 import { type BotCommand, TelegramApiError, TelegramClient } from "./client.ts";
+import { type IncomingAudio, type IncomingTurn, isLargeFileData, type Started, type TelegramConversation } from "./conversation.ts";
 import type { PrivateLink, TelegramLinks } from "./links.ts";
 
 /** Bump when the menu's commands change: the object re-sends it on start (setMyCommands). */
@@ -38,6 +39,8 @@ export interface TelegramDeps {
   callbacks: TelegramCallbacks;
   /** The notice center, for the buttons; read when a button is tapped. */
   alerts(): AlertService;
+  /** The conversation with the agent (step 14); absent in tests that don't need it. */
+  conversation?: TelegramConversation;
   state: InternalState;
   events: AuthEvents;
   /** The bot token, or null while the secret isn't set. Read on every use, never kept. */
@@ -72,6 +75,16 @@ interface IncomingMessage {
   from?: From;
   chat?: Chat;
   text?: string;
+  caption?: string;
+  /** Step 14: a voice note or an audio file, as the update describes it. */
+  audio?: IncomingAudio;
+  /** Forwarded from someone (forward_origin): all its text is someone else's. */
+  forwarded?: boolean;
+  /** Someone else's words in the message: a quote, a reply to another person's message. */
+  quote?: string;
+  replyText?: string;
+  /** A photo, a document, a sticker or anything else the bot doesn't read yet. */
+  other?: boolean;
   /** A group turned into a supergroup: the new id (in the old group) or the old one (in the new). */
   migrate_to_chat_id?: number;
   migrate_from_chat_id?: number;
@@ -124,17 +137,29 @@ export class TelegramService {
    * returns when it was handled. Never throws: a failure is logged by name.
    */
   enqueue(raw: string): Promise<void> {
-    const work = this.#queue.then(() => this.#handle(raw)).catch((error: unknown) => log("error", "telegram_update_failed", { error }));
-    this.#queue = work;
-    return work;
+    const handled = this.#queue
+      .then(() => this.#handle(raw))
+      .catch((error: unknown) => {
+        log("error", "telegram_update_failed", { error });
+        return null;
+      });
+    this.#queue = handled.then(() => undefined);
+    // A conversation's turn outlives the queue (the next update is read meanwhile); the caller keeps the object awake for both.
+    return handled.then((started) => started?.turn);
   }
 
-  /** Tests: resolves when every queued update was handled. */
-  settled(): Promise<void> {
+  /** Tests: resolves when every queued update was handled, while a turn they started may still run. */
+  handled(): Promise<void> {
     return this.#queue;
   }
 
-  async #handle(raw: string): Promise<void> {
+  /** Tests: resolves when every queued update was handled, and the turn they started ended. */
+  async settled(): Promise<void> {
+    await this.#queue;
+    await this.deps.conversation?.settled();
+  }
+
+  async #handle(raw: string): Promise<Started | null | undefined> {
     if (!this.configured()) return;
     let update: unknown;
     try {
@@ -161,7 +186,8 @@ export class TelegramService {
     const link = this.deps.links.private();
     if (link && link.userId === incoming.from.id) {
       this.#remember(id);
-      await (link.status === "active" ? this.#fromOwner(link, incoming) : this.#fromPending(link, incoming));
+      if (link.status === "active") return this.#fromOwner(link, incoming);
+      await this.#fromPending(link, incoming);
       return;
     }
     // An active link belongs to another account: this one is a stranger.
@@ -212,27 +238,88 @@ export class TelegramService {
     await this.#say(link.chatId, "telegram.start.pending");
   }
 
-  /** The owner, through the active link. Commands and the conversation arrive in steps 14 and 15. */
-  async #fromOwner(link: PrivateLink, incoming: Incoming): Promise<void> {
+  /**
+   * The owner, through the active link: the notices' buttons, /start and
+   * /ajuda, and the conversation with the agent (step 14). Returns the turn a
+   * message started, which runs past this update.
+   */
+  async #fromOwner(link: PrivateLink, incoming: Incoming): Promise<Started | null> {
+    // The idle time is measured before this update counts as use.
+    const lastUsed = link.lastUsedAt;
     this.deps.links.touch();
     if (incoming.kind === "callback_query") {
+      if (isLargeFileData(incoming.callbackData) && this.deps.conversation) {
+        return this.deps.conversation.tap(this.client(), {
+          chatId: incoming.chat.id,
+          data: incoming.callbackData,
+          callbackId: incoming.callbackId,
+          messageId: incoming.callbackMessageId,
+          conversation: link.conversation,
+        });
+      }
       await this.#onNoticeButton(incoming);
-      return;
+      return null;
     }
-    if (incoming.kind !== "message") return;
-    const command = commandOf(incoming.message?.text);
+    if (incoming.kind !== "message") return null;
+    const message = incoming.message ?? {};
+    // A forwarded "/comando" is someone else's text: never a command.
+    const own = message.forwarded ? "" : (message.text ?? message.caption ?? "");
+    const command = commandOf(own);
     if (command === "start") {
       this.deps.links.audit("command", "start", "already_linked");
       await this.#say(link.chatId, "telegram.start.already");
-      return;
+      return null;
     }
     if (command === "ajuda") {
       this.deps.links.audit("command", "ajuda", "ok");
       await this.#say(link.chatId, "telegram.help");
-      return;
+      return null;
     }
-    this.deps.links.audit(command === null ? "message" : "command", command === null ? "text" : "unknown", "not_yet");
-    await this.#say(link.chatId, "telegram.notYet");
+    if (command !== null) {
+      this.deps.links.audit("command", "unknown", "not_yet");
+      await this.#say(link.chatId, "telegram.notYet");
+      return null;
+    }
+    const kind = message.audio?.kind ?? (message.other ? "other" : "text");
+    // The switch is off: the bot says so and reads nothing, not even the audio's file.
+    if (!link.conversation || !this.deps.conversation) {
+      this.deps.links.audit("message", kind, "off");
+      await this.#say(link.chatId, "telegram.chat.off");
+      return null;
+    }
+    if (message.other && !message.audio) {
+      this.deps.links.audit("message", kind, "unsupported");
+      await this.#say(link.chatId, "telegram.chat.unsupported");
+      return null;
+    }
+    const quoted: IncomingTurn["quoted"] = [];
+    const forwardedText = message.forwarded ? (message.text ?? message.caption ?? "") : "";
+    if (forwardedText) quoted.push({ kind: "forward", text: forwardedText });
+    if (message.quote) quoted.push({ kind: "quote", text: message.quote });
+    if (message.replyText) quoted.push({ kind: "reply", text: message.replyText });
+    // Until step 15's unlock (passkey or e-mail): after the read lock's hours without use the
+    // conversation turns itself off, and only the app (signed in) turns it back on.
+    if (lastUsed !== null && Date.now() - Date.parse(lastUsed) > this.#readLockHours() * HOUR_MS) {
+      this.deps.links.setConversation(false);
+      this.deps.links.audit("message", kind, "idle_off");
+      await this.#say(link.chatId, "telegram.chat.idle", { horas: this.#readLockHours() });
+      return null;
+    }
+    // 30 messages to the agent an hour: past that the bot says so once and ignores the rest until the hour turns.
+    const rate = this.#chatRate();
+    if (rate !== "ok") {
+      this.deps.links.audit("message", kind, "rate_limited");
+      if (rate === "first") await this.#say(link.chatId, "telegram.chat.rate");
+      return null;
+    }
+    this.deps.links.audit("message", kind, "turn");
+    return this.deps.conversation.receive(this.client(), {
+      chatId: link.chatId,
+      text: own,
+      quoted,
+      audio: message.audio ?? null,
+      forwardedAudio: message.forwarded === true && message.audio !== undefined,
+    });
   }
 
   /** The owner's account, when the update came from it: the active link (and TELEGRAM_ADMIN_ID, when set). */
@@ -370,9 +457,9 @@ export class TelegramService {
     await clearButtons();
   }
 
-  async #say(chatId: number, key: MessageKey): Promise<void> {
+  async #say(chatId: number, key: MessageKey, params?: Record<string, string | number>): Promise<void> {
     try {
-      await this.client().sendMessage(chatId, t(this.deps.locale(), key));
+      await this.client().sendMessage(chatId, t(this.deps.locale(), key, params));
     } catch (error) {
       log("warn", "telegram_send_failed", { error, ...kindOf(error) });
     }
@@ -493,6 +580,8 @@ export class TelegramService {
     if (patch.conversation !== undefined) {
       if (!this.deps.links.private()) throw new AppError("CONFLICT", "error.telegramNoLink");
       this.deps.links.setConversation(patch.conversation);
+      // Turned on in the app: the read lock's hours start over from now.
+      if (patch.conversation) this.deps.links.touch();
     }
     if (patch.readLockHours !== undefined) this.deps.state.set("bot_read_lock_hours", patch.readLockHours);
     return this.#statusNow(null);
@@ -529,9 +618,25 @@ export class TelegramService {
     return { ...base, ...(await this.#webhookHealth()) };
   }
 
-  #statusNow(health: { webhookError: TelegramStatus["webhookError"]; webhookMissing: boolean } | null): TelegramStatus {
+  #readLockHours(): number {
     const lock = this.deps.state.get<unknown>("bot_read_lock_hours");
-    const readLockHours = typeof lock === "number" && Number.isInteger(lock) && lock >= TELEGRAM_LIMITS.readLockHours.min && lock <= TELEGRAM_LIMITS.readLockHours.max ? lock : TELEGRAM_LIMITS.readLockHours.default;
+    return typeof lock === "number" && Number.isInteger(lock) && lock >= TELEGRAM_LIMITS.readLockHours.min && lock <= TELEGRAM_LIMITS.readLockHours.max ? lock : TELEGRAM_LIMITS.readLockHours.default;
+  }
+
+  /** Counts one message to the agent in the hour's window: "ok", "first" (the one past the limit) or "over". */
+  #chatRate(): "ok" | "first" | "over" {
+    const at = Date.now();
+    const stored = this.deps.state.get<string>("telegram_chat_window");
+    const [start, count] = typeof stored === "string" ? stored.split("|").map(Number) : [0, 0];
+    const fresh = !start || at - start >= HOUR_MS;
+    const used = fresh ? 0 : (count ?? 0);
+    this.deps.state.set("telegram_chat_window", `${fresh ? at : start}|${used + 1}`);
+    if (used < TELEGRAM_LIMITS.chatPerHour) return "ok";
+    return used === TELEGRAM_LIMITS.chatPerHour ? "first" : "over";
+  }
+
+  #statusNow(health: { webhookError: TelegramStatus["webhookError"]; webhookMissing: boolean } | null): TelegramStatus {
+    const readLockHours = this.#readLockHours();
     const link = this.deps.links.private();
     const code = this.deps.links.currentCode();
     let state: TelegramState;
@@ -688,6 +793,8 @@ function parseIncoming(update: Record<string, unknown>): Incoming | null {
         from: message.from,
         chat: message.chat,
         ...(typeof message.text === "string" ? { text: message.text } : {}),
+        ...(typeof message.caption === "string" ? { caption: message.caption } : {}),
+        ...thirdParty(message),
         ...(Number.isSafeInteger(message.migrate_to_chat_id) ? { migrate_to_chat_id: message.migrate_to_chat_id as number } : {}),
         ...(Number.isSafeInteger(message.migrate_from_chat_id) ? { migrate_from_chat_id: message.migrate_from_chat_id as number } : {}),
       },
@@ -720,6 +827,42 @@ function parseIncoming(update: Record<string, unknown>): Incoming | null {
   }
   // edited_message, business_message, inline_query and the rest: never handled.
   return null;
+}
+
+const OTHER_CONTENT = ["photo", "document", "video", "video_note", "sticker", "animation", "contact", "location", "venue", "poll", "dice", "story", "game", "paid_media"] as const;
+
+/** A voice note or an audio file's description; null when anything in it is off. */
+function audioOf(value: unknown, kind: IncomingAudio["kind"]): IncomingAudio | null {
+  if (!isObject(value) || typeof value.file_id !== "string" || value.file_id.length === 0 || value.file_id.length > 256) return null;
+  const duration = typeof value.duration === "number" && Number.isFinite(value.duration) && value.duration >= 0 ? value.duration : null;
+  if (duration === null) return null;
+  const size = typeof value.file_size === "number" && Number.isSafeInteger(value.file_size) && value.file_size >= 0 ? value.file_size : null;
+  return { kind, fileId: value.file_id, duration, size };
+}
+
+/**
+ * The parts of a message the conversation reads besides its text (step 14):
+ * the audio, whether it was forwarded, and someone else's words in it (a
+ * quote, the message replied to when it is another person's). Every text is
+ * cut to the stored limit.
+ */
+function thirdParty(message: Record<string, unknown>): Partial<IncomingMessage> {
+  const out: Partial<IncomingMessage> = {};
+  const clip = (text: string) => [...text].slice(0, TELEGRAM_LIMITS.quotedMax).join("");
+  const audio = audioOf(message.voice, "voice") ?? audioOf(message.audio, "audio");
+  if (audio) out.audio = audio;
+  else if (message.voice !== undefined || message.audio !== undefined || OTHER_CONTENT.some((key) => message[key] !== undefined)) out.other = true;
+  // Forwarded, or written by an inline bot: someone else's words either way.
+  if (isObject(message.forward_origin) || isObject(message.via_bot)) out.forwarded = true;
+  if (isObject(message.quote) && typeof message.quote.text === "string" && message.quote.text) out.quote = clip(message.quote.text);
+  const reply = message.reply_to_message;
+  const fromSelf = isObject(reply) && isFrom(reply.from) && isFrom(message.from) && (reply.from.id === message.from.id || reply.from.is_bot === true);
+  // A reply to someone else's message: their words are data. external_reply brings its words as a quote, read above.
+  if (!out.quote && isObject(reply) && !fromSelf) {
+    const text = typeof reply.text === "string" ? reply.text : typeof reply.caption === "string" ? reply.caption : "";
+    if (text) out.replyText = clip(text);
+  }
+  return out;
 }
 
 /** A Bot API failure as the API's error: "Telegram didn't answer" for the owner, the kind in the log. */

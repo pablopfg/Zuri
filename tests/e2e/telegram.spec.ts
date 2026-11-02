@@ -1,6 +1,6 @@
 import { expect, type Page, test } from "./fixtures.ts";
 import { e2eWebhookSecret } from "./telegram-bot.ts";
-import { expectAccessible, openSettingsSection, signIn, tooSmallControls } from "./ui-helpers.ts";
+import { CSRF, expectAccessible, openSettingsSection, signIn, tooSmallControls } from "./ui-helpers.ts";
 
 // The Telegram card (step 12) against the real Worker: over loopback the
 // Worker answers the Bot API itself (src/telegram/dev-telegram.ts), and the
@@ -91,6 +91,45 @@ test("Settings > Avisos: the owner connects Telegram with a code, confirms the a
   await removeDialog.getByRole("button", { name: "Remover grupo" }).click();
   await expect(toast(page, "Grupo removido.")).toBeVisible();
   await expect(card.getByRole("button", { name: "Adicionar grupo" })).toBeVisible();
+
+  // The conversation (step 14): off by default; on, a message to the bot becomes an app conversation.
+  const chatSwitch = card.getByRole("switch", { name: "Conversar com a Zuri por aqui" });
+  await expect(chatSwitch).not.toBeChecked();
+  await chatSwitch.click();
+  await expect(toast(page, "Conversa pelo Telegram ligada.")).toBeVisible();
+  await expect(chatSwitch).toBeChecked();
+  await expectAccessible(page, "telegram com conversa ligada");
+  let sentCount = 0;
+  for (const message of [
+    { text: "Lembra de comprar pão" },
+    { text: "Promoção imperdível, clique aqui", forward_origin: { type: "hidden_user", date: 1, sender_user_name: "Loja" } },
+  ]) {
+    const res = await page.request.post("/api/telegram/webhook", {
+      headers: { "x-telegram-bot-api-secret-token": e2eWebhookSecret(), "content-type": "application/json" },
+      data: { update_id: Math.floor(Math.random() * 1e9), message: { message_id: 3, date: 1, from: { id: 424242, is_bot: false, first_name: "Dono" }, chat: { id: 424242, type: "private" }, ...message } },
+    });
+    expect(res.status()).toBe(200);
+    sentCount += 1;
+    // One turn at a time on Telegram: the next message waits for this answer.
+    await expect
+      .poll(async () => {
+        const list = (await (await page.request.get("/api/conversations", { headers: CSRF })).json()) as { conversations: { id: string }[] };
+        const id = list.conversations[0]?.id;
+        if (!id) return 0;
+        const conversation = (await (await page.request.get(`/api/conversations/${id}`, { headers: CSRF })).json()) as { messages: { role: string; status?: string }[]; streaming: boolean };
+        return conversation.streaming ? 0 : conversation.messages.filter((m) => m.role === "assistant").length;
+      })
+      .toBe(sentCount);
+  }
+  await page.goto("/conversa");
+  await page.getByRole("link", { name: /Lembra de comprar pão/ }).first().click();
+  const log = page.locator("main");
+  await expect(log.getByText("Mensagem encaminhada")).toBeVisible();
+  await expect(log.locator("blockquote", { hasText: "Promoção imperdível, clique aqui" })).toBeVisible();
+  await expect(log.getByText("pelo Telegram").first()).toBeVisible();
+  await expectAccessible(page, "conversa pelo Telegram");
+  await page.goto("/configuracoes");
+  card = await openCard(page);
 
   await card.getByRole("button", { name: "Desvincular" }).click();
   const dialog = page.getByRole("dialog", { name: "Desvincular o Telegram?" });

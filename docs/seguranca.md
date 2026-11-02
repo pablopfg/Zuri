@@ -766,6 +766,31 @@ Etapa 12, fundação. O bot obedece a uma conta só, no chat privado
   insistir com Feito, Adiar ou Silenciar no Telegram; ler no app não para.
   Alerta causado pelo bot é recusado no bot ("Este aviso só pode ser confirmado
   no app."); o reconhecimento no app com senha recente chega na etapa 16.
+- **Conversa pelo bot (etapa 14).** Nasce desligada; desligada, o bot não
+  chama `getFile` nem pergunta nada. O texto que o próprio dono escreve é a
+  mensagem do turno, como no app. Texto de terceiros (mensagem encaminhada,
+  `quote`, resposta à mensagem de outra pessoa, voz encaminhada) fica à parte
+  na mensagem (`zur_messages.quoted`) e entra no prompt só como
+  `<data source="telegram_forward">`, neutralizado; um `/comando` encaminhado
+  não roda. A resposta sai em HTML com `<`, `>` e `&` escapados antes de
+  qualquer marcação e links desarmados; só as tags que o servidor monta
+  (`b`, `i`, `s`, `code`, `pre`) chegam ao Telegram, e HTML recusado volta em
+  texto puro. Nada do texto vai ao registro do bot, só o tipo e o resultado.
+- **Arquivo acima do limite.** O `file_id` fica em
+  `zur_telegram_pending_files`; o botão leva só `v1:large_file:<id>` (12 bytes
+  aleatórios). O toque vale 10 minutos e uma vez (um `UPDATE … WHERE used_at
+  IS NULL`), só do dono no chat privado. A cota do dia é conferida de novo e
+  reservada antes do download; o download não segue redirecionamento, recusa
+  caminho fora do padrão do Telegram e para no meio acima do tamanho informado
+  ou de 20 MB. O áudio nunca é guardado nem vai a log. Sem tamanho na
+  mensagem, vale o do `getFile`, e acima de 5 MB o bot pergunta antes. O custo
+  reservado é o maior entre a duração declarada e a estimada pelos bytes (128
+  kbit/s), para um áudio longo declarado como curto não passar da cota.
+- **Trava provisória da conversa.** Até a etapa 15 trazer o destravamento por
+  passkey ou e-mail, a conversa pelo bot se desliga sozinha depois do tempo da
+  trava de leitura sem uso (12 h por padrão) e só volta pelo app, com sessão.
+  O limite de 30 mensagens por hora já vale. Arquivo de áudio (não a nota de
+  voz) e mensagem de bot inline entram como dado de terceiros.
 
 ## Logs da Cloudflare
 

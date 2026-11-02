@@ -26,6 +26,8 @@ export const TELEGRAM_LIMITS = {
   subrequestBudget: 45,
   /** Test messages per hour from Settings > Notices. */
   testsPerHour: 3,
+  /** Messages to the agent per hour from the bot (spec, "Bot do Telegram"); past it, one reply and then silence. */
+  chatPerHour: 30,
   /** The read lock (step 15): hours without use before content asks to be unlocked. */
   readLockHours: { min: 1, max: 72, default: 12 },
   /** Telegram's limit for one message's text. */
@@ -43,7 +45,32 @@ export const TELEGRAM_LIMITS = {
   alertBodyMax: 3_500,
   /** The group's name as the card shows it. */
   groupTitleMax: 128,
+  /** Step 14: one turn of the conversation, from the message to the last block of the answer. */
+  turnTimeoutMs: 3 * 60_000,
+  /** "typing…" lasts 5 s on Telegram: sent again this often, only in the turn's first minute, at most this many times. */
+  typingEveryMs: 5_000,
+  typingWindowMs: 60_000,
+  typingMax: 12,
+  /** Voice and audio processed without asking (spec, "Arquivo acima do limite"). */
+  audioSoftSeconds: 5 * 60,
+  audioSoftBytes: 5 * 1024 * 1024,
+  /** The largest file the Bot API lets a bot download (getFile, confirmed in core.telegram.org/bots/api). */
+  downloadMaxBytes: 20 * 1024 * 1024,
+  /**
+   * The longest audio transcribed in one go: Workers AI publishes no limit per
+   * call for Whisper, so this keeps a file within the turn's 3 minutes (plan of step 14).
+   */
+  audioHardSeconds: 30 * 60,
+  /** "Processar mesmo assim" works this long, once. */
+  largeFileTtlMs: 10 * 60_000,
+  /** Third-party text (a forward, a quote) kept with the owner's message, per item and items per message. */
+  quotedMax: 4_000,
+  quotedItems: 4,
 } as const;
+
+/** Third-party content in a message from Telegram: a forward, a quote, a reply to someone else, a forwarded voice's words. */
+export const QUOTED_KINDS = ["forward", "quote", "reply", "voice"] as const;
+export type QuotedKind = (typeof QUOTED_KINDS)[number];
 
 /** What a notice's buttons do; the button carries only "v1:<action>:<opaque id>". */
 export const TELEGRAM_NOTICE_ACTIONS = ["done", "snooze", "mute"] as const;

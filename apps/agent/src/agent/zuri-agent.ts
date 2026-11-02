@@ -24,6 +24,7 @@ import { usableVapidKeys, type VapidKeys } from "../push/webpush.ts";
 import { developmentTelegramFetcher } from "../telegram/dev-telegram.ts";
 import { TelegramCallbacks } from "../telegram/callbacks.ts";
 import { TelegramChannel } from "../telegram/channel.ts";
+import { TelegramConversation } from "../telegram/conversation.ts";
 import { TelegramLinks } from "../telegram/links.ts";
 import { TelegramService } from "../telegram/service.ts";
 import { createTurnstile, type Turnstile } from "../auth/turnstile.ts";
@@ -90,6 +91,8 @@ interface Store {
   diagnostics: DiagnosticsService;
   push: PushService;
   telegram: TelegramService;
+  /** The bot's conversation with the agent (step 14). */
+  telegramConversation: TelegramConversation;
 }
 
 /**
@@ -452,10 +455,37 @@ export class ZuriAgent extends Agent<WorkerEnv> {
           exists: async (id) => (await this.getScheduleById(id)) !== undefined,
         },
       });
+      const usage = new UsageMeter(db);
+      // The owner's conversation in the bot (step 14): the same runner, meter and turns as the app.
+      const telegramConversation = new TelegramConversation({
+        db,
+        links: telegramLinks,
+        state,
+        runner: () => this.runner(),
+        conversations: () => conversations,
+        activeRuns: this.activeRuns,
+        ai: () => this.ai(),
+        room: () => ({ ...usage.room(this.aiLimits()), resetsAt: usage.resetsAt() }),
+        audioLock: {
+          take: () => {
+            if (this.#transcribing) return false;
+            this.#transcribing = true;
+            return true;
+          },
+          give: () => {
+            this.#transcribing = false;
+          },
+          busy: () => this.#transcribing,
+        },
+        locale: () => this.locale(),
+        timeZone: () => settings.field("timeZone"),
+        origin: () => this.publicUrl().origin,
+      });
       const telegram = new TelegramService({
         links: telegramLinks,
         callbacks: telegramCallbacks,
         alerts: () => alerts,
+        conversation: telegramConversation,
         state,
         events: auth.events,
         token: () => telegramToken(env.TELEGRAM_BOT_TOKEN),
@@ -467,7 +497,7 @@ export class ZuriAgent extends Agent<WorkerEnv> {
         // Local development never reaches Telegram (src/telegram/dev-telegram.ts).
         ...(this.development() ? { fetcher: developmentTelegramFetcher as typeof fetch } : {}),
       });
-      this.#store = { db, settings, auth, productivity, memories, usage: new UsageMeter(db), conversations, actions, plans, automations, alerts, watchers, diagnostics, push, telegram };
+      this.#store = { db, settings, auth, productivity, memories, usage, conversations, actions, plans, automations, alerts, watchers, diagnostics, push, telegram, telegramConversation };
     }
     return this.#store;
   }

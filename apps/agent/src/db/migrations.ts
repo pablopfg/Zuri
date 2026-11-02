@@ -749,6 +749,33 @@ export const MIGRATIONS: readonly Migration[] = [
       `CREATE INDEX IF NOT EXISTS zur_notices_snoozed ON zur_notices (snoozed_until) WHERE snoozed_until IS NOT NULL`,
     ],
   },
+  {
+    version: 16,
+    name: "telegram_conversation",
+    statements: [
+      // An audio file over the limit, waiting for "Processar mesmo assim" (step 14).
+      // The id (12 random bytes, base64url) is the one in the buttons; the
+      // file_id stays here, never in a button. One row per chat at most. Never
+      // in the backup: it lives 10 minutes.
+      `CREATE TABLE IF NOT EXISTS zur_telegram_pending_files (
+        id TEXT PRIMARY KEY,
+        chat_id INTEGER NOT NULL,
+        file_id TEXT NOT NULL,
+        kind TEXT CHECK (kind IN ('voice', 'audio')),
+        size_bytes INTEGER,
+        duration_s INTEGER,
+        neurons_estimate REAL,
+        message_id INTEGER,
+        created_at TEXT NOT NULL,
+        expires_at TEXT NOT NULL,
+        used_at TEXT
+      )`,
+      `CREATE INDEX IF NOT EXISTS zur_telegram_pending_files_chat ON zur_telegram_pending_files (chat_id)`,
+      // Someone else's text the owner sent along from Telegram (a forward, a
+      // quote): JSON, shown as a quote and given to the model only as <data>.
+      `ALTER TABLE zur_messages ADD COLUMN quoted TEXT`,
+    ],
+  },
 ];
 
 export const LATEST_SCHEMA_VERSION = MIGRATIONS.at(-1)?.version ?? 0;
