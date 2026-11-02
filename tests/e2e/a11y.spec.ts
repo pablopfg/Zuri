@@ -29,10 +29,11 @@ for (const scheme of ["light", "dark"] as const) {
 
       await page.getByRole("button", { name: "Abrir avisos" }).click();
       await expect(page.getByRole("dialog", { name: "Avisos" })).toBeVisible();
+      await expect(page.getByRole("dialog", { name: "Avisos" }).getByRole("status").filter({ hasText: "Carregando" })).toHaveCount(0);
       await expectAccessible(page, "avisos");
       await page.keyboard.press("Escape");
 
-      for (const tab of ["conta", "seguranca", "ia", "avisos", "integracoes", "dados"]) {
+      for (const tab of ["conta", "seguranca", "ia", "avisos", "integracoes", "dados", "diagnostico"]) {
         await page.goto(`/configuracoes/${tab}`);
         await expect(page.getByRole("heading", { level: 1, name: "Configurações" })).toBeVisible();
         await expect(page.getByRole("status").filter({ hasText: "Carregando" })).toHaveCount(0);

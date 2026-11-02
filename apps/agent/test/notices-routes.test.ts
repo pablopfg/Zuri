@@ -168,6 +168,40 @@ describe("the object's wiring", () => {
     expect(JSON.parse(stored).startsWith(watch)).toBe(true);
   });
 
+  it("never sets the alarm at once again when a step keeps failing: the next try waits a minute", async () => {
+    const { at, ranAutomations } = await inOwner(async (agent) => {
+      const watchers = agent.store.watchers as unknown as { tick: () => boolean };
+      const alerts = agent.store.alerts as unknown as { sweep: () => void };
+      watchers.tick = () => {
+        throw new Error("disk full");
+      };
+      alerts.sweep = () => {
+        throw new Error("disk full");
+      };
+      // A round already past due that the failing step can't move forward.
+      agent.store.db.run(`UPDATE zur_settings SET value = ? WHERE key = 'alert_watch_at'`, JSON.stringify(new Date(Date.now() - 60_000).toISOString()));
+      let ran = false;
+      const wake = agent.store.automations.wake.bind(agent.store.automations);
+      agent.store.automations.wake = async (...args) => {
+        ran = true;
+        return wake(...args);
+      };
+      try {
+        await agent.runAutomations({}, undefined);
+      } finally {
+        delete (watchers as Partial<typeof watchers>).tick;
+        delete (alerts as Partial<typeof alerts>).sweep;
+        delete (agent.store.automations as Partial<typeof agent.store.automations>).wake;
+      }
+      const stored = agent.store.db.one<{ value: string }>(`SELECT value FROM zur_settings WHERE key = 'automation_alarm'`)?.value ?? '""';
+      return { at: Date.parse((JSON.parse(stored) as string).split("|")[0] ?? ""), ranAutomations: ran };
+    });
+    // The automations still ran, and the alarm comes back no sooner than a minute later.
+    expect(ranAutomations).toBe(true);
+    expect(at - Date.now()).toBeGreaterThan(50_000);
+    await inOwner((agent) => agent.store.db.run(`DELETE FROM zur_settings WHERE key = 'alert_watch_at'`));
+  });
+
   it("runs the watchers and the tries on the alarm, and sets the next round", async () => {
     const next = await inOwner(async (agent) => {
       agent.store.db.run(`DELETE FROM zur_settings WHERE key = 'alert_watch_at'`);

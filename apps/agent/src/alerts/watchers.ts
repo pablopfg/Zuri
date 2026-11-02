@@ -114,7 +114,8 @@ export class Watchers {
     const open = (where: string, order: string, ...params: string[]) =>
       db.all<TaskRow>(`SELECT id, title, due_at FROM zur_tasks WHERE status != 'done' AND ${where} ORDER BY ${order} LIMIT 50`, ...params);
 
-    for (const row of open(`due_at > ? AND due_at <= ?`, "due_at", nowIso, iso(nowMs + HOUR))) raise(row, "watch.taskDueHour", `task-due-hour:${row.id}`, 2 * DAY);
+    // Keyed by task and deadline: a task put off to a new deadline is told about again.
+    for (const row of open(`due_at > ? AND due_at <= ?`, "due_at", nowIso, iso(nowMs + HOUR))) raise(row, "watch.taskDueHour", `task-due-hour:${row.id}:${row.due_at}`, 2 * DAY);
     if (nowMs >= digestAt) {
       for (const row of open(`due_at < ? AND due_at >= ?`, "due_at DESC", nowIso, iso(nowMs - WATCH.overdueDays * DAY))) {
         // The first day it insists (high); afterwards it is a plain daily reminder.
@@ -122,7 +123,7 @@ export class Watchers {
         raise(row, "watch.taskOverdue", `task-overdue:${row.id}:${localDay}`, 26 * HOUR, firstDay);
       }
     }
-    for (const row of open(`due_at > ? AND due_at <= ?`, "due_at", iso(nowMs + HOUR), iso(nowMs + DAY))) raise(row, "watch.taskDueDay", `task-due-day:${row.id}`, 2 * DAY);
+    for (const row of open(`due_at > ? AND due_at <= ?`, "due_at", iso(nowMs + HOUR), iso(nowMs + DAY))) raise(row, "watch.taskDueDay", `task-due-day:${row.id}:${row.due_at}`, 2 * DAY);
     const stalledBefore = iso(nowMs - WATCH.stalledDays * DAY);
     for (const row of db.all<TaskRow>(`SELECT id, title, due_at FROM zur_tasks WHERE status = 'in_progress' AND updated_at < ? ORDER BY updated_at LIMIT 50`, stalledBefore)) {
       raise(row, "watch.taskStalled", `task-stalled:${row.id}`, WATCH.stalledDays * DAY);

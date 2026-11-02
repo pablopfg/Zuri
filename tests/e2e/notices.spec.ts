@@ -102,14 +102,17 @@ test("Settings > Avisos: the daily summary and the watchers are saved; the chann
 test("Settings > Diagnóstico shows a screen's failure by name only, and marks it resolved @mobile", async ({ page }) => {
   await signedIn(page, "/configuracoes");
   await expect(page.getByRole("heading", { level: 1, name: "Configurações" })).toBeVisible();
-  const route = `/e2e-${tag()}`;
-  const sent = await page.request.post("/api/diagnostics/client", { headers: CSRF, data: { name: "TypeError", route } });
+  // A name of its own per run: the database keeps what earlier runs logged.
+  const name = `E2e${tag().replace(/[^A-Za-z0-9]/g, "")}`;
+  const sent = await page.request.post("/api/diagnostics/client", { headers: CSRF, data: { name, route: "/notas/0b8f8a52-5b2c-4c55-9a4c-2f1f3e1f4a10" } });
   expect(sent.status()).toBe(204);
   await openSettingsSection(page, "Diagnóstico");
   await expect(page.getByRole("heading", { name: /Tudo funcionando|Teve falha recente|Uma falha está se repetindo/ })).toBeVisible();
-  const entry = page.getByRole("list", { name: "Falhas registradas" }).getByRole("listitem").filter({ hasText: route });
+  const entry = page.getByRole("list", { name: "Falhas registradas" }).getByRole("listitem").filter({ hasText: name });
   await expect(entry.getByText("CLIENT_ERROR")).toBeVisible();
   await expect(entry.getByText(/^Tela/)).toBeVisible();
+  // Only the screen: the record's id in the path never reaches the log.
+  await expect(entry.getByText("/notas/id", { exact: true })).toBeVisible();
   await expectAccessible(page, "diagnóstico");
   expect(await tooSmallControls(page), "every control of Settings > Diagnóstico is a 44 px target").toEqual([]);
   await entry.getByRole("button", { name: "Marcar como resolvida" }).click();

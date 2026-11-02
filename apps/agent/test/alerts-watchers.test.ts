@@ -49,17 +49,19 @@ const notices = (w: WatchWorld) =>
   w.world.db.all<{ kind: string; priority: string; params: string; body: string | null }>(`SELECT kind, priority, params, body FROM zur_notices ORDER BY created_at, rowid`);
 
 /** A task due at `dueAt` (UTC ISO), straight into the table: the watchers read only the table. */
-function task(w: WatchWorld, title: string, dueAt: string | null, status = "todo", updatedAt?: string) {
+function task(w: WatchWorld, title: string, dueAt: string | null, status = "todo", updatedAt?: string): string {
   const at = updatedAt ?? new Date(w.world.clock.now).toISOString();
+  const id = crypto.randomUUID();
   w.world.db.run(
     `INSERT INTO zur_tasks (id, title, status, due_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)`,
-    crypto.randomUUID(),
+    id,
     title,
     status,
     dueAt,
     at,
     at,
   );
+  return id;
 }
 
 /** A round now, whenever the last one ran (the digest tests jump the clock around). */
@@ -111,6 +113,21 @@ describe("the watchers' round", () => {
       w.world.clock.now += 15 * MINUTE;
       w.watchers.tick();
       expect(notices(w)).toHaveLength(5);
+    });
+  });
+
+  it("tells again about a task put off to a new deadline, once per deadline", async () => {
+    await withWatchers(async (w) => {
+      const id = task(w, "Pagar a conta", inMs(w, 30 * MINUTE));
+      w.watchers.tick();
+      expect(notices(w).map((n) => n.kind)).toEqual(["watch.taskDueHour"]);
+      // Put off by a day: tomorrow, 30 minutes before, it comes back.
+      w.world.db.run(`UPDATE zur_tasks SET due_at = ? WHERE id = ?`, inMs(w, DAY + 30 * MINUTE), id);
+      w.world.clock.now += DAY;
+      round(w);
+      expect(notices(w).map((n) => n.kind)).toEqual(["watch.taskDueHour", "watch.taskDueHour"]);
+      round(w);
+      expect(notices(w)).toHaveLength(2);
     });
   });
 

@@ -72,6 +72,9 @@ interface Store {
  * its SQLite. Exactly one instance exists (AGENT_INSTANCE_NAME); the Worker is
  * the only way in, and it never lets a client choose another.
  */
+/** The soonest the shared alarm comes back for notice work already past due (see `otherDue`). */
+const RETRY_FLOOR_MS = 60_000;
+
 export class ZuriAgent extends Agent<WorkerEnv> {
   #store: Store | undefined;
   /** Chat turns running now, by conversation (the Stop button aborts one). */
@@ -168,14 +171,16 @@ export class ZuriAgent extends Agent<WorkerEnv> {
    * finally the next one is set. The handler waits for the sends it started.
    */
   async runAutomations(_payload: unknown, schedule?: { id: string }): Promise<void> {
-    const { db, alerts, watchers, automations } = this.store;
-    try {
-      alerts.sweep();
-      flushSecurityAlerts(db, alerts);
-      await alerts.escalate();
-      watchers.tick();
-    } catch (error) {
-      log("error", "alert_tick_failed", { error });
+    const { db, alerts, watchers, automations, diagnostics } = this.store;
+    // Each step on its own: one that fails never keeps the others (or the automations) from running.
+    // The watchers go first, since their round moves the next one forward before anything else.
+    const steps = [() => watchers.tick(), () => diagnostics.flush(), () => alerts.sweep(), () => flushSecurityAlerts(db, alerts), () => alerts.escalate()];
+    for (const step of steps) {
+      try {
+        await step();
+      } catch (error) {
+        log("error", "alert_tick_failed", { error });
+      }
     }
     await automations.wake(schedule?.id ?? null, this.executor());
     await alerts.settled();
@@ -315,7 +320,13 @@ export class ZuriAgent extends Agent<WorkerEnv> {
         otherDue: () => {
           const tries = alerts.nextDue();
           const watch = watchers.nextDue();
-          return tries && tries < watch ? tries : watch;
+          const due = tries && tries < watch ? tries : watch;
+          // Work already past due is only left there when its step failed on the last
+          // alarm (a full disk, say): wait a minute before trying again, never at once,
+          // so a step that keeps failing can't spin the alarm through the day's quota.
+          const floor = new Date(Date.now() + RETRY_FLOOR_MS).toISOString();
+          // ISO strings in UTC sort as times: the later of the two.
+          return [due, floor].sort()[1] ?? floor;
         },
         finished: (automation, outcome) => noticeForRun(alerts, diagnostics, automation, outcome),
         alarm: {

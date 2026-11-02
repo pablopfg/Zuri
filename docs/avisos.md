@@ -82,7 +82,9 @@ Os vigias e as tentativas de insistência usam o mesmo alarme das automações
 a próxima automação e o `otherDue` (próxima rodada dos vigias ou próxima
 tentativa). Ao despertar, `runAutomations` limpa envios presos, transforma
 eventos de acesso em avisos, faz as tentativas devidas, roda os vigias e só então
-as automações. A primeira rodada dos vigias acontece 15 min depois do primeiro
+as automações. Cada passo tem o próprio `try`; se um deles falhar e deixar
+trabalho vencido, o alarme volta só depois de 1 minuto, nunca na hora, para que
+um passo quebrado não gaste a cota do dia. A primeira rodada dos vigias acontece 15 min depois do primeiro
 uso do banco, para que a primeira requisição não escreva nada em segundo plano.
 
 ## Diagnóstico
@@ -102,6 +104,14 @@ recente ou falha se repetindo) e cada tipo de falha dos últimos 30 dias.
   quando uma página quebra, uma vez por tipo a cada carregamento, até 20 por
   hora no servidor. A rota recusa qualquer outro campo.
 - "Marcar como resolvida" zera a contagem do dia; a próxima falha reabre.
+- O "dia" das contagens (hoje, 20 no dia) é o dia UTC, o mesmo do teto de IA:
+  em São Paulo ele vira às 21:00.
+- A mesma falha repetida em menos de 5 s é somada na memória e gravada junto
+  com a seguinte (ou na próxima rodada do alarme, ou ao abrir a aba): uma
+  enxurrada custa uma escrita a cada poucos segundos por tipo.
+- O servidor guarda só a página da tela que falhou (as páginas do app e as abas
+  de Configurações); qualquer outro trecho do caminho vira `id`, e uma página
+  desconhecida vira `/outra`.
 - A versão vem do binding `CF_VERSION_METADATA` (grátis). Numa VPS
   (`docs/planos/migracao-vps.md`), ele é trocado por uma variável com o commit
   publicado; sem ele, "falha nova nesta versão" só vale para tipos nunca vistos.

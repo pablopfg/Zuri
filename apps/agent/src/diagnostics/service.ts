@@ -49,6 +49,13 @@ const RAY = /^[0-9a-f]{16}(?:-[A-Z]{3})?$/;
 const RELEASE = /^[0-9a-f-]{8,64}$/;
 const DAY_MS = 24 * 3_600_000;
 const HOUR_MS = 3_600_000;
+/**
+ * The same failure again within this time is counted in memory and written with
+ * the next one: a flood (a public route while a service is down) costs one write
+ * every few seconds per kind, not one per request. An eviction loses at most this
+ * much of the count.
+ */
+const FOLD_MS = 5_000;
 
 /**
  * The failure log of its own (docs/planos/observabilidade.md): one row per kind
@@ -59,6 +66,9 @@ const HOUR_MS = 3_600_000;
  * a day per kind of failure.
  */
 export class DiagnosticsService {
+  /** Per kind: when its row was last written, and the failures seen since then (see FOLD_MS). */
+  private readonly folded = new Map<string, { writtenAt: number; pending: number; ref: string | null; report: FailureReport }>();
+
   constructor(
     private readonly db: Database,
     private readonly state: InternalState,
@@ -80,15 +90,22 @@ export class DiagnosticsService {
   }
 
   /** Counts a failure. Never throws: the failure log must not become one more failure. */
-  record(report: FailureReport): void {
+  record(report: FailureReport, flushing = false): void {
     try {
-      this.count(report);
+      this.count(report, flushing);
     } catch (error) {
       log("error", "diagnostics_failed", { error });
     }
   }
 
-  private count(report: FailureReport): void {
+  /** Writes the failures still folded in memory: before the tab reads the log, and on each alarm. */
+  flush(): void {
+    for (const fold of [...this.folded.values()]) {
+      if (fold.pending > 0) this.record(fold.report, true);
+    }
+  }
+
+  private count(report: FailureReport, flushing = false): void {
     const nowMs = this.now();
     const at = new Date(nowMs).toISOString();
     const day = at.slice(0, 10);
@@ -100,6 +117,18 @@ export class DiagnosticsService {
     const release = this.release();
     const fingerprint = `${source}:${route ?? "-"}:${code}:${errorName}`;
     const id = fnv64(fingerprint);
+    const fold = this.folded.get(id);
+    if (!flushing && fold && nowMs - fold.writtenAt < FOLD_MS && nowMs >= fold.writtenAt) {
+      fold.pending++;
+      fold.ref = ref ?? fold.ref;
+      return;
+    }
+    // This failure (none when flushing) plus the ones folded since the last write.
+    const n = (flushing ? 0 : 1) + (fold?.pending ?? 0);
+    if (n === 0) return;
+    const lastRef = ref ?? fold?.ref ?? null;
+    this.folded.set(id, { writtenAt: nowMs, pending: 0, ref: null, report: { source, code, errorName, route, ref: null } });
+    if (this.folded.size > DIAGNOSTIC_LIMITS.types) this.folded.delete(this.folded.keys().next().value as string);
     const row = this.db.one<DiagnosticRow>(`SELECT * FROM zur_diagnostics WHERE id = ?`, id);
     let newInRelease: boolean;
     let burst: number;
@@ -107,38 +136,42 @@ export class DiagnosticsService {
     if (!row) {
       this.db.run(
         `INSERT INTO zur_diagnostics (id, fingerprint, source, code, error_name, route, count_total, count_day, day, window_start, window_count, first_at, last_at, last_ref, release)
-         VALUES (?, ?, ?, ?, ?, ?, 1, 1, ?, ?, 1, ?, ?, ?, ?)`,
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         id,
         fingerprint,
         source,
         code,
         errorName,
         route,
+        n,
+        n,
         day,
         at,
+        n,
         at,
         at,
-        ref,
+        lastRef,
         release,
       );
       this.trim();
       newInRelease = true;
-      burst = 1;
-      today = 1;
+      burst = n;
+      today = n;
     } else {
       const inWindow = nowMs - Date.parse(row.window_start) < DIAGNOSTIC_LIMITS.burstWindowMs;
-      burst = inWindow ? row.window_count + 1 : 1;
-      today = row.day === day ? row.count_day + 1 : 1;
+      burst = inWindow ? row.window_count + n : n;
+      today = row.day === day ? row.count_day + n : n;
       // Seen before, but only in an earlier version: new again in this one.
       newInRelease = release !== null && row.release !== release;
       this.db.run(
-        `UPDATE zur_diagnostics SET count_total = count_total + 1, count_day = ?, day = ?, window_start = ?, window_count = ?, last_at = ?, last_ref = coalesce(?, last_ref), release = coalesce(?, release), resolved_at = NULL WHERE id = ?`,
+        `UPDATE zur_diagnostics SET count_total = count_total + ?, count_day = ?, day = ?, window_start = ?, window_count = ?, last_at = ?, last_ref = coalesce(?, last_ref), release = coalesce(?, release), resolved_at = NULL WHERE id = ?`,
+        n,
         today,
         day,
         inWindow ? row.window_start : at,
         burst,
         at,
-        ref,
+        lastRef,
         release,
         id,
       );
@@ -168,11 +201,12 @@ export class DiagnosticsService {
       throw new AppError("RATE_LIMITED", undefined, { retryAfter: Math.max(1, Math.ceil(((start ?? 0) + HOUR_MS - nowMs) / 1000)) });
     }
     this.state.set("diagnostics_client_window", `${fresh ? nowMs : start}|${used + 1}`);
-    this.record({ source: "interface", code: "CLIENT_ERROR", errorName: input.name, route: input.route });
+    this.record({ source: "interface", code: "CLIENT_ERROR", errorName: input.name, route: screenOf(input.route) });
   }
 
   /** The tab: every kind still kept, the most recent first, and the overall state. */
   report(): DiagnosticsReport {
+    this.flush();
     const nowMs = this.now();
     const today = new Date(nowMs).toISOString().slice(0, 10);
     this.db.run(`DELETE FROM zur_diagnostics WHERE last_at < ?`, new Date(nowMs - DIAGNOSTIC_LIMITS.days * DAY_MS).toISOString());
@@ -208,6 +242,8 @@ export class DiagnosticsService {
 
   /** "Mark as resolved": the day's count starts over; the total stays. The next failure reopens it. */
   resolve(id: string): void {
+    this.flush();
+    this.folded.delete(id);
     const { rowsWritten } = this.db.run(
       `UPDATE zur_diagnostics SET resolved_at = ?, count_day = 0, window_count = 0 WHERE id = ?`,
       new Date(this.now()).toISOString(),
@@ -224,6 +260,22 @@ export class DiagnosticsService {
       DIAGNOSTIC_LIMITS.types,
     );
   }
+}
+
+/** The interface's pages (apps/web/src/App.tsx) and the settings tabs: the only words a screen's path keeps. */
+const SCREENS = new Set(["", "entrar", "primeiro-acesso", "conversa", "tarefas", "notas", "automacoes", "memoria", "acessos", "configuracoes"]);
+const SETTINGS_TABS = new Set(["conta", "seguranca", "ia", "avisos", "integracoes", "dados", "diagnostico"]);
+
+/**
+ * The screen a path names, never what else it carries: the page (unknown ones
+ * become "outra"), a settings tab, and any further segment as "id". The
+ * interface already swaps ids; this holds even for a page that sends more.
+ */
+export function screenOf(path: string): string {
+  const [, page = "", ...rest] = path.split("/");
+  if (!SCREENS.has(page)) return "/outra";
+  if (page === "configuracoes" && rest[0] !== undefined && SETTINGS_TABS.has(rest[0])) return `/configuracoes/${rest[0]}${rest.length > 1 ? "/id" : ""}`;
+  return `/${page}${rest.some((segment) => segment !== "") ? "/id" : ""}`;
 }
 
 /** A short, stable id for a fingerprint (FNV-1a, 64 bits): an address for the row, not a secret. */

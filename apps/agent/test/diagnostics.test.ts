@@ -2,7 +2,7 @@ import { DEFAULT_SETTINGS, DIAGNOSTIC_LIMITS } from "@zuri/shared";
 import { describe, expect, it } from "vitest";
 import { AlertService } from "../src/alerts/service.ts";
 import { InternalState } from "../src/db/internal-state.ts";
-import { DiagnosticsService, fnv64 } from "../src/diagnostics/service.ts";
+import { DiagnosticsService, fnv64, screenOf } from "../src/diagnostics/service.ts";
 import { AppError } from "../src/http/errors.ts";
 import { type ChatWorld, withChatWorld } from "./chat-world.ts";
 
@@ -76,6 +76,9 @@ describe("the failure log", () => {
       expect(w.diagnostics.report().status).toBe("failing");
       w.world.clock.now += 24 * 60 * MINUTE;
       for (let i = 0; i < DIAGNOSTIC_LIMITS.burst; i++) w.diagnostics.record(failure);
+      // A burst inside a few seconds is folded in memory; the alarm (or the tab) writes it.
+      expect(alertsOf(w)).toHaveLength(2);
+      w.diagnostics.flush();
       expect(alertsOf(w)).toHaveLength(3);
     });
   });
@@ -101,6 +104,7 @@ describe("the failure log", () => {
       w.diagnostics.record(failure);
       expect(alertsOf(w)).toHaveLength(1);
       w.release = RELEASE_B;
+      w.world.clock.now += 10_000;
       w.diagnostics.record(failure);
       expect(alertsOf(w)).toHaveLength(2);
     });
@@ -143,6 +147,32 @@ describe("the failure log", () => {
       w.diagnostics.recordClient({ name: "TypeError", route: "/tarefas" });
       expect(w.diagnostics.report().entries[0]?.countTotal).toBe(21);
     });
+  });
+
+  it("folds a flood of the same failure into one write every few seconds, losing no count", async () => {
+    await withDiagnostics(async (w) => {
+      w.diagnostics.record(failure);
+      for (let i = 0; i < 99; i++) w.diagnostics.record(failure);
+      // Nothing written for the 99 that came within the same seconds.
+      expect(w.world.db.one<{ count_total: number }>(`SELECT count_total FROM zur_diagnostics`)?.count_total).toBe(1);
+      w.world.clock.now += 6_000;
+      w.diagnostics.record(failure);
+      expect(w.world.db.one<{ count_total: number }>(`SELECT count_total FROM zur_diagnostics`)?.count_total).toBe(101);
+      // What is still folded shows in the tab: reading it writes it first.
+      w.diagnostics.record(failure);
+      expect(w.diagnostics.report().entries[0]?.countTotal).toBe(102);
+    });
+  });
+
+  it("keeps only the screen of a path the interface sends: the page, a settings tab, the rest as 'id'", () => {
+    expect(screenOf("/")).toBe("/");
+    expect(screenOf("/tarefas")).toBe("/tarefas");
+    expect(screenOf("/notas/id")).toBe("/notas/id");
+    expect(screenOf("/notas/joao-silva-cpf")).toBe("/notas/id");
+    expect(screenOf("/configuracoes/diagnostico")).toBe("/configuracoes/diagnostico");
+    expect(screenOf("/configuracoes/joao")).toBe("/configuracoes/id");
+    expect(screenOf("/joao-silva-cpf")).toBe("/outra");
+    expect(screenOf("/__proto__")).toBe("/outra");
   });
 
   it("never throws, even when the database refuses the write", async () => {
