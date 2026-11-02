@@ -19,6 +19,86 @@ funciona: [docs/agente/versionamento.md](docs/agente/versionamento.md).
 
 O que já entrou na `develop` e ainda não ganhou número fica em [`changelog/nao-lancado/`](changelog/nao-lancado/) por alguns minutos, até o workflow de versão escrever a seção.
 
+## [0.18.1] - 2026-11-02
+
+Mesclada às 11:11 (UTC-3) · commit [`7cf8147`](https://github.com/pablopfg/Zuri/commit/7cf81477b2383e7b78664b9df4a1a615a4033703) · PR [#78](https://github.com/pablopfg/Zuri/pull/78) · Cria as tags de versão por git push e segue quando uma release é recusada
+
+### Alterado
+
+- Sem mudança visível: cria as tags de versão por git push e segue quando uma release é recusada.
+
+## [0.18.0] - 2026-11-02
+
+Mesclada às 10:58 (UTC-3) · commit [`fbfc4d6`](https://github.com/pablopfg/Zuri/commit/fbfc4d662237cd43ac91163cc3a514558e195d7c) · PR [#75](https://github.com/pablopfg/Zuri/pull/75) · Conversa com o agente por texto e voz
+
+### Adicionado
+
+- Conversa com a Zuri pelo Telegram. Com **Conversar com a Zuri por aqui**
+  ligado no cartão do Telegram (Configurações › Avisos), o que você escreve no
+  chat com o bot vira uma conversa do app, com as mesmas memórias, ferramentas
+  e limites. A resposta chega formatada, com "digitando…" enquanto a Zuri
+  pensa, e a conversa aparece na sua lista com a marca "pelo Telegram".
+- Voz e arquivos de áudio pelo Telegram: até 5 minutos e 5 MB, a Zuri
+  transcreve, mostra o que entendeu e responde. Acima disso ela pergunta antes,
+  com o custo em Neurons e o que sobra no dia, e só baixa depois de você tocar
+  em **Processar mesmo assim** (vale 10 minutos).
+- No app, mensagem encaminhada ou trecho citado no Telegram aparece numa caixa
+  separada da sua mensagem.
+
+### Segurança
+
+- A conversa pelo Telegram nasce desligada; desligada, o bot não baixa nem o
+  áudio.
+- Mensagem encaminhada, citação e resposta à mensagem de outra pessoa entram
+  como dado, nunca como ordem sua, e um comando encaminhado não roda.
+- O identificador do arquivo nunca vai no botão, e o download para no meio se
+  o arquivo vier maior do que o Telegram disse ou passar de 20 MB.
+- Toda resposta sai com o texto escapado e os links desarmados.
+- Depois de 12 horas sem uso do bot, a conversa se desliga sozinha e só volta
+  pelo app. O limite é de 30 mensagens por hora para a Zuri.
+- Arquivo de áudio e mensagem de bot inline entram como texto de terceiros; só
+  a sua nota de voz conta como fala sua.
+- O custo de um áudio também é estimado pelo tamanho do arquivo, então um
+  áudio longo que diz ser curto não passa da cota do dia.
+
+### Atualização
+
+- A migration 16 cria a tabela dos áudios que esperam confirmação e guarda o
+  texto de terceiros junto da mensagem, e roda sozinha na primeira requisição
+  depois do deploy.
+
+## [0.17.2] - 2026-11-02
+
+Mesclada às 10:42 (UTC-3) · commit [`988492f`](https://github.com/pablopfg/Zuri/commit/988492f73d9d91a567b4671e89afec48b7c9b2f1) · PR [#76](https://github.com/pablopfg/Zuri/pull/76) · Organiza o CHANGELOG por versão e cria pré-releases a cada merge
+
+### Adicionado
+
+- Versão do sistema em Configurações > Diagnóstico ("Versão da Zuri") e no
+  formulário de "Relatar no GitHub". Cada merge na `develop` vira uma versão
+  0.x com tag `vX.Y.Z` e uma pré-release no GitHub, criadas sozinhas logo
+  depois do merge.
+
+### Alterado
+
+- O `CHANGELOG.md` agora tem uma seção por versão, da mais nova para a mais
+  antiga, com a hora do merge no horário de Brasília (UTC-3), o commit e a PR.
+  O histórico foi refeito desde a primeira PR: as etapas 0 a 13 viraram as
+  versões 0.1.0 a 0.17.0. Cada PR continua escrevendo a sua parte em
+  `changelog/nao-lancado/`, e a que conclui uma etapa marca
+  `<!-- versao: minor -->` na primeira linha.
+- O código da publicação no Diagnóstico passou a se chamar "Código da
+  publicação", para não se confundir com a versão.
+
+## [0.17.1] - 2026-11-02
+
+Mesclada às 10:11 (UTC-3) · commit [`629d95d`](https://github.com/pablopfg/Zuri/commit/629d95d1dd5c635e3e2bb9afc6858f89b286030f) · PR [#74](https://github.com/pablopfg/Zuri/pull/74) · Mantém o nome novo da conversa e estabiliza dois e2e
+
+### Corrigido
+
+- Renomear uma conversa logo depois de uma resposta não volta mais para o nome
+  antigo na tela. Uma atualização da conversa que saiu antes do novo nome
+  chegava depois e o desfazia (o nome novo já estava salvo). Corrige a #72.
+
 ## [0.17.0] - 2026-11-02
 
 Mesclada às 09:20 (UTC-3) · commit [`d61079a`](https://github.com/pablopfg/Zuri/commit/d61079a42b469e98f80221b7a2bee0adc2029cf9) · PR [#73](https://github.com/pablopfg/Zuri/pull/73) · Envia avisos com botões (etapa 13)
@@ -1351,7 +1431,11 @@ Mesclada às 22:15 (UTC-3) · commit [`360a79e`](https://github.com/pablopfg/Zur
   `npm audit`), CodeQL, Dependabot e rulesets para a `develop` e a `main`.
 - `LICENSE` (MIT), `NOTICE.md`, `SECURITY.md` e `CONTRIBUTING.md`.
 
-[Não lançado]: https://github.com/pablopfg/Zuri/compare/v0.17.0...develop
+[Não lançado]: https://github.com/pablopfg/Zuri/compare/v0.18.1...develop
+[0.18.1]: https://github.com/pablopfg/Zuri/releases/tag/v0.18.1
+[0.18.0]: https://github.com/pablopfg/Zuri/releases/tag/v0.18.0
+[0.17.2]: https://github.com/pablopfg/Zuri/releases/tag/v0.17.2
+[0.17.1]: https://github.com/pablopfg/Zuri/releases/tag/v0.17.1
 [0.17.0]: https://github.com/pablopfg/Zuri/releases/tag/v0.17.0
 [0.16.0]: https://github.com/pablopfg/Zuri/releases/tag/v0.16.0
 [0.15.7]: https://github.com/pablopfg/Zuri/releases/tag/v0.15.7
