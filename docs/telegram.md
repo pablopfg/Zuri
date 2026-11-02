@@ -14,7 +14,7 @@ diz o que já existe e como usar.
 | 15a | Trava de leitura com `/destravar` (passkey ou código por e-mail), `/nova_conversa` | pronta |
 | 15b | Comandos de consulta e ação rápida | pronta |
 | 16a | Aprovar as propostas da Zuri com passkey ou código por e-mail, `/aprovar` | pronta |
-| 16b | Comandos de segurança e modo de bloqueio | a fazer |
+| 16b | Comandos de segurança e modo de bloqueio | pronta |
 
 ## Criar o bot
 
@@ -283,6 +283,12 @@ guardou. Todos contam nos 60 comandos por hora.
 | `/nova_conversa` | Começa outra conversa com a Zuri | sim |
 | `/aprovar` | Propostas da Zuri esperando aprovação, com **Aprovar** | sim |
 | `/destravar` | Libera a leitura por 12 horas | não |
+| `/acessos` | Os 10 acessos mais recentes, com cidade, rede resumida (`189.40.x.x`) e aparelho | sim |
+| `/sessoes` | Sessões abertas no app, com **Encerrar** em cada uma | sim |
+| `/encerrar_sessoes` | Encerra todas as sessões do app, depois de **Encerrar todas** | não |
+| `/tokens` | Tokens de acesso remoto ativos (vazio até a etapa 20) | sim |
+| `/pausar_rotinas` | Pausa as rotinas com IA e as sentinelas, depois de **Pausar todas** | não |
+| `/bloquear` | Liga o modo de bloqueio, depois de **Bloquear agora** | não |
 | `/ajuda` | Lista os comandos | não |
 
 Com a leitura travada, a resposta traz o botão **Destravar**, que faz o mesmo
@@ -310,6 +316,43 @@ Telegram: foto, 1,2 MB (não guardado)". Sem legenda, a Zuri pede uma. O
 arquivo nunca é baixado nem guardado, e o nome dele não é lido. Figurinhas,
 vídeos e o resto recebem "por enquanto eu entendo texto, áudio e fotos ou
 documentos com legenda".
+
+## Emergência: comandos de segurança e modo de bloqueio
+
+Para quando o celular sumiu ou apareceu um acesso estranho. `/encerrar_sessoes`,
+`/pausar_rotinas` e `/bloquear` nunca pedem destravamento e confirmam com um
+toque (sem passkey nem e-mail), porque só tiram acesso. Nenhum deles usa IA:
+funcionam com a IA fora do ar. Cada um gera um alerta de segurança em todos os
+canais, que o bot não reconhece: ele só para de insistir quando você toca em
+**Confirmar que vi** na central de avisos do app, com a senha digitada nos
+últimos 15 minutos. Desfazer (retomar rotinas, sair do bloqueio) só pelo app.
+
+`/bloquear` faz, de uma vez:
+
+- encerra todas as sessões do app;
+- suspende os tokens de acesso remoto (eles voltam ao sair; chegam na etapa 20);
+- para as rotinas com IA enquanto durar (a lista de execuções mostra
+  "Pulada: modo de bloqueio"); lembretes e alertas de segurança continuam;
+- recusa conversa, aprovações (botão, `/aprovar`, código por e-mail e a
+  página `/aprovar`) e destravamento. O bot responde só a `/status`, `/avisos`
+  e `/ajuda`.
+
+Para voltar:
+
+- **Na primeira hora**, só se entra no app com a senha e um **código de
+  recuperação**, e esse login já desliga o bloqueio. O código do aplicativo e
+  a passkey são recusados, sem gastar tentativa. Sem verificação em duas
+  etapas, ninguém entra nessa hora.
+- **Depois da primeira hora**, entra-se com a senha e o código do aplicativo,
+  e o app abre direto em **Sair do bloqueio**: ele mostra quando o bloqueio
+  foi ligado e pede o código (do aplicativo ou de recuperação) para sair.
+- Se não foi você: **Não fui eu: desvincular o Telegram**, na mesma tela,
+  desvincula na hora. Depois, troque a senha.
+
+Um segundo `/bloquear` pela mesma conta até 24 horas depois de sair ainda
+bloqueia, mas também suspende o vínculo com o Telegram até você confirmar a
+conta de novo em **Configurações › Avisos**. Assim, quem pegou o seu Telegram
+não deixa você fora indefinidamente.
 
 ### O que nunca é feito pelo bot
 

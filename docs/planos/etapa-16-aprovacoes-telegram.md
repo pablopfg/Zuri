@@ -39,7 +39,7 @@ A etapa 16 tem duas metades independentes, como a 15: aprovar pelo bot as propos
 | CA11 | Aprovação feita pelo bot gera alerta de segurança que só se reconhece no app | especificação ("Reconhecimento cruzado") |
 | CA12 | Menu do bot ganha `/aprovar` (versão 4) e `/ajuda` explica | especificação |
 
-16b (resumo; o plano detalhado da 16b acrescenta os seus CAs aqui): `/bloquear` funciona com a IA fora do ar; login durante o bloqueio recusado com 2FA e aceito com código de recuperação na primeira hora; rebloqueio em 24 h suspende o vínculo; tokens suspensos voltam ao sair (os tokens remotos chegam na etapa 20: até lá `/tokens` mostra o estado vazio e o bloqueio deixa o gancho pronto); alerta causado pelo bot não se reconhece pelo bot e, no app, só com senha digitada nos últimos 15 min.
+16b (resumo; critérios, desenho e testes da 16b em [`etapa-16b-modo-de-bloqueio.md`](etapa-16b-modo-de-bloqueio.md)): `/bloquear` funciona com a IA fora do ar; login durante o bloqueio recusado com 2FA e aceito com código de recuperação na primeira hora; rebloqueio em 24 h suspende o vínculo; tokens suspensos voltam ao sair (os tokens remotos chegam na etapa 20: até lá `/tokens` mostra o estado vazio e o bloqueio deixa o gancho pronto); alerta causado pelo bot não se reconhece pelo bot e, no app, só com senha digitada nos últimos 15 min.
 
 ## 4. Escopo
 
