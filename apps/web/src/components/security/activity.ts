@@ -33,6 +33,7 @@ export const KIND_LABEL: Record<AuthEventKind, MessageKey> = {
   push_removed: "web.activity.kind.push_removed",
   telegram_linked: "web.activity.kind.telegram_linked",
   telegram_unlinked: "web.activity.kind.telegram_unlinked",
+  telegram_group_linked: "web.activity.kind.telegram_group_linked",
   setup_failure: "web.activity.kind.setup_failure",
   setup_locked: "web.activity.kind.setup_locked",
   owner_created: "web.activity.kind.owner_created",

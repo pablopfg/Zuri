@@ -77,4 +77,17 @@ export function registerTelegramRoutes(app: Hono<ApiEnv>, deps: () => TelegramDe
   });
 
   app.post("/telegram/test", async () => Response.json(await deps().telegram.test()));
+
+  // The notices' group (step 13): adding one sends notices where others may read them, so the password typed recently.
+  app.post("/telegram/group", async (c) => {
+    const { telegram, auth } = deps();
+    auth.requireRecentAuth(c.get("session"));
+    return Response.json(await telegram.groupCode());
+  });
+
+  app.delete("/telegram/group", async (c) => {
+    const { telegram, auth } = deps();
+    auth.requireRecentAuth(c.get("session"));
+    return Response.json(await telegram.unlinkGroup());
+  });
 }

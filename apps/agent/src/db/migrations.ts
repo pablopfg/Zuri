@@ -726,6 +726,29 @@ export const MIGRATIONS: readonly Migration[] = [
       `CREATE INDEX IF NOT EXISTS zur_telegram_audit_at ON zur_telegram_audit (at)`,
     ],
   },
+  {
+    version: 15,
+    name: "telegram_alerts",
+    statements: [
+      // The notices' buttons in Telegram (step 13). The button carries only
+      // "v1:<action>:<id>"; the id (12 random bytes, base64url) points here, to
+      // the action, the notice and how long it works. Never in the backup.
+      `CREATE TABLE IF NOT EXISTS zur_telegram_callbacks (
+        id TEXT PRIMARY KEY,
+        action TEXT NOT NULL,
+        target_type TEXT,
+        target_id TEXT,
+        message_id INTEGER,
+        expires_at TEXT NOT NULL,
+        used_at TEXT
+      )`,
+      `CREATE INDEX IF NOT EXISTS zur_telegram_callbacks_target ON zur_telegram_callbacks (target_type, target_id)`,
+      `CREATE INDEX IF NOT EXISTS zur_telegram_callbacks_expires ON zur_telegram_callbacks (expires_at)`,
+      // "Adiar 1 h": when the notice comes back (a copy is raised then).
+      `ALTER TABLE zur_notices ADD COLUMN snoozed_until TEXT`,
+      `CREATE INDEX IF NOT EXISTS zur_notices_snoozed ON zur_notices (snoozed_until) WHERE snoozed_until IS NOT NULL`,
+    ],
+  },
 ];
 
 export const LATEST_SCHEMA_VERSION = MIGRATIONS.at(-1)?.version ?? 0;

@@ -63,6 +63,35 @@ test("Settings > Avisos: the owner connects Telegram with a code, confirms the a
   await expect(toast(page, "Mensagem de teste enviada.")).toBeVisible();
   await expectAccessible(page, "telegram conectado");
 
+  // The notices' group (step 13): a one-time link, the owner's account adds the bot, then Remover grupo.
+  await expect(card.getByText("Opcional. Sem grupo, os avisos chegam no chat com o bot.", { exact: false })).toBeVisible();
+  await card.getByRole("button", { name: "Adicionar grupo" }).click();
+  const groupLink = card.getByRole("link", { name: "Escolher o grupo" });
+  await expect(groupLink).toBeVisible();
+  const groupHref = (await groupLink.getAttribute("href")) ?? "";
+  expect(groupHref).toMatch(/^https:\/\/t\.me\/zuri_local_bot\?startgroup=[A-Z2-9]{8}$/);
+  await expectAccessible(page, "telegram com link do grupo");
+  expect(await tooSmallControls(page), "every control of the group section is a 44 px target").toEqual([]);
+  const groupCode = new URL(groupHref).searchParams.get("startgroup") ?? "";
+  const added = await page.request.post("/api/telegram/webhook", {
+    headers: { "x-telegram-bot-api-secret-token": e2eWebhookSecret(), "content-type": "application/json" },
+    data: {
+      update_id: Math.floor(Math.random() * 1e9),
+      message: { message_id: 2, date: 1, from: { id: 424242, is_bot: false, first_name: "Dono" }, chat: { id: -1001234500001, type: "supergroup", title: "Avisos da casa", is_forum: true }, text: `/start@zuri_local_bot ${groupCode}` },
+    },
+  });
+  expect(added.status()).toBe(200);
+  await page.reload();
+  card = await openCard(page);
+  await expect(card.getByText("Os avisos vão para o grupo Avisos da casa.")).toBeVisible();
+  await expect(card.getByText("Cada tipo de aviso tem o seu tópico.")).toBeVisible();
+  await expectAccessible(page, "telegram com grupo");
+  await card.getByRole("button", { name: "Remover grupo" }).click();
+  const removeDialog = page.getByRole("dialog", { name: "Remover o grupo?" });
+  await removeDialog.getByRole("button", { name: "Remover grupo" }).click();
+  await expect(toast(page, "Grupo removido.")).toBeVisible();
+  await expect(card.getByRole("button", { name: "Adicionar grupo" })).toBeVisible();
+
   await card.getByRole("button", { name: "Desvincular" }).click();
   const dialog = page.getByRole("dialog", { name: "Desvincular o Telegram?" });
   await expect(dialog).toBeVisible();

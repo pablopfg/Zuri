@@ -2,6 +2,12 @@ import { SECURITY_ALERT_EVENTS, type SecurityAlertEvent } from "@zuri/shared";
 import type { Database } from "../db/database.ts";
 import type { AlertService } from "./service.ts";
 
+/**
+ * Events the bot itself causes: their alert stops insisting only when answered
+ * in the app, never through the bot (spec, "Reconhecimento cruzado").
+ */
+const BOT_CAUSED: readonly SecurityAlertEvent[] = ["telegram_group_linked"];
+
 /** Rows taken per call: a flood of refusals can't make one request do unbounded work. */
 const PER_FLUSH = 20;
 
@@ -30,7 +36,7 @@ export function flushSecurityAlerts(db: Database, alerts: AlertService): number 
         // Only the kind of event: the text on a locked screen never says where it came from.
         params: { event: row.kind as SecurityAlertEvent },
         link: "/acessos",
-        origin: "web",
+        origin: (BOT_CAUSED as readonly string[]).includes(row.kind) ? "bot" : "web",
         dedupeKey: `auth-event:${row.id}`,
         dedupeMs: 7 * 24 * 3_600_000,
       });

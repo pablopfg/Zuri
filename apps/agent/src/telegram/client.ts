@@ -194,6 +194,11 @@ export class TelegramClient {
     return this.call<{ file_id: string; file_size?: number; file_path?: string }>("getFile", { file_id: fileId });
   }
 
+  /** A forum topic in a group (step 13); the bot needs the "Manage topics" right. */
+  createForumTopic(chatId: number, name: string) {
+    return this.call<{ message_thread_id: number }>("createForumTopic", { chat_id: chatId, name: [...name].slice(0, 128).join("") });
+  }
+
   leaveChat(chatId: number) {
     return this.call<boolean>("leaveChat", { chat_id: chatId });
   }

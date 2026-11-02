@@ -95,6 +95,7 @@ describe("the migration list", () => {
       12: "7731fefa0ced903440fd2ecf1235715834e22347a37c93cbf71d7a25bb8a43a5",
       13: "c624e0db89d6aed17b6a751b21cfe2fcec4b117206baeadc4d2c860967b1fe05",
       14: "090919da832586473e230fa78cb31715d432200ed144fc94a57b83b73e4543b5",
+      15: "862c580be5d38907e9632922016c755a65b6ec6a60ed17dc381e4681dd82edbb",
     };
     for (const m of MIGRATIONS) {
       const digest = createHash("sha256").update(statementText(m).replace(/\r\n/g, "\n")).digest("hex");
@@ -110,7 +111,7 @@ describe("migrate", () => {
       expect(zurObjects(db)).toEqual([]);
 
       expect(migrate(db)).toBe(LATEST_SCHEMA_VERSION);
-      expect(schemaVersion(db)).toBe(14);
+      expect(schemaVersion(db)).toBe(15);
       // FTS5 keeps shadow tables of its own (zur_notes_fts_data and others): only ours are listed.
       expect(zurObjects(db).filter((name) => !/^table:zur_(notes|memories)_fts_/.test(name))).toEqual([
         "table:zur_activity",
@@ -203,6 +204,7 @@ describe("migrate", () => {
         "index:zur_notices_created",
         "index:zur_notices_escalating",
         "index:zur_notices_learning",
+        "index:zur_notices_snoozed",
         "index:zur_notices_unread",
         "table:zur_passkeys",
         "table:zur_pending_actions",
@@ -227,6 +229,9 @@ describe("migrate", () => {
         "index:zur_tasks_status_due",
         "table:zur_telegram_audit",
         "index:zur_telegram_audit_at",
+        "table:zur_telegram_callbacks",
+        "index:zur_telegram_callbacks_expires",
+        "index:zur_telegram_callbacks_target",
         "table:zur_telegram_link_codes",
         "table:zur_telegram_links",
         "index:zur_telegram_links_kind",
@@ -405,7 +410,7 @@ describe("migrate", () => {
     await withEmptyDatabase("from-13", (db) => {
       expect(migrate(db, MIGRATIONS.slice(0, 13))).toBe(13);
       db.run(`INSERT INTO zur_tasks (id, title, created_at, updated_at) VALUES ('t1', 'Pagar a luz', 'x', 'x')`);
-      expect(migrate(db)).toBe(14);
+      expect(migrate(db, MIGRATIONS.slice(0, 14))).toBe(14);
       expect(db.one(`SELECT title FROM zur_tasks WHERE id = 't1'`)).toEqual({ title: "Pagar a luz" });
       const link = (id: string, kind: string, status = "pending") =>
         db.run(`INSERT INTO zur_telegram_links (id, kind, user_id, chat_id, status) VALUES (?, ?, 1, 1, ?)`, id, kind, status);
@@ -418,6 +423,23 @@ describe("migrate", () => {
       db.run(`INSERT INTO zur_telegram_link_codes (code_hash, expires_at) VALUES ('h', 'x')`);
       expect(db.one(`SELECT failed_attempts FROM zur_telegram_link_codes`)).toEqual({ failed_attempts: 0 });
       db.run(`INSERT INTO zur_telegram_audit (at, kind, name, result) VALUES ('x', 'command', 'start', 'pending')`);
+    });
+  });
+
+  it("upgrades a database at version 14 to 15: the notices' buttons and the snooze, the owner's data and notices kept", async () => {
+    await withEmptyDatabase("from-14", (db) => {
+      expect(migrate(db, MIGRATIONS.slice(0, 14))).toBe(14);
+      db.run(`INSERT INTO zur_tasks (id, title, created_at, updated_at) VALUES ('t1', 'Pagar a luz', 'x', 'x')`);
+      db.run(
+        `INSERT INTO zur_notices (id, kind, category, priority, params, origin, created_at) VALUES ('n1', 'digest.daily', 'digests', 'normal', '{}', 'system', '2026-11-02T10:00:00.000Z')`,
+      );
+      expect(migrate(db)).toBe(15);
+      expect(db.one(`SELECT title FROM zur_tasks WHERE id = 't1'`)).toEqual({ title: "Pagar a luz" });
+      expect(db.one(`SELECT snoozed_until FROM zur_notices WHERE id = 'n1'`)).toEqual({ snoozed_until: null });
+      db.run(`INSERT INTO zur_telegram_callbacks (id, action, target_type, target_id, expires_at) VALUES ('c1', 'done', 'notice', 'n1', 'x')`);
+      expect(db.one(`SELECT message_id, used_at FROM zur_telegram_callbacks WHERE id = 'c1'`)).toEqual({ message_id: null, used_at: null });
+      // The id is the key: the same button can't be stored twice.
+      expect(() => db.run(`INSERT INTO zur_telegram_callbacks (id, action, expires_at) VALUES ('c1', 'done', 'x')`)).toThrow();
     });
   });
 

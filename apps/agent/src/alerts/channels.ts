@@ -1,9 +1,11 @@
-import type { AlertChannelName, ChannelState, DeliveryReason, Notice } from "@zuri/shared";
+import type { AlertChannelName, ChannelState, DeliveryReason, Notice, NoticeOrigin } from "@zuri/shared";
 
 /** What a channel gets: the notice already in the owner's language, and which try this is (1 to 3). */
 export interface AlertMessage {
   notice: Notice;
   attempt: number;
+  /** Who caused it: a security alert the bot caused gets no buttons in the bot (spec, "Reconhecimento cruzado"). */
+  origin?: NoticeOrigin;
 }
 
 /** What a send did. A channel never throws for an expected refusal: it says why. */

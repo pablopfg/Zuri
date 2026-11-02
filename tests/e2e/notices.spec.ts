@@ -91,8 +91,8 @@ test("Settings > Avisos: the daily summary and the watchers are saved; the chann
   await page.getByLabel("Horário do resumo").fill("06:45");
   await page.getByRole("region", { name: "Resumo do dia" }).getByRole("button", { name: "Salvar" }).click();
   await expect(toast(page, "Avisos salvos.")).toBeVisible();
-  // Push is set up in the e2e Worker but has no device yet; Telegram and e-mail come later.
-  await expect(page.getByText("Ainda não disponível")).toHaveCount(2);
+  // Push and the Telegram bot are set up in the e2e Worker (step 13 made Telegram a channel); e-mail is not.
+  await expect(page.getByText("Ainda não disponível")).toHaveCount(1);
   // Earlier runs may have left sends (a security alert tries push even without a device), so only the card is checked.
   await expect(page.getByRole("region", { name: "Últimos envios" })).toBeVisible();
   await expectAccessible(page, "configurações de avisos");
@@ -245,13 +245,19 @@ test("Settings > Avisos: the channels of each kind of notice are saved; security
   const reminders = card.getByRole("checkbox", { name: "Lembretes por Notificação no aparelho" });
   await expect(reminders).toBeChecked();
   await reminders.uncheck();
+  // Telegram arrives discreet; "Texto completo" shows a category's text there (step 13).
+  const fullText = card.getByRole("checkbox", { name: "Texto completo de Lembretes no Telegram" });
+  await expect(fullText).not.toBeChecked();
+  await fullText.check();
   await card.getByRole("button", { name: "Salvar" }).click();
   await expect(toast(page, "Avisos salvos.")).toBeVisible();
   await page.reload();
-  await expect(page.getByRole("region", { name: "O que vai para cada canal" }).getByRole("checkbox", { name: "Lembretes por Notificação no aparelho" })).not.toBeChecked();
+  const saved = page.getByRole("region", { name: "O que vai para cada canal" });
+  await expect(saved.getByRole("checkbox", { name: "Lembretes por Notificação no aparelho" })).not.toBeChecked();
+  await expect(saved.getByRole("checkbox", { name: "Texto completo de Lembretes no Telegram" })).toBeChecked();
   await expectAccessible(page, "canais por tipo de aviso");
 
   // Back to the defaults: the database is shared by the runs and the projects.
-  const reset = await page.request.patch("/api/settings", { headers: CSRF, data: { alertRoutes: { reminders: ["push", "telegram"] } } });
+  const reset = await page.request.patch("/api/settings", { headers: CSRF, data: { alertRoutes: { reminders: ["push", "telegram"] }, alertFullText: [] } });
   expect(reset.status()).toBe(200);
 });

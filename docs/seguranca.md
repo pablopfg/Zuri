@@ -731,6 +731,27 @@ Etapa 12, fundação. O bot obedece a uma conta só, no chat privado
   menu. O cartão mostra o @ do bot e os 4 últimos dígitos do id da conta, nunca o
   id inteiro.
 - **Saída.** Texto puro, sem `parse_mode`, e sem prévia de links.
+- **Avisos (etapa 13).** Discretos por padrão (só o título; o texto com "Texto
+  completo" ligado na categoria), com todo endereço desarmado por `disarmLinks`
+  (título e texto). O único link clicável é o botão **Abrir**, para o endereço do
+  próprio app e só para as páginas da lista fechada `NOTICE_LINKS`.
+- **Botões.** `callback_data` = `v1:<ação>:<12 bytes aleatórios em base64url>`
+  (até 26 bytes); a ação, o aviso e a validade de 24 h ficam em
+  `zur_telegram_callbacks`, nunca no botão. O primeiro toque marca todos os
+  botões daquele aviso como usados num só `UPDATE`, então dois toques
+  simultâneos agem uma vez só. Todo toque é respondido com `answerCallbackQuery`.
+- **Grupo de avisos (N9).** Vincular pede senha recente no app e um código de
+  10 minutos (HMAC com propósito próprio, diferente do código da conta) que só
+  vale se a conta do vínculo ativo (e do `TELEGRAM_ADMIN_ID`) adicionou o bot.
+  Gera o alerta `telegram_group_linked`, com origem `bot`: ele só para de
+  insistir no app, e chega no Telegram sem botões de resposta. No grupo, toque
+  de outra pessoa recebe "Só o dono pode usar estes botões." sem gravar nada.
+  Alertas de segurança e a terceira tentativa de qualquer aviso vão só ao chat
+  privado: o grupo nunca recebe sozinho um alerta de segurança.
+- **Reconhecimento cruzado.** Alerta de segurança causado na web para de
+  insistir com Feito, Adiar ou Silenciar no Telegram; ler no app não para.
+  Alerta causado pelo bot é recusado no bot ("Este aviso só pode ser confirmado
+  no app."); o reconhecimento no app com senha recente chega na etapa 16.
 
 ## Logs da Cloudflare
 

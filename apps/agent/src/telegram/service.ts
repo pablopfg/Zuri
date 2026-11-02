@@ -7,17 +7,20 @@ import {
   TELEGRAM_CODE_ALPHABET,
   TELEGRAM_LIMITS,
   type TelegramConnect,
+  type TelegramGroupCode,
   type TelegramState,
   type TelegramStatus,
   type TelegramUpdate,
   isTelegramLinkCode,
 } from "@zuri/shared";
+import type { AlertService } from "../alerts/service.ts";
 import type { ClientInfo } from "../auth/client.ts";
 import type { AuthEvents } from "../auth/events.ts";
 import type { InternalState } from "../db/internal-state.ts";
 import { telegramWebhookSecret, TELEGRAM_WEBHOOK_PATH } from "../gates/telegram.ts";
 import { AppError } from "../http/errors.ts";
 import { log } from "../log.ts";
+import type { TelegramCallbacks } from "./callbacks.ts";
 import { type BotCommand, TelegramApiError, TelegramClient } from "./client.ts";
 import type { PrivateLink, TelegramLinks } from "./links.ts";
 
@@ -31,6 +34,10 @@ const HOUR_MS = 3_600_000;
 
 export interface TelegramDeps {
   links: TelegramLinks;
+  /** The notices' buttons (step 13). */
+  callbacks: TelegramCallbacks;
+  /** The notice center, for the buttons; read when a button is tapped. */
+  alerts(): AlertService;
   state: InternalState;
   events: AuthEvents;
   /** The bot token, or null while the secret isn't set. Read on every use, never kept. */
@@ -50,6 +57,8 @@ export interface TelegramDeps {
 interface Chat {
   id: number;
   type: string;
+  title?: string;
+  is_forum?: boolean;
 }
 interface From {
   id: number;
@@ -63,6 +72,9 @@ interface IncomingMessage {
   from?: From;
   chat?: Chat;
   text?: string;
+  /** A group turned into a supergroup: the new id (in the old group) or the old one (in the new). */
+  migrate_to_chat_id?: number;
+  migrate_from_chat_id?: number;
 }
 interface Incoming {
   kind: (typeof TELEGRAM_ALLOWED_UPDATES)[number];
@@ -70,6 +82,9 @@ interface Incoming {
   chat: Chat;
   message: IncomingMessage | null;
   callbackId: string | null;
+  /** callback_query: the button's data and the message it is under. */
+  callbackData: string | null;
+  callbackMessageId: number | null;
   /** my_chat_member: the bot's new status in that chat. */
   memberStatus: string | null;
 }
@@ -134,12 +149,8 @@ export class TelegramService {
     const incoming = parseIncoming(update as Record<string, unknown>);
     if (!incoming) return;
 
-    // Groups and channels: no group is linked before step 13, so the bot leaves. Nothing is written.
     if (incoming.chat.type !== "private") {
-      if (incoming.memberStatus === "left" || incoming.memberStatus === "kicked") return;
-      await this.client()
-        .leaveChat(incoming.chat.id)
-        .catch(() => undefined);
+      await this.#fromGroup(id, incoming);
       return;
     }
     // A private chat's id is the account's: anything else is not a real private chat.
@@ -205,12 +216,7 @@ export class TelegramService {
   async #fromOwner(link: PrivateLink, incoming: Incoming): Promise<void> {
     this.deps.links.touch();
     if (incoming.kind === "callback_query") {
-      // No buttons yet: the tap only needs its spinner stopped.
-      if (incoming.callbackId) {
-        await this.client()
-          .answerCallbackQuery(incoming.callbackId)
-          .catch(() => undefined);
-      }
+      await this.#onNoticeButton(incoming);
       return;
     }
     if (incoming.kind !== "message") return;
@@ -227,6 +233,140 @@ export class TelegramService {
     }
     this.deps.links.audit(command === null ? "message" : "command", command === null ? "text" : "unknown", "not_yet");
     await this.#say(link.chatId, "telegram.notYet");
+  }
+
+  /** The owner's account, when the update came from it: the active link (and TELEGRAM_ADMIN_ID, when set). */
+  #isOwner(from: From): boolean {
+    const link = this.deps.links.private();
+    const admin = this.deps.adminId();
+    return from.is_bot !== true && link?.status === "active" && link.userId === from.id && (admin === null || admin === from.id);
+  }
+
+  /**
+   * Groups (step 13, N9). In the linked group only the owner's taps on the
+   * notices' buttons count; anyone else's get "only the owner" and write
+   * nothing. The group is linked by the owner's own account adding the bot
+   * with the code from the app. From any other group or channel the bot leaves.
+   */
+  async #fromGroup(updateId: number, incoming: Incoming): Promise<void> {
+    const group = this.deps.links.group();
+    const chat = incoming.chat;
+    const message = incoming.message;
+    if (group && chat.id === group.chatId) {
+      if (incoming.kind === "callback_query") {
+        if (this.#isOwner(incoming.from)) {
+          this.#remember(updateId);
+          // Topics turned on after the group was linked: the next notices use them.
+          if (chat.is_forum === true && !group.forum) this.deps.links.setTopics(chat.id, { forum: true });
+          await this.#onNoticeButton(incoming);
+        } else if (incoming.callbackId) {
+          await this.client()
+            .answerCallbackQuery(incoming.callbackId, t(this.deps.locale(), "telegram.notice.ownerOnly"))
+            .catch(() => undefined);
+        }
+        return;
+      }
+      if (incoming.kind === "my_chat_member" && (incoming.memberStatus === "left" || incoming.memberStatus === "kicked")) {
+        this.#remember(updateId);
+        this.deps.links.removeGroup();
+        this.deps.links.audit("group", "removed_from_group", "unlinked");
+        return;
+      }
+      const to = message?.migrate_to_chat_id;
+      if (typeof to === "number" && Number.isSafeInteger(to) && to !== chat.id) {
+        this.#remember(updateId);
+        this.deps.links.moveGroup(chat.id, to);
+        this.deps.links.audit("group", "migrated", "moved");
+        return;
+      }
+      // Anything else said in the group is not for the bot.
+      return;
+    }
+    // The new supergroup's first message names the linked group it came from.
+    const from = message?.migrate_from_chat_id;
+    if (group && typeof from === "number" && from === group.chatId) {
+      this.#remember(updateId);
+      this.deps.links.moveGroup(from, chat.id);
+      this.deps.links.audit("group", "migrated", "moved");
+      return;
+    }
+    const isGroup = chat.type === "group" || chat.type === "supergroup";
+    const owner = this.#isOwner(incoming.from);
+    if (incoming.kind === "my_chat_member") {
+      if (incoming.memberStatus === "left" || incoming.memberStatus === "kicked") return;
+      // The owner adding the bot with the code: wait for the /start that follows.
+      if (isGroup && owner && this.#groupCode()) return;
+    }
+    if (isGroup && owner && incoming.kind === "message") {
+      const code = startCode(message?.text);
+      const current = this.#groupCode();
+      if (code !== null && current && isTelegramLinkCode(code) && (await this.#codeHash(code, "group")) === current.hash) {
+        await this.#linkGroup(updateId, chat);
+        return;
+      }
+    }
+    await this.client()
+      .leaveChat(chat.id)
+      .catch(() => undefined);
+  }
+
+  async #linkGroup(updateId: number, chat: Chat): Promise<void> {
+    const owner = this.deps.links.private();
+    if (!owner) return;
+    const previous = this.deps.links.group();
+    this.#remember(updateId);
+    this.deps.links.saveGroup({ chatId: chat.id, title: (chat.title ?? "").slice(0, TELEGRAM_LIMITS.groupTitleMax), forum: chat.is_forum === true, userId: owner.userId });
+    this.deps.state.delete("telegram_group_code");
+    // A new group for the notices is a security event the bot caused: answered only in the app.
+    this.deps.events.record("telegram_group_linked", null, { alert: true });
+    this.deps.links.audit("group", "link", "active");
+    await this.#say(chat.id, "telegram.group.linked");
+    if (previous && previous.chatId !== chat.id) {
+      await this.client()
+        .leaveChat(previous.chatId)
+        .catch(() => undefined);
+    }
+  }
+
+  /** The group code waiting, if still valid. */
+  #groupCode(): { hash: string; expiresAt: string } | null {
+    const stored = this.deps.state.get<unknown>("telegram_group_code");
+    if (typeof stored !== "string") return null;
+    const [hash, expiresAt] = stored.split("|");
+    if (!hash || !expiresAt || expiresAt <= new Date().toISOString()) return null;
+    return { hash, expiresAt };
+  }
+
+  /**
+   * A notice's button, from the owner (the caller checked): the tap is
+   * answered within Telegram's 10 seconds, acts once, and the buttons leave the
+   * message. A second tap, here or under the same notice elsewhere, gets
+   * "already handled".
+   */
+  async #onNoticeButton(incoming: Incoming): Promise<void> {
+    const client = this.client();
+    const locale = this.deps.locale();
+    const answer = (key: MessageKey) =>
+      incoming.callbackId
+        ? client.answerCallbackQuery(incoming.callbackId, t(locale, key)).catch(() => undefined)
+        : Promise.resolve(undefined);
+    const clearButtons = () =>
+      incoming.callbackMessageId === null ? Promise.resolve(null) : client.editMessageReplyMarkup(incoming.chat.id, incoming.callbackMessageId).catch(() => null);
+    const found = this.deps.callbacks.lookup(incoming.callbackData ?? undefined);
+    if (found.status !== "ok") {
+      this.deps.links.audit("callback", "notice", found.status);
+      await answer(found.status === "used" ? "telegram.notice.handled" : found.status === "expired" ? "telegram.notice.expired" : "telegram.notice.gone");
+      if (found.status !== "unknown") await clearButtons();
+      return;
+    }
+    if (!this.deps.callbacks.consume(found.noticeId)) {
+      await answer("telegram.notice.handled");
+      return;
+    }
+    const result = await this.deps.alerts().respondOutOfBand(found.noticeId, found.action);
+    this.deps.links.audit("callback", found.action, result);
+    await answer(BUTTON_ANSWER[result]);
+    await clearButtons();
   }
 
   async #say(chatId: number, key: MessageKey): Promise<void> {
@@ -248,8 +388,44 @@ export class TelegramService {
     this.deps.state.set("telegram_seen_update_ids", ids.join(","));
   }
 
-  async #codeHash(code: string): Promise<string> {
-    return hmacSha256Hex(this.deps.sessionSecret(), `zuri:telegram-code:v1:${code}`);
+  /** The account's and the group's codes are told apart, so one can never stand for the other. */
+  async #codeHash(code: string, purpose: "account" | "group" = "account"): Promise<string> {
+    return hmacSha256Hex(this.deps.sessionSecret(), purpose === "group" ? `zuri:telegram-group-code:v1:${code}` : `zuri:telegram-code:v1:${code}`);
+  }
+
+  /**
+   * "Adicionar a um grupo": a one-time code in a link that opens Telegram to
+   * pick the group. Only the linked account's /start with it in a group counts.
+   */
+  async groupCode(): Promise<TelegramGroupCode> {
+    if (this.deps.links.private()?.status !== "active") throw new AppError("CONFLICT", "error.telegramNoLink");
+    let bot: string;
+    try {
+      bot = await this.#botUsername(this.client());
+    } catch (error) {
+      if (error instanceof AppError) throw error;
+      throw unavailable(error);
+    }
+    const code = randomCode();
+    const expiresAt = new Date(Date.now() + TELEGRAM_LIMITS.groupCodeTtlMs).toISOString();
+    this.deps.state.set("telegram_group_code", `${await this.#codeHash(code, "group")}|${expiresAt}`);
+    this.deps.links.audit("group", "code", "issued");
+    return { link: `https://t.me/${bot}?startgroup=${code}`, expiresAt };
+  }
+
+  /** "Tirar do grupo": notices go back to the private chat; the bot leaves the group if it can. */
+  async unlinkGroup(): Promise<TelegramStatus> {
+    const group = this.deps.links.group();
+    this.deps.state.delete("telegram_group_code");
+    if (group && this.deps.links.removeGroup()) {
+      this.deps.links.audit("group", "unlink", "removed");
+      if (this.configured()) {
+        await this.client()
+          .leaveChat(group.chatId)
+          .catch(() => undefined);
+      }
+    }
+    return this.#statusNow(null);
   }
 
   // --- The app's side (Settings > Notices) ---------------------------------
@@ -297,7 +473,14 @@ export class TelegramService {
   /** "Desvincular": the account stops being heard at once; the bot says goodbye if it can. */
   async unlink(client: ClientInfo, session: string): Promise<void> {
     const link = this.deps.links.private();
+    const group = this.deps.links.group();
+    this.deps.state.delete("telegram_group_code");
     if (!this.deps.links.remove()) return;
+    if (group && this.configured()) {
+      await this.client()
+        .leaveChat(group.chatId)
+        .catch(() => undefined);
+    }
     this.#webhookInfo = null;
     if (link?.status !== "active") return;
     this.deps.events.record("telegram_unlinked", client, { session: session.slice(0, 16), alert: true });
@@ -370,6 +553,11 @@ export class TelegramService {
       webhookMissing: health?.webhookMissing ?? false,
       conversation: link?.conversation ?? false,
       readLockHours,
+      group: (() => {
+        const group = this.deps.links.group();
+        return group ? { title: group.title, topics: group.forum && !group.topicsOff, linkedAt: group.linkedAt } : null;
+      })(),
+      groupCodeExpiresAt: link?.status === "active" ? (this.#groupCode()?.expiresAt ?? null) : null,
     };
   }
 
@@ -448,6 +636,16 @@ export class TelegramService {
   }
 }
 
+/** What the owner reads after tapping a notice's button. */
+const BUTTON_ANSWER: Record<Awaited<ReturnType<AlertService["respondOutOfBand"]>>, MessageKey> = {
+  done: "telegram.notice.answer.done",
+  snoozed: "telegram.notice.answer.snoozed",
+  muted: "telegram.notice.answer.muted",
+  already: "telegram.notice.handled",
+  missing: "telegram.notice.gone",
+  app_only: "telegram.notice.appOnly",
+};
+
 /** The 8-character code, uniform over the alphabet (32 letters: a byte's low 5 bits, no bias). */
 function randomCode(): string {
   const bytes = crypto.getRandomValues(new Uint8Array(TELEGRAM_LIMITS.codeLength));
@@ -485,8 +683,16 @@ function parseIncoming(update: Record<string, unknown>): Incoming | null {
       kind: "message",
       from: message.from,
       chat: message.chat,
-      message: { from: message.from, chat: message.chat, ...(typeof message.text === "string" ? { text: message.text } : {}) },
+      message: {
+        from: message.from,
+        chat: message.chat,
+        ...(typeof message.text === "string" ? { text: message.text } : {}),
+        ...(Number.isSafeInteger(message.migrate_to_chat_id) ? { migrate_to_chat_id: message.migrate_to_chat_id as number } : {}),
+        ...(Number.isSafeInteger(message.migrate_from_chat_id) ? { migrate_from_chat_id: message.migrate_from_chat_id as number } : {}),
+      },
       callbackId: null,
+      callbackData: null,
+      callbackMessageId: null,
       memberStatus: null,
     };
   }
@@ -494,13 +700,22 @@ function parseIncoming(update: Record<string, unknown>): Incoming | null {
   if (isObject(callback)) {
     const inner = isObject(callback.message) ? callback.message : null;
     if (!isFrom(callback.from) || !inner || !isChat(inner.chat) || typeof callback.id !== "string") return null;
-    return { kind: "callback_query", from: callback.from, chat: inner.chat, message: null, callbackId: callback.id.slice(0, 64), memberStatus: null };
+    return {
+      kind: "callback_query",
+      from: callback.from,
+      chat: inner.chat,
+      message: null,
+      callbackId: callback.id.slice(0, 64),
+      callbackData: typeof callback.data === "string" ? callback.data.slice(0, 64) : null,
+      callbackMessageId: Number.isSafeInteger(inner.message_id) ? (inner.message_id as number) : null,
+      memberStatus: null,
+    };
   }
   const member = update.my_chat_member;
   if (isObject(member)) {
     if (!isFrom(member.from) || !isChat(member.chat)) return null;
     const status = isObject(member.new_chat_member) && typeof member.new_chat_member.status === "string" ? member.new_chat_member.status : null;
-    return { kind: "my_chat_member", from: member.from, chat: member.chat, message: null, callbackId: null, memberStatus: status };
+    return { kind: "my_chat_member", from: member.from, chat: member.chat, message: null, callbackId: null, callbackData: null, callbackMessageId: null, memberStatus: status };
   }
   // edited_message, business_message, inline_query and the rest: never handled.
   return null;

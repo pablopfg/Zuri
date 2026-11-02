@@ -69,7 +69,12 @@ interface NoticeRow {
   attempts: number;
   next_attempt_at: string | null;
   learn_key?: string | null;
+  snoozed_until?: string | null;
 }
+
+/** What a button outside the app did to a notice (step 13, the Telegram buttons). */
+export type OutOfBandResult = "done" | "snoozed" | "muted" | "already" | "missing" | "app_only";
+export type OutOfBandAction = "done" | "snooze" | "mute";
 
 interface DeliveryRow {
   id: number;
@@ -93,6 +98,8 @@ const BODY_MAX = 4_000;
 const TRIES_PER_WAKE = 10;
 const HOUR = 3_600_000;
 const DAY = 24 * HOUR;
+/** "Adiar 1 h": the notice comes back this much later. */
+const SNOOZE_MS = HOUR;
 
 export interface AlertServiceDeps {
   locale: () => Locale;
@@ -262,7 +269,7 @@ export class AlertService {
         const id = this.record(row, channel.name, attempt, "sending", null, counted);
         let result: SendResult;
         try {
-          result = await withTimeout(channel.send({ notice, attempt }), SEND_TIMEOUT_MS);
+          result = await withTimeout(channel.send({ notice, attempt, origin: row.origin }), SEND_TIMEOUT_MS);
         } catch (error) {
           log("error", "alert_delivery_failed", { error, kind: channel.name });
           result = { status: "failed", reason: error instanceof TimeoutError ? "unreachable" : "error" };
@@ -319,9 +326,14 @@ export class AlertService {
     if (started) await this.deps.rearm();
   }
 
-  /** The earliest next try of an insisting notice, for the object's one alarm. */
+  /** The earliest next try of an insisting notice, or a snoozed one coming back, for the object's one alarm. */
   nextDue(): string | null {
-    return this.db.one<{ at: string }>(`SELECT next_attempt_at AS at FROM zur_notices WHERE escalation = 'active' ORDER BY next_attempt_at LIMIT 1`)?.at ?? null;
+    const tries = this.db.one<{ at: string }>(`SELECT next_attempt_at AS at FROM zur_notices WHERE escalation = 'active' ORDER BY next_attempt_at LIMIT 1`)?.at ?? null;
+    const snoozed = this.db.one<{ at: string }>(`SELECT snoozed_until AS at FROM zur_notices WHERE snoozed_until IS NOT NULL ORDER BY snoozed_until LIMIT 1`)?.at ?? null;
+    if (tries === null) return snoozed;
+    if (snoozed === null) return tries;
+    // ISO strings in UTC sort as times: the earlier of the two.
+    return [tries, snoozed].sort()[0] ?? tries;
   }
 
   /**
@@ -331,6 +343,7 @@ export class AlertService {
    */
   async escalate(): Promise<number> {
     const nowMs = this.now();
+    this.wakeSnoozed(nowMs);
     const due = this.db.all<NoticeRow>(
       `SELECT * FROM zur_notices WHERE escalation = 'active' AND next_attempt_at <= ? ORDER BY next_attempt_at LIMIT ?`,
       iso(nowMs),
@@ -361,7 +374,67 @@ export class AlertService {
     return tries;
   }
 
+  /**
+   * Snoozed notices whose hour is up come back as a new notice (same text,
+   * same priority, no learning), sent and insisting like any other. Each one is
+   * claimed in the statement that clears its time, so it comes back once.
+   */
+  private wakeSnoozed(nowMs: number): void {
+    const due = this.db.all<NoticeRow>(`SELECT * FROM zur_notices WHERE snoozed_until IS NOT NULL AND snoozed_until <= ? ORDER BY snoozed_until LIMIT ?`, iso(nowMs), TRIES_PER_WAKE);
+    for (const row of due) {
+      const { rowsWritten } = this.db.run(`UPDATE zur_notices SET snoozed_until = NULL WHERE id = ? AND snoozed_until = ?`, row.id, row.snoozed_until ?? "");
+      if (rowsWritten === 0) continue;
+      let params: NoticeParams = {};
+      try {
+        const parsed: unknown = JSON.parse(row.params);
+        if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) params = parsed as NoticeParams;
+      } catch {
+        // The kind's text still shows.
+      }
+      this.raise({
+        kind: row.kind,
+        category: row.category,
+        priority: row.priority,
+        params,
+        body: row.body,
+        link: (NOTICE_LINKS as readonly string[]).includes(row.link ?? "") ? (row.link as (typeof NOTICE_LINKS)[number]) : null,
+        origin: row.origin,
+        source: null,
+      });
+    }
+  }
+
   // ---------- The owner's answers ----------
+
+  /**
+   * A button tapped outside the app (Telegram): Feito marks the notice read,
+   * Adiar 1 h marks it read and brings it back in an hour, Silenciar stops the
+   * insisting without marking it read. Each ends the insisting. A security
+   * alert caused on the web stops here (answered on another channel); one the
+   * bot caused only stops in the app (spec, "Reconhecimento cruzado").
+   */
+  async respondOutOfBand(id: string, action: OutOfBandAction): Promise<OutOfBandResult> {
+    const row = this.db.one<NoticeRow>(`SELECT * FROM zur_notices WHERE id = ?`, id);
+    if (!row) return "missing";
+    if (row.category === "security" && row.origin === "bot") return "app_only";
+    const at = iso(this.now());
+    const stop = `escalation = CASE WHEN escalation = 'active' THEN ? ELSE escalation END, next_attempt_at = CASE WHEN escalation = 'active' THEN NULL ELSE next_attempt_at END`;
+    if (action === "done") {
+      if (row.read_at !== null && row.escalation !== "active") return "already";
+      this.db.run(`UPDATE zur_notices SET read_at = coalesce(read_at, ?), ${stop} WHERE id = ?`, at, "acknowledged", id);
+      return "done";
+    }
+    if (action === "snooze") {
+      if (row.snoozed_until) return "already";
+      this.db.run(`UPDATE zur_notices SET read_at = coalesce(read_at, ?), snoozed_until = ?, ${stop} WHERE id = ?`, at, iso(this.now() + SNOOZE_MS), "acknowledged", id);
+      // The object's one alarm must wake for it (rule P8).
+      await this.deps.rearm();
+      return "snoozed";
+    }
+    if (row.escalation !== "active") return "already";
+    this.db.run(`UPDATE zur_notices SET ${stop} WHERE id = ?`, "muted", id);
+    return "muted";
+  }
 
   /**
    * Marks one notice as read, or all of them. Reading answers an insisting
@@ -573,6 +646,7 @@ const SECURITY_TEXT: Record<SecurityAlertEvent, Text> = {
   push_removed: { title: "notice.security.push_removed.title", body: "notice.security.push_removed.body" },
   telegram_linked: { title: "notice.security.telegram_linked.title", body: "notice.security.telegram_linked.body" },
   telegram_unlinked: { title: "notice.security.telegram_unlinked.title", body: "notice.security.telegram_unlinked.body" },
+  telegram_group_linked: { title: "notice.security.telegram_group_linked.title", body: "notice.security.telegram_group_linked.body" },
   setup_failure: { title: "notice.security.setup_failure.title", body: "notice.security.setup_failure.body" },
   setup_locked: { title: "notice.security.setup_locked.title", body: "notice.security.setup_locked.body" },
   owner_created: { title: "notice.security.owner_created.title", body: "notice.security.owner_created.body" },
