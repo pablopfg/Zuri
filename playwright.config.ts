@@ -1,5 +1,6 @@
 import { defineConfig, devices } from "@playwright/test";
 import { E2E_SETUP_CODE, SETUP_PORT } from "./tests/e2e/setup-server.ts";
+import { WORKER_LOG } from "./tests/e2e/worker-log.ts";
 
 const port = 4173;
 
@@ -12,6 +13,8 @@ export default defineConfig({
   workers: 1,
   retries: 0,
   forbidOnly: true,
+  // Fails the run when the Worker logged an uncaught error (tests/e2e/worker-log.ts).
+  globalTeardown: "./tests/e2e/worker-log.ts",
   use: {
     baseURL: `http://127.0.0.1:${port}`,
     trace: "retain-on-failure",
@@ -33,7 +36,7 @@ export default defineConfig({
       // Every run starts from an empty database (its own folder, apart from `npm run dev`'s):
       // sign-in limits and settings left by an earlier run would change the results.
       command:
-        `node -e "require('node:fs').rmSync('.wrangler/e2e',{recursive:true,force:true})" && ` +
+        `node -e "const fs=require('node:fs');fs.rmSync('.wrangler/e2e',{recursive:true,force:true});fs.rmSync(process.argv[1],{force:true});fs.mkdirSync(require('node:path').dirname(process.argv[1]),{recursive:true})" '${WORKER_LOG}' && ` +
         "npm run build -w @zuri/web && npm exec -w @zuri/agent -- wrangler dev --local --ip 127.0.0.1 --persist-to ../../.wrangler/e2e " +
         `--port ${port} --env-file ../../tests/e2e/worker.env --var PUBLIC_URL:http://127.0.0.1:${port} ` +
         // Optional secrets don't load from the env file (only those wrangler.jsonc
@@ -42,19 +45,24 @@ export default defineConfig({
         `--var OWNER_EMAIL:dono@exemplo.com.br --var 'OWNER_PASSWORD_HASH:${E2E_PASSWORD_HASH}' ` +
         // Cloudflare's always-pass Turnstile test keys: accepted only over loopback,
         // where the Worker answers their test token without the network (tests/e2e/fixtures.ts).
-        "--var TURNSTILE_SITE_KEY:1x00000000000000000000AA --var TURNSTILE_SECRET_KEY:1x0000000000000000000000000000000AA",
+        "--var TURNSTILE_SITE_KEY:1x00000000000000000000AA --var TURNSTILE_SECRET_KEY:1x0000000000000000000000000000000AA" +
+        // A copy of everything the Worker prints, for the check after the run, and
+        // all of it back on stderr: Playwright shows only the server's stderr.
+        ` 2>&1 | tee '${WORKER_LOG}' >&2`,
       url: `http://127.0.0.1:${port}/api/health`,
       reuseExistingServer: false,
       timeout: 120_000,
     },
     {
-      // Started after the first one (Playwright waits for each in turn), so the interface is built already.
+      // Started after the first one (Playwright waits for each in turn), so the interface is built
+      // already. Its output goes to the same log, after the first one's, for the same check.
       command:
         `node -e "require('node:fs').rmSync('.wrangler/e2e-setup',{recursive:true,force:true})" && ` +
         "npm exec -w @zuri/agent -- wrangler dev --local --ip 127.0.0.1 --persist-to ../../.wrangler/e2e-setup " +
         `--port ${SETUP_PORT} --env-file ../../tests/e2e/worker.env --var PUBLIC_URL:http://127.0.0.1:${SETUP_PORT} ` +
         `--var SETUP_CODE:${E2E_SETUP_CODE} ` +
-        "--var TURNSTILE_SITE_KEY:1x00000000000000000000AA --var TURNSTILE_SECRET_KEY:1x0000000000000000000000000000000AA",
+        "--var TURNSTILE_SITE_KEY:1x00000000000000000000AA --var TURNSTILE_SECRET_KEY:1x0000000000000000000000000000000AA" +
+        ` 2>&1 | tee -a '${WORKER_LOG}' >&2`,
       url: `http://127.0.0.1:${SETUP_PORT}/api/health`,
       reuseExistingServer: false,
       timeout: 120_000,
