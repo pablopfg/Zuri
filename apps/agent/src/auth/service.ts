@@ -15,6 +15,8 @@ import {
   type PasskeyInfo,
   type PasskeyRegistration,
   PASSWORD_PROBLEM_MESSAGE,
+  type RecoveryComplete,
+  type RecoveryRequest,
   type SetupCodeRequest,
   type SetupOwnerRequest,
   type SetupRecoverRequest,
@@ -32,6 +34,7 @@ import type { SettingsRepository } from "../db/settings.ts";
 import { AppError } from "../http/errors.ts";
 import { PushDevices } from "../push/devices.ts";
 import { type ClientInfo, stripControl } from "./client.ts";
+import { RecoveryLinks } from "./email-recovery.ts";
 import { AuthEvents } from "./events.ts";
 import { LoginLimiter } from "./login-limiter.ts";
 import { type ChallengeRow, type MfaFactor, TwoStep } from "./mfa.ts";
@@ -78,6 +81,16 @@ export interface AuthDeps {
   breached: (password: string) => Promise<boolean | null>;
   /** The owner's host and origin (PUBLIC_URL): the only ones a passkey is made for or accepted from. */
   relyingParty: RelyingParty;
+  /**
+   * E-mail for the password recovery (step 11c): whether it can send now, and
+   * the send of a link (its token and when it ends). Null where it isn't wired.
+   */
+  recoveryMail?: {
+    available(): boolean;
+    send(token: string, expiresAt: number): Promise<boolean>;
+    /** Keeps the send running after the answer: the request answers as fast whether or not the e-mail matched. */
+    defer(work: Promise<void>): void;
+  } | null;
 }
 
 /** A finished sign-in: what the route turns into cookies. */
@@ -145,6 +158,7 @@ export class AuthService {
   readonly setupCode: SetupCode;
   /** Push devices end with the password that added them, and with the logout of their browser. */
   readonly #push: PushDevices;
+  readonly #recovery: RecoveryLinks;
   readonly #clock: () => number;
   #synced: Promise<void> | undefined;
 
@@ -161,10 +175,11 @@ export class AuthService {
     this.passkeys = new Passkeys(deps.db, deps.state, this.#clock);
     this.setupCode = new SetupCode(deps.state, deps.secrets, this.#clock);
     this.#push = new PushDevices(deps.db, this.#clock);
+    this.#recovery = new RecoveryLinks(deps.state, deps.secrets.sessionSecret, this.#clock);
   }
 
   /** The owner's e-mail: the one typed at the first access, else the OWNER_EMAIL secret, else none. */
-  private ownerEmail(): string {
+  ownerEmail(): string {
     const stored = this.deps.state.get<string>("owner_email");
     return typeof stored === "string" && stored !== "" ? stored : (this.deps.secrets.ownerEmail ?? "");
   }
@@ -242,6 +257,7 @@ export class AuthService {
         // Browsers known to the old password stop being trusted with the new one.
         this.events.forgetDevices();
         this.#push.retireAll();
+        this.#recovery.clear();
         this.events.record("credentials_reset", null, { alert: true, reason: newPepper ? "pepper" : "password" });
         // A new pepper is the full reset (lost password and phone): the sealed
         // secret can't be opened with it anyway, so the second step goes too.
@@ -742,9 +758,110 @@ export class AuthService {
       // A browser that knew the old password is new again (its next sign-in is an alert).
       this.events.forgetDevices();
       this.#push.retireAll();
+      this.#recovery.clear();
       this.events.record("password_changed", client, { session: next.row.id.slice(0, 16), alert: true });
     });
     return { token: next.token, session: next.row };
+  }
+
+  // ---------- Password recovery by e-mail (step 11c) ----------
+
+  /** Whether a recovery link can arrive: e-mail is set up and there is an owner. */
+  async recoveryStatus(): Promise<{ available: boolean }> {
+    await this.sync();
+    return { available: this.ownerExists() && Boolean(this.deps.recoveryMail?.available()) };
+  }
+
+  /**
+   * "Esqueci minha senha": in this order, the network's limit (3 in 15 minutes,
+   * counted whatever the e-mail), the robot check, then the keyed comparison of
+   * the e-mail. The answer is always the same, so it never says whether the
+   * e-mail is the owner's; only the owner's gets a link, valid 30 minutes.
+   */
+  async requestRecovery(input: RecoveryRequest, client: ClientInfo): Promise<void> {
+    await this.sync();
+    if (!this.turnstile && this.deps.turnstileMandatory) throw new AppError("NOT_CONFIGURED", "error.turnstileNotConfigured");
+    const wait = this.#recovery.reserve(client.network);
+    if (wait !== null) {
+      this.recordRefusal("login_rate_limited", client, "recovery");
+      throw new AppError("RATE_LIMITED", undefined, { retryAfter: wait });
+    }
+    await this.assertHuman(input.turnstileToken, client);
+    const matches = await this.checkEmail(input.email);
+    const mail = this.deps.recoveryMail;
+    if (!matches || !this.ownerExists() || !mail?.available()) {
+      // Folded per network, and into one row under a flood: refusals can't push the log's history out.
+      this.events.record("recovery_requested", client, { reason: matches ? "email_off" : "wrong_email", everyNetwork: this.limiter.underPressure() });
+      return;
+    }
+    const link = await this.#recovery.issue();
+    if (!link) {
+      this.events.record("recovery_requested", client, { reason: "link_held" });
+      return;
+    }
+    // Not awaited: waiting on the e-mail service would make the owner's address answer slower than any other.
+    mail.defer(
+      mail
+        .send(link.token, link.expiresAt)
+        .catch(() => false)
+        .then((sent) => this.events.record("recovery_requested", client, { reason: sent ? "link_sent" : "link_failed" })),
+    );
+  }
+
+  /** Whether a link still works, and whether its form needs a code. Every refusal is the same "expired". */
+  async checkRecovery(token: string): Promise<{ secondStep: boolean }> {
+    await this.sync();
+    if (!(await this.#recovery.valid(token))) throw this.recoveryExpired();
+    return { secondStep: this.twoStep.enabled() };
+  }
+
+  /**
+   * The new password from a link. With two-step sign-in on, a code too (from
+   * the authenticator or a recovery code), under the same pause and alerts as
+   * any code; five wrong ones end the link. Then, as after a change: every
+   * session ends, known browsers are forgotten, push devices retire, and the
+   * owner is told on every channel.
+   */
+  async completeRecovery(input: RecoveryComplete, client: ClientInfo): Promise<void> {
+    await this.sync();
+    const fingerprint = await this.#recovery.fingerprint(input.token);
+    if (!this.#recovery.matches(fingerprint)) throw this.recoveryExpired();
+    // The password first: a weak or leaked one must not spend a one-time code.
+    const hash = await this.acceptablePassword(input.password, this.personalWords());
+    if (this.twoStep.enabled()) {
+      if (!input.totp) throw new AppError("VALIDATION_FAILED", "auth.recovery.codeRequired", { fields: ["totp"] });
+      this.assertCodesAllowed(client, "recovery", false);
+      const reserved = this.twoStep.reserveWrongCode();
+      const factor = await this.twoStep.verify(input.totp, { recovery: true });
+      if (!factor) {
+        this.noteWrongSecondStep(client, "recovery", reserved.reachedDailyCap);
+        const left = this.#recovery.wrongCode();
+        if (left === 0) throw this.recoveryExpired();
+        throw new AppError("INVALID_CREDENTIALS", "auth.mfa.wrongCode", { attemptsLeft: left });
+      }
+      this.twoStep.releaseWrongCode(reserved.at);
+      if (factor === "recovery_code") this.events.record("recovery_code_used", client, { reason: "recovery", alert: true });
+    }
+    // Checked again inside the transaction that uses it: a second form with the same link, or a new
+    // request, may have won during the awaits, and only one of them changes the password.
+    let used = false;
+    this.deps.db.transaction(() => {
+      if (!this.#recovery.matches(fingerprint)) return;
+      used = true;
+      this.deps.state.set("auth_password_hash", hash);
+      this.deps.state.delete("auth_password_change_required");
+      this.sessions.revokeAll();
+      this.twoStep.dropChallenges();
+      this.events.forgetDevices();
+      this.#push.retireAll();
+      this.#recovery.clear();
+      this.events.record("password_recovered", client, { alert: true });
+    });
+    if (!used) throw this.recoveryExpired();
+  }
+
+  private recoveryExpired(): AppError {
+    return new AppError("RECOVERY_EXPIRED", "auth.recovery.expired");
   }
 
   // ---------- First access and recovery with the installation code ----------
@@ -910,6 +1027,7 @@ export class AuthService {
       this.twoStep.dropChallenges();
       this.events.forgetDevices();
       this.#push.retireAll();
+      this.#recovery.clear();
       this.events.record("access_recovered", client, { alert: true });
       return true;
     });

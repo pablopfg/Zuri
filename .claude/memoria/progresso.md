@@ -26,9 +26,15 @@ etapas ficam detalhadas; as mais antigas viram uma linha na tabela.
 | 8 | mesclada (31/10/2026) | #25 | Provedor Workers AI e IA simulada, medição por passo, teto de 9.000 Neurons/dia, aba IA |
 | 9 | mesclada (31/10/2026) | #28 | Conversa em SSE, 20 ferramentas com permissão e limite, aprovações e planos, voz, injeção de prompt testada |
 | 10 | mesclada (02/11/2026) | #46 | Automações: lembretes, resumo das tarefas e rotinas com IA, alarme único, recuperação após reinício, aprovação das rotinas do chat |
-| 11 | em andamento (11a #55 e 11b em revisão) | #55 | Central de avisos, insistência, vigias, resumo do dia e Diagnóstico (11a); notificação no aparelho e canais por tipo (11b); e-mail e recuperação de senha (11c); prioridade que aprende (11d) |
+| 11 | em andamento (11a #55 e 11b #56 mescladas; 11c em revisão) | #55, #56 | Central de avisos, insistência, vigias, resumo do dia e Diagnóstico (11a); notificação no aparelho e canais por tipo (11b); e-mail e recuperação de senha (11c); prioridade que aprende (11d) |
 
 ## Últimas etapas (detalhe)
+
+### Etapa 11 · E-mail e recuperação de senha (parte 11c)
+- Entregou: `packages/shared/src/email.ts` (limites, schemas, `disarmLinks`), `apps/agent/src/email/{sender,channel}.ts`, `apps/agent/src/auth/email-recovery.ts`, rotas públicas `/api/auth/recovery`, `/check`, `/complete`, eventos `recovery_requested` e `password_recovered` (alerta), página `/recuperar-senha` sob demanda e link "Esqueci minha senha" no login.
+- Migrations: nenhuma (estado em `zur_settings`: `email_sent_window`, `recovery_link`, `recovery_requests`).
+- Decisões técnicas: token no fragmento do link, só o HMAC guardado; resposta 202 igual para qualquer e-mail; com 2FA o link pede código (5 erros encerram); e-mail tenta uma vez (`firstTryOnly`); assunto discreto como o push. O binding `SEND_EMAIL` com `destination_address` fica para o deploy da etapa 24 (`ZURI_ALERT_EMAIL_TO`); `ALERT_EMAIL_FROM` é segredo. JS inicial 138,9 kB.
+- Falta (11d): prioridade que aprende e campo de prioridade nas automações.
 
 ### Etapa 11 · Notificação no aparelho (parte 11b)
 - Entregou: `apps/agent/src/push/{webpush,devices,channel,service,dev-push}.ts` (RFC 8291 + RFC 8292 só com WebCrypto, confere com o vetor da RFC), rotas `/api/push`, `/api/push/devices`, `/api/push/test`, eventos de acesso `push_added`/`push_removed` (alerta), `sw.js` com `push` e `notificationclick`, `PushCard` e `RoutesCard` na aba Avisos, `scripts/gerar-chaves-vapid.ts`.
@@ -91,6 +97,6 @@ etapas ficam detalhadas; as mais antigas viram uma linha na tabela.
 
 ## Próxima etapa
 
-- Número e nome: 11c · E-mail e recuperação de senha (mesma etapa 11); depois 11d (prioridade que aprende) e então a 12 · Telegram (base)
-- Dependências mescladas: 11a (#55) e 11b
+- Número e nome: 11d · Prioridade que aprende (mesma etapa 11); depois a 12 · Telegram (base)
+- Dependências mescladas: 11a (#55), 11b (#56) e 11c
 - Precisa de algo do Pablo antes: não
