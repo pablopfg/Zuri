@@ -5,9 +5,10 @@
 import type { Page } from "@playwright/test";
 import { CSRF } from "../tests/e2e/ui-helpers.ts";
 
-/** A deadline `days` from today, at 18:00 in São Paulo. */
-const dueIn = (days: number) => `${new Date(Date.now() + days * 86_400_000).toISOString().slice(0, 10)}T21:00:00.000Z`;
-const dayIn = (days: number) => new Date(Date.now() + days * 86_400_000).toISOString().slice(0, 10);
+/** The day `days` from today in São Paulo (not UTC's day: late in the evening they differ). */
+const dayIn = (days: number) => new Date(Date.now() + days * 86_400_000).toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" });
+/** A deadline `days` from today, at 18:00 in São Paulo (UTC-3, no summer time since 2019). */
+const dueIn = (days: number) => `${dayIn(days)}T21:00:00.000Z`;
 
 /**
  * Creates the sample projects, tasks, notes, memories and a conversation with a

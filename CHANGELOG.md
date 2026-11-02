@@ -9,6 +9,21 @@ o [SemVer](https://semver.org/lang/pt-BR/). Cada PR escreve a sua entrada em
 
 ### Adicionado
 
+- Automações (etapa 10), em uma tela nova com lembretes, o resumo das tarefas e
+  as rotinas da Zuri. Cada uma pode rodar uma vez, todo dia, em dias da semana,
+  num dia do mês ou a cada algumas horas (no mínimo 1), sempre no seu fuso.
+  Antes de salvar, a tela mostra as próximas três execuções. Dá para executar
+  na hora, pausar, editar e excluir. O histórico guarda o que cada execução
+  entregou. Por enquanto o resultado fica só nessa tela; os avisos chegam na
+  etapa 11.
+- Na conversa, a Zuri cria lembretes e resumos na hora. Rotinas que usam IA
+  ficam esperando a sua aprovação em Automações, e a conversa mostra o link
+  "Revisar em Automações". Para excluir uma automação pelo chat, você aprova
+  um cartão.
+- Limite de rotinas com IA por dia em Configurações › IA: 6 por padrão, até 48.
+- "Nova automação" e "Automações" na paleta (Ctrl/⌘ K). No celular,
+  Automações também aparece na lista de Configurações.
+
 - Cumprimento no Início: bom dia, boa tarde ou boa noite pelo horário do seu
   fuso (o das configurações, não o do aparelho), com o seu nome e uma frase
   curta que muda a cada dia. A frase troca sozinha quando o período vira,

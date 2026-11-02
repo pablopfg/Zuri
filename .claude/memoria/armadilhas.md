@@ -80,6 +80,11 @@ acrescente aqui cada armadilha nova que encontrar (sem dados pessoais).
   recorrência; cubra a virada de dia e o horário de verão histórico.
 - Dependências com versão exata; confira o `package-lock.json` no diff.
 
+- O mundo de teste (`test/chat-world.ts`) precisa passar o mesmo relógio falso
+  a todo serviço que olha a hora (`Productivity`, `AutomationService`...). Na
+  etapa 10, o `Productivity` sem `clock` usava a hora real: o teste do resumo
+  passou num dia e falhou dois dias depois.
+
 ## Agents SDK
 
 - A capability `mcp` do Agents SDK responde ao callback OAuth em
@@ -185,6 +190,17 @@ acrescente aqui cada armadilha nova que encontrar (sem dados pessoais).
   (`hooks-*.js`) e subiu o JS inicial em 1,5 KB. A paleta recebe o `navigate`
   do `AppShell` por propriedade, e a Memória recebe a busca pedida pela paleta
   por `askMemorySearch` em `lib/palette.ts`, sem o roteador.
+- Etapa 10: cada pedaço novo dividido entre telas sob demanda (um ícone usado
+  por duas telas, um módulo `lib/` comum, `dates.ts` da shared) põe o nome do
+  arquivo na lista de pré-carga do pacote inicial: uns 25 bytes a mais cada.
+  Use nas telas novas ícones que só elas usam (ou os que o inicial já tem, como
+  `Clock`), e passe pedidos da paleta a uma tela por endereço (`#...`) ou
+  evento do `window`, sem módulo comum. Textos do `ptBRCore` usados só por
+  telas sob demanda vão para o catálogo da tela (`pt-BR-markdown.ts`,
+  `pt-BR-settings.ts`). No `join` do catálogo, passe cada parte como argumento
+  próprio: `{ ...a, ...b }` dentro da chamada `/* @__PURE__ */` impediu o
+  descarte e levou o catálogo inteiro para o inicial (+11 KB). Meça com 3
+  casas (`toFixed(3)` numa cópia do `check-bundle-size.ts`).
 - O axe rodando no meio da animação de entrada (opacidade baixa) acusa
   contraste falso. `expectAccessible` espera as animações finitas terminarem.
 

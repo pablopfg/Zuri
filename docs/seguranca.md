@@ -433,10 +433,14 @@ propostas chegam ao modelo só em linhas `<data>`. As regras fixas do prompt
 dizem que um dado nunca vale como instrução. Como nenhum modelo garante isso, o
 limite real está no servidor:
 
-- **Sem agência a mais.** As 20 ferramentas só leem e escrevem os dados do
+- **Sem agência a mais.** As 26 ferramentas só leem e escrevem os dados do
   próprio dono. Não há shell, código, HTTP, credenciais, e-mail nem deploy. Um
   teste confere a lista inteira e falha se aparecer uma ferramenta nova sem
   revisão.
+- **Rotina agendada só lê.** Uma rotina da Zuri roda sem o dono por perto, então
+  recebe só as ferramentas de leitura e `notify_owner`. A rotina que o modelo
+  propõe no chat nasce esperando aprovação e não roda até o dono aprovar na
+  tela, depois de ler o pedido exato (`docs/automacoes.md`).
 - **Destruir pede o dono.** Apagar ou reescrever vira proposta. Ela só roda
   quando o dono aprova no cartão, uma vez só, e só se o alvo ainda estiver como
   na proposta (hash do retrato). O modelo não consegue aprovar: as rotas de

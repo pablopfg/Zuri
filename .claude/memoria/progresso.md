@@ -24,15 +24,24 @@ etapas ficam detalhadas; as mais antigas viram uma linha na tabela.
 | 6 | mesclada (31/10/2026) | #12 | Tarefas, notas (Markdown, FTS5), projetos, lixeira de 30 dias, limites por tipo |
 | 7 | mesclada (31/10/2026) | #21 | Memória com estados atual/incerta/passada, substituição sem ciclos, fila de revisão, recordação em `<data>` |
 | 8 | mesclada (31/10/2026) | #25 | Provedor Workers AI e IA simulada, medição por passo, teto de 9.000 Neurons/dia, aba IA |
-| 9 | em revisão (31/10/2026) | PR #28 | Conversa em SSE, 20 ferramentas com permissão e limite, aprovações e planos, voz, injeção de prompt testada |
+| 9 | mesclada (31/10/2026) | #28 | Conversa em SSE, 20 ferramentas com permissão e limite, aprovações e planos, voz, injeção de prompt testada |
+| 10 | em revisão (02/11/2026) | PR #PRNUM | Automações: lembretes, resumo das tarefas e rotinas com IA, alarme único, recuperação após reinício, aprovação das rotinas do chat |
 
 ## Últimas etapas (detalhe)
+
+### Etapa 10 · Automações
+- Entregou: `packages/shared/src/{schedule,automations}.ts` (agendas sem Zod para a prévia da tela; schemas e limites), `apps/agent/src/automations/{service,executor}.ts`, `scheduled()` no runner, ferramentas `create_reminder`, `create_automation`, `list_automations`, `propose_ai_routine`, `cancel_automation` (destrutiva) e `notify_owner` (só em rotina), rotas `/api/automations*`, tela `/automacoes` (`pages/automations/`, `lib/automations.ts`), configuração `aiScheduledRunsPerDay` (padrão 6, até 48). Doc: `docs/automacoes.md`.
+- Migrations: versão 9 (`zur_automations`, `zur_automation_runs` com índice único em `(automation_id, slot)`, contadores `automations` e `automation_runs`).
+- Decisões técnicas: um alarme só do SDK para todas (P8), guardado em `automation_alarm`; cada horário é reivindicado numa transação antes de rodar, então nunca roda duas vezes; atraso < 24 h roda uma vez como "Recuperada", ≥ 24 h vira "Pulada"; reinício marca execuções presas como interrompidas (sem repetir) e rearma; horário que não existe no fuso anda para frente, horário repetido usa a primeira passagem; dia 29–31 cai no último dia do mês; rotina do chat nasce pendente e só o dono aprova; limites 50 ativas, 10 pendentes, 1 hora mínima, histórico de 2.000.
+- Ficou para depois: o resultado vai só para o histórico da tela; aviso no sino, push e Telegram chegam na etapa 11 (que também cria a aba Diagnóstico com as falhas `automation_failed` do log).
+- Riscos ou dívidas: o JS inicial ficou em 138,9 kB com teto de 139; textos de telas sob demanda saíram do catálogo inicial (`pt-BR-markdown.ts`, chaves de Configurações). No celular, Automações fica na lista de Configurações e na busca (a barra tem 5 lugares).
+- Atenção para a próxima: a etapa 11 entrega o resultado de cada execução (`zur_automation_runs.result`, `notify_owner` em `notices`) na central de avisos; não crie outro alarme, use o de `AutomationService.rearm()`.
 
 ### Etapa 9 · Chat com ferramentas
 - Entregou: `packages/shared/src/chat.ts` (schemas, limites, eventos do SSE), `apps/agent/src/agent/{prompt,context,runner}.ts`, `apps/agent/src/tools/` (registro, executor, 20 ferramentas), `apps/agent/src/chat/` (`conversations`, `actions`, `plans`, `local-due`), `apps/agent/src/ai/transcription.ts`, rotas em `api/chat.ts`, tela `/conversa` (`apps/web/src/pages/chat/`). Doc: `docs/chat.md`; segurança em `docs/seguranca.md` ("Ferramentas do agente e injeção de prompt").
 - Migrations: versão 8 (`zur_conversations`, `zur_messages`, `zur_pending_actions`, `zur_task_plan_drafts`, contadores `conversations` e `messages`, coluna `author` em `zur_memories`).
 - Decisões técnicas: proposta destrutiva com hash SHA-256 do alvo, reivindicada por `UPDATE … RETURNING` e conferida de novo na transação; plano é rascunho e a confirmação recusa tarefa nova; chamada que chega à ferramenta conta no turno mesmo se falhar, mas devolve a vaga do limite por ferramenta; repetição exata recusada; resultado de ferramenta em `<data source="tool">` cortado em 8.000 caracteres; orçamento de contexto = menor entre o do dono e a janela do modelo; resumo quando 8+ mensagens não cabem; textos pt-BR das Configurações viraram `pt-BR-settings.ts` sob demanda (JS inicial 139,0 kB).
-- Ficou para depois: execução agendada usa só ferramentas `read` (`context: "scheduled"`, etapa 10); origem `telegram` das mensagens (etapa 14); sem atualização ao vivo entre duas abas abertas na mesma conversa.
+- Ficou para depois: origem `telegram` das mensagens (etapa 14); sem atualização ao vivo entre duas abas abertas na mesma conversa.
 - SEC-09-07 (pedido do Pablo): memória que a assistente guarda tem `author = 'agent'`, marca "Anotada pela assistente" e `saved_by="assistant"` no prompt; vira do dono quando ele edita ou repete. O Telegram (etapa 14) passa `origin: telegram` e `author: agent` em `remember`.
 - Atenção para a próxima: a etapa 10 chama o runner com `context: "scheduled"` e sem dono presente (nada destrutivo, nenhum plano); toda IA continua por `agent.ai()`. O mock entende `call <ferramenta> {json}`.
 
@@ -42,13 +51,6 @@ etapas ficam detalhadas; as mais antigas viram uma linha na tabela.
 - Decisões técnicas: todo uso de IA passa por `MeteredAI` (reserva o máximo antes, acerta por passo com os tokens da Cloudflare, devolve o que não começou); dias UTC; `maxRetries: 0`; prazo de 120 s por vez; ao fim da vez o medidor fecha e nenhuma chamada nova começa; `enable_thinking: false` só em GLM e Qwen3; IA simulada quando `PUBLIC_URL` é loopback, e `wrangler dev --local` em dev e e2e.
 - Ficou para depois: janela de contexto por modelo (Llama 3.3 70B tem 24 mil tokens); limitar o tamanho do resultado de ferramenta; transcrição e embeddings usam `reserveAudio`/`stepNeurons` quando chegarem (etapas da voz e da busca).
 - Atenção para a próxima: a etapa 9 chama `agent.ai()` (sempre `MeteredAI`, nunca o provedor cru), passa `signal` do botão Parar e trata `AI_LIMIT_REACHED` e `SERVICE_UNAVAILABLE` (`error.ai*`) no SSE. Senha recente para trocar modelo só na etapa 21 (`aiModel` em `SESSION_FIELDS`).
-
-### Etapa 7 · Memória e histórico
-- Entregou: `packages/shared/src/memory.ts` (schemas e limites), `apps/agent/src/memory/` (`text`, `conflict`, `intent`, `dates`, `repository`, `lifecycle`, `service`, `recall`), `apps/agent/src/agent/data.ts` (`dataLine`, `neutralize`), rotas `/api/memories*`, tela `/memoria` com fila "Para revisar", chave `memoryConflictReview` nas configurações. Doc: `docs/memoria.md`.
-- Migrations: versão 6 (`zur_memories` + FTS5, `zur_memory_reviews`, índices por estado e por estado+categoria, contadores em `zur_counts`).
-- Decisões técnicas: conflito só por regras (sem IA/Clef); regras nunca aposentam memória, só abrem revisão (máx. 500 pendentes); apagar é definitivo (sem lixeira, sem log); fato que vira passado leva as revisões; editar/restaurar para texto de outra atual = 409; busca ranqueia nas 200 ocorrências mais novas (conflito: 50); `fold` só tira acentos latinos.
-- Ficou para depois: verificação de conflito por IA; paginação além de 200 por filtro (o resto aparece na busca); importar backup usa `cleanImportedLinks` e precisa `rebuild` do FTS (etapa 23).
-- Atenção para a próxima: etapa 9 liga `selectRelevantMemories` + `memoryPromptSection` (orçamento `memoryTokenBudget`) ao runner; `remember` → `create`, `update_memory` → `correct`; `update` sem histórico e revisão `replace`/`cancel` só como `destructive` (`.claude/rules/ferramentas.md`). Todo conteúdo guardado no prompt passa por `dataLine`.
 
 <!-- Modelo, até 10 linhas por etapa:
 ### Etapa NN · <nome>
