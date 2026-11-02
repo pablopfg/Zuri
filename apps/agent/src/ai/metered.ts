@@ -115,7 +115,6 @@ export class MeteredAI {
     const deadline = Date.now() + this.deadlineMs;
     let previous: AppError | null = null;
     for (const [index, provider] of providers.entries()) {
-      const last = index === providers.length - 1;
       // The failure just now may have closed this one too (the same account's allocation).
       if (index > 0 && !this.chain.breaker.available(provider)) continue;
       const turn = this.turn(clean, 0, provider);
@@ -131,7 +130,7 @@ export class MeteredAI {
       } catch (error) {
         outcome = call.outcome(error);
         failure = outcome === "error" && call.timedOut() ? timeout() : classifyAiError(error);
-        if (outcome !== "error" || !this.switchAfter(provider, failure, last)) throw failure;
+        if (outcome !== "error" || !this.switchAfter(provider, failure, providers[index + 1])) throw failure;
         previous = failure;
       } finally {
         call.end();
@@ -147,10 +146,11 @@ export class MeteredAI {
    * only when one is left; the owner's limits, a stop, a refused request or the
    * turn's deadline end the turn.
    */
-  private switchAfter(provider: AIProvider, failure: AppError, last: boolean): boolean {
+  private switchAfter(provider: AIProvider, failure: AppError, next: AIProvider | undefined): boolean {
     if (!isSwitchable(failure)) return false;
     this.chain.breaker.failed(provider, failure);
-    if (last) return false;
+    // The failure may have closed the next one too (the same account's allocation): no switch, no log.
+    if (!next || !this.chain.breaker.available(next)) return false;
     log("warn", "ai_fallback", { code: failure.code, kind: failure.messageKey.replace("error.", "").toLowerCase() });
     return true;
   }
@@ -170,7 +170,11 @@ export class MeteredAI {
    * tool could run twice.
    */
   async *generateWithTools(req: MeteredToolRequest): AsyncIterable<AgentEvent> {
-    const clean = this.scrubTools(this.scrubRequest(req));
+    // A tool that starts ends any switch, even before its event reaches this loop (the SDK runs it first).
+    let toolRan = false;
+    const clean = this.scrubTools(this.scrubRequest(req), () => {
+      toolRan = true;
+    });
     const toolChars = clean.tools.reduce((n, tool) => n + tool.name.length + tool.description.length + schemaChars(tool.inputSchema), 0);
     const providers = this.chain.candidates();
     const deadline = Date.now() + this.deadlineMs;
@@ -221,7 +225,7 @@ export class MeteredAI {
         return;
       }
       const error = failure ?? timeout();
-      if (started || !this.switchAfter(provider, error, last)) throw error;
+      if (started || toolRan || !this.switchAfter(provider, error, providers[index + 1])) throw error;
       previous = error;
     }
     throw previous ?? new AppError("SERVICE_UNAVAILABLE", "error.aiUnavailable");
@@ -235,12 +239,13 @@ export class MeteredAI {
   }
 
   /** Tool results reach the model inside the provider: they get the same check on their way. */
-  private scrubTools(req: MeteredToolRequest): MeteredToolRequest {
-    if (this.secrets.length === 0) return req;
+  private scrubTools(req: MeteredToolRequest, onRun: () => void): MeteredToolRequest {
     const tools: ProviderTool[] = req.tools.map((tool) => ({
       ...tool,
       execute: async (input, callId) => {
+        onRun();
         const output = await tool.execute(input, callId);
+        if (this.secrets.length === 0) return output;
         const json = JSON.stringify(output ?? null);
         const clean = this.scrub(json);
         return clean === json ? output : (JSON.parse(clean) as unknown);

@@ -105,7 +105,8 @@ export function classifyAiError(error: unknown): AppError {
   if (error instanceof AppError) return error;
   const text = errorText(error).toLowerCase();
   // Cloudflare's own wording only: any error that merely mentions Neurons is not a spent allocation.
-  if (text.includes("4006") || text.includes("daily free allocation")) {
+  // The code on its own ("4006: …"), never inside a longer number (a token count of 24006).
+  if (/(^|[^0-9])4006([^0-9]|$)/.test(text) || text.includes("daily free allocation")) {
     return new AppError("AI_LIMIT_REACHED", "error.aiQuotaExhausted", { limit: "account" });
   }
   if (isAbort(error) || text.includes("abort")) return new AppError("SERVICE_UNAVAILABLE", "error.aiAborted");
@@ -117,6 +118,8 @@ export function classifyAiError(error: unknown): AppError {
   }
   // The request itself was refused (bad input, too long for the window): another model would refuse it too.
   const status = httpStatus(error);
+  // A timeout on the provider's side (3007/3008 come as 408) is a busy model, not a bad request.
+  if (status === 408 || /(^|[^0-9])300[78]([^0-9]|$)/.test(text)) return new AppError("SERVICE_UNAVAILABLE", "error.aiBusy");
   if ((status !== undefined && status >= 400 && status < 500) || REJECTED.test(text)) {
     return new AppError("SERVICE_UNAVAILABLE", "error.aiRequestRejected");
   }

@@ -3,6 +3,7 @@ import { runInDurableObject } from "cloudflare:test";
 import { describe, expect, it } from "vitest";
 import { composePrompt, NEVER_IN_PROMPT, ORIGIN_CLASS, PROMPT_ORIGINS } from "../src/agent/prompt-contract.ts";
 import type { ZuriAgent } from "../src/agent/zuri-agent.ts";
+import { SECRET_PLACEHOLDER } from "../src/ai/metered.ts";
 import { MockAIProvider, type RecordedPrompt } from "../src/ai/mock.ts";
 import { InternalState } from "../src/db/internal-state.ts";
 import { AppError } from "../src/http/errors.ts";
@@ -111,10 +112,28 @@ describe("the canary test (D2): nothing sensitive reaches a model", () => {
       expect(prompts.length).toBeGreaterThanOrEqual(turns.length + 1);
       for (const canary of canaries) expect(everything.includes(canary), `leaked: ${canary.slice(0, 12)}…`).toBe(false);
       expect(everything).not.toMatch(/CANARIO/i);
+      // The last net (MeteredAI) never had to act: a secret it removed is still a leak to fix.
+      expect(everything).not.toContain(SECRET_PLACEHOLDER);
       // The recorder does see what the tools read: the owner's own content gets through.
       const results = JSON.stringify(prompts.flatMap((p) => p.toolResults));
       expect(results).toContain(VISIBLE);
       expect(results).toContain("Bolo de fubá");
+    });
+  });
+});
+
+describe("the AI breaker of the object", () => {
+  it("keeps the spent allocation in the database, read back by a new breaker after a restart", async () => {
+    const stub = testEnv.AGENT.get(testEnv.AGENT.idFromName(`canary-${++objects}`));
+    await runInDurableObject(stub, async (agent: ZuriAgent) => {
+      const breaker = agent.breaker();
+      expect(agent.breaker()).toBe(breaker);
+      breaker.failed({ id: "workers-ai", model: "m" }, new AppError("AI_LIMIT_REACHED", "error.aiQuotaExhausted"));
+      const state = new InternalState(agent.store.db);
+      expect(state.get("ai_quota_exhausted_day")).toBe(new Date().toISOString().slice(0, 10));
+      const { CircuitBreaker } = await import("../src/ai/chain.ts");
+      const again = new CircuitBreaker(Date.now, { load: () => state.get<string>("ai_quota_exhausted_day"), save: () => undefined });
+      expect(again.quotaSpent({ id: "workers-ai" })).toBe(true);
     });
   });
 });

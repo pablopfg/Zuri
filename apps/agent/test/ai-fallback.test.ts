@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 import { BREAKER_MAX_OPEN_MS, BREAKER_OPEN_MS, BREAKER_WINDOW_MS, CircuitBreaker, ProviderChain } from "../src/ai/chain.ts";
 import { chooseChain } from "../src/ai/index.ts";
@@ -150,8 +150,7 @@ describe("switching to the fallback model", () => {
 describe("never switching", () => {
   it("keeps the owner's own limit: refused before any call, the fallback is not asked", async () => {
     await withAiWorld(async (world) => {
-      const { calls } = workersPair(world, busy);
-      const { chain } = workersPair(world, busy);
+      const { chain, calls } = workersPair(world, busy);
       const ai = new MeteredAI(chain, world.meter, () => ({ ...LIMITS, requestsPerDay: 0 }));
       const error = await failure(collect(ai.stream(ask())));
       expect(error.code).toBe("AI_LIMIT_REACHED");
@@ -216,6 +215,26 @@ describe("never switching", () => {
     });
   });
 
+  it("does not switch when a tool started before its event was read (the SDK runs tools first)", async () => {
+    await withAiWorld(async (world) => {
+      let ran = 0;
+      const primary = new Scripted("workers-ai", GLM, async function* (req) {
+        // The tool runs, then the stream fails before any event comes out.
+        await req.tools[0]?.execute({}, "t1");
+        // Never true: a scripted stream that yields nothing before failing.
+        if (ran > 1) yield { type: "text", delta: "" };
+        throw new AppError("SERVICE_UNAVAILABLE", "error.aiBusy");
+      });
+      const fallback = new Scripted("workers-ai", QWEN, answers("reserva"));
+      const ai = new MeteredAI(new ProviderChain(primary, fallback), world.meter, () => LIMITS);
+      const tools = [{ name: "list_tasks", description: "Lists tasks", inputSchema: z.object({}), execute: async () => ++ran }];
+      const error = await failure(collect(ai.generateWithTools({ ...ask(), tools, maxIterations: 3, toolBudgetExhausted: () => false })));
+      expect(error.messageKey).toBe("error.aiBusy");
+      expect(ran).toBe(1);
+      expect(fallback.calls).toBe(0);
+    });
+  });
+
   it("does not switch after a tool ran: the tool never runs twice", async () => {
     await withAiWorld(async (world) => {
       let ran = 0;
@@ -246,8 +265,12 @@ describe("never switching", () => {
         },
         breaker,
       );
+      const warn = vi.spyOn(console, "warn");
       const first = await failure(collect(ai.stream(ask())));
       expect(first).toMatchObject({ code: "AI_LIMIT_REACHED", messageKey: "error.aiQuotaExhausted" });
+      // No switch happened, so no switch is logged.
+      expect(warn.mock.calls.flat().join(" ")).not.toContain("ai_fallback");
+      warn.mockRestore();
       expect(calls.map((c) => c.model)).toEqual([GLM]);
       expect(saved).toEqual(["2026-10-31"]);
       // Known spent: refused without a call.
@@ -401,6 +424,11 @@ describe("classification", () => {
     expect(key(new Error("3010: Invalid or incomplete input for the model"))).toBe("error.aiRequestRejected");
     expect(key(new Error("5021: The input exceeds the maximum context length"))).toBe("error.aiRequestRejected");
     expect(key(Object.assign(new Error("x"), { status: 503 }))).toBe("error.aiUnavailable");
+    // A server-side timeout is a busy model, and a number that merely contains 4006 is not the account's allocation.
+    expect(key(Object.assign(new Error("x"), { status: 408 }))).toBe("error.aiBusy");
+    expect(key(new Error("3007: Request timeout"))).toBe("error.aiBusy");
+    expect(key(new Error("5021: The input exceeds the context window (24006 tokens)"))).toBe("error.aiRequestRejected");
+    expect(key(new Error("AiError: 4006: you have used up your daily free allocation"))).toBe("error.aiQuotaExhausted");
     const yes = ["error.aiBusy", "error.aiModelUnavailable", "error.aiUnavailable", "error.aiQuotaExhausted"] as const;
     const no = ["error.aiAborted", "error.aiTimeout", "error.aiRequestRejected", "error.aiLimit.requests", "error.aiLimit.neurons"] as const;
     for (const k of yes) expect(isSwitchable(new AppError("SERVICE_UNAVAILABLE", k)), k).toBe(true);

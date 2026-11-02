@@ -29,7 +29,8 @@ mesmo medidor.
 - A IA simulada também finge um modelo ocupado: uma mensagem que começa com
   `fail ` falha no modelo escolhido antes de responder, e o reserva simulado
   (`mock-fallback`) responde no lugar. Assim a troca aparece em `npm run dev`
-  e nos e2e.
+  e nos e2e. Nesse modo o disjuntor recomeça a cada vez, para o `fail ` dos
+  testes nunca deixar o modelo simulado de lado.
 
 ## Modelo reserva e disjuntor
 
@@ -50,7 +51,8 @@ parte 2. Código em `apps/agent/src/ai/chain.ts` e `apps/agent/src/ai/metered.ts
   mostrado, nenhuma ferramenta rodou) e só por falha do provedor
   (`isSwitchable`): ocupado (`error.aiBusy`), modelo fora
   (`error.aiModelUnavailable`), erro desconhecido ou do servidor
-  (`error.aiUnavailable`), ou 20 s sem o primeiro pedaço (`FIRST_CHUNK_MS`,
+  (`error.aiUnavailable`), tempo esgotado do lado do provedor (HTTP 408,
+  códigos 3007 e 3008, lidos como ocupado), ou 20 s sem o primeiro pedaço (`FIRST_CHUNK_MS`,
   só enquanto há reserva; o último modelo da fila tem o prazo inteiro).
 - **Quando não troca.** Teto do dono (`AI_LIMIT_REACHED` do medidor), Parar,
   pedido recusado (`error.aiRequestRejected`: HTTP 4xx que não é 429, entrada
@@ -62,7 +64,8 @@ parte 2. Código em `apps/agent/src/ai/chain.ts` e `apps/agent/src/ai/metered.ts
   pulado e o reserva responde direto. Depois disso a próxima chamada real
   testa o modelo; falhou, abre de novo pelo dobro do tempo, até 15 min; deu
   certo, fecha. Sem pings de saúde. Com todos abertos, o escolhido é tentado
-  assim mesmo.
+  assim mesmo. Uma ferramenta que começou a rodar, mesmo antes de o evento
+  dela chegar, impede a troca.
 - **Cota da conta.** O 4006 da Cloudflare (cota grátis da conta esgotada) vale
   para todos os modelos do Workers AI: o reserva não é tentado, e nenhuma
   chamada sai até 00:00 UTC. O dia fica em `zur_settings`

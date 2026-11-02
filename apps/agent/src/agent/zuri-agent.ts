@@ -194,7 +194,8 @@ export class ZuriAgent extends Agent<WorkerEnv> {
    * per use, so a change of model in the settings applies to the next turn.
    */
   ai(): MeteredAI {
-    const breaker = this.breaker();
+    // Local development: a fresh breaker per turn, so the simulated `fail ` never sidelines the chosen mock.
+    const breaker = this.development() && !this.testProvider ? new CircuitBreaker() : this.breaker();
     const chain = this.testProvider
       ? new ProviderChain(this.testProvider, this.testFallbackProvider, breaker)
       : chooseChain({
