@@ -65,7 +65,11 @@ export type InternalKey =
   | "telegram_confirm_locked_until"
   | "telegram_confirm_alerted_at"
   | "telegram_confirm_email_sends"
-  | "email_confirm_window";
+  | "email_confirm_window"
+  // Step 15b: the numbers of the last /tarefas ("<ms>|<id>,<id>…", valid 1 hour) and the date
+  // the owner is correcting ("<message id>|<task|reminder>|<id>|<expires ms>").
+  | "telegram_task_numbers"
+  | "telegram_fix";
 
 export class InternalState {
   constructor(private readonly db: Database) {}

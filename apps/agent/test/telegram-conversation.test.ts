@@ -354,10 +354,10 @@ describe("text", () => {
     expect(sent("sendChatAction").length).toBe(TELEGRAM_LIMITS.typingMax);
   });
 
-  it("answers a photo with what it understands for now, and starts no turn", async () => {
+  it("answers a sticker with what it understands for now, and starts no turn", async () => {
     await linkOwner();
-    await deliver(message({ photo: [{ file_id: "p", file_unique_id: "p", width: 1, height: 1 }], caption: "olha" }));
-    expect(texts()).toEqual(["Por enquanto eu entendo só texto e áudio por aqui."]);
+    await deliver(message({ sticker: { file_id: "p", file_unique_id: "p", width: 1, height: 1, type: "regular" } }));
+    expect(texts()).toEqual(["Por enquanto eu entendo texto, áudio e fotos ou documentos com legenda."]);
     expect(sent("getFile")).toHaveLength(0);
     expect(prompts).toHaveLength(0);
   });
@@ -367,7 +367,7 @@ describe("text", () => {
     await deliver(message({ voice: { file_id: "x", file_unique_id: "x" } }));
     await deliver(message({ audio: { file_id: "x".repeat(257), file_unique_id: "x", duration: 3 } }));
     await deliver(message({ voice: { file_id: "x", file_unique_id: "x", duration: -1 } }));
-    expect(texts()).toEqual(Array(3).fill("Por enquanto eu entendo só texto e áudio por aqui."));
+    expect(texts()).toEqual(Array(3).fill("Por enquanto eu entendo texto, áudio e fotos ou documentos com legenda."));
     expect(sent("getFile")).toHaveLength(0);
   });
 
@@ -760,7 +760,7 @@ describe("the edges of a turn", () => {
     await linkOwner();
     await inOwner((agent) => agent.store.db.run(`UPDATE zur_telegram_links SET last_used_at = ? WHERE kind = 'private'`, new Date(Date.now() - 13 * 3_600_000).toISOString()));
     await deliver(text("Quais são minhas notas?"));
-    expect(texts()).toEqual(["Faz um tempo que você não usa o bot, então travei a leitura por segurança. Toque em /destravar para liberar."]);
+    expect(texts()).toEqual(["Faz um tempo que você não usa o bot, então travei a leitura por segurança. Toque em Destravar ou mande /destravar para liberar."]);
     expect(prompts).toHaveLength(0);
     // The switch stays as the owner left it: the lock is not the switch.
     expect((await json<TelegramStatus>(await api("GET", "/telegram"), 200)).conversation).toBe(true);
@@ -769,7 +769,7 @@ describe("the edges of a turn", () => {
     botCalls.length = 0;
     await deliver(text("Oi"));
     expect(prompts).toHaveLength(0);
-    expect(texts()).toEqual(["Faz um tempo que você não usa o bot, então travei a leitura por segurança. Toque em /destravar para liberar."]);
+    expect(texts()).toEqual(["Faz um tempo que você não usa o bot, então travei a leitura por segurança. Toque em Destravar ou mande /destravar para liberar."]);
   });
 
   it("keeps to 30 messages an hour: the 31st gets one reply, the rest nothing", async () => {

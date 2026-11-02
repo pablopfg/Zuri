@@ -275,9 +275,22 @@ describe("linking the owner's account", () => {
     });
     expect(sent("setMyCommands")[0]?.body).toEqual({
       commands: [
-        { command: "ajuda", description: "O que eu faço por aqui" },
-        { command: "destravar", description: "Liberar a leitura por 12 h" },
+        { command: "hoje", description: "O que tenho para hoje" },
+        { command: "tarefas", description: "Minhas tarefas abertas" },
+        { command: "nova", description: "Criar uma tarefa" },
+        { command: "feito", description: "Concluir uma tarefa da lista" },
+        { command: "lembrar", description: "Criar um lembrete" },
+        { command: "nota", description: "Guardar uma nota" },
+        { command: "buscar", description: "Buscar nas tarefas, notas e memórias" },
+        { command: "memoria", description: "Guardar algo na memória" },
+        { command: "rotinas", description: "Rotinas ativas" },
+        { command: "avisos", description: "Últimos avisos" },
+        { command: "uso", description: "Uso da IA hoje" },
+        { command: "status", description: "Como a Zuri está" },
+        { command: "backup", description: "Situação do backup" },
         { command: "nova_conversa", description: "Começar uma conversa nova" },
+        { command: "destravar", description: "Liberar a leitura por 12 h" },
+        { command: "ajuda", description: "O que eu faço por aqui" },
       ],
     });
     // Only the HMAC is stored, never the code.

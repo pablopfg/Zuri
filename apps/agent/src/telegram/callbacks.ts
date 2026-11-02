@@ -79,6 +79,67 @@ export class TelegramCallbacks {
   }
 }
 
+/** The buttons under the commands' answers (step 15): each points to one row with its target. */
+export const COMMAND_ACTIONS = ["task_done", "task_later", "task_undo", "task_fix", "reminder_fix", "routine_pause", "unlock"] as const;
+export type CommandAction = (typeof COMMAND_ACTIONS)[number];
+
+export type CommandTap =
+  | { status: "ok"; action: CommandAction; targetId: string }
+  | { status: "unknown" }
+  | { status: "expired" }
+  | { status: "used" };
+
+/** True when the data names one of the commands' actions (the notices' buttons have their own). */
+export function isCommandData(data: string | null | undefined): boolean {
+  const action = typeof data === "string" ? DATA.exec(data)?.[1] : undefined;
+  return action !== undefined && (COMMAND_ACTIONS as readonly string[]).includes(action);
+}
+
+/**
+ * The commands' buttons (Feito, Adiar, Desfazer, Corrigir, Pausar, Destravar):
+ * the same table as the notices', with the target kept here and a validity per
+ * button. Each button acts once; a list's other buttons keep working.
+ */
+export class CommandButtons {
+  constructor(
+    private readonly db: Database,
+    private readonly clock: () => number = Date.now,
+  ) {}
+
+  create(action: CommandAction, targetId: string, ttlMs: number): string {
+    const at = this.clock();
+    const id = randomId();
+    this.db.run(`DELETE FROM zur_telegram_callbacks WHERE expires_at < ?`, new Date(at - DAY_MS).toISOString());
+    this.db.run(
+      `INSERT INTO zur_telegram_callbacks (id, action, target_type, target_id, expires_at) VALUES (?, ?, 'command', ?, ?)`,
+      id,
+      action,
+      targetId,
+      new Date(at + ttlMs).toISOString(),
+    );
+    return `v1:${action}:${id}`;
+  }
+
+  /** Uses the button once: a second tap (or two quick ones) gets "used". */
+  take(data: string | null | undefined): CommandTap {
+    const match = typeof data === "string" ? DATA.exec(data) : null;
+    if (!match) return { status: "unknown" };
+    const id = match[2] ?? "";
+    const row = this.db.one<{ action: string; target_type: string | null; target_id: string | null; expires_at: string; used_at: string | null }>(
+      `SELECT action, target_type, target_id, expires_at, used_at FROM zur_telegram_callbacks WHERE id = ?`,
+      id,
+    );
+    if (!row || row.action !== match[1] || row.target_type !== "command" || !row.target_id) return { status: "unknown" };
+    if (!(COMMAND_ACTIONS as readonly string[]).includes(row.action)) return { status: "unknown" };
+    if (row.used_at !== null) return { status: "used" };
+    const now = new Date(this.clock()).toISOString();
+    if (row.expires_at <= now) return { status: "expired" };
+    const { rowsWritten } = this.db.run(`UPDATE zur_telegram_callbacks SET used_at = ? WHERE id = ? AND used_at IS NULL`, now, id);
+    if (rowsWritten === 0) return { status: "used" };
+    return { status: "ok", action: row.action as CommandAction, targetId: row.target_id };
+  }
+}
+
 /** 12 random bytes in base64url: 16 characters, nothing to guess. */
 function randomId(): string {
   const bytes = crypto.getRandomValues(new Uint8Array(12));

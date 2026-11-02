@@ -22,7 +22,8 @@ import { PushDevices } from "../push/devices.ts";
 import { PushService } from "../push/service.ts";
 import { usableVapidKeys, type VapidKeys } from "../push/webpush.ts";
 import { developmentTelegramFetcher } from "../telegram/dev-telegram.ts";
-import { TelegramCallbacks } from "../telegram/callbacks.ts";
+import { CommandButtons, TelegramCallbacks } from "../telegram/callbacks.ts";
+import { TelegramCommands } from "../telegram/commands.ts";
 import { TelegramChannel } from "../telegram/channel.ts";
 import { TelegramConfirmations } from "../telegram/confirmations.ts";
 import { TelegramConversation } from "../telegram/conversation.ts";
@@ -503,11 +504,28 @@ export class ZuriAgent extends Agent<WorkerEnv> {
         events: auth.events,
         sessionSecret: () => env.SESSION_SECRET,
       });
+      // The quick commands (step 15b): the same services as the app, no AI.
+      const telegramCommands = new TelegramCommands({
+        productivity,
+        memories,
+        automations,
+        alerts: () => alerts,
+        usage: () => usage.report(this.aiLimits(), this.development() ? "mock" : "workers-ai", settings.field("aiModel")),
+        diagnostics: () => diagnostics.report(),
+        healthy: () => this.healthy(),
+        aiAvailable: () => usage.room(this.aiLimits()).neurons > 0,
+        buttons: new CommandButtons(db),
+        state,
+        locale: () => this.locale(),
+        timeZone: () => settings.field("timeZone"),
+        origin: () => this.publicUrl().origin,
+      });
       const telegram = new TelegramService({
         links: telegramLinks,
         callbacks: telegramCallbacks,
         alerts: () => alerts,
         conversation: telegramConversation,
+        commands: telegramCommands,
         confirmations: telegramConfirmations,
         timeZone: () => settings.field("timeZone"),
         afterUpdate: () => flushSecurityAlerts(db, alerts),
