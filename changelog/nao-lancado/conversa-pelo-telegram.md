@@ -1,3 +1,5 @@
+<!-- versao: minor -->
+
 ### Adicionado
 
 - Conversa com a Zuri pelo Telegram. Com **Conversar com a Zuri por aqui**

@@ -37,5 +37,15 @@ export default defineProject({
       miniflare: { bindings: TEST_ENV },
     }),
   ],
-  test: { name: "agent", include: ["test/**/*.test.ts"], setupFiles: ["test/setup-turnstile.ts"] },
+  test: {
+    name: "agent",
+    include: ["test/**/*.test.ts"],
+    setupFiles: ["test/setup-turnstile.ts"],
+    // Without the module cache on disk, each new workerd worker fetches the
+    // modules it imports one by one. With it, @cloudflare/vitest-plugin inlines
+    // every cached module (code and source maps, instrumented under coverage)
+    // into one WebSocket reply, and workerd closes any message over 32 MiB
+    // ("Message is too large"): the whole agent suite died before running.
+    fsModuleCache: false,
+  },
 });
