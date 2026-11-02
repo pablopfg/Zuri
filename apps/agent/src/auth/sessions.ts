@@ -154,11 +154,18 @@ export class Sessions {
     return until > this.clock() ? until : null;
   }
 
-  revoke(id: string): void {
-    this.db.run(`DELETE FROM zur_sessions WHERE id = ?`, id);
+  /** Ends one session; returns how many ended (0 or 1). */
+  revoke(id: string): number {
+    return this.db.all(`DELETE FROM zur_sessions WHERE id = ? RETURNING id`, id).length;
   }
 
-  revokeAll(): void {
-    this.db.run(`DELETE FROM zur_sessions`);
+  /** Ends every session; returns how many. */
+  revokeAll(): number {
+    return this.db.all(`DELETE FROM zur_sessions RETURNING id`).length;
+  }
+
+  /** The sessions still within their limits, the most recently used first (at most MAX_SESSIONS exist). */
+  list(): SessionRow[] {
+    return this.db.all<SessionRow>(`SELECT * FROM zur_sessions ORDER BY last_seen_at DESC, created_at DESC`).filter((row) => !this.ended(row));
   }
 }

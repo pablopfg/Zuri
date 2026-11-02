@@ -64,6 +64,7 @@ function notice(overrides: Partial<Notice> = {}): Notice {
     attempts: 0,
     nextAttemptAt: null,
     security: false,
+    ackInApp: false,
     ...overrides,
   };
 }

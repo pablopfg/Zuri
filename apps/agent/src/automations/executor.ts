@@ -15,6 +15,8 @@ export interface ExecutorDeps {
   locale: () => Locale;
   /** The runner of AI routines; the model behind the meter (rule P7). */
   runner: () => AgentRunner;
+  /** True during a lockdown (step 16): routines with AI wait, reminders and the digest go on. */
+  lockdown?: () => boolean;
 }
 
 /**
@@ -43,6 +45,7 @@ export function automationExecutor(deps: ExecutorDeps): Executor {
 const ROUTINE_DEADLINE_MS = 5 * 60_000;
 
 async function routine(automation: Automation, runId: string, deps: ExecutorDeps): Promise<RunOutcome> {
+  if (deps.lockdown?.()) return { status: "skipped", result: null, problem: "lockdown" };
   const cap = deps.settings().aiScheduledRunsPerDay;
   if (deps.automations.aiRunsToday() >= cap) return { status: "skipped", result: null, problem: "ai_budget" };
   deps.automations.markAi(runId);

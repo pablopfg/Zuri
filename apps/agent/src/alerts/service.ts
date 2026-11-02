@@ -475,6 +475,25 @@ export class AlertService {
     return { unread: this.unreadCount() };
   }
 
+  /**
+   * The app's answer to a security alert the bot caused (step 16): read, and
+   * its insisting ends. The route checked the password typed recently. Any
+   * other alert is refused: one caused on the web stops only in Telegram.
+   */
+  acknowledgeInApp(id: string): Notice {
+    const row = this.row(id);
+    if (row.category !== "security" || row.origin !== "bot") throw new AppError("CONFLICT", "error.noticeAckBotOnly");
+    this.db.run(
+      `UPDATE zur_notices SET read_at = coalesce(read_at, ?),
+         escalation = CASE WHEN escalation IN ('active', 'unacknowledged') THEN 'acknowledged' ELSE escalation END,
+         next_attempt_at = NULL
+       WHERE id = ?`,
+      iso(this.now()),
+      id,
+    );
+    return this.present(this.row(id));
+  }
+
   /** Stops an insisting notice without marking it read. A security alert can't be silenced from the app. */
   mute(id: string): Notice {
     const row = this.row(id);
@@ -600,6 +619,7 @@ export class AlertService {
       attempts: row.attempts,
       nextAttemptAt: row.next_attempt_at,
       security: row.category === "security",
+      ackInApp: row.category === "security" && row.origin === "bot",
     };
   }
 }
@@ -661,6 +681,10 @@ const SECURITY_TEXT: Record<SecurityAlertEvent, Text> = {
   telegram_unlocked: { title: "notice.security.telegram_unlocked.title", body: "notice.security.telegram_unlocked.body" },
   telegram_confirm_locked: { title: "notice.security.telegram_confirm_locked.title", body: "notice.security.telegram_confirm_locked.body" },
   telegram_approved: { title: "notice.security.telegram_approved.title", body: "notice.security.telegram_approved.body" },
+  telegram_lockdown: { title: "notice.security.telegram_lockdown.title", body: "notice.security.telegram_lockdown.body" },
+  telegram_sessions_ended: { title: "notice.security.telegram_sessions_ended.title", body: "notice.security.telegram_sessions_ended.body" },
+  telegram_routines_paused: { title: "notice.security.telegram_routines_paused.title", body: "notice.security.telegram_routines_paused.body" },
+  lockdown_exited: { title: "notice.security.lockdown_exited.title", body: "notice.security.lockdown_exited.body" },
   setup_failure: { title: "notice.security.setup_failure.title", body: "notice.security.setup_failure.body" },
   setup_locked: { title: "notice.security.setup_locked.title", body: "notice.security.setup_locked.body" },
   owner_created: { title: "notice.security.owner_created.title", body: "notice.security.owner_created.body" },

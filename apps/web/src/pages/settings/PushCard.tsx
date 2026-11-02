@@ -8,7 +8,7 @@ import { ALERTS_KEY } from "../../hooks/notices.ts";
 import { ApiError, api } from "../../lib/api.ts";
 import { useI18n } from "../../lib/i18n.tsx";
 import { PushDenied, pushSupport, subscribe, unsubscribe } from "../../lib/push.ts";
-import { describeUserAgent } from "../../lib/user-agent.ts";
+import { describeUserAgent } from "@zuri/shared";
 
 export const PUSH_KEY = ["push"] as const;
 

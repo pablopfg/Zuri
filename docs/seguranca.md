@@ -829,6 +829,37 @@ Etapa 12, fundação. O bot obedece a uma conta só, no chat privado
   Cada aprovação gera `telegram_approved` (origem `bot`, sem insistir, só
   reconhecível no app). Sem `TELEGRAM_ADMIN_ID`, passkey e e-mail, o cartão
   só mostra **Abrir no app**.
+- **Comandos de segurança e modo de bloqueio (etapa 16b).** `/acessos`
+  mostra os 10 eventos mais novos com a rede resumida (`a.b.x.x` no IPv4, os
+  dois primeiros grupos no IPv6), nunca o IP inteiro. `/encerrar_sessoes`,
+  `/pausar_rotinas` e `/bloquear` não pedem destravamento e confirmam com um
+  botão de uso único (10 minutos), sem passkey nem e-mail, porque só reduzem
+  o acesso; exigem `TELEGRAM_ADMIN_ID`. Cada um grava um evento em Acessos
+  (`telegram_sessions_ended`, `telegram_routines_paused`, `telegram_lockdown`)
+  e um alerta de origem `bot` em todos os canais. `/bloquear`, numa
+  transação, grava `lockdown_until` (fim da primeira hora) e
+  `lockdown_source` em `zur_settings`, apaga todas as sessões e suspende os
+  tokens remotos pelo `RemoteTokenHook` (vazio até a etapa 20). Enquanto
+  durar: a API responde 423 `LOCKDOWN_ACTIVE` a tudo fora da lista curta
+  (sessão, sair, confirmar senha, `GET /api/lockdown`,
+  `POST /api/lockdown/exit`, `GET /api/settings`, `GET` e `DELETE
+  /api/telegram`); o bot responde só a `/status`, `/avisos` e `/ajuda`, sem
+  botões, e recusa conversa, aprovações (botão, `/aprovar`, código por e-mail
+  e a página `/aprovar`, 423 `APPROVALS_LOCKED`) e destravamento; o executor
+  pula as rotinas com IA. Na primeira hora o login só aceita senha + código de
+  recuperação (o código do app e a passkey recebem 423 sem gastar tentativa;
+  sem 2FA, ninguém entra), e esse login sai do bloqueio. Depois, senha + 2FA
+  abre a tela **Sair do bloqueio**, que pede a senha digitada nos últimos 15
+  minutos e, com 2FA ligada, um código do app ou de recuperação (contados
+  como os outros códigos). A saída grava `lockdown_exited` com alerta. Um
+  novo `/bloquear` pelo mesmo vínculo até 24 horas depois da saída é
+  rebloqueio: bloqueia e suspende o vínculo até o dono confirmar a conta no
+  app.
+- **Reconhecimento cruzado no app (etapa 16b).** Alerta de segurança de origem
+  `bot` não para pelo bot (`respondOutOfBand` devolve `app_only`) nem por
+  "marcar como lido". Só `POST /api/notices/:id/acknowledge`, com a senha
+  digitada nos últimos 15 minutos, o dá por visto; a rota recusa com 409 o
+  alerta que não veio do bot.
 - **Limites.** 60 comandos por hora e 30 mensagens por hora, contadas antes de qualquer resposta (também com a conversa desligada ou a leitura travada). Arquivo
   de áudio (não a nota de voz) e mensagem de bot inline entram como dado de
   terceiros.

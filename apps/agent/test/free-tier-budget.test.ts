@@ -558,4 +558,34 @@ describe("the Free plan budget of each route", () => {
       agent.store.db.run(`DELETE FROM zur_alert_learning`);
     });
   });
+  it("the lockdown's routes (step 16b): its state, leaving it and acknowledging a bot's alert read and write a handful of rows", async () => {
+    expect((await cost("POST", "/auth/confirm", { password: TEST_PASSWORD })).status).toBe(204);
+    const id = crypto.randomUUID();
+    await runInDurableObject(owner(), (agent: ZuriAgent) => {
+      // Marked without ending the sessions, so this test's own session stays.
+      agent.store.auth.lockdown.mark("budget");
+      agent.store.db.run(
+        `INSERT INTO zur_notices (id, kind, category, priority, params, created_at, origin, escalation) VALUES (?, 'security', 'security', 'critical', '{"event":"telegram_lockdown"}', ?, 'bot', 'active')`,
+        id,
+        new Date().toISOString(),
+      );
+    });
+    const status = await cost("GET", "/lockdown");
+    expect(status.status).toBe(200);
+    expect(status.read).toBeLessThanOrEqual(10);
+    expect(status.written).toBe(0);
+    const exit = await cost("POST", "/lockdown/exit", {});
+    expect(exit.status).toBe(204);
+    expect(exit.read).toBeLessThanOrEqual(30);
+    // The state, the access event and its alert (the notice and its deliveries), indexes included.
+    expect(exit.written).toBeLessThanOrEqual(35);
+    const ack = await cost("POST", `/notices/${id}/acknowledge`);
+    expect(ack.status).toBe(200);
+    expect(ack.read).toBeLessThanOrEqual(10);
+    expect(ack.written).toBeLessThanOrEqual(4);
+    await runInDurableObject(owner(), (agent: ZuriAgent) => {
+      agent.store.db.run(`DELETE FROM zur_notices`);
+      agent.store.db.run(`DELETE FROM zur_settings WHERE key LIKE 'lockdown_%'`);
+    });
+  });
 });

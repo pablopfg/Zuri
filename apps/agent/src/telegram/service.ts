@@ -32,9 +32,10 @@ import { type Confirmed, isCodeShaped, type SendCodeOutcome, type TelegramConfir
 import { type IncomingAudio, type IncomingTurn, isLargeFileData, type Started, type TelegramConversation } from "./conversation.ts";
 import type { PrivateLink, TelegramLinks } from "./links.ts";
 import { ReadLock } from "./read-lock.ts";
+import { isSecurityAction, isSecurityCommand, OPEN_SECURITY_COMMANDS, type TelegramSecurity } from "./security.ts";
 
 /** Bump when the menu's commands change: the object re-sends it on start (setMyCommands). */
-export const TELEGRAM_MENU_VERSION = 4;
+export const TELEGRAM_MENU_VERSION = 5;
 
 /** The commands in the bot's menu. Steps 13 to 16 add theirs and bump TELEGRAM_MENU_VERSION. */
 const MENU: readonly { command: string; description: MessageKey }[] = [
@@ -54,6 +55,12 @@ const MENU: readonly { command: string; description: MessageKey }[] = [
   { command: "nova_conversa", description: "telegram.menu.nova_conversa" },
   { command: "aprovar", description: "telegram.menu.aprovar" },
   { command: "destravar", description: "telegram.menu.destravar" },
+  { command: "acessos", description: "telegram.menu.acessos" },
+  { command: "sessoes", description: "telegram.menu.sessoes" },
+  { command: "encerrar_sessoes", description: "telegram.menu.encerrar_sessoes" },
+  { command: "tokens", description: "telegram.menu.tokens" },
+  { command: "pausar_rotinas", description: "telegram.menu.pausar_rotinas" },
+  { command: "bloquear", description: "telegram.menu.bloquear" },
   { command: "ajuda", description: "telegram.menu.ajuda" },
 ];
 
@@ -93,6 +100,8 @@ export interface TelegramDeps {
   confirmations?: TelegramConfirmations;
   /** The agent's proposals as the bot shows and approves them (step 16); absent in tests that don't need them. */
   approvals?: TelegramApprovals;
+  /** The security commands and the lockdown (step 16b); absent in tests that don't need them. */
+  security?: TelegramSecurity;
   state: InternalState;
   events: AuthEvents;
   /** The bot token, or null while the secret isn't set. Read on every use, never kept. */
@@ -321,6 +330,11 @@ export class TelegramService {
    * /destravar, the code and the notices' buttons work then.
    */
   async #fromOwner(link: PrivateLink, incoming: Incoming): Promise<Started | null> {
+    // The lockdown (step 16b) comes first: only /status, /avisos and /ajuda answer, nothing else acts.
+    if (this.#lockdown()) {
+      await this.#duringLockdown(link, incoming);
+      return null;
+    }
     const locked = this.#lock.locked(link);
     if (!locked) this.deps.links.touch();
     if (incoming.kind === "callback_query") {
@@ -420,6 +434,55 @@ export class TelegramService {
     });
   }
 
+  #lockdown(): boolean {
+    return this.deps.security?.lockdownActive() === true;
+  }
+
+  /**
+   * During a lockdown the bot answers only /status, /avisos (without the
+   * texts) and /ajuda (spec, "Modo de bloqueio"). Approvals, the e-mailed
+   * codes, the conversation, unlocking and every button are refused, and all
+   * of it counts in the hour's 60 commands, so a flood can't make it write
+   * without end. Leaving the lockdown happens only in the app.
+   */
+  async #duringLockdown(link: PrivateLink, incoming: Incoming): Promise<void> {
+    const rate = this.#rate("telegram_command_window", TELEGRAM_LIMITS.commandsPerHour);
+    if (incoming.kind === "callback_query") {
+      this.deps.links.audit("lockdown", "callback", rate === "ok" ? "refused" : "rate_limited");
+      if (rate !== "over") await this.#answer(incoming.callbackId, rate === "ok" ? "telegram.bloqueio.ativoCurto" : "telegram.cmd.rate");
+      return;
+    }
+    if (incoming.kind !== "message") return;
+    if (rate !== "ok") {
+      this.deps.links.audit("lockdown", "message", "rate_limited");
+      if (rate === "first") await this.#say(link.chatId, "telegram.cmd.rate");
+      return;
+    }
+    const message = incoming.message ?? {};
+    const own = message.forwarded ? "" : (message.text ?? message.caption ?? "");
+    const command = commandOf(own);
+    if (command === "ajuda") {
+      this.deps.links.audit("lockdown", "ajuda", "ok");
+      await this.#say(link.chatId, "telegram.help");
+      return;
+    }
+    if ((command === "status" || command === "avisos") && this.deps.commands) {
+      // /avisos as when reading is locked: the time, category and priority, never the text.
+      const outs = await this.deps.commands.run(command, "", true);
+      this.deps.links.audit("lockdown", command, "ok");
+      for (const out of outs) await this.#send(link.chatId, { text: out.text });
+      return;
+    }
+    // A code typed here is never checked during a lockdown, but it still leaves the chat (as outside one).
+    if (isCodeShaped(own) && message.message_id !== undefined) {
+      await this.client()
+        .deleteMessage(link.chatId, message.message_id)
+        .catch(() => undefined);
+    }
+    this.deps.links.audit("lockdown", command ?? "message", "refused");
+    await this.#say(link.chatId, command === "bloquear" ? "telegram.seg.bloquear.jaLigado" : "telegram.bloqueio.ativo");
+  }
+
   /** A command from the owner, already counted against the hour's 60. */
   async #command(link: PrivateLink, command: string, text: string, locked: boolean): Promise<void> {
     switch (command) {
@@ -449,6 +512,34 @@ export class TelegramService {
         const outs = await approvals.pending(this.canConfirm());
         this.deps.links.audit("command", "aprovar", "ok");
         for (const out of outs) await this.#send(link.chatId, out);
+        return;
+      }
+      case "acessos":
+      case "sessoes":
+      case "encerrar_sessoes":
+      case "tokens":
+      case "pausar_rotinas":
+      case "bloquear": {
+        const security = this.deps.security;
+        if (!security || !isSecurityCommand(command)) {
+          this.deps.links.audit("command", command, "not_yet");
+          await this.#say(link.chatId, "telegram.notYet");
+          return;
+        }
+        // Listing needs reading unlocked; the three that only reduce access never do (spec).
+        if (locked && !OPEN_SECURITY_COMMANDS.includes(command)) {
+          this.deps.links.audit("command", command, "locked");
+          await this.#sayLocked(link.chatId);
+          return;
+        }
+        // Like approvals, the security commands need TELEGRAM_ADMIN_ID set (N11).
+        if (this.deps.adminId() === null) {
+          this.deps.links.audit("command", command, "no_admin");
+          await this.#say(link.chatId, "telegram.seg.needsAdmin");
+          return;
+        }
+        this.deps.links.audit("command", command, "ok");
+        await this.#send(link.chatId, security.run(command));
         return;
       }
       case "nova_conversa":
@@ -513,7 +604,13 @@ export class TelegramService {
   /** A tap on a command's button: answered within Telegram's 10 seconds; only the tapped button leaves the message. */
   async #onCommandButton(link: PrivateLink, incoming: Incoming, locked: boolean): Promise<void> {
     const commands = this.deps.commands;
-    if (!commands || !incoming.callbackData) return;
+    if (!incoming.callbackData) return;
+    const security = this.deps.security;
+    if (security && isSecurityAction(/^v1:([a-z_]+):/.exec(incoming.callbackData)?.[1])) {
+      await this.#onSecurityButton(link, incoming, security);
+      return;
+    }
+    if (!commands) return;
     const outcome = await commands.tap(incoming.callbackData, locked, incoming.callbackKeyboard);
     const action = /^v1:([a-z_]+):/.exec(incoming.callbackData)?.[1] ?? "unknown";
     this.deps.links.audit("callback", action, outcome.locked ? "locked" : outcome.unlock ? "unlock" : "ok");
@@ -537,6 +634,34 @@ export class TelegramService {
       return;
     }
     if (outcome.out) await this.#send(link.chatId, outcome.out);
+  }
+
+  /**
+   * Confirmar, Cancelar or Encerrar under a security command (step 16b): they
+   * only reduce access, so they work with reading locked. A relock (a second
+   * /bloquear within 24 hours of leaving) suspends this link too, in the
+   * lockdown's own transaction.
+   */
+  async #onSecurityButton(link: PrivateLink, incoming: Incoming, security: TelegramSecurity): Promise<void> {
+    const data = incoming.callbackData ?? "";
+    const action = /^v1:([a-z_]+):/.exec(data)?.[1] ?? "unknown";
+    if (this.deps.adminId() === null) {
+      this.deps.links.audit("callback", action, "no_admin");
+      await this.#answer(incoming.callbackId, "telegram.seg.needsAdminShort");
+      return;
+    }
+    let suspended = false;
+    const outcome = await security.tap(data, link.id, incoming.callbackKeyboard, () => {
+      suspended = this.deps.links.suspend();
+    });
+    this.deps.links.audit("callback", action, outcome.relock ? "relock" : outcome.out ? "done" : "ok");
+    const client = this.client();
+    if (incoming.callbackId) await client.answerCallbackQuery(incoming.callbackId, outcome.answer).catch(() => undefined);
+    if (outcome.keyboard && incoming.callbackMessageId !== null) {
+      await client.editMessageReplyMarkup(incoming.chat.id, incoming.callbackMessageId, { inline_keyboard: outcome.keyboard }).catch(() => null);
+    }
+    if (outcome.out) await this.#send(link.chatId, outcome.out);
+    if (suspended) this.deps.links.audit("lockdown", "relock", "suspended");
   }
 
   /** The right date after Corrigir; it writes, so it needs reading unlocked. */
@@ -839,6 +964,8 @@ export class TelegramService {
   }
 
   #confirmations(): TelegramConfirmations {
+    // During a lockdown nothing is approved or unlocked through the bot, not even from the page (step 16b).
+    if (this.#lockdown()) throw new AppError("APPROVALS_LOCKED", "error.approveLockdown", { approval: "lockdown" });
     const confirmations = this.deps.confirmations;
     // Without TELEGRAM_ADMIN_ID no confirmation is ever made, so no token can be good.
     if (!confirmations || this.deps.adminId() === null || this.deps.links.private()?.status !== "active") {
@@ -881,6 +1008,12 @@ export class TelegramService {
           this.#remember(updateId);
           // Topics turned on after the group was linked: the next notices use them.
           if (chat.is_forum === true && !group.forum) this.deps.links.setTopics(chat.id, { forum: true });
+          // During a lockdown the group's buttons act on nothing either (step 16b): only the app does.
+          if (this.deps.security?.lockdownActive()) {
+            this.deps.links.audit("lockdown", "callback", "refused");
+            await this.#answer(incoming.callbackId, "telegram.bloqueio.ativoCurto");
+            return;
+          }
           await this.#onNoticeButton(incoming);
         } else if (incoming.callbackId) {
           await this.client()

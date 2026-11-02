@@ -6,6 +6,7 @@ import {
   confirmRequestSchema,
   heartbeatRequestSchema,
   type Locale,
+  lockdownExitSchema,
   loginRequestSchema,
   type MfaRequired,
   mfaCodeRequestSchema,
@@ -104,6 +105,25 @@ const WHILE_SECOND_STEP_SETUP = new Set([
   "POST /api/auth/mfa/setup",
   "POST /api/auth/mfa/enable",
   "GET /api/settings",
+]);
+
+/**
+ * Signed-in routes that still work during a lockdown (step 16): the session
+ * itself, typing the password again, "Sair do bloqueio", reading the settings (the language), and the
+ * Telegram card, whose Desvincular is "Não fui eu". Everything else answers
+ * 423 LOCKDOWN_ACTIVE until the owner leaves it.
+ */
+const WHILE_LOCKDOWN = new Set([
+  "GET /api/auth/session",
+  "POST /api/auth/logout",
+  "POST /api/auth/heartbeat",
+  "POST /api/auth/confirm",
+  "GET /api/auth/mfa",
+  "GET /api/lockdown",
+  "POST /api/lockdown/exit",
+  "GET /api/settings",
+  "GET /api/telegram",
+  "DELETE /api/telegram",
 ]);
 
 /**
@@ -296,9 +316,15 @@ export function createApi(deps: ApiDeps) {
     // HEAD is a GET without the body, and the router answers it with the GET route.
     const method = c.req.method === "HEAD" ? "GET" : c.req.method;
     const route = `${method} ${c.req.path.replace(/\/+$/, "")}`;
-    if (auth.passwordChangeRequired() && !WHILE_PASSWORD_CHANGE.has(route)) throw new AppError("PASSWORD_CHANGE_REQUIRED");
-    if (auth.secondStepRequired() && !WHILE_SECOND_STEP_SETUP.has(route)) {
-      throw new AppError("FORBIDDEN", "auth.setup.secondStepRequired", { secondStepRequired: true });
+    // A lockdown comes first (step 16b): its short list is all there is until the owner leaves it, so a
+    // password to change or a second step to set up never hides "Sair do bloqueio"; they follow after.
+    if (auth.lockdown.active()) {
+      if (!WHILE_LOCKDOWN.has(route)) throw new AppError("LOCKDOWN_ACTIVE", "auth.lockdown.active");
+    } else {
+      if (auth.passwordChangeRequired() && !WHILE_PASSWORD_CHANGE.has(route)) throw new AppError("PASSWORD_CHANGE_REQUIRED");
+      if (auth.secondStepRequired() && !WHILE_SECOND_STEP_SETUP.has(route)) {
+        throw new AppError("FORBIDDEN", "auth.setup.secondStepRequired", { secondStepRequired: true });
+      }
     }
     c.set("session", session);
     await next();
@@ -346,6 +372,16 @@ export function createApi(deps: ApiDeps) {
     const response = Response.json(auth.state(next.session));
     response.headers.append("set-cookie", sessionCookie(c.req.raw, next.token));
     return response;
+  });
+
+  // ---------- Lockdown (step 16): "Sair do bloqueio" ----------
+
+  app.get("/lockdown", () => Response.json(deps.auth().lockdownStatus()));
+
+  app.post("/lockdown/exit", async (c) => {
+    const proof = await readJson(c.req.raw, lockdownExitSchema, 1024);
+    await deps.auth().exitLockdown(c.get("session"), proof, client(c));
+    return new Response(null, { status: 204 });
   });
 
   // ---------- Settings ----------

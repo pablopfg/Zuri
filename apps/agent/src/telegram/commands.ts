@@ -504,6 +504,9 @@ export class TelegramCommands {
           return { keyboard: without, out: this.#askFix(found.action === "task_fix" ? "task" : "reminder", found.targetId) };
         case "routine_pause":
           return { ...(await this.#pause(found.targetId)), keyboard: without };
+        // The security buttons go to TelegramSecurity before reaching here (service.ts).
+        default:
+          return { answer: this.#t("telegram.cmd.sumiu"), keyboard: without };
       }
     } catch (error) {
       return { answer: this.#failure(error, found.action).text, keyboard: without };
@@ -696,7 +699,7 @@ function foldName(name: string): string {
 }
 
 /** The message's buttons without the one tapped; rows left empty go. */
-function withoutButton(keyboard: Button[][], data: string): Button[][] {
+export function withoutButton(keyboard: Button[][], data: string): Button[][] {
   return keyboard.map((row) => row.filter((button) => button.callback_data !== data)).filter((row) => row.length > 0);
 }
 

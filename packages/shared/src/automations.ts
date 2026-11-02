@@ -67,7 +67,7 @@ export type AutomationRunTrigger = (typeof AUTOMATION_RUN_TRIGGERS)[number];
  * Why a run was skipped or failed, stable and in English; the interface words
  * it. Never a message from an exception (it could quote data).
  */
-export const AUTOMATION_RUN_PROBLEMS = ["missed", "busy", "ai_budget", "ai_limit", "ai_unavailable", "interrupted", "failed"] as const;
+export const AUTOMATION_RUN_PROBLEMS = ["missed", "busy", "ai_budget", "ai_limit", "ai_unavailable", "interrupted", "failed", "lockdown"] as const;
 export type AutomationRunProblem = (typeof AUTOMATION_RUN_PROBLEMS)[number];
 
 // ---------- Schedules ----------

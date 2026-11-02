@@ -48,6 +48,15 @@ export function NoticesPanel({ onClose, navigate }: { onClose: () => void; navig
     },
     onError: failed,
   });
+  // A security alert the bot caused stops only here; the password typed recently is asked once if needed (step 16).
+  const acknowledge = useMutation({
+    mutationFn: (id: string) => api<Notice>(`/notices/${id}/acknowledge`, { method: "POST" }),
+    onSuccess: () => {
+      toast(t("web.notices.acknowledged"));
+      void refresh();
+    },
+    onError: failed,
+  });
   const remove = useMutation({
     mutationFn: (id: string) => api<void>(`/notices/${id}`, { method: "DELETE" }),
     onSuccess: () => {
@@ -104,8 +113,9 @@ export function NoticesPanel({ onClose, navigate }: { onClose: () => void; navig
                 onOpen={() => go(notice)}
                 onRead={() => read.mutate(notice.id)}
                 onMute={() => mute.mutate(notice.id)}
+                onAcknowledge={() => acknowledge.mutate(notice.id)}
                 onRemove={() => remove.mutate(notice.id)}
-                busy={(read.isPending && read.variables === notice.id) || (mute.isPending && mute.variables === notice.id) || (remove.isPending && remove.variables === notice.id)}
+                busy={[read, mute, acknowledge, remove].some((m) => m.isPending && m.variables === notice.id)}
               />
             ))}
           </ul>
@@ -136,6 +146,7 @@ function NoticeItem({
   onOpen,
   onRead,
   onMute,
+  onAcknowledge,
   onRemove,
   busy,
 }: {
@@ -143,12 +154,15 @@ function NoticeItem({
   onOpen: () => void;
   onRead: () => void;
   onMute: () => void;
+  onAcknowledge: () => void;
   onRemove: () => void;
   busy: boolean;
 }) {
   const { t, dateTime } = useI18n();
   const unread = notice.readAt === null;
   const urgent = notice.priority === "critical" || notice.priority === "high";
+  // The bot's own security alerts wait for the owner here (step 16, "Reconhecimento cruzado").
+  const waiting = notice.ackInApp && (notice.escalation === "active" || notice.escalation === "unacknowledged");
   return (
     <li
       aria-busy={busy || undefined}
@@ -171,7 +185,9 @@ function NoticeItem({
       </div>
       <p className={cn("mt-1 break-words", unread ? "font-semibold" : "font-medium")}>{notice.title}</p>
       {notice.body && <p className="mt-1 whitespace-pre-line break-words text-sm leading-6 text-fg-muted">{notice.body}</p>}
-      {notice.escalation === "active" && <p className="mt-1 text-xs text-fg-muted">{t(notice.security ? "web.notices.securityInsists" : "web.notices.insisting")}</p>}
+      {notice.escalation === "active" && (
+        <p className="mt-1 text-xs text-fg-muted">{t(notice.ackInApp ? "web.notices.ackInApp" : notice.security ? "web.notices.securityInsists" : "web.notices.insisting")}</p>
+      )}
       {notice.escalation === "unacknowledged" && <p className="mt-1 text-xs text-fg-muted">{t("web.notices.unacknowledged")}</p>}
       <div className="mt-2 flex flex-wrap items-center gap-1">
         {notice.link && (
@@ -182,6 +198,12 @@ function NoticeItem({
         {unread && (
           <Button variant="ghost" onClick={onRead} disabled={busy}>
             {t("web.notices.markRead")}
+          </Button>
+        )}
+        {waiting && (
+          <Button variant="secondary" onClick={onAcknowledge} disabled={busy}>
+            <Check className="h-4 w-4" aria-hidden />
+            {t("web.notices.acknowledge")}
           </Button>
         )}
         {notice.escalation === "active" && !notice.security && (

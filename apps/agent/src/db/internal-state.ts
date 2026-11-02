@@ -69,7 +69,13 @@ export type InternalKey =
   // Step 15b: the numbers of the last /tarefas ("<ms>|<id>,<id>…", valid 1 hour) and the date
   // the owner is correcting (the last 5 Corrigir questions, see fixQuestions in telegram/commands.ts).
   | "telegram_task_numbers"
-  | "telegram_fix";
+  | "telegram_fix"
+  // Step 16b, the lockdown (spec, "Modo de bloqueio"): the end of its first hour (ISO; set only while
+  // it is on), where it came from ("telegram:<link id>", kept after leaving, for the 24-hour relock)
+  // and when the owner last left one (ISO).
+  | "lockdown_until"
+  | "lockdown_source"
+  | "lockdown_exited_at";
 
 export class InternalState {
   constructor(private readonly db: Database) {}

@@ -169,6 +169,8 @@ export const sessionStateSchema = /* @__PURE__ */ mini.strictObject({
   removePlainPasswordSecret: mini.boolean(),
   /** Created at the first access and still without two-step sign-in: only turning it on works. */
   secondStepRequired: mini.boolean(),
+  /** Step 16: a lockdown is on; the app shows only "Sair do bloqueio" (GET /api/lockdown) until the owner leaves it. */
+  lockdown: mini.optional(mini.boolean()),
   /** The owner exists and the SETUP_CODE secret is still set: the owner should delete it. */
   removeSetupCodeSecret: mini.boolean(),
   /** Until when sensitive actions work without typing the password again. */

@@ -25,6 +25,7 @@ import { developmentTelegramFetcher } from "../telegram/dev-telegram.ts";
 import { TelegramApprovals } from "../telegram/approvals.ts";
 import { CommandButtons, TelegramCallbacks } from "../telegram/callbacks.ts";
 import { TelegramCommands } from "../telegram/commands.ts";
+import { TelegramSecurity } from "../telegram/security.ts";
 import { TelegramChannel } from "../telegram/channel.ts";
 import { TelegramConfirmations } from "../telegram/confirmations.ts";
 import { TelegramConversation } from "../telegram/conversation.ts";
@@ -187,6 +188,7 @@ export class ZuriAgent extends Agent<WorkerEnv> {
       settings: () => this.store.settings.get(),
       locale: () => this.locale(),
       runner: () => this.runner(),
+      lockdown: () => this.store.auth.lockdown.active(),
     });
   }
 
@@ -547,6 +549,17 @@ export class ZuriAgent extends Agent<WorkerEnv> {
         timeZone: () => settings.field("timeZone"),
         origin: () => this.publicUrl().origin,
       });
+      // The security commands and the lockdown (step 16b): no AI, so they work with it down.
+      const telegramSecurity = new TelegramSecurity({
+        auth,
+        automations,
+        buttons: commandButtons,
+        locale: () => this.locale(),
+        timeZone: () => settings.field("timeZone"),
+        abortRuns: () => {
+          for (const run of this.activeRuns.values()) run.abort();
+        },
+      });
       const telegram = new TelegramService({
         links: telegramLinks,
         callbacks: telegramCallbacks,
@@ -555,6 +568,7 @@ export class ZuriAgent extends Agent<WorkerEnv> {
         commands: telegramCommands,
         confirmations: telegramConfirmations,
         approvals: telegramApprovals,
+        security: telegramSecurity,
         timeZone: () => settings.field("timeZone"),
         afterUpdate: () => flushSecurityAlerts(db, alerts),
         state,

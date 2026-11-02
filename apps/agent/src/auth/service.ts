@@ -4,7 +4,10 @@ import {
   type PasswordProof,
   hashPassword,
   hmacSha256Hex,
+  normalizeRecoveryCode,
   isPasswordHash,
+  type LockdownExit,
+  type LockdownStatus,
   type LoginRequest,
   type MessageKey,
   MAX_PASSKEYS,
@@ -36,8 +39,9 @@ import { PushDevices } from "../push/devices.ts";
 import { type ClientInfo, stripControl } from "./client.ts";
 import { RecoveryLinks } from "./email-recovery.ts";
 import { AuthEvents } from "./events.ts";
+import { Lockdown, type LockdownEntered, NO_REMOTE_TOKENS, type RemoteTokenHook } from "./lockdown.ts";
 import { LoginLimiter } from "./login-limiter.ts";
-import { type ChallengeRow, type MfaFactor, TwoStep } from "./mfa.ts";
+import { type ChallengeRow, type CodeOptions, type MfaFactor, TwoStep } from "./mfa.ts";
 import { Passkeys, type RelyingParty } from "./passkeys.ts";
 import { type SessionRow, Sessions } from "./sessions.ts";
 import { type CodeState, SetupCode } from "./setup-code.ts";
@@ -91,6 +95,8 @@ export interface AuthDeps {
     /** Keeps the send running after the answer: the request answers as fast whether or not the e-mail matched. */
     defer(work: Promise<void>): void;
   } | null;
+  /** Remote access tokens (step 20), suspended during a lockdown; none until then. */
+  remoteTokens?: RemoteTokenHook;
 }
 
 /** A finished sign-in: what the route turns into cookies. */
@@ -156,6 +162,8 @@ export class AuthService {
   readonly twoStep: TwoStep;
   readonly passkeys: Passkeys;
   readonly setupCode: SetupCode;
+  /** The lockdown (step 16): what it changes in the sign-in lives here. */
+  readonly lockdown: Lockdown;
   /** Push devices end with the password that added them, and with the logout of their browser. */
   readonly #push: PushDevices;
   readonly #recovery: RecoveryLinks;
@@ -176,6 +184,7 @@ export class AuthService {
     this.setupCode = new SetupCode(deps.state, deps.secrets, this.#clock);
     this.#push = new PushDevices(deps.db, this.#clock);
     this.#recovery = new RecoveryLinks(deps.state, deps.secrets.sessionSecret, this.#clock);
+    this.lockdown = new Lockdown(deps.state, this.#clock);
   }
 
   /** The owner's e-mail: the one typed at the first access, else the OWNER_EMAIL secret, else none. */
@@ -344,12 +353,20 @@ export class AuthService {
       throw new AppError("INVALID_CREDENTIALS", undefined, this.turnstile ? { turnstileSiteKey: this.turnstile.siteKey } : undefined);
     }
     const weak = this.weakPassword(source, input.password);
+    // The lockdown's first hour (step 16): only a recovery code gets in, so without two-step sign-in nothing does.
+    const strict = this.lockdown.strict();
+    if (strict && !this.twoStep.enabled()) {
+      this.events.record("login_failure", client, { reason: "lockdown" });
+      throw new AppError("LOCKDOWN_ACTIVE", "auth.lockdown.strict");
+    }
     if (this.twoStep.enabled()) {
       // The password was right; the code comes next. The try stays a failure until then.
       const challenge = await this.twoStep.createChallenge({ loginAttempt: attempt, weakPassword: weak, network: client.network }, () => {
         if (!sameSource(source, this.passwordSource()) || !this.twoStep.enabled()) throw new AppError("INVALID_CREDENTIALS");
       });
       this.events.record("mfa_challenge", client);
+      // The first hour of a lockdown takes no passkey: only a recovery code (step 16).
+      if (strict) return { mfa: { ...challenge, passkey: false } };
       return { mfa: { ...challenge, passkey: this.passkeys.usableHere(this.relyingParty.rpId) } };
     }
     // Before the success is written, or this very sign-in would make the network look known.
@@ -369,11 +386,16 @@ export class AuthService {
    * networks pause every network that isn't the owner's.
    */
   completeMfa(token: string | null, code: string, client: ClientInfo, cookies: SignInCookies): Promise<SignedIn> {
-    return this.completeSecondStep(token, client, cookies, "code", async () => this.twoStep.verify(code, { recovery: true }));
+    // The lockdown's first hour (step 16): the authenticator's code is not enough, only a recovery code.
+    // Anything not shaped like one is refused before it is checked, so it costs no try and says why.
+    const strict = this.lockdown.strict();
+    if (strict && normalizeRecoveryCode(code) === null) return Promise.reject(new AppError("LOCKDOWN_ACTIVE", "auth.lockdown.strict"));
+    return this.completeSecondStep(token, client, cookies, "code", async () => this.twoStep.verify(code, { recovery: true, totp: !strict }));
   }
 
   /** The second step with a passkey: its signed answer to the request sent for this challenge. Wrong answers count like wrong codes. */
   completePasskey(token: string | null, response: PasskeyAssertion["response"], client: ClientInfo, cookies: SignInCookies): Promise<SignedIn> {
+    if (this.lockdown.strict()) return Promise.reject(new AppError("LOCKDOWN_ACTIVE", "auth.lockdown.strict"));
     return this.completeSecondStep(token, client, cookies, "passkey", async (row) => {
       const challenge = this.twoStep.takeWebauthnChallenge(row.id);
       const ok =
@@ -393,6 +415,7 @@ export class AuthService {
     await this.sync();
     this.requireConfigured();
     const row = await this.liveChallenge(token, null);
+    if (this.lockdown.strict()) throw new AppError("LOCKDOWN_ACTIVE", "auth.lockdown.strict");
     this.assertCodesAllowed(client, "passkey", await this.ownerBrowser(client, cookies));
     const live = row.webauthn_challenge !== null && (row.webauthn_expires_at ?? 0) > this.#clock() ? row.webauthn_challenge : undefined;
     const request = await this.passkeys.authenticationOptions(this.relyingParty, "preferred", live);
@@ -575,6 +598,11 @@ export class AuthService {
         // A used recovery code is always worth telling: it may mean the phone is in other hands.
         alert: recovery || (!first && (!known || newNetwork)),
       });
+      // A recovery code proves the owner past any doubt: this sign-in also ends a lockdown (step 16).
+      if (recovery && this.lockdown.clear()) {
+        (this.deps.remoteTokens ?? NO_REMOTE_TOKENS).resumeAll();
+        this.events.record("lockdown_exited", client, { session: row.id.slice(0, 16), reason: "recovery_code", alert: true });
+      }
       return true;
     });
     if (!current) throw new AppError("INVALID_CREDENTIALS");
@@ -629,6 +657,7 @@ export class AuthService {
       removeSetupCodeSecret: this.setupCode.configured() && this.ownerExists(),
       recentAuthUntil: until === null ? null : new Date(until).toISOString(),
       deadlines: this.sessions.deadlines(row),
+      lockdown: this.lockdown.active(),
     };
   }
 
@@ -657,6 +686,72 @@ export class AuthService {
   /** Sensitive actions (rule 7) call this: the password typed in the last 15 minutes of this session. */
   requireRecentAuth(row: SessionRow): void {
     if (this.sessions.recentAuthUntil(row) === null) throw new AppError("RECENT_AUTH_REQUIRED");
+  }
+
+  // ---------- Lockdown and the bot's security commands (step 16) ----------
+
+  /**
+   * /bloquear: in one transaction every web session ends and the remote
+   * tokens are suspended (not revoked); the alert goes on every channel. The
+   * routines with AI stop by themselves while it is on (the executor asks).
+   */
+  enterLockdown(linkId: string, onRelock: () => void = () => undefined): LockdownEntered {
+    return this.deps.db.transaction(() => {
+      const entered = this.lockdown.mark(linkId);
+      if (entered.status !== "entered") return entered;
+      // A relock suspends the bot's link in the same transaction: never a relock with the link still on.
+      if (entered.relock) onRelock();
+      this.sessions.revokeAll();
+      (this.deps.remoteTokens ?? NO_REMOTE_TOKENS).suspendAll();
+      this.events.record("telegram_lockdown", null, { reason: entered.relock ? "relock" : "", alert: true });
+      return entered;
+    });
+  }
+
+  /**
+   * "Sair do bloqueio": the password typed recently, plus a current code or a
+   * recovery code when two-step sign-in is on (both counted like any code).
+   * The tokens the lockdown suspended come back.
+   */
+  async exitLockdown(row: SessionRow, proof: LockdownExit, client: ClientInfo): Promise<void> {
+    this.requireRecentAuth(row);
+    if (!this.lockdown.active()) throw new AppError("CONFLICT", "auth.lockdown.none");
+    if (this.twoStep.enabled()) {
+      // The first hour takes only a recovery code, here too: a session opened in a race with /bloquear can't leave with the app's code.
+      if ("totp" in proof && this.lockdown.strict()) throw new AppError("LOCKDOWN_ACTIVE", "auth.lockdown.strict");
+      if ("totp" in proof) await this.checkCode(row, proof.totp, client, { recovery: false }, "lockdown");
+      else if ("recoveryCode" in proof) await this.checkCode(row, proof.recoveryCode, client, { recovery: true, totp: false }, "lockdown");
+      else throw new AppError("VALIDATION_FAILED", "auth.lockdown.codeRequired", { fields: ["totp"] });
+    }
+    this.deps.db.transaction(() => {
+      if (!this.lockdown.clear()) return;
+      (this.deps.remoteTokens ?? NO_REMOTE_TOKENS).resumeAll();
+      this.events.record("lockdown_exited", client, { session: row.id.slice(0, 16), alert: true });
+    });
+  }
+
+  /** What "Sair do bloqueio" asks for. */
+  lockdownStatus(): LockdownStatus {
+    return { lockdown: this.lockdown.info(), needsCode: this.twoStep.enabled() };
+  }
+
+  /** The open web sessions, newest use first (for /sessoes). */
+  openSessions(): SessionRow[] {
+    return this.sessions.list();
+  }
+
+  /** Ends one session (/sessoes, Encerrar) or all of them (/encerrar_sessoes); the alert only the app acknowledges. */
+  endSessions(id: string | null): number {
+    return this.deps.db.transaction(() => {
+      const ended = id === null ? this.sessions.revokeAll() : this.sessions.revoke(id);
+      if (ended > 0) this.events.record("telegram_sessions_ended", null, { reason: id === null ? "all" : "one", alert: true });
+      return ended;
+    });
+  }
+
+  /** Remote tokens active now (for /tokens; none before step 20). */
+  remoteTokensActive(): number {
+    return (this.deps.remoteTokens ?? NO_REMOTE_TOKENS).active();
   }
 
   // ---------- Password again, and changing it ----------
@@ -1040,7 +1135,7 @@ export class AuthService {
    * A current code from a signed-in session, under the network's limit and the
    * shared pause. INVALID_CREDENTIALS when wrong; the session stays.
    */
-  async checkCode(row: SessionRow, code: string, client: ClientInfo, options: { recovery: boolean }, reason: string): Promise<MfaFactor> {
+  async checkCode(row: SessionRow, code: string, client: ClientInfo, options: CodeOptions, reason: string): Promise<MfaFactor> {
     // The shared pause first: a paused network spends none of its own tries. A
     // live session already proves the owner's browser; the network must too.
     this.assertCodesAllowed(client, reason, this.limiter.isTrusted(client.network));

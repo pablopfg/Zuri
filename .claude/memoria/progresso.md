@@ -32,9 +32,16 @@ etapas ficam detalhadas; as mais antigas viram uma linha na tabela.
 | 14 | mesclada (02/11/2026) | #75 | Conversa e voz no Telegram: conversa do app pelo bot, HTML em blocos, voz até 5 min/5 MB, pergunta antes de baixar arquivo grande, terceiros como `<data>` |
 | 15a | mesclada (02/11/2026) | #84 | Trava de leitura do bot com `/destravar` (passkey na página `/aprovar` ou código por e-mail), `/nova_conversa`, 60 comandos/hora |
 | 15b | mesclada (02/11/2026) | #89 | Comandos rápidos sem IA (`/hoje`, `/tarefas`, `/nova`, `/feito`, `/lembrar`, `/nota`, `/buscar`, `/memoria`, `/rotinas`, `/avisos`, `/uso`, `/status`, `/backup`), gramática de datas, fotos e documentos viram nota, botão Destravar |
-| 16a | em revisão | — | Aprovações pelo bot: botão **Aprovar** com prévia do servidor, `/aprovar`, confirmação por passkey ou e-mail presa à proposta e ao hash, `TARGET_CHANGED`, alerta `telegram_approved` |
+| 16a | mesclada (02/11/2026) | #93 | Aprovações pelo bot: botão **Aprovar** com prévia do servidor, `/aprovar`, confirmação por passkey ou e-mail presa à proposta e ao hash, `TARGET_CHANGED`, alerta `telegram_approved` |
+| 16b | em revisão | — | Comandos de segurança (`/acessos`, `/sessoes`, `/encerrar_sessoes`, `/tokens`, `/pausar_rotinas`, `/bloquear`), modo de bloqueio com a tela **Sair do bloqueio**, rebloqueio que suspende o vínculo, **Confirmar que vi** no app |
 
 ## Últimas etapas (detalhe)
+
+### Etapa 16b · Comandos de segurança e modo de bloqueio
+- Entregou: `apps/agent/src/telegram/security.ts` (`TelegramSecurity`, `maskAddress`), `apps/agent/src/auth/lockdown.ts` (`Lockdown`, `RemoteTokenHook`/`NO_REMOTE_TOKENS`), recusas no login (`LOCKDOWN_ACTIVE`), na API (lista `WHILE_LOCKDOWN` em `api/app.ts`) e no bot (`#duringLockdown`), `GET /api/lockdown`, `POST /api/lockdown/exit`, `POST /api/notices/:id/acknowledge` (`acknowledgeInApp`, `Notice.ackInApp`), executor com problema `lockdown`, tela `LockdownPage.tsx` (no chunk de `PasswordChangePage`), menu v5. Plano: `docs/planos/etapa-16b-modo-de-bloqueio.md`.
+- Migrations: nenhuma (18 continua livre). Chaves em `zur_settings`: `lockdown_until` (fim da 1ª hora; ligado enquanto existir), `lockdown_source` (`telegram:<vínculo>[|relock]`, fica após a saída), `lockdown_exited_at`.
+- Decisões técnicas: rotinas com IA são puladas (não pausadas) durante o bloqueio; login com código de recuperação sai a qualquer momento; sem 2FA, sair pede só a senha recente; toques em avisos do Telegram durante o bloqueio não agem; textos da tela em `pt-BR-setup.ts` (orçamento do JS inicial: 139.076 B).
+- Para as próximas: a etapa 20 liga os tokens no `RemoteTokenHook` (`suspendAll`/`resumeAll`/`active`) e põe **Revogar** em `/tokens`; etapas 18 e 22 consultam `auth.lockdown.active()` para pausar MCP e workflows; rota nova que precise funcionar no bloqueio entra em `WHILE_LOCKDOWN`.
 
 ### Etapa 16a · Aprovações pelo bot
 - Entregou: `apps/agent/src/telegram/approvals.ts` (`TelegramApprovals`: prévia a partir do `snapshot` atual, cartão com **Aprovar**, `turnCards` até 3 por resposta, `/aprovar` até 5, `run` por `runApprovedAction`; `BOT_APPROVABLE` lista fechada), `targetState` em `tools/registry.ts`, `TelegramConfirmations.open(purpose, target)` com `pending_action_id`/`target_hash` e reaproveitamento do pedido aberto, `CommandButtons` com ação `approve` que não se gasta, rotas da página devolvendo 409 `TARGET_CHANGED`/`CONFLICT`, página `/aprovar` com a prévia, evento `telegram_approved` (origem `bot`, sem insistir), menu v4 com `/aprovar`. Plano: `docs/planos/etapa-16-aprovacoes-telegram.md`.
@@ -48,15 +55,9 @@ etapas ficam detalhadas; as mais antigas viram uma linha na tabela.
 - Decisões técnicas: respostas em texto puro com `disarm()`; fotos e documentos contam nos 60 comandos/h e pedem destravamento; Adiar = um dia adiante na mesma hora (vencida: amanhã; 09:00 sem prazo); lembrete do bot nasce com origem `app`; "semana que vem" sozinha = segunda seguinte; agenda, monitores, MCP, embeddings e idade do backup ficam para as etapas 17, 18, 19, 22 e 23.
 - Para a 16: botões novos entram em `COMMAND_ACTIONS` (`callbacks.ts`) e passam por `TelegramCommands.tap`; `OPEN_COMMANDS` diz o que não pede destravamento (a 16 soma `/bloquear`, `/pausar_rotinas`, `/encerrar_sessoes`); o menu sobe para a versão 4.
 
-### Etapa 15a · Destravar o bot do Telegram
-- Entregou: `apps/agent/src/telegram/{read-lock,confirmations}.ts` (`ReadLock`; `TelegramConfirmations`: link de uso único, código por e-mail, 5 erros/15 min travam 1 h), rotas `POST /api/approvals/telegram/{options,verify}` (`api/approvals.ts`, sem sessão, CSRF + limitador do login), página `/aprovar` (`pages/ApprovePage.tsx`, textos em `pt-BR-approve.ts`), cota `confirmations` no `EmailSender` (10/dia), eventos `telegram_unlocked` (aviso sem insistir, `insist: false`) e `telegram_confirm_locked`, menu v2 (`/ajuda`, `/destravar`, `/nova_conversa`), hook `afterUpdate` que manda os alertas de segurança logo depois de cada atualização. Plano: `docs/planos/etapa-15a-destravamento-telegram.md`.
-- Migrations: versão 17 (`zur_telegram_approvals`, com `reply_message_id` a mais que o contrato).
-- Decisões técnicas: a etapa 15 virou 15a e 15b; a trava provisória (conversa desligada) saiu; só uso com a leitura liberada renova o prazo; token no fragmento e só HMAC no banco; código só vale como resposta (`force_reply`) e a mensagem é apagada; chaves novas em `zur_settings` (`bot_unlocked_until`, `telegram_command_window`, `telegram_confirm_*`, `email_confirm_window`).
-- Para a 15b: o aviso de trava ainda é só texto com `/destravar`; a especificação prevê um botão nele (fazer com os comandos); comandos de consulta (`/hoje`, `/tarefas`, `/nova`, `/feito`, `/lembrar`, `/nota`, `/buscar`, `/memoria`, `/rotinas`, `/avisos`, `/uso`, `/status`), fotos e documentos (N4) e `/backup`; todo comando de leitura passa por `#lock.locked()`; somar ao `MENU` sobe `TELEGRAM_MENU_VERSION` (hoje 2); o limite de 60/h já vale. Para a 16: `TelegramConfirmations` aceita outros propósitos (`TELEGRAM_CONFIRM_PURPOSES`), a página `/aprovar` já trata o resultado por propósito; trocar **Abrir no app** por Aprovar.
-
 ### Notas que continuam valendo
 - Um alarme só (P8): use `AutomationService.rearm()`/`otherDue`, nunca outro alarme. O runner aceita `context: "scheduled"` (só leitura, sem dono presente). Toda IA por `agent.ai()`.
-- JS inicial em ~138,9 kB (teto 139): tela nova sob demanda, textos via `addMessages`.
+- JS inicial em ~139,08 kB (teto 139,1): tela nova sob demanda, textos via `addMessages`; tela que trava o app vai no chunk de `PasswordChangePage`.
 
 <!-- Modelo, até 10 linhas por etapa:
 ### Etapa NN · <nome>

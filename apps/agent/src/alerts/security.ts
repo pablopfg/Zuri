@@ -6,7 +6,16 @@ import type { AlertService } from "./service.ts";
  * Events the bot itself causes: their alert stops insisting only when answered
  * in the app, never through the bot (spec, "Reconhecimento cruzado").
  */
-const BOT_CAUSED: readonly SecurityAlertEvent[] = ["telegram_group_linked", "telegram_unlocked", "telegram_confirm_locked", "telegram_approved"];
+export const BOT_CAUSED: readonly SecurityAlertEvent[] = [
+  "telegram_group_linked",
+  "telegram_unlocked",
+  "telegram_confirm_locked",
+  "telegram_approved",
+  // Step 16b: /bloquear, /encerrar_sessoes (and Encerrar in /sessoes), /pausar_rotinas.
+  "telegram_lockdown",
+  "telegram_sessions_ended",
+  "telegram_routines_paused",
+];
 
 /**
  * Events told once, without insisting: the owner just confirmed with a passkey

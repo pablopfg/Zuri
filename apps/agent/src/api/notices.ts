@@ -40,6 +40,14 @@ export function registerNoticeRoutes(app: Hono<ApiEnv>, deps: () => NoticeDeps, 
     return Response.json(deps().alerts.markRead(id));
   });
 
+  // A security alert the bot caused stops only here, with the password typed recently (step 16, "Reconhecimento cruzado").
+  app.post("/notices/:id/acknowledge", (c) => {
+    const id = noticeId(c.req.param("id"));
+    const { alerts, auth } = deps();
+    auth.requireRecentAuth(c.get("session"));
+    return Response.json(alerts.acknowledgeInApp(id));
+  });
+
   app.post("/notices/:id/mute", (c) => Response.json(deps().alerts.mute(noticeId(c.req.param("id")))));
 
   // Deleting a security alert asks for the password typed recently: whoever took the session can't erase it.

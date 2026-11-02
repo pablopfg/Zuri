@@ -85,4 +85,5 @@ export const PROBLEM_LABEL: Record<AutomationRunProblem, MessageKey> = {
   ai_unavailable: "web.automations.problem.ai_unavailable",
   interrupted: "web.automations.problem.interrupted",
   failed: "web.automations.problem.failed",
+  lockdown: "web.automations.problem.lockdown",
 };
