@@ -271,7 +271,7 @@ O orçamento de cada cota está em [docs/arquitetura/orcamento-free-tier.md](doc
 | | 14 | Conversa e voz | ✅ |
 | | 15a | Trava de leitura e `/destravar` | ✅ |
 | | 15b | Comandos administrativos | ✅ |
-| | 16 | Aprovações seguras e modo de bloqueio | ⬜ |
+| | 16 | Aprovações seguras e modo de bloqueio | 🚧 |
 | **D · Integrações** | 17 | Busca semântica | ⬜ |
 | | 18 | Servidores MCP remotos | ⬜ |
 | | 19 | Google Agenda | ⬜ |
