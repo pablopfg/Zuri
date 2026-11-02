@@ -1,4 +1,4 @@
-# Prompts das etapas seguintes (1 a 25)
+# Prompts das etapas seguintes (1 a 25, com a 19b)
 
 Depois que o PR da etapa 0 estiver mesclado, envie um prompt por vez, na ordem.
 
@@ -16,7 +16,7 @@ Depois que o PR da etapa 0 estiver mesclado, envie um prompt por vez, na ordem.
 | A · Fundação | 1 → 2 → 3 → 4 → 5 | Não |
 | B · Assistente na web | 6, 7, 8 → 9 → 10 → 11 | 6, 7 e 8 entre si |
 | C · Bot do Telegram | 12 → 13, 14, 15 → 16 | 13 e 14 entre si, depois da 12 |
-| D · Paridade | 17, 18, 19, 20, 22 (21 só com OK) | Todas entre si, depois da 11 |
+| D · Paridade | 17, 18, 19 → 19b, 20, 22 (21 só com OK) | Todas entre si, depois da 11; a 19b depois da 19 |
 | E · Fechamento | 23 → 24 → 25 | A 24 pode começar depois da 5 |
 
 ---
@@ -242,6 +242,24 @@ Execute a etapa 19 da especificação ("Google Agenda").
 
 - delete_calendar_event é proposta. Agendas só leitura não aceitam escrita (teste). Eventos da agenda são dados.
 - /hoje no bot passa a incluir a agenda. As rotinas de briefing (07:00) e fechamento (19:00) usam o fuso do dono.
+- Publique o app OAuth como "Em produção" sem pedir verificação e explique ao dono a tela "o Google não verificou este app": em "Teste", o refresh token de escopo sensível vence em 7 dias e a agenda pararia toda semana (docs/planos/google-contatos.md, seção 4). Deixe a conexão Google pronta para receber o escopo de contatos da etapa 19b por autorização incremental.
+- Fluxo completo de etapa, PR para develop, link e resultado dos testes.
+```
+
+### Etapa 19b · Google Contatos
+
+```text
+Execute a etapa 19b da especificação ("Google Contatos"). Ela vem depois da 19 e usa a mesma conexão Google.
+
+▶ Antes, você fornece: ligar a People API no mesmo projeto do Google Cloud da agenda e acrescentar o escopo de contatos na tela de consentimento. Me diga o passo a passo; nenhum segredo novo.
+
+- Leia docs/planos/google-contatos.md inteiro. Confira em .claude/memoria/decisoes.md as respostas do Pablo às perguntas da seção 2; o que não tiver resposta segue a recomendação do plano.
+- Confirme na documentação oficial da People API os nomes atuais de contactGroups.list, people.connections.list, personFields, syncToken e o erro EXPIRED_SYNC_TOKEN. Endereços do Google fixos no código, prazo de 15 s em toda chamada.
+- Só leitura (contacts.readonly). Só contatos das etiquetas escolhidas na tela; IA, bot e token remoto não mudam a seleção (teste para cada caminho).
+- Migration só de acréscimo com as tabelas da seção 7. search_contacts e get_contact como read, resultado em <data source="contact">, teste de injeção pela observação do contato.
+- Automações de aniversários e datas especiais no fuso do dono e o gatilho de contato novo na etiqueta, sem disparar na primeira leitura completa.
+- Nenhum nome, telefone, e-mail, observação ou nome de etiqueta em log; contatos fora do backup; desconectar revoga o token e apaga a cópia.
+- Testes da seção 13, números da seção 10 em free-tier-budget.test.ts, capturas das telas novas.
 - Fluxo completo de etapa, PR para develop, link e resultado dos testes.
 ```
 

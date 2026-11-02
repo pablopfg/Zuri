@@ -173,7 +173,7 @@ O que está na `develop` hoje, etapa por etapa. "extra" marca melhorias feitas f
 | :---: | --- | --- | :---: |
 | 📲 | **Push e e-mail** | Os avisos também no aparelho e por e-mail, com canais por categoria, recuperação de senha por e-mail e prioridade que aprende. | 11 |
 | 🤖 | **Bot do Telegram** | Painel de administração no bolso: consultas sem IA, conversa por texto e voz (arquivo acima do limite só com a sua confirmação), aprovações com passkey e modo de bloqueio. | 12–16 |
-| 🔌 | **Integrações** | Busca semântica, servidores MCP, Google Agenda, acesso remoto para o n8n e monitor de sites, todos opcionais. | 17–22 |
+| 🔌 | **Integrações** | Busca semântica, servidores MCP, Google Agenda, Google Contatos por etiqueta, acesso remoto para o n8n e monitor de sites, todos opcionais. | 17–22 |
 | 💾 | **Backup e instalação** | Backup e importação, guia de instalação só pelo navegador e auditoria final. | 23–25 |
 
 ## 🧭 Como funciona
@@ -264,6 +264,7 @@ O orçamento de cada cota está em [docs/arquitetura/orcamento-free-tier.md](doc
 | **D · Integrações** | 17 | Busca semântica | ⬜ |
 | | 18 | Servidores MCP remotos | ⬜ |
 | | 19 | Google Agenda | ⬜ |
+| | 19b | Google Contatos | ⬜ |
 | | 20 | Acesso remoto e eventos | ⬜ |
 | | 21 | Modelos pagos ⚠️ | ⬜ |
 | | 22 | Workflows (monitor de sites) | ⬜ |
