@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { type Notice, ptBRAlerts } from "@zuri/shared";
-import { BellOff, Check, Trash2 } from "lucide-react";
+import { BellOff, Check, Trash2, X } from "lucide-react";
 import { useEffect } from "react";
 import { NOTICES_KEY, setUnread, useNotices } from "../hooks/notices.ts";
 import { api, errorMessage } from "../lib/api.ts";
@@ -68,6 +68,15 @@ export function NoticesPanel({ onClose, navigate }: { onClose: () => void; navig
 
   return (
     <div className="space-y-4">
+      {/* Closes from the corner, as in the big chat apps; the <dialog> is fixed, so it anchors this. */}
+      <button
+        type="button"
+        className="absolute right-3 top-3 flex h-11 w-11 items-center justify-center rounded-lg text-fg-muted hover:bg-raised hover:text-fg"
+        aria-label={t("web.close")}
+        onClick={onClose}
+      >
+        <X className="h-5 w-5" aria-hidden />
+      </button>
       {query.isError && <ErrorNotice error={query.error} onRetry={() => void query.refetch()} />}
       {!query.isError && notices.length === 0 && (
         <EmptyState icon={<BellOff className="h-6 w-6" />} title={t("web.notices.emptyTitle")}>
@@ -107,7 +116,7 @@ export function NoticesPanel({ onClose, navigate }: { onClose: () => void; navig
           )}
         </>
       )}
-      <div className="flex flex-wrap justify-between gap-2">
+      <div className="flex">
         <Button
           variant="ghost"
           onClick={() => {
@@ -116,9 +125,6 @@ export function NoticesPanel({ onClose, navigate }: { onClose: () => void; navig
           }}
         >
           {t("web.notices.settings")}
-        </Button>
-        <Button variant="secondary" onClick={onClose}>
-          {t("web.close")}
         </Button>
       </div>
     </div>

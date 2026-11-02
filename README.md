@@ -12,7 +12,7 @@
 [![Licença: MIT](https://img.shields.io/badge/licen%C3%A7a-MIT-0b0f19)](LICENSE)
 [![Roda na Cloudflare](https://img.shields.io/badge/roda%20na-Cloudflare-f38020?logo=cloudflare&logoColor=white)](https://developers.cloudflare.com/workers/)
 [![Plano Free](https://img.shields.io/badge/plano%20Free-compat%C3%ADvel-22c55e)](#-plano-free-sem-surpresa-na-fatura)
-[![Etapas](https://img.shields.io/badge/etapas-10%20de%2026-22c55e)](#️-mapa-das-etapas)
+[![Etapas](https://img.shields.io/badge/etapas-10%20de%2028-22c55e)](#️-mapa-das-etapas)
 [![Sem telemetria](https://img.shields.io/badge/telemetria-nenhuma-0b0f19)](#-segurança-e-privacidade)
 [![Node.js 24+](https://img.shields.io/badge/node-24%2B-339933?logo=nodedotjs&logoColor=white)](.nvmrc)
 
@@ -24,7 +24,7 @@ de um Durable Object e conversa com você pelo navegador e, em breve, pelo Teleg
 </div>
 
 > [!NOTE]
-> **Em construção.** A Zuri sai em 26 etapas, uma por PR, a partir da [especificação](docs/especificacao.md). As etapas 0 a 11 estão na `develop`, da conversa com o agente às automações e à central de avisos. O [mapa das etapas](#️-mapa-das-etapas) mostra o que já existe e o que vem a seguir; o estado detalhado fica em [`progresso.md`](.claude/memoria/progresso.md).
+> **Em construção.** A Zuri sai em 28 etapas, uma por PR, a partir da [especificação](docs/especificacao.md). As etapas 0 a 11 estão na `develop`, da conversa com o agente às automações e à central de avisos. O [mapa das etapas](#️-mapa-das-etapas) mostra o que já existe e o que vem a seguir; o estado detalhado fica em [`progresso.md`](.claude/memoria/progresso.md).
 
 ## Sumário
 
@@ -272,6 +272,7 @@ O orçamento de cada cota está em [docs/arquitetura/orcamento-free-tier.md](doc
 | | 22 | Workflows (monitor de sites) | ⬜ |
 | **E · Fechamento** | 23 | Backup, importação e retenção | ⬜ |
 | | 24 | Deploy e guia de instalação | ⬜ |
+| | 26 | Revisão de textos e experiência (antes da 25) | ⬜ |
 | | 25 | Auditoria final e testes de ponta a ponta | ⬜ |
 
 Além das etapas, PRs de melhoria já trouxeram o Turnstile em todo login, a página Acessos, o menu recolhível, a revisão de design e o orçamento de performance. Tudo isso está no [CHANGELOG](CHANGELOG.md).
@@ -327,7 +328,7 @@ scripts/        Lint de i18n, ícones, tamanho do pacote e capturas do README
 
 | Documento | Assunto |
 | --- | --- |
-| [Especificação](docs/especificacao.md) | Escopo, contratos e as 26 etapas |
+| [Especificação](docs/especificacao.md) | Escopo, contratos e as 28 etapas |
 | [Arquitetura](docs/arquitetura.md) | Worker, Durable Object, portões e desenvolvimento local |
 | [Segurança](docs/seguranca.md) | Login, sessões, 2FA, passkeys e o modelo de ameaças |
 | [Interface](docs/interface.md) | Telas, acessibilidade e a identidade visual Sinal |
