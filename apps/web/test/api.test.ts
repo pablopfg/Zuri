@@ -111,6 +111,6 @@ describe("api", () => {
 
   it("answers undefined for a 202 without a body (the recovery request)", async () => {
     stubFetch(new Response(null, { status: 202 }));
-    await expect(api("/auth/recovery", { method: "POST", body: { email: "dono@exemplo.com.br" } })).resolves.toBeUndefined();
+    await expect(api("/auth/recover/request", { method: "POST", body: { email: "dono@exemplo.com.br" } })).resolves.toBeUndefined();
   });
 });

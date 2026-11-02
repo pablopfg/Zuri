@@ -1,6 +1,8 @@
 import { hmacSha256Hex, RECOVERY_LIMITS, randomToken, timingSafeEqualText } from "@zuri/shared";
 import type { InternalState } from "../db/internal-state.ts";
 
+const DAY_MS = 24 * 3600_000;
+
 interface StoredLink {
   /** HMAC of the token: the database never holds a link that works. */
   hash: string;
@@ -49,12 +51,26 @@ export class RecoveryLinks {
     return null;
   }
 
-  /** A new link; the one before stops working. */
-  async issue(): Promise<{ token: string; expiresAt: number }> {
+  /** When links went out in the last 24 hours. */
+  private issued(now: number): number[] {
+    const raw = this.state.get<string>("recovery_issued");
+    return (typeof raw === "string" ? raw.split(",").map(Number) : []).filter((at) => Number.isFinite(at) && at > now - DAY_MS);
+  }
+
+  /**
+   * A new link, or null while the day's links are spent or the last one went out
+   * less than 10 minutes ago (the owner's link keeps working). The one before stops working.
+   */
+  async issue(): Promise<{ token: string; expiresAt: number } | null> {
+    const now = this.clock();
+    const issued = this.issued(now);
+    if (issued.length >= RECOVERY_LIMITS.linksPerDay || (issued.at(-1) ?? 0) > now - RECOVERY_LIMITS.linkGapMs) return null;
     const token = randomToken(32);
-    const expiresAt = this.clock() + RECOVERY_LIMITS.ttlMs;
-    const stored: StoredLink = { hash: await this.hash(token), expiresAt, wrong: 0 };
+    const expiresAt = now + RECOVERY_LIMITS.ttlMs;
+    const hash = await this.hash(token);
+    const stored: StoredLink = { hash, expiresAt, wrong: 0 };
     this.state.set("recovery_link", JSON.stringify(stored));
+    this.state.set("recovery_issued", [...issued, now].join(","));
     return { token, expiresAt };
   }
 
@@ -68,13 +84,25 @@ export class RecoveryLinks {
     }
   }
 
-  /** Whether this token is the live link (right, not expired, not used). The comparison takes the same time however much matched. */
-  async valid(token: string): Promise<boolean> {
-    // Hashed first, read after: nothing can change the stored link between this read and the caller's next step.
-    const given = await this.hash(token);
+  /** The token's HMAC, to check against the stored link (with `matches`) without another await. */
+  fingerprint(token: string): Promise<string> {
+    return this.hash(token);
+  }
+
+  /**
+   * Whether this fingerprint is the live link (right, not expired, not used). Synchronous, so a
+   * caller can check it inside the transaction that uses the link. The comparison takes the same
+   * time however much matched.
+   */
+  matches(fingerprint: string): boolean {
     const stored = this.stored();
     if (!stored || stored.expiresAt <= this.clock()) return false;
-    return timingSafeEqualText(given, stored.hash);
+    return timingSafeEqualText(fingerprint, stored.hash);
+  }
+
+  /** Whether this token is the live link. */
+  async valid(token: string): Promise<boolean> {
+    return this.matches(await this.hash(token));
   }
 
   /** A wrong code given with the link; the fifth ends it. Returns the tries left. */

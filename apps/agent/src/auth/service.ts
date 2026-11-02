@@ -85,7 +85,12 @@ export interface AuthDeps {
    * E-mail for the password recovery (step 11c): whether it can send now, and
    * the send of a link (its token and when it ends). Null where it isn't wired.
    */
-  recoveryMail?: { available(): boolean; send(token: string, expiresAt: number): Promise<boolean> } | null;
+  recoveryMail?: {
+    available(): boolean;
+    send(token: string, expiresAt: number): Promise<boolean>;
+    /** Keeps the send running after the answer: the request answers as fast whether or not the e-mail matched. */
+    defer(work: Promise<void>): void;
+  } | null;
 }
 
 /** A finished sign-in: what the route turns into cookies. */
@@ -785,12 +790,22 @@ export class AuthService {
     const matches = await this.checkEmail(input.email);
     const mail = this.deps.recoveryMail;
     if (!matches || !this.ownerExists() || !mail?.available()) {
-      this.events.record("recovery_requested", client, { reason: matches ? "email_off" : "wrong_email" });
+      // Folded per network, and into one row under a flood: refusals can't push the log's history out.
+      this.events.record("recovery_requested", client, { reason: matches ? "email_off" : "wrong_email", everyNetwork: this.limiter.underPressure() });
       return;
     }
     const link = await this.#recovery.issue();
-    const sent = await mail.send(link.token, link.expiresAt);
-    this.events.record("recovery_requested", client, { reason: sent ? "link_sent" : "link_failed" });
+    if (!link) {
+      this.events.record("recovery_requested", client, { reason: "link_held" });
+      return;
+    }
+    // Not awaited: waiting on the e-mail service would make the owner's address answer slower than any other.
+    mail.defer(
+      mail
+        .send(link.token, link.expiresAt)
+        .catch(() => false)
+        .then((sent) => this.events.record("recovery_requested", client, { reason: sent ? "link_sent" : "link_failed" })),
+    );
   }
 
   /** Whether a link still works, and whether its form needs a code. Every refusal is the same "expired". */
@@ -809,12 +824,15 @@ export class AuthService {
    */
   async completeRecovery(input: RecoveryComplete, client: ClientInfo): Promise<void> {
     await this.sync();
-    if (!(await this.#recovery.valid(input.token))) throw this.recoveryExpired();
+    const fingerprint = await this.#recovery.fingerprint(input.token);
+    if (!this.#recovery.matches(fingerprint)) throw this.recoveryExpired();
+    // The password first: a weak or leaked one must not spend a one-time code.
+    const hash = await this.acceptablePassword(input.password, this.personalWords());
     if (this.twoStep.enabled()) {
-      if (!input.code) throw new AppError("VALIDATION_FAILED", "auth.recovery.codeRequired", { fields: ["code"] });
+      if (!input.totp) throw new AppError("VALIDATION_FAILED", "auth.recovery.codeRequired", { fields: ["totp"] });
       this.assertCodesAllowed(client, "recovery", false);
       const reserved = this.twoStep.reserveWrongCode();
-      const factor = await this.twoStep.verify(input.code, { recovery: true });
+      const factor = await this.twoStep.verify(input.totp, { recovery: true });
       if (!factor) {
         this.noteWrongSecondStep(client, "recovery", reserved.reachedDailyCap);
         const left = this.#recovery.wrongCode();
@@ -824,10 +842,12 @@ export class AuthService {
       this.twoStep.releaseWrongCode(reserved.at);
       if (factor === "recovery_code") this.events.record("recovery_code_used", client, { reason: "recovery", alert: true });
     }
-    const hash = await this.acceptablePassword(input.password, this.personalWords());
-    // Read again after the awaits: a second form with the same link, or a new request, may have won.
-    if (!(await this.#recovery.valid(input.token))) throw this.recoveryExpired();
+    // Checked again inside the transaction that uses it: a second form with the same link, or a new
+    // request, may have won during the awaits, and only one of them changes the password.
+    let used = false;
     this.deps.db.transaction(() => {
+      if (!this.#recovery.matches(fingerprint)) return;
+      used = true;
       this.deps.state.set("auth_password_hash", hash);
       this.deps.state.delete("auth_password_change_required");
       this.sessions.revokeAll();
@@ -837,10 +857,11 @@ export class AuthService {
       this.#recovery.clear();
       this.events.record("password_recovered", client, { alert: true });
     });
+    if (!used) throw this.recoveryExpired();
   }
 
   private recoveryExpired(): AppError {
-    return new AppError("INVALID_CREDENTIALS", "auth.recovery.expired", { recovery: "expired" });
+    return new AppError("RECOVERY_EXPIRED", "auth.recovery.expired");
   }
 
   // ---------- First access and recovery with the installation code ----------

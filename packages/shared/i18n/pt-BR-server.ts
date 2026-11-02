@@ -83,7 +83,7 @@ export const ptBRServer = {
   "notice.email.open": "Abrir na Zuri: {link}",
   "notice.email.footer": "A Zuri nunca pede a sua senha por e-mail.",
   "notice.email.recovery.subject": "Zuri: link para criar uma senha nova",
-  "notice.email.recovery.body": "Alguém pediu para criar uma senha nova na Zuri. Se foi você, abra o link abaixo. Ele vale por 30 minutos e funciona uma vez só.\n\n{link}\n\nSe não foi você, pode ignorar este e-mail. A sua senha continua a mesma.",
+  "notice.email.recovery.body": "Alguém pediu para criar uma senha nova na Zuri. Se foi você, abra o link abaixo. Ele vale por {minutes} minutos e funciona uma vez só.\n\n{link}\n\nSe não foi você, pode ignorar este e-mail. A sua senha continua a mesma.",
   "auth.recovery.expired": "Este link não vale mais. Peça um novo na tela de entrar.",
   "auth.recovery.codeRequired": "Digite o código do app autenticador ou um código de recuperação.",
   "notice.security.password_recovered.title": "Senha trocada pelo e-mail",

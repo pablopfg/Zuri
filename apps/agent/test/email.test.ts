@@ -85,7 +85,7 @@ describe("the e-mail sender", () => {
 
   it("accepts only a plain address", () => {
     expect(emailAddress(" zuri@exemplo.com.br ")).toBe("zuri@exemplo.com.br");
-    for (const bad of ["", "zuri", "zuri@exemplo", "Zuri <zuri@exemplo.com.br>", "a@b.com,c@d.com", "a b@exemplo.com.br", `${"a".repeat(250)}@exemplo.com.br`, undefined, null]) {
+    for (const bad of ["", "zuri", "zuri@exemplo", "Zuri <zuri@exemplo.com.br>", "a@exemplo.com.br,b@exemplo.com.br", "a b@exemplo.com.br", `${"a".repeat(250)}@exemplo.com.br`, undefined, null]) {
       expect(emailAddress(bad), String(bad)).toBeNull();
     }
   });
@@ -164,5 +164,6 @@ describe("disarmLinks", () => {
   it("breaks every address and host, and leaves plain words alone", () => {
     expect(disarmLinks("Abra http://a.exemplo.com.br/x ou HTTPS://b.io")).toBe("Abra hxxp://a[.]exemplo[.]com[.]br/x ou hxxps://b[.]io");
     expect(disarmLinks("Fim. Comprar pão, leite e café às 7.30")).toBe("Fim. Comprar pão, leite e café às 7.30");
+    expect(disarmLinks("Veja exemplo.рф, exemplo。com e 192.0.2.10/x")).toBe("Veja exemplo[.]рф, exemplo[.]com e 192[.]0[.]2[.]10/x");
   });
 });

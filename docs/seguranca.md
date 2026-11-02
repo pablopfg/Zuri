@@ -121,10 +121,18 @@ Decisão do Pablo de 31/10/2026; plano completo em
 Etapa 11c. Só funciona com o e-mail configurado (`SEND_EMAIL`, `ALERT_EMAIL_FROM`
 e o e-mail do dono); sem ele, a página aponta para o código de instalação.
 
-- `POST /api/auth/recovery` responde 202 para qualquer e-mail, sem dizer se é o
-  do dono. Antes de olhar o e-mail, passa pelo limite de 3 pedidos por rede em
+- `POST /api/auth/recover/request` responde 202 para qualquer e-mail, sem dizer
+  se é o do dono, e no mesmo tempo: o envio do e-mail continua depois da
+  resposta. Antes de olhar o e-mail, passa pelo limite de 3 pedidos por rede em
   15 minutos (no máximo 200 redes lembradas) e pela verificação de robô, que
   falha fechada como no login.
+- De todas as redes juntas, saem no máximo 3 links em 24 horas, com pelo menos
+  10 minutos entre um e outro. Um pedido fora disso não envia nada e mantém o
+  link anterior (motivo "link anterior mantido" no registro de acessos). Assim,
+  quem sabe o e-mail do dono não gasta os 10 e-mails do dia nem fica trocando o
+  link dele. Risco aceito: essa pessoa pode gastar os 3 links do dia; aí a
+  recuperação fica com o código de instalação até o dia seguinte. Um link cujo
+  envio falhou substitui o anterior.
 - O link leva 32 bytes aleatórios no fragmento (`/recuperar-senha#…`): o
   fragmento não vai em nenhuma requisição, então o token não aparece em log
   nenhum, e a página o tira da barra de endereço assim que o lê. O servidor

@@ -29,14 +29,10 @@ test("without e-mail set up, the page points to the installation code @mobile", 
 });
 
 test("asks for a link with the robot check, and answers the same whatever the e-mail @mobile", async ({ page }) => {
-  await page.route("**/api/auth/recovery", (route) => {
-    if (route.request().method() === "GET") return route.fulfill({ json: { available: true } });
-    return route.fallback();
-  });
+  await page.route("**/api/auth/recover", (route) => route.fulfill({ json: { available: true } }));
   const sent: { email: string; turnstileToken?: string }[] = [];
   let calls = 0;
-  await page.route("**/api/auth/recovery", (route) => {
-    if (route.request().method() !== "POST") return route.fallback();
+  await page.route("**/api/auth/recover/request", (route) => {
     sent.push(route.request().postDataJSON());
     calls += 1;
     if (calls === 1) return refusal(route, 429, "RATE_LIMITED", "Muitas tentativas. Espere um pouco.", { retryAfter: 2 });
@@ -68,12 +64,12 @@ test("asks for a link with the robot check, and answers the same whatever the e-
 
 test("a link with two-step sign-in asks for a code, survives a wrong one and saves the new password @mobile", async ({ page }) => {
   const checked: string[] = [];
-  await page.route("**/api/auth/recovery/check", (route) => {
+  await page.route("**/api/auth/recover/check", (route) => {
     checked.push(route.request().postDataJSON().token);
     return route.fulfill({ json: { secondStep: true } });
   });
-  const tries: { token: string; password: string; code?: string }[] = [];
-  await page.route("**/api/auth/recovery/complete", (route) => {
+  const tries: { token: string; password: string; totp?: string }[] = [];
+  await page.route("**/api/auth/recover/confirm", (route) => {
     tries.push(route.request().postDataJSON());
     if (tries.length === 1) return refusal(route, 401, "INVALID_CREDENTIALS", "Código incorreto.", { attemptsLeft: 4 });
     return route.fulfill({ status: 204, body: "" });
@@ -102,14 +98,25 @@ test("a link with two-step sign-in asks for a code, survives a wrong one and sav
   await code.fill("123456");
   await page.getByRole("button", { name: "Salvar a senha nova" }).click();
   await expect(page.getByRole("heading", { name: "Senha nova salva" })).toBeFocused();
-  expect(tries[1]).toEqual({ token: TOKEN, password: PASSWORD, code: "123456" });
+  expect(tries[1]).toEqual({ token: TOKEN, password: PASSWORD, totp: "123456" });
   await page.getByRole("link", { name: "Ir para a tela de entrada" }).click();
   await expect(page).toHaveURL(/\/entrar$/);
 });
 
+test("a link pasted into the open page is read too", async ({ page }) => {
+  await page.route("**/api/auth/recover", (route) => route.fulfill({ json: { available: true } }));
+  await page.route("**/api/auth/recover/check", (route) => route.fulfill({ json: { secondStep: false } }));
+  await page.goto("/recuperar-senha");
+  await expect(page.getByRole("heading", { level: 1, name: "Esqueci minha senha" })).toBeVisible();
+  await page.goto(`/recuperar-senha#${TOKEN}`);
+  await expect(page.getByRole("heading", { name: "Crie uma senha nova" })).toBeFocused();
+  await expect(page).toHaveURL(/\/recuperar-senha$/);
+  await expect(page.getByLabel("Código do app autenticador ou de recuperação")).toHaveCount(0);
+});
+
 test("a link that no longer works offers a new one @mobile", async ({ page }) => {
-  await page.route("**/api/auth/recovery/check", (route) =>
-    refusal(route, 401, "INVALID_CREDENTIALS", "Este link não vale mais. Peça um novo na tela de entrar.", { recovery: "expired" }),
+  await page.route("**/api/auth/recover/check", (route) =>
+    refusal(route, 410, "RECOVERY_EXPIRED", "Este link não vale mais. Peça um novo na tela de entrar."),
   );
   await page.goto(`/recuperar-senha#${TOKEN}`);
   await expect(page.getByRole("heading", { name: "Este link não vale mais" })).toBeFocused();

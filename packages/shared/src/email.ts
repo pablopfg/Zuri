@@ -29,6 +29,13 @@ export const RECOVERY_LIMITS = {
   codeTries: 5,
   /** Networks remembered for the limit; past this the oldest go (a flood can't grow the row). */
   networksKept: 200,
+  /**
+   * Links sent in any 24 hours, from every network together, and the shortest gap between two:
+   * someone who knows the owner's e-mail can't spend the day's e-mails (and the security
+   * alerts' reserve) or keep replacing the owner's link.
+   */
+  linksPerDay: 3,
+  linkGapMs: 10 * 60_000,
 } as const;
 
 /** A recovery token: 32 random bytes, base64url. It travels in the link's fragment, never in a server log. */
@@ -37,7 +44,7 @@ export const RECOVERY_PATH = "/recuperar-senha";
 
 const token = /* @__PURE__ */ z.string().regex(/^[A-Za-z0-9_-]{43}$/);
 
-/** POST /api/auth/recovery: the e-mail typed and the robot check. Always the same answer. */
+/** POST /api/auth/recover/request: the e-mail typed and the robot check. Always the same answer. */
 export const recoveryRequestSchema = /* @__PURE__ */ z
   .object({
     email: z.string().max(MAX_EMAIL_LENGTH),
@@ -46,16 +53,17 @@ export const recoveryRequestSchema = /* @__PURE__ */ z
   .strict();
 export type RecoveryRequest = z.infer<typeof recoveryRequestSchema>;
 
-/** POST /api/auth/recovery/check: whether a link still works, and whether it needs a code. */
+/** POST /api/auth/recover/check: whether a link still works, and whether it needs a code. */
 export const recoveryCheckSchema = /* @__PURE__ */ z.object({ token }).strict();
 export type RecoveryCheck = z.infer<typeof recoveryCheckSchema>;
 
-/** POST /api/auth/recovery/complete: the new password, and a code when two-step sign-in is on. */
+/** POST /api/auth/recover/confirm: the new password, and a code when two-step sign-in is on. */
 export const recoveryCompleteSchema = /* @__PURE__ */ z
   .object({
     token,
     password: z.string().min(1).max(MAX_PASSWORD_INPUT_LENGTH),
-    code: z.string().min(1).max(64).optional(),
+    /** The authenticator's code or a recovery code (the contract's name for both). */
+    totp: z.string().min(1).max(64).optional(),
   })
   .strict();
 export type RecoveryComplete = z.infer<typeof recoveryCompleteSchema>;
@@ -78,7 +86,12 @@ export type RecoveryLink = z.infer<typeof recoveryLinkSchema>;
  * safety): "http" turns "hxxp" and the dots of a host turn "[.]".
  */
 export function disarmLinks(text: string): string {
-  return text
-    .replace(/\bhttp(s?):\/\//gi, (_, s: string) => `hxxp${s.toLowerCase()}://`)
-    .replace(/\b((?:[a-z0-9-]+\.)+[a-z]{2,})\b/gi, (host: string) => host.replace(/\./g, "[.]"));
+  return (
+    text
+      .replace(/\bhttp(s?):\/\//gi, (_, s: string) => `hxxp${s.toLowerCase()}://`)
+      // Any script's letters, and the full-width and ideographic dots some readers turn into links too.
+      .replace(/(?<![\p{L}\p{N}-])(?:[\p{L}\p{N}-]+[.。．｡])+\p{L}{2,}(?![\p{L}\p{N}-])/gu, (host: string) => host.replace(/[.。．｡]/g, "[.]"))
+      // A bare IPv4 address, with or without a path after it.
+      .replace(/(?<![\d.])\d{1,3}(?:\.\d{1,3}){3}(?![\d.])/g, (ip: string) => ip.replace(/\./g, "[.]"))
+  );
 }

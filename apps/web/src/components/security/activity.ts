@@ -65,6 +65,7 @@ const REASON_LABEL: Record<string, MessageKey> = {
   email_off: "web.accessLog.reason.email_off",
   link_sent: "web.accessLog.reason.link_sent",
   link_failed: "web.accessLog.reason.link_failed",
+  link_held: "web.accessLog.reason.link_held",
 };
 
 /** The reasons of a row the owner can read, in order. */

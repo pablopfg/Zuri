@@ -16,7 +16,7 @@ export interface EmailSenderDeps {
   clock?: () => number;
 }
 
-/** A plain address (name@host.tld) after trimming, or null: anything else leaves e-mail "not configured". */
+/** A plain address (a local part, "@" and a host with a dot) after trimming, or null: anything else leaves e-mail "not configured". */
 export function emailAddress(value: string | undefined | null): string | null {
   const trimmed = value?.trim() ?? "";
   return trimmed.length <= 254 && /^[^\s@<>",;]+@[^\s@<>",;]+\.[^\s@<>",;]+$/.test(trimmed) ? trimmed : null;

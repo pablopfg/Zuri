@@ -33,7 +33,6 @@ type Step =
 interface RefusalDetails {
   retryAfter?: number;
   turnstileSiteKey?: string;
-  recovery?: "expired";
   fields?: string[];
 }
 
@@ -69,11 +68,22 @@ export function RecoveryPage({ go }: { go: (path: string) => void }) {
   // Read, then taken off the address bar and the history (an effect: a pure first render reads it twice in development).
   useEffect(() => {
     if (window.location.hash) window.history.replaceState(window.history.state, "", RECOVERY_PATH);
+    // A link pasted into this same tab changes only the fragment: no new page load, so it is read here.
+    const pasted = () => {
+      const token = readToken();
+      window.history.replaceState(window.history.state, "", RECOVERY_PATH);
+      if (!token) return;
+      setError(null);
+      setCheckError(null);
+      setStep({ kind: "checking", token });
+    };
+    window.addEventListener("hashchange", pasted);
+    return () => window.removeEventListener("hashchange", pasted);
   }, []);
 
   const status = useQuery({
     queryKey: ["recovery-status"],
-    queryFn: async () => recoveryStatusSchema.parse(await api<unknown>("/auth/recovery")),
+    queryFn: async () => recoveryStatusSchema.parse(await api<unknown>("/auth/recover")),
     enabled: step.kind === "request",
     retry: 1,
   });
@@ -120,11 +130,11 @@ export function RecoveryPage({ go }: { go: (path: string) => void }) {
     if (!checking) return;
     const { token } = checking;
     let live = true;
-    api<unknown>("/auth/recovery/check", { method: "POST", body: { token } })
+    api<unknown>("/auth/recover/check", { method: "POST", body: { token } })
       .then((answer) => live && setStep({ kind: "link", token, link: recoveryLinkSchema.parse(answer) }))
       .catch((err: unknown) => {
         if (!live) return;
-        if (err instanceof ApiError && (err.code === "INVALID_CREDENTIALS" || err.code === "VALIDATION_FAILED")) setStep({ kind: "bad" });
+        if (err instanceof ApiError && (err.code === "RECOVERY_EXPIRED" || err.code === "VALIDATION_FAILED")) setStep({ kind: "bad" });
         else setCheckError(err);
       });
     return () => {
@@ -190,7 +200,7 @@ export function RecoveryPage({ go }: { go: (path: string) => void }) {
       setHumanRound((n) => n + 1);
     }
     try {
-      await api("/auth/recovery", { method: "POST", body: { email: email.trim(), ...(token ? { turnstileToken: token } : {}) } });
+      await api("/auth/recover/request", { method: "POST", body: { email: email.trim(), ...(token ? { turnstileToken: token } : {}) } });
       setStep({ kind: "sent" });
     } catch (err) {
       refused(err);
@@ -215,9 +225,9 @@ export function RecoveryPage({ go }: { go: (path: string) => void }) {
     setError(null);
     setPasswordError(null);
     try {
-      await api("/auth/recovery/complete", {
+      await api("/auth/recover/confirm", {
         method: "POST",
-        body: { token: step.token, password, ...(step.link.secondStep ? { code: code.trim() } : {}) },
+        body: { token: step.token, password, ...(step.link.secondStep ? { totp: code.trim() } : {}) },
       });
       setPassword("");
       setRepeat("");
@@ -227,7 +237,7 @@ export function RecoveryPage({ go }: { go: (path: string) => void }) {
       if (session) retry();
     } catch (err) {
       const details = err instanceof ApiError ? (err.details as RefusalDetails) : {};
-      if (details.recovery === "expired") {
+      if (err instanceof ApiError && err.code === "RECOVERY_EXPIRED") {
         setPassword("");
         setRepeat("");
         setCode("");

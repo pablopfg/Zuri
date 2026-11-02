@@ -38,7 +38,8 @@ export type InternalKey =
   // Step 11c: e-mails sent in the last 24 hours, the recovery link and the requests for one per network.
   | "email_sent_window"
   | "recovery_link"
-  | "recovery_requests";
+  | "recovery_requests"
+  | "recovery_issued";
 
 export class InternalState {
   constructor(private readonly db: Database) {}

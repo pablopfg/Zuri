@@ -50,6 +50,7 @@ export const ptBRSecurity = {
   "web.accessLog.reason.email_off": "envio de e-mail desligado",
   "web.accessLog.reason.link_sent": "link enviado",
   "web.accessLog.reason.link_failed": "o e-mail não saiu",
+  "web.accessLog.reason.link_held": "link anterior mantido (pedido repetido)",
   "web.activity.title": "Atividade de acesso",
   "web.activity.description": "Os acessos mais recentes: quem entrou, de onde e o que foi recusado.",
   "web.activity.emptyTitle": "Nenhum acesso registrado",

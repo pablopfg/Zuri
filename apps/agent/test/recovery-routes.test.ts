@@ -26,6 +26,8 @@ beforeEach(async () => {
       },
     };
     env.ALERT_EMAIL_FROM = "zuri@exemplo.com.br";
+    // Each test asks for its own link: the day's links and their gap start over.
+    agent.store.db.run(`DELETE FROM zur_settings WHERE key = 'recovery_issued'`);
   });
   const real = globalThis.fetch;
   vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
@@ -48,46 +50,46 @@ const linkIn = (text: string) => /#([A-Za-z0-9_-]{43})/.exec(text)?.[1] ?? "";
 
 describe("the recovery routes", () => {
   it("need no session but the CSRF header", async () => {
-    const res = await call(`${ORIGIN}/api/auth/recovery`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email: TEST_EMAIL, turnstileToken: HUMAN_TOKEN }) });
+    const res = await call(`${ORIGIN}/api/auth/recover/request`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email: TEST_EMAIL, turnstileToken: HUMAN_TOKEN }) });
     expect(res.status).toBe(403);
-    expect((await call(`${ORIGIN}/api/auth/recovery`, { headers: headers() })).status).toBe(200);
+    expect((await call(`${ORIGIN}/api/auth/recover`, { headers: headers() })).status).toBe(200);
   });
 
   it("say whether a link can arrive, and answer 202 whatever the e-mail", async () => {
-    expect(await (await call(`${ORIGIN}/api/auth/recovery`, { headers: headers() })).json()).toEqual({ available: true });
-    expect((await post("/auth/recovery", { email: "outra@exemplo.com.br", turnstileToken: HUMAN_TOKEN })).status).toBe(202);
+    expect(await (await call(`${ORIGIN}/api/auth/recover`, { headers: headers() })).json()).toEqual({ available: true });
+    expect((await post("/auth/recover/request", { email: "outra@exemplo.com.br", turnstileToken: HUMAN_TOKEN })).status).toBe(202);
     expect(mails).toHaveLength(0);
-    expect((await post("/auth/recovery", { email: TEST_EMAIL, turnstileToken: HUMAN_TOKEN }, "192.0.2.202")).status).toBe(202);
+    expect((await post("/auth/recover/request", { email: TEST_EMAIL, turnstileToken: HUMAN_TOKEN }, "192.0.2.202")).status).toBe(202);
     expect(mails).toHaveLength(1);
     expect(mails[0]).toMatchObject({ to: TEST_EMAIL, subject: "Zuri: link para criar uma senha nova" });
     expect(mails[0]?.text).toContain(`${ORIGIN}/recuperar-senha#`);
   });
 
   it("refuse a request without the robot check, malformed or too large", async () => {
-    const robot = await post("/auth/recovery", { email: TEST_EMAIL }, "192.0.2.203");
+    const robot = await post("/auth/recover/request", { email: TEST_EMAIL }, "192.0.2.203");
     expect(robot.status).toBe(400);
     expect(apiErrorSchema.parse(await robot.json()).code).toBe("TURNSTILE_REQUIRED");
     expect(mails).toHaveLength(0);
-    expect(apiErrorSchema.parse(await (await post("/auth/recovery", { email: TEST_EMAIL, extra: 1 }, "192.0.2.204")).json()).code).toBe("VALIDATION_FAILED");
-    expect((await post("/auth/recovery", JSON.stringify({ email: TEST_EMAIL, turnstileToken: "x".repeat(4100) }), "192.0.2.205")).status).toBe(400);
-    expect((await post("/auth/recovery/check", { token: "curto" })).status).toBe(400);
+    expect(apiErrorSchema.parse(await (await post("/auth/recover/request", { email: TEST_EMAIL, extra: 1 }, "192.0.2.204")).json()).code).toBe("VALIDATION_FAILED");
+    expect((await post("/auth/recover/request", JSON.stringify({ email: TEST_EMAIL, turnstileToken: "x".repeat(4100) }), "192.0.2.205")).status).toBe(400);
+    expect((await post("/auth/recover/check", { token: "curto" })).status).toBe(400);
   });
 
   it("set a new password from the link, end the sessions and refuse the link a second time", async () => {
     const login = await call(`${ORIGIN}/api/auth/login`, { method: "POST", headers: headers("192.0.2.206"), body: JSON.stringify({ email: TEST_EMAIL, password: TEST_PASSWORD, turnstileToken: HUMAN_TOKEN }) });
     expect(login.status).toBe(200);
     const cookie = login.headers.getSetCookie().find((c) => c.startsWith("__Host-zuri_session="))?.split(";")[0] ?? "";
-    await post("/auth/recovery", { email: TEST_EMAIL, turnstileToken: HUMAN_TOKEN }, "192.0.2.207");
+    await post("/auth/recover/request", { email: TEST_EMAIL, turnstileToken: HUMAN_TOKEN }, "192.0.2.207");
     const token = linkIn(mails[0]?.text ?? "");
-    expect(await (await post("/auth/recovery/check", { token })).json()).toEqual({ secondStep: false });
+    expect(await (await post("/auth/recover/check", { token })).json()).toEqual({ secondStep: false });
     const next = "nova senha comprida do teste de rota";
-    const done = await post("/auth/recovery/complete", { token, password: next });
+    const done = await post("/auth/recover/confirm", { token, password: next });
     expect(done.status, await done.clone().text()).toBe(204);
     expect(done.headers.getSetCookie().some((c) => c.startsWith("__Host-zuri_session=;"))).toBe(true);
     expect((await call(`${ORIGIN}/api/auth/session`, { headers: { ...headers(), cookie } })).status).toBe(401);
-    const again = await post("/auth/recovery/complete", { token, password: `${next} 2` });
-    expect(again.status).toBe(401);
-    expect(apiErrorSchema.parse(await again.json()).details).toEqual({ recovery: "expired" });
+    const again = await post("/auth/recover/confirm", { token, password: `${next} 2` });
+    expect(again.status).toBe(410);
+    expect(apiErrorSchema.parse(await again.json()).code).toBe("RECOVERY_EXPIRED");
     // The owner hears about it on every channel.
     const raised = await inOwner(async (agent) => {
       await agent.store.alerts.settled();

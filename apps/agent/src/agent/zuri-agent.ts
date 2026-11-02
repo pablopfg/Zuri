@@ -1,4 +1,4 @@
-import { DEFAULT_LOCALE, isPasswordHash, isUsableSetupCode, type Locale, RECOVERY_PATH, t } from "@zuri/shared";
+import { DEFAULT_LOCALE, isPasswordHash, isUsableSetupCode, type Locale, RECOVERY_LIMITS, RECOVERY_PATH, t } from "@zuri/shared";
 import { Agent } from "agents";
 import { chooseChain, CircuitBreaker, MeteredAI, ProviderChain, UsageMeter } from "../ai/index.ts";
 import type { AIProvider } from "../ai/provider.ts";
@@ -350,9 +350,10 @@ export class ZuriAgent extends Agent<WorkerEnv> {
           send: async (token) => {
             const locale = this.locale();
             const link = `${this.publicUrl().origin}${RECOVERY_PATH}#${token}`;
-            const outcome = await email.send({ subject: t(locale, "notice.email.recovery.subject"), text: t(locale, "notice.email.recovery.body", { link }), security: true });
+            const outcome = await email.send({ subject: t(locale, "notice.email.recovery.subject"), text: t(locale, "notice.email.recovery.body", { link, minutes: RECOVERY_LIMITS.ttlMs / 60_000 }), security: true });
             return outcome === "sent";
           },
+          defer: (work) => this.ctx.waitUntil(work),
         },
       });
       const productivity = new Productivity(db, { timeZone: () => settings.get().timeZone });
