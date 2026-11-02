@@ -1,6 +1,6 @@
 import { expect, type Page, test } from "./fixtures.ts";
 import { e2eWebhookSecret } from "./telegram-bot.ts";
-import { expectAccessible, openSettingsSection, signIn, tooSmallControls } from "./ui-helpers.ts";
+import { CSRF, expectAccessible, openSettingsSection, signIn, tooSmallControls } from "./ui-helpers.ts";
 
 // The Telegram card (step 12) against the real Worker: over loopback the
 // Worker answers the Bot API itself (src/telegram/dev-telegram.ts), and the
@@ -113,10 +113,10 @@ test("Settings > Avisos: the owner connects Telegram with a code, confirms the a
     // One turn at a time on Telegram: the next message waits for this answer.
     await expect
       .poll(async () => {
-        const list = (await (await page.request.get("/api/conversations")).json()) as { conversations: { id: string }[] };
+        const list = (await (await page.request.get("/api/conversations", { headers: CSRF })).json()) as { conversations: { id: string }[] };
         const id = list.conversations[0]?.id;
         if (!id) return 0;
-        const conversation = (await (await page.request.get(`/api/conversations/${id}`)).json()) as { messages: { role: string; status?: string }[]; streaming: boolean };
+        const conversation = (await (await page.request.get(`/api/conversations/${id}`, { headers: CSRF })).json()) as { messages: { role: string; status?: string }[]; streaming: boolean };
         return conversation.streaming ? 0 : conversation.messages.filter((m) => m.role === "assistant").length;
       })
       .toBe(sentCount);
