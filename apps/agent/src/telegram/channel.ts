@@ -207,7 +207,7 @@ export const CATEGORY_NAME: Record<AlertCategory, MessageKey> = {
   events: "telegram.notice.category.events",
 };
 
-const PRIORITY_NAME: Record<AlertPriority, MessageKey> = {
+export const PRIORITY_NAME: Record<AlertPriority, MessageKey> = {
   low: "telegram.notice.priority.low",
   normal: "telegram.notice.priority.normal",
   high: "telegram.notice.priority.high",

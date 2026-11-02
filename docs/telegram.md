@@ -213,14 +213,61 @@ O botão de passkey só aparece se houver passkey cadastrada; o de e-mail, só
 se o envio de e-mail estiver configurado. Sem nenhum dos dois, o bot explica
 como cadastrar uma passkey no app.
 
-## O que o bot responde hoje
+## Comandos
 
-Além dos avisos e da conversa, o bot confirma o vínculo, manda a mensagem de
-teste e responde a `/ajuda`, `/destravar` e `/nova_conversa`. Fotos e documentos recebem "por enquanto eu
-entendo só texto e áudio"; comandos de consulta chegam na etapa 15b. Algumas
-ações nunca serão feitas pelo bot (trocar senha ou e-mail, desligar o 2FA,
-desvincular o próprio Telegram, entre outras): para essas o bot sempre manda
-abrir o app.
+Nenhum comando usa IA: eles leem e escrevem pelos mesmos serviços do app e
+respondem em texto puro, com links, comandos e menções desarmados no que você
+guardou. Todos contam nos 60 comandos por hora.
+
+| Comando | O que faz | Pede destravamento? |
+| --- | --- | --- |
+| `/hoje` | Atrasadas, vencem hoje e lembretes do dia, até 5 por bloco e "e mais N no app" | sim |
+| `/tarefas [projeto]` | Até 10 tarefas abertas numeradas, com **Feito** e **Adiar** (um dia adiante, na mesma hora; vencida, para amanhã); os números e os botões valem 1 hora | sim |
+| `/nova <texto>` | Cria uma tarefa; a data no fim (ou no começo) do texto vira o prazo, com o botão **Corrigir data** | sim |
+| `/feito <nº>` | Conclui a tarefa de número tal da última lista, com **Desfazer** por 5 minutos | sim |
+| `/lembrar <quando> <texto>` | Cria um lembrete único, com **Corrigir data** | sim |
+| `/nota <texto>` | Guarda uma nota; a primeira linha é o título | sim |
+| `/buscar <termo>` | Até 5 tarefas, notas e memórias, com trechos de 100 caracteres | sim |
+| `/memoria <fato>` | Guarda uma memória marcada como vinda do Telegram | sim |
+| `/rotinas` | Automações ativas e a próxima execução, com **Pausar** | sim |
+| `/avisos` | Os 10 avisos mais novos, marcando os que esperam você | só para o texto |
+| `/uso` | Pedidos de IA, Neurons, áudio e custo de tabela de hoje | não |
+| `/status` | Versão, saúde, falhas em 24 h e se a IA está disponível | não |
+| `/backup` | Situação do backup e **Abrir no app** | não |
+| `/nova_conversa` | Começa outra conversa com a Zuri | sim |
+| `/destravar` | Libera a leitura por 12 horas | não |
+| `/ajuda` | Lista os comandos | não |
+
+Com a leitura travada, a resposta traz o botão **Destravar**, que faz o mesmo
+que `/destravar`. Os botões dos comandos valem uma vez só; numa lista, só o
+botão tocado some. A agenda entra no `/hoje` com o Google Agenda, os monitores
+e o MCP no `/status` com as etapas deles, e a idade do backup com o backup
+automático.
+
+### Datas em `/nova` e `/lembrar`
+
+Valem "hoje", "amanhã", "depois de amanhã", dias da semana com ou sem
+"-feira", "dia 5", "5/11", "5/11/2026", "9h", "9h30", "9:30", "às 21h",
+"daqui a N minutos/horas/dias" e "semana que vem" (a segunda-feira seguinte;
+"sexta que vem" é a sexta da semana seguinte). Sem hora, vale 09:00. A Zuri
+pergunta em vez de adivinhar quando o dia da semana é hoje e não tem hora,
+quando "5/11" já passou neste ano ("Quis dizer 05/11/2027?"), quando aparece
+"meio-dia", "tarde" ou "noite" sem hora, quando sobra uma palavra de data
+que ela não entendeu e quando a data já passou. Em `/nova`, "hoje" sem hora
+depois das 09:00 vence às 23:59.
+
+### Fotos e documentos
+
+Foto ou documento com legenda vira uma nota com a linha "Anexo recebido pelo
+Telegram: foto, 1,2 MB (não guardado)". Sem legenda, a Zuri pede uma. O
+arquivo nunca é baixado nem guardado, e o nome dele não é lido. Figurinhas,
+vídeos e o resto recebem "por enquanto eu entendo texto, áudio e fotos ou
+documentos com legenda".
+
+### O que nunca é feito pelo bot
+
+Trocar senha ou e-mail, desligar o 2FA, desvincular o próprio Telegram, entre
+outras: para essas o bot sempre manda abrir o app.
 
 ## Quando algo falha por dentro
 

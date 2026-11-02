@@ -24,21 +24,35 @@ import type { InternalState } from "../db/internal-state.ts";
 import { telegramWebhookSecret, TELEGRAM_WEBHOOK_PATH } from "../gates/telegram.ts";
 import { AppError } from "../http/errors.ts";
 import { log } from "../log.ts";
-import type { TelegramCallbacks } from "./callbacks.ts";
+import { isCommandData, type TelegramCallbacks } from "./callbacks.ts";
 import { type BotCommand, TelegramApiError, TelegramClient } from "./client.ts";
+import { type Attachment, type Button, fixQuestions, OPEN_COMMANDS, type Out, TelegramCommands } from "./commands.ts";
 import { type Confirmed, isCodeShaped, type SendCodeOutcome, type TelegramConfirmations } from "./confirmations.ts";
 import { type IncomingAudio, type IncomingTurn, isLargeFileData, type Started, type TelegramConversation } from "./conversation.ts";
 import type { PrivateLink, TelegramLinks } from "./links.ts";
 import { ReadLock } from "./read-lock.ts";
 
 /** Bump when the menu's commands change: the object re-sends it on start (setMyCommands). */
-export const TELEGRAM_MENU_VERSION = 2;
+export const TELEGRAM_MENU_VERSION = 3;
 
 /** The commands in the bot's menu. Steps 13 to 16 add theirs and bump TELEGRAM_MENU_VERSION. */
 const MENU: readonly { command: string; description: MessageKey }[] = [
-  { command: "ajuda", description: "telegram.menu.ajuda" },
-  { command: "destravar", description: "telegram.menu.destravar" },
+  { command: "hoje", description: "telegram.menu.hoje" },
+  { command: "tarefas", description: "telegram.menu.tarefas" },
+  { command: "nova", description: "telegram.menu.nova" },
+  { command: "feito", description: "telegram.menu.feito" },
+  { command: "lembrar", description: "telegram.menu.lembrar" },
+  { command: "nota", description: "telegram.menu.nota" },
+  { command: "buscar", description: "telegram.menu.buscar" },
+  { command: "memoria", description: "telegram.menu.memoria" },
+  { command: "rotinas", description: "telegram.menu.rotinas" },
+  { command: "avisos", description: "telegram.menu.avisos" },
+  { command: "uso", description: "telegram.menu.uso" },
+  { command: "status", description: "telegram.menu.status" },
+  { command: "backup", description: "telegram.menu.backup" },
   { command: "nova_conversa", description: "telegram.menu.nova_conversa" },
+  { command: "destravar", description: "telegram.menu.destravar" },
+  { command: "ajuda", description: "telegram.menu.ajuda" },
 ];
 
 /** "Receber código por e-mail" under an unlock: "v1:unlock_email:<the confirmation's id>". */
@@ -65,6 +79,8 @@ export interface TelegramDeps {
   alerts(): AlertService;
   /** The conversation with the agent (step 14); absent in tests that don't need it. */
   conversation?: TelegramConversation;
+  /** The quick commands (step 15b): /hoje, /tarefas, /nova and the rest; absent in tests that don't need them. */
+  commands?: TelegramCommands;
   /** Confirmations made outside Telegram (step 15: unlocking reading); absent in tests that don't need them. */
   confirmations?: TelegramConfirmations;
   state: InternalState;
@@ -117,6 +133,8 @@ interface IncomingMessage {
   replyText?: string;
   /** A photo, a document, a sticker or anything else the bot doesn't read yet. */
   other?: boolean;
+  /** A photo or a document (step 15b): its kind and size, as the update says; never downloaded. */
+  attachment?: Attachment;
   /** A group turned into a supergroup: the new id (in the old group) or the old one (in the new). */
   migrate_to_chat_id?: number;
   migrate_from_chat_id?: number;
@@ -130,6 +148,8 @@ interface Incoming {
   /** callback_query: the button's data and the message it is under. */
   callbackData: string | null;
   callbackMessageId: number | null;
+  /** The buttons under the tapped message, so a list can lose only the tapped one. */
+  callbackKeyboard: Button[][] | null;
   /** my_chat_member: the bot's new status in that chat. */
   memberStatus: string | null;
 }
@@ -299,11 +319,22 @@ export class TelegramService {
         await this.#sendUnlockCode(incoming, unlockEmail[1] ?? "");
         return null;
       }
+      if (isCommandData(incoming.callbackData) && this.deps.commands) {
+        // The commands' buttons count in the hour's 60 too: tapping an old button can't make the bot write without end.
+        const rate = this.#rate("telegram_command_window", TELEGRAM_LIMITS.commandsPerHour);
+        if (rate !== "ok") {
+          this.deps.links.audit("callback", "any", "rate_limited");
+          await this.#answer(incoming.callbackId, rate === "first" ? "telegram.cmd.rate" : undefined);
+          return null;
+        }
+        await this.#onCommandButton(link, incoming, locked);
+        return null;
+      }
       if (isLargeFileData(incoming.callbackData) && this.deps.conversation) {
         if (locked) {
           this.deps.links.audit("callback", "large_file", "locked");
           await this.#answer(incoming.callbackId, "telegram.lock.lockedShort");
-          await this.#say(link.chatId, "telegram.lock.locked");
+          await this.#sayLocked(link.chatId);
           return null;
         }
         return this.deps.conversation.tap(this.client(), {
@@ -323,7 +354,9 @@ export class TelegramService {
     const own = message.forwarded ? "" : (message.text ?? message.caption ?? "");
     if (await this.#maybeCode(link, message, own)) return null;
     const command = commandOf(own);
-    if (command !== null) {
+    // The answer to Corrigir (step 15b): a reply to the bot's question with the right date. Counted as a command.
+    const fixing = command === null && own !== "" && message.replyToId !== undefined && this.deps.commands !== undefined && this.#isFixReply(message.replyToId);
+    if (command !== null || fixing || (message.attachment && !message.audio)) {
       // 60 commands an hour: past that the bot says so once and ignores the rest until the hour turns.
       const rate = this.#rate("telegram_command_window", TELEGRAM_LIMITS.commandsPerHour);
       if (rate !== "ok") {
@@ -331,7 +364,9 @@ export class TelegramService {
         if (rate === "first") await this.#say(link.chatId, "telegram.cmd.rate");
         return null;
       }
-      await this.#command(link, command, locked);
+      if (command !== null) await this.#command(link, command, own, locked);
+      else if (fixing) await this.#fix(link, message.replyToId ?? 0, own, locked);
+      else if (message.attachment) await this.#attachment(link, message.attachment, message.caption ?? "", locked, message.forwarded === true);
       return null;
     }
     const kind = message.audio?.kind ?? (message.other ? "other" : "text");
@@ -352,7 +387,7 @@ export class TelegramService {
     // Locked: nothing reaches the agent and no audio is downloaded.
     if (locked) {
       this.deps.links.audit("message", kind, "locked");
-      await this.#say(link.chatId, "telegram.lock.locked");
+      await this.#sayLocked(link.chatId);
       return null;
     }
     if (message.other && !message.audio) {
@@ -376,7 +411,7 @@ export class TelegramService {
   }
 
   /** A command from the owner, already counted against the hour's 60. */
-  async #command(link: PrivateLink, command: string, locked: boolean): Promise<void> {
+  async #command(link: PrivateLink, command: string, text: string, locked: boolean): Promise<void> {
     switch (command) {
       case "start":
         this.deps.links.audit("command", "start", "already_linked");
@@ -392,7 +427,7 @@ export class TelegramService {
       case "nova_conversa":
         if (locked) {
           this.deps.links.audit("command", "nova_conversa", "locked");
-          await this.#say(link.chatId, "telegram.lock.locked");
+          await this.#sayLocked(link.chatId);
           return;
         }
         if (!link.conversation || !this.deps.conversation) {
@@ -404,9 +439,111 @@ export class TelegramService {
         this.deps.links.audit("command", "nova_conversa", "ok");
         await this.#say(link.chatId, "telegram.newConversation");
         return;
-      default:
-        this.deps.links.audit("command", "unknown", "not_yet");
-        await this.#say(link.chatId, "telegram.notYet");
+      default: {
+        const commands = this.deps.commands;
+        if (!commands || !TelegramCommands.handles(command)) {
+          this.deps.links.audit("command", "unknown", "not_yet");
+          await this.#say(link.chatId, "telegram.notYet");
+          return;
+        }
+        // /uso, /status and /backup never ask to unlock; /avisos hides only the text (spec).
+        if (locked && !OPEN_COMMANDS.includes(command)) {
+          this.deps.links.audit("command", command, "locked");
+          await this.#sayLocked(link.chatId);
+          return;
+        }
+        const args = text.replace(/^\/\S+\s*/, "");
+        const outs = await commands.run(command, args, locked);
+        this.deps.links.audit("command", command, "ok");
+        for (const out of outs) await this.#send(link.chatId, out);
+      }
+    }
+  }
+
+  /** A photo or a document: its caption becomes a note (N4: the file is never kept); it writes, so it needs reading unlocked. */
+  async #attachment(link: PrivateLink, file: Attachment, caption: string, locked: boolean, forwarded: boolean): Promise<void> {
+    const commands = this.deps.commands;
+    if (!commands) {
+      this.deps.links.audit("message", "other", "unsupported");
+      await this.#say(link.chatId, "telegram.chat.unsupported");
+      return;
+    }
+    // A forwarded caption is someone else's text: never saved as the owner's note.
+    if (forwarded) {
+      this.deps.links.audit("message", file.kind, "forwarded");
+      await this.#say(link.chatId, "telegram.attachment.encaminhado");
+      return;
+    }
+    if (locked) {
+      this.deps.links.audit("message", file.kind, "locked");
+      await this.#sayLocked(link.chatId);
+      return;
+    }
+    this.deps.links.audit("message", file.kind, caption.trim() ? "note" : "no_caption");
+    await this.#send(link.chatId, commands.attachment(file, caption));
+  }
+
+  /** A tap on a command's button: answered within Telegram's 10 seconds; only the tapped button leaves the message. */
+  async #onCommandButton(link: PrivateLink, incoming: Incoming, locked: boolean): Promise<void> {
+    const commands = this.deps.commands;
+    if (!commands || !incoming.callbackData) return;
+    const outcome = await commands.tap(incoming.callbackData, locked, incoming.callbackKeyboard);
+    const action = /^v1:([a-z_]+):/.exec(incoming.callbackData)?.[1] ?? "unknown";
+    this.deps.links.audit("callback", action, outcome.locked ? "locked" : outcome.unlock ? "unlock" : "ok");
+    const client = this.client();
+    if (incoming.callbackId) {
+      await client.answerCallbackQuery(incoming.callbackId, outcome.answer).catch(() => undefined);
+    }
+    if (outcome.keyboard && incoming.callbackMessageId !== null) {
+      await client.editMessageReplyMarkup(incoming.chat.id, incoming.callbackMessageId, { inline_keyboard: outcome.keyboard }).catch(() => null);
+    }
+    if (outcome.locked) {
+      await this.#sayLocked(link.chatId);
+      return;
+    }
+    if (outcome.unlock) {
+      await this.#unlock(link, locked);
+      return;
+    }
+    if (outcome.out) await this.#send(link.chatId, outcome.out);
+  }
+
+  /** The right date after Corrigir; it writes, so it needs reading unlocked. */
+  async #fix(link: PrivateLink, replyToId: number, text: string, locked: boolean): Promise<void> {
+    if (locked) {
+      this.deps.links.audit("command", "corrigir", "locked");
+      await this.#sayLocked(link.chatId);
+      return;
+    }
+    const fixed = await this.deps.commands?.fix(replyToId, text);
+    this.deps.links.audit("command", "corrigir", "ok");
+    if (fixed) await this.#send(link.chatId, fixed);
+  }
+
+  /** Whether a reply answers one of the bot's Corrigir questions (open, used or expired: never sent to the agent). */
+  #isFixReply(replyToId: number): boolean {
+    return fixQuestions(this.deps.state.get<unknown>("telegram_fix")).some((question) => question.messageId === replyToId);
+  }
+
+
+  /** "Reading is locked", with the Destravar button (spec: the button under a locked command). */
+  async #sayLocked(chatId: number): Promise<void> {
+    const button = this.deps.commands?.unlockButton();
+    await this.#send(chatId, { text: t(this.deps.locale(), "telegram.lock.locked"), ...(button ? { keyboard: [[button]] } : {}) });
+  }
+
+  /** One of the commands' answers: plain text, with its buttons or reply box. */
+  async #send(chatId: number, out: Out): Promise<void> {
+    try {
+      const markup = out.forceReply
+        ? { reply_markup: { force_reply: true, input_field_placeholder: out.forceReply } }
+        : out.keyboard
+          ? { reply_markup: { inline_keyboard: out.keyboard } }
+          : {};
+      const sent = await this.client().sendMessage(chatId, out.text, markup);
+      out.sent?.(sent.message_id);
+    } catch (error) {
+      log("warn", "telegram_send_failed", { error, ...kindOf(error) });
     }
   }
 
@@ -1063,6 +1200,7 @@ function parseIncoming(update: Record<string, unknown>): Incoming | null {
       callbackId: null,
       callbackData: null,
       callbackMessageId: null,
+      callbackKeyboard: null,
       memberStatus: null,
     };
   }
@@ -1078,6 +1216,7 @@ function parseIncoming(update: Record<string, unknown>): Incoming | null {
       callbackId: callback.id.slice(0, 64),
       callbackData: typeof callback.data === "string" ? callback.data.slice(0, 64) : null,
       callbackMessageId: Number.isSafeInteger(inner.message_id) ? (inner.message_id as number) : null,
+      callbackKeyboard: keyboardOf(inner.reply_markup),
       memberStatus: null,
     };
   }
@@ -1085,7 +1224,7 @@ function parseIncoming(update: Record<string, unknown>): Incoming | null {
   if (isObject(member)) {
     if (!isFrom(member.from) || !isChat(member.chat)) return null;
     const status = isObject(member.new_chat_member) && typeof member.new_chat_member.status === "string" ? member.new_chat_member.status : null;
-    return { kind: "my_chat_member", from: member.from, chat: member.chat, message: null, callbackId: null, callbackData: null, callbackMessageId: null, memberStatus: status };
+    return { kind: "my_chat_member", from: member.from, chat: member.chat, message: null, callbackId: null, callbackData: null, callbackMessageId: null, callbackKeyboard: null, memberStatus: status };
   }
   // edited_message, business_message, inline_query and the rest: never handled.
   return null;
@@ -1113,6 +1252,8 @@ function thirdParty(message: Record<string, unknown>): Partial<IncomingMessage> 
   const clip = (text: string) => [...text].slice(0, TELEGRAM_LIMITS.quotedMax).join("");
   const audio = audioOf(message.voice, "voice") ?? audioOf(message.audio, "audio");
   if (audio) out.audio = audio;
+  const attachment = attachmentOf(message);
+  if (attachment) out.attachment = attachment;
   else if (message.voice !== undefined || message.audio !== undefined || OTHER_CONTENT.some((key) => message[key] !== undefined)) out.other = true;
   // Forwarded, or written by an inline bot: someone else's words either way.
   if (isObject(message.forward_origin) || isObject(message.via_bot)) out.forwarded = true;
@@ -1125,6 +1266,46 @@ function thirdParty(message: Record<string, unknown>): Partial<IncomingMessage> 
     if (text) out.replyText = clip(text);
   }
   return out;
+}
+
+/** The size Telegram gives for a file, when it is a sane number. */
+const sizeOf = (value: unknown): number | null =>
+  isObject(value) && typeof value.file_size === "number" && Number.isSafeInteger(value.file_size) && value.file_size >= 0 ? value.file_size : null;
+
+/**
+ * A photo (the largest size Telegram lists) or a document: kind, size and a
+ * MIME type only when it looks like one. The file name is someone's text and
+ * never read.
+ */
+function attachmentOf(message: Record<string, unknown>): Attachment | null {
+  if (Array.isArray(message.photo) && message.photo.length > 0) {
+    const sizes = message.photo.map(sizeOf).filter((size): size is number => size !== null);
+    return { kind: "photo", size: sizes.length > 0 ? Math.max(...sizes) : null, mime: null };
+  }
+  if (isObject(message.document)) {
+    const mime = typeof message.document.mime_type === "string" && /^[a-z]{1,20}\/[a-z0-9.+-]{1,60}$/.test(message.document.mime_type) ? message.document.mime_type : null;
+    return { kind: "document", size: sizeOf(message.document), mime };
+  }
+  return null;
+}
+
+/** The inline keyboard under a message: rows of buttons with text and callback data or url, nothing else kept. */
+function keyboardOf(markup: unknown): Button[][] | null {
+  if (!isObject(markup) || !Array.isArray(markup.inline_keyboard)) return null;
+  const rows: Button[][] = [];
+  for (const row of markup.inline_keyboard.slice(0, 20)) {
+    if (!Array.isArray(row)) return null;
+    const buttons: Button[] = [];
+    for (const button of row.slice(0, 8)) {
+      if (!isObject(button) || typeof button.text !== "string") return null;
+      const text = button.text.slice(0, 64);
+      if (typeof button.callback_data === "string") buttons.push({ text, callback_data: button.callback_data.slice(0, 64) });
+      else if (typeof button.url === "string" && /^https:\/\//.test(button.url)) buttons.push({ text, url: button.url.slice(0, 512) });
+      else return null;
+    }
+    rows.push(buttons);
+  }
+  return rows;
 }
 
 /** A Bot API failure as the API's error: "Telegram didn't answer" for the owner, the kind in the log. */

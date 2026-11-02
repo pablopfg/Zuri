@@ -30,9 +30,16 @@ etapas ficam detalhadas; as mais antigas viram uma linha na tabela.
 | 12 | mesclada (02/11/2026) | #70 | Fundação do bot do Telegram: cliente da Bot API, webhook com travas, vínculo por código confirmado no app, cartão em Configurações › Avisos |
 | 13 | mesclada (02/11/2026) | #73 | Avisos no Telegram: canal da central, discreto com "Texto completo", botões Feito/Adiar/Silenciar/Abrir, grupo opcional com tópicos |
 | 14 | mesclada (02/11/2026) | #75 | Conversa e voz no Telegram: conversa do app pelo bot, HTML em blocos, voz até 5 min/5 MB, pergunta antes de baixar arquivo grande, terceiros como `<data>` |
-| 15a | em revisão | — | Trava de leitura do bot com `/destravar` (passkey na página `/aprovar` ou código por e-mail), `/nova_conversa`, 60 comandos/hora |
+| 15a | mesclada (02/11/2026) | #84 | Trava de leitura do bot com `/destravar` (passkey na página `/aprovar` ou código por e-mail), `/nova_conversa`, 60 comandos/hora |
+| 15b | em revisão | — | Comandos rápidos sem IA (`/hoje`, `/tarefas`, `/nova`, `/feito`, `/lembrar`, `/nota`, `/buscar`, `/memoria`, `/rotinas`, `/avisos`, `/uso`, `/status`, `/backup`), gramática de datas, fotos e documentos viram nota, botão Destravar |
 
 ## Últimas etapas (detalhe)
+
+### Etapa 15b · Comandos rápidos no Telegram
+- Entregou: `apps/agent/src/telegram/{commands,dates}.ts` (`TelegramCommands`, um método por comando; `parseWhen`/`extractWhen`, a gramática de datas), `CommandButtons` em `callbacks.ts` (linhas `target_type = 'command'` em `zur_telegram_callbacks`, validade por botão, uso único), roteamento em `service.ts` (comandos, botões, Corrigir por `force_reply`, fotos e documentos, botão Destravar em todo aviso de trava), menu v3 com 16 comandos. Plano: `docs/planos/etapa-15b-comandos-telegram.md`.
+- Migrations: nenhuma (17 continua a última; a próxima é a 18). Chaves novas em `zur_settings`: `telegram_task_numbers`, `telegram_fix`.
+- Decisões técnicas: respostas em texto puro com `disarm()`; fotos e documentos contam nos 60 comandos/h e pedem destravamento; Adiar = um dia adiante na mesma hora (vencida: amanhã; 09:00 sem prazo); lembrete do bot nasce com origem `app`; "semana que vem" sozinha = segunda seguinte; agenda, monitores, MCP, embeddings e idade do backup ficam para as etapas 17, 18, 19, 22 e 23.
+- Para a 16: botões novos entram em `COMMAND_ACTIONS` (`callbacks.ts`) e passam por `TelegramCommands.tap`; `OPEN_COMMANDS` diz o que não pede destravamento (a 16 soma `/bloquear`, `/pausar_rotinas`, `/encerrar_sessoes`); o menu sobe para a versão 4.
 
 ### Etapa 15a · Destravar o bot do Telegram
 - Entregou: `apps/agent/src/telegram/{read-lock,confirmations}.ts` (`ReadLock`; `TelegramConfirmations`: link de uso único, código por e-mail, 5 erros/15 min travam 1 h), rotas `POST /api/approvals/telegram/{options,verify}` (`api/approvals.ts`, sem sessão, CSRF + limitador do login), página `/aprovar` (`pages/ApprovePage.tsx`, textos em `pt-BR-approve.ts`), cota `confirmations` no `EmailSender` (10/dia), eventos `telegram_unlocked` (aviso sem insistir, `insist: false`) e `telegram_confirm_locked`, menu v2 (`/ajuda`, `/destravar`, `/nova_conversa`), hook `afterUpdate` que manda os alertas de segurança logo depois de cada atualização. Plano: `docs/planos/etapa-15a-destravamento-telegram.md`.
@@ -45,12 +52,6 @@ etapas ficam detalhadas; as mais antigas viram uma linha na tabela.
 - Migrations: versão 16 (`zur_telegram_pending_files`, `zur_messages.quoted`).
 - Decisões técnicas: uma conversa do Telegram por vez (`telegram_conversation` em `zur_settings`), recriada se apagada; texto do próprio dono é a mensagem do turno e o de terceiros (encaminhada, citação, resposta a outra pessoa, voz encaminhada) vai em `quoted` e no prompt como `<data source="telegram_forward">`; botões `v1:large_file|large_skip:<id>` apontam para a linha do arquivo (sem `zur_telegram_callbacks`); teto extra de 30 min por arquivo (o Whisper não publica limite); o turno corre fora da fila do bot (`Started`), então a fila lê a próxima atualização enquanto responde.
 - Para a 15: trava de leitura, limite de 30 mensagens/hora e `/nova_conversa` (troca `telegram_conversation`); fotos e documentos hoje respondem "só texto e áudio". Para a 16: proposta no turno mostra **Abrir no app** (`/conversa/<id>`); trocar pelo botão Aprovar.
-
-### Etapa 13 · Avisos no Telegram
-- Entregou: `apps/agent/src/telegram/{channel,callbacks}.ts` (canal `TelegramChannel`, botões `v1:<ação>:<id>`), grupo em `TelegramLinks` (`group`, `saveGroup`, `moveGroup`, `setTopics`), toques e grupo em `TelegramService` (`groupCode`, `unlinkGroup`), `AlertService.respondOutOfBand` e `snoozed_until` (volta como cópia em `escalate`), rotas `POST/DELETE /api/telegram/group`, configuração `alertFullText`, evento `telegram_group_linked` (origem `bot` em `alerts/security.ts`). Tela: seção do grupo no `TelegramCard`, coluna "Texto completo" no `RoutesCard`. Plano: `docs/planos/etapa-13-avisos-telegram.md`.
-- Migrations: versão 15 (`zur_telegram_callbacks`, `zur_notices.snoozed_until`).
-- Decisões técnicas: texto puro com `disarmLinks`; segurança e 3ª tentativa sempre no chat privado; Feito em todo aviso, Adiar/Silenciar só em alta e crítica; alerta de segurança com origem `bot` sai sem botões e o bot recusa; código do grupo em `zur_settings` (`telegram_group_code`, HMAC com propósito próprio).
-- Para a 16: reconhecimento no app, com senha recente, dos alertas causados pelo bot (hoje eles insistem e viram "não confirmado"). Para a 15: `/avisos` pode reaproveitar `formatNotice`. Sem fila por chat ainda (limite por canal segura o volume).
 
 ### Notas que continuam valendo
 - Um alarme só (P8): use `AutomationService.rearm()`/`otherDue`, nunca outro alarme. O runner aceita `context: "scheduled"` (só leitura, sem dono presente). Toda IA por `agent.ai()`.

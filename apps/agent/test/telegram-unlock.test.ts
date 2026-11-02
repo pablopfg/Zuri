@@ -16,7 +16,7 @@ import { type SoftPasskey, softPasskey } from "./soft-passkey.ts";
 const IP = "192.0.2.15";
 const OWNER = 424242;
 const HOUR = 3_600_000;
-const LOCKED = "Faz um tempo que você não usa o bot, então travei a leitura por segurança. Toque em /destravar para liberar.";
+const LOCKED = "Faz um tempo que você não usa o bot, então travei a leitura por segurança. Toque em Destravar ou mande /destravar para liberar.";
 let cookie = "";
 let secret = "";
 const owner = () => testEnv.AGENT.get(testEnv.AGENT.idFromName(AGENT_INSTANCE_NAME));
