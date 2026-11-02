@@ -37,6 +37,8 @@ export interface RunnerDeps {
   clock?: () => number;
   /** Replaceable in tests. */
   registry?: readonly ToolDefinition[];
+  /** A turn that failed unexpectedly, or found the model out: told to the failure log (step 11). */
+  onFailure?: (failure: { source: "chat" | "ai"; code: string; errorName: string }) => void;
 }
 
 /** Tokens the tools' descriptions and schemas take in every prompt; computed once per process. */
@@ -216,6 +218,9 @@ export class AgentRunner {
       }
       const appError = error instanceof AppError ? error : new AppError("INTERNAL_ERROR");
       if (!(error instanceof AppError)) log("error", "chat_turn_failed", { error });
+      if (!(error instanceof AppError) || appError.code === "SERVICE_UNAVAILABLE") {
+        this.deps.onFailure?.({ source: error instanceof AppError ? "ai" : "chat", code: appError.code, errorName: error instanceof Error ? error.name : typeof error });
+      }
       yield { type: "error", code: appError.code, message: t(locale, appError.messageKey), ...(appError.details ? { details: appError.details } : {}) };
       yield { type: "done", message: finish("error", { code: appError.code, key: appError.messageKey }) };
     }

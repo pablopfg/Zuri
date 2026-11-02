@@ -10,8 +10,13 @@ import { SSE_PING_MS } from "../api/chat.ts";
 import { AuthService } from "../auth/service.ts";
 import { automationExecutor } from "../automations/executor.ts";
 import { AutomationService } from "../automations/service.ts";
+import { noticeForRun } from "../alerts/automations.ts";
+import { flushSecurityAlerts } from "../alerts/security.ts";
+import { AlertService } from "../alerts/service.ts";
+import { Watchers } from "../alerts/watchers.ts";
+import { DiagnosticsService } from "../diagnostics/service.ts";
 import { createTurnstile, type Turnstile } from "../auth/turnstile.ts";
-import { MIN_OWNER_PASSWORD_LENGTH, parsePublicUrl } from "../config.ts";
+import { MIN_OWNER_PASSWORD_LENGTH, parsePublicUrl, secretProblems } from "../config.ts";
 import { Database } from "../db/database.ts";
 import { InternalState } from "../db/internal-state.ts";
 import { migrate } from "../db/migrations.ts";
@@ -57,6 +62,9 @@ interface Store {
   actions: PendingActionRepository;
   plans: TaskPlanService;
   automations: AutomationService;
+  alerts: AlertService;
+  watchers: Watchers;
+  diagnostics: DiagnosticsService;
 }
 
 /**
@@ -70,6 +78,8 @@ export class ZuriAgent extends Agent<WorkerEnv> {
   readonly activeRuns = new Map<string, AbortController>();
   /** One voice clip at a time ("Constantes padrão"). */
   #transcribing = false;
+  /** The shared alarm was checked since the object woke (a database made on demand starts without one). */
+  #armed = false;
   /**
    * Tests only: a stand-in model and transcriber, since the test deploy has no
    * AI binding. Nothing in the app sets these.
@@ -89,8 +99,7 @@ export class ZuriAgent extends Agent<WorkerEnv> {
       runNow: (id: string) => this.store.automations.runNow(id, this.executor()),
     }),
     aiUsage: () => this.store.usage.report(this.aiLimits(), this.development() ? "mock" : "workers-ai", this.store.settings.field("aiModel")),
-    passwordSecretSet: () =>
-      isPasswordHash(this.env.OWNER_PASSWORD_HASH) || (this.env.OWNER_PASSWORD?.length ?? 0) >= MIN_OWNER_PASSWORD_LENGTH,
+    passwordSecretSet: () => this.passwordSecretSet(),
     setupCodeSet: () => isUsableSetupCode(this.env.SETUP_CODE),
     origin: () => this.publicUrl().origin,
     development: () => this.development(),
@@ -105,7 +114,18 @@ export class ZuriAgent extends Agent<WorkerEnv> {
       locale: () => this.locale(),
       pingMs: () => this.streamPingMs,
     }),
+    notices: () => ({ alerts: this.store.alerts, diagnostics: this.store.diagnostics, auth: this.store.auth }),
   });
+
+  private passwordSecretSet(): boolean {
+    return isPasswordHash(this.env.OWNER_PASSWORD_HASH) || (this.env.OWNER_PASSWORD?.length ?? 0) >= MIN_OWNER_PASSWORD_LENGTH;
+  }
+
+  /** What /api/health answers, checked by the watcher too: the alarm runs even when no request does. */
+  private healthy(): boolean {
+    if (secretProblems(this.env).length > 0) return false;
+    return this.passwordSecretSet() || isUsableSetupCode(this.env.SETUP_CODE) || this.store.auth.passwordConfigured();
+  }
 
   private toolServices(): Omit<ToolContext, "conversationId" | "mode" | "timeZone"> {
     const { db, productivity, memories, conversations, plans, actions, automations } = this.store;
@@ -135,15 +155,48 @@ export class ZuriAgent extends Agent<WorkerEnv> {
     if (!opened) return;
     try {
       const { interrupted } = await this.store.automations.reconcile();
+      this.#armed = true;
       if (interrupted > 0) log("warn", "automation_interrupted", { count: interrupted });
     } catch (error) {
       log("error", "automation_reconcile_failed", { error });
     }
   }
 
-  /** The automations' alarm (Agents SDK schedule): runs whatever is due, then sets the next one. */
+  /**
+   * The object's one alarm (Agents SDK schedule, rule P8): the notices' next
+   * tries, the watchers and the digest, then the automations that are due;
+   * finally the next one is set. The handler waits for the sends it started.
+   */
   async runAutomations(_payload: unknown, schedule?: { id: string }): Promise<void> {
-    await this.store.automations.wake(schedule?.id ?? null, this.executor());
+    const { db, alerts, watchers, automations } = this.store;
+    try {
+      alerts.sweep();
+      flushSecurityAlerts(db, alerts);
+      await alerts.escalate();
+      watchers.tick();
+    } catch (error) {
+      log("error", "alert_tick_failed", { error });
+    }
+    await automations.wake(schedule?.id ?? null, this.executor());
+    await alerts.settled();
+  }
+
+  /**
+   * After a request that opened the database: access events marked for an
+   * alert become notices at once, and the shared alarm is checked the first
+   * time (a database made on demand starts without one).
+   */
+  private async afterRequest(): Promise<void> {
+    try {
+      const { db, alerts, automations } = this.store;
+      flushSecurityAlerts(db, alerts);
+      if (!this.#armed) {
+        this.#armed = true;
+        await automations.rearm({ verify: true });
+      }
+    } catch (error) {
+      log("error", "alert_tick_failed", { error });
+    }
   }
 
   /** A chat turn's runner, over the store and the metered model. */
@@ -155,6 +208,7 @@ export class ZuriAgent extends Agent<WorkerEnv> {
       locale: () => this.locale(),
       ai: () => this.ai(),
       agentName: this.env.AGENT_NAME,
+      onFailure: (failure) => this.store.diagnostics.record(failure),
     });
   }
 
@@ -245,8 +299,25 @@ export class ZuriAgent extends Agent<WorkerEnv> {
       const conversations = new ConversationRepository(db, productivity.storage, () => this.locale());
       const actions = new PendingActionRepository(db);
       const plans = new TaskPlanService(db, productivity, () => settings.field("timeZone"));
-      const automations = new AutomationService(db, productivity.storage, new InternalState(db), {
+      const state = new InternalState(db);
+      // The notices, the watchers and the automations share one alarm: each refers to the others lazily.
+      const alerts: AlertService = new AlertService(db, productivity.storage, {
+        locale: () => this.locale(),
+        settings: () => settings.get(),
+        // Push and e-mail plug in here in step 11b, Telegram in step 13.
+        channels: () => [],
+        rearm: () => automations.rearm(),
+      });
+      const diagnostics = new DiagnosticsService(db, state, { alerts: () => alerts, release: () => env.CF_VERSION_METADATA?.id ?? null });
+      const watchers = new Watchers({ db, alerts, state, settings: () => settings.get(), locale: () => this.locale(), healthy: () => this.healthy() });
+      const automations: AutomationService = new AutomationService(db, productivity.storage, state, {
         timeZone: () => settings.field("timeZone"),
+        otherDue: () => {
+          const tries = alerts.nextDue();
+          const watch = watchers.nextDue();
+          return tries && tries < watch ? tries : watch;
+        },
+        finished: (automation, outcome) => noticeForRun(alerts, diagnostics, automation, outcome),
         alarm: {
           schedule: async (at) => (await this.schedule(at, "runAutomations", {}, { idempotent: false })).id,
           cancel: async (id) => {
@@ -255,7 +326,7 @@ export class ZuriAgent extends Agent<WorkerEnv> {
           exists: async (id) => (await this.getScheduleById(id)) !== undefined,
         },
       });
-      this.#store = { db, settings, auth, productivity, memories, usage: new UsageMeter(db), conversations, actions, plans, automations };
+      this.#store = { db, settings, auth, productivity, memories, usage: new UsageMeter(db), conversations, actions, plans, automations, alerts, watchers, diagnostics };
     }
     return this.#store;
   }
@@ -284,7 +355,9 @@ export class ZuriAgent extends Agent<WorkerEnv> {
   }
 
   override async onRequest(request: Request): Promise<Response> {
-    return this.#api.fetch(request, this.env);
+    const response = await this.#api.fetch(request, this.env);
+    if (this.#store) await this.afterRequest();
+    return response;
   }
 
   /** Zuri has no sub-agents: without this, `/sub/{class}/{name}` would wake an empty facet with its own database. */

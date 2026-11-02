@@ -88,6 +88,34 @@ describe("SettingsRepository", () => {
     });
   });
 
+  it("saves the notice settings (step 11) and refuses times, limits and routes out of range", async () => {
+    await withRepository("notices", (settings) => {
+      const saved = settings.update({
+        digestEnabled: false,
+        digestTime: "06:45",
+        watchersEnabled: false,
+        alertPerHour: 60,
+        alertPerDay: 1,
+        alertRoutes: { security: ["push", "email"], digests: [] },
+      });
+      expect(saved).toMatchObject({ digestEnabled: false, digestTime: "06:45", watchersEnabled: false, alertPerHour: 60, alertPerDay: 1 });
+      expect(settings.get().alertRoutes).toEqual({ security: ["push", "email"], digests: [] });
+      // Saving the same routes again is a no-op, not a change.
+      expect(() => settings.update({ alertRoutes: { security: ["push", "email"], digests: [] } })).not.toThrow();
+      for (const patch of [
+        { digestTime: "24:00" },
+        { digestTime: "7:30" },
+        { alertPerHour: 0 },
+        { alertPerHour: 61 },
+        { alertPerDay: 501 },
+        { alertRoutes: { security: ["sms"] } },
+        { alertRoutes: { nope: ["push"] } },
+      ]) {
+        expect(() => settings.update(patch as never), JSON.stringify(patch)).toThrow(AppError);
+      }
+    });
+  });
+
   it("reads a corrupt or no longer valid stored value as the default", async () => {
     await withRepository("corrupt", (settings, db) => {
       db.run(`INSERT INTO zur_settings (key, value, updated_at) VALUES ('language', '"fr"', 'x'), ('time_zone', '{not json', 'x')`);

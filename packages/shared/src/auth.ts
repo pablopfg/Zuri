@@ -174,6 +174,8 @@ export const sessionStateSchema = /* @__PURE__ */ mini.strictObject({
   /** Until when sensitive actions work without typing the password again. */
   recentAuthUntil: mini.nullable(isoInstant),
   deadlines: sessionDeadlinesSchema,
+  /** Notices not read yet (step 11): the bell's count, sent with the session check and the heartbeat. */
+  unreadNotices: mini.optional(mini.number()),
 });
 
 // ---------- Access activity (shown in Settings > Security) ----------

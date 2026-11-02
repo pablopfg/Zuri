@@ -45,8 +45,9 @@ import {
 import { type AutomationDeps, registerAutomationRoutes } from "./automations.ts";
 import { type ChatDeps, registerChatRoutes } from "./chat.ts";
 import { registerMemoryRoutes } from "./memory.ts";
+import { type NoticeDeps, registerNoticeRoutes } from "./notices.ts";
 import { registerProductivityRoutes } from "./productivity.ts";
-import { log } from "../log.ts";
+import { log, rayOf, routeLabel } from "../log.ts";
 
 export interface ApiEnv {
   Bindings: WorkerEnv;
@@ -71,6 +72,8 @@ export interface ApiDeps {
   aiUsage(): UsageReport;
   /** The chat, its proposals and voice input (step 9). */
   chat(): ChatDeps;
+  /** The notice center and the failure log (step 11). Absent only in tests of other routes. */
+  notices?(): NoticeDeps;
   /** True when a password secret is set, so the health check can answer without opening the database. */
   passwordSecretSet(): boolean;
   /** True when a usable SETUP_CODE is set: the first access can still be done. Absent is false. */
@@ -107,7 +110,10 @@ const WHILE_SECOND_STEP_SETUP = new Set([
 export function createApi(deps: ApiDeps) {
   const app = new Hono<ApiEnv>().basePath("/api");
 
-  app.onError((error, c) => errorResponse(error, deps.locale(), c.req.raw));
+  app.onError((error, c) => {
+    noteFailure(deps, error, c.req.raw);
+    return errorResponse(error, deps.locale(), c.req.raw);
+  });
   app.notFound(() => errorResponse(new AppError("NOT_FOUND"), deps.locale()));
 
   // Public: says only whether the Worker is up and configured. Never data, never
@@ -258,11 +264,12 @@ export function createApi(deps: ApiDeps) {
     await next();
   });
 
-  app.get("/auth/session", (c) => Response.json(deps.auth().state(c.get("session"))));
+  // The bell's count rides on the session check and the heartbeat: no polling of its own (rule P11).
+  app.get("/auth/session", (c) => Response.json({ ...deps.auth().state(c.get("session")), ...unread(deps) }));
 
   app.post("/auth/heartbeat", async (c) => {
     const { active } = await readJson(c.req.raw, heartbeatRequestSchema, 1024);
-    return Response.json(deps.auth().heartbeat(c.get("session"), active));
+    return Response.json({ ...deps.auth().heartbeat(c.get("session"), active), ...unread(deps) });
   });
 
   app.post("/auth/logout", (c) => {
@@ -373,6 +380,8 @@ export function createApi(deps: ApiDeps) {
   registerMemoryRoutes(app, deps.memories);
   registerChatRoutes(app, deps.chat);
   registerAutomationRoutes(app, deps.automations);
+  const notices = deps.notices;
+  if (notices) registerNoticeRoutes(app, () => notices());
 
   // Step 8: what the AI used today and the last 7 days. Read only: the limits change through /settings.
   app.get("/usage", () => Response.json(deps.aiUsage()));
@@ -381,6 +390,34 @@ export function createApi(deps: ApiDeps) {
 }
 
 const SESSION_FIELDS = Object.keys(SESSION_TIMEOUT_RANGES);
+
+/** The bell's count, when the notice center is there. */
+function unread(deps: ApiDeps): { unreadNotices?: number } {
+  const notices = deps.notices?.();
+  return notices ? { unreadNotices: notices.alerts.unreadCount() } : {};
+}
+
+/**
+ * An unexpected error, or a service that did not answer, goes to the failure
+ * log (the Diagnóstico tab). Expected refusals (a wrong password, a missing
+ * record) are not failures. If the database itself is what failed, the log
+ * line from errorResponse is all there is.
+ */
+function noteFailure(deps: ApiDeps, error: unknown, request: Request): void {
+  const unexpected = !(error instanceof AppError);
+  if (!unexpected && error.code !== "SERVICE_UNAVAILABLE") return;
+  try {
+    deps.notices?.().diagnostics.record({
+      source: "api",
+      code: unexpected ? "INTERNAL_ERROR" : error.code,
+      errorName: error instanceof Error ? error.name : typeof error,
+      route: routeLabel(request) ?? null,
+      ref: rayOf(request) ?? null,
+    });
+  } catch {
+    // The database is out: nothing more to do here.
+  }
+}
 
 /** A passkey's id as WebAuthn hands it out (base64url); anything else is not one. */
 function passkeyId(value: string): string {

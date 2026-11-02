@@ -538,6 +538,88 @@ export const MIGRATIONS: readonly Migration[] = [
       `CREATE TRIGGER IF NOT EXISTS zur_counts_automation_runs_delete AFTER DELETE ON zur_automation_runs BEGIN UPDATE zur_counts SET n = n - 1 WHERE kind = 'automation_runs'; END`,
     ],
   },
+  {
+    version: 10,
+    name: "notices",
+    statements: [
+      // The notice center (step 11). The kind and its data, never translated
+      // text: `params` is JSON (names, counts) and `body` holds only what the
+      // owner or the agent wrote (an automation's result). Security alerts are
+      // always critical and kept apart from the rest (ALERT_LIMITS). Not in the backup.
+      `CREATE TABLE IF NOT EXISTS zur_notices (
+        id TEXT PRIMARY KEY,
+        kind TEXT NOT NULL,
+        category TEXT NOT NULL CHECK (category IN ('reminders', 'digests', 'routines', 'tasks', 'system', 'security', 'events')),
+        priority TEXT NOT NULL CHECK (priority IN ('low', 'normal', 'high', 'critical')),
+        params TEXT NOT NULL DEFAULT '{}',
+        body TEXT,
+        link TEXT,
+        origin TEXT NOT NULL DEFAULT 'system' CHECK (origin IN ('web', 'bot', 'system')),
+        created_at TEXT NOT NULL,
+        read_at TEXT,
+        escalation TEXT CHECK (escalation IN ('active', 'acknowledged', 'muted', 'unacknowledged')),
+        attempts INTEGER NOT NULL DEFAULT 0,
+        next_attempt_at TEXT
+      )`,
+      `CREATE INDEX IF NOT EXISTS zur_notices_created ON zur_notices (created_at, id)`,
+      `CREATE INDEX IF NOT EXISTS zur_notices_category ON zur_notices (category, created_at)`,
+      // The bell's count and the insisting ones read only what they need.
+      `CREATE INDEX IF NOT EXISTS zur_notices_unread ON zur_notices (created_at) WHERE read_at IS NULL`,
+      `CREATE INDEX IF NOT EXISTS zur_notices_escalating ON zur_notices (next_attempt_at) WHERE escalation = 'active'`,
+      // Dedupe keys outlive the notice: deleting a notice does not let the same one come back at once.
+      `CREATE TABLE IF NOT EXISTS zur_alert_keys (key TEXT PRIMARY KEY, until TEXT NOT NULL)`,
+      `CREATE INDEX IF NOT EXISTS zur_alert_keys_until ON zur_alert_keys (until)`,
+      // Every try to send a notice out of the app: metadata only, never the text (90 days, 2,000 rows).
+      `CREATE TABLE IF NOT EXISTS zur_alert_deliveries (
+        id INTEGER PRIMARY KEY,
+        at TEXT NOT NULL,
+        notice_id TEXT NOT NULL,
+        kind TEXT NOT NULL,
+        category TEXT NOT NULL,
+        channel TEXT NOT NULL,
+        priority TEXT NOT NULL,
+        attempt INTEGER NOT NULL,
+        status TEXT NOT NULL CHECK (status IN ('sending', 'sent', 'failed', 'skipped')),
+        reason TEXT,
+        -- 1 when it takes a place in the channel's limits (reminders, critical notices and later tries don't).
+        counted INTEGER NOT NULL DEFAULT 0
+      )`,
+      `CREATE INDEX IF NOT EXISTS zur_alert_deliveries_channel ON zur_alert_deliveries (channel, at) WHERE counted = 1`,
+      `CREATE INDEX IF NOT EXISTS zur_alert_deliveries_at ON zur_alert_deliveries (at)`,
+      // One row per kind of failure, not per occurrence: a thousand equal errors cost one row
+      // (docs/planos/observabilidade.md). 200 kinds, 30 days. Never a message, a stack or a value.
+      `CREATE TABLE IF NOT EXISTS zur_diagnostics (
+        id TEXT PRIMARY KEY,
+        fingerprint TEXT NOT NULL UNIQUE,
+        source TEXT NOT NULL,
+        code TEXT NOT NULL,
+        error_name TEXT NOT NULL,
+        route TEXT,
+        count_total INTEGER NOT NULL DEFAULT 0,
+        count_day INTEGER NOT NULL DEFAULT 0,
+        day TEXT NOT NULL,
+        window_start TEXT NOT NULL,
+        window_count INTEGER NOT NULL DEFAULT 0,
+        first_at TEXT NOT NULL,
+        last_at TEXT NOT NULL,
+        last_ref TEXT,
+        release TEXT,
+        resolved_at TEXT
+      )`,
+      `CREATE INDEX IF NOT EXISTS zur_diagnostics_last ON zur_diagnostics (last_at)`,
+      // Counters for the caps, so trimming never counts a table.
+      `INSERT INTO zur_counts (kind, n) VALUES ('notices', 0), ('security_notices', 0), ('notices_unread', 0), ('alert_deliveries', 0) ON CONFLICT (kind) DO NOTHING`,
+      // The bell's count rides on every heartbeat: one row, never a count of the unread.
+      `CREATE TRIGGER IF NOT EXISTS zur_counts_unread_insert AFTER INSERT ON zur_notices WHEN NEW.read_at IS NULL BEGIN UPDATE zur_counts SET n = n + 1 WHERE kind = 'notices_unread'; END`,
+      `CREATE TRIGGER IF NOT EXISTS zur_counts_unread_read AFTER UPDATE OF read_at ON zur_notices WHEN OLD.read_at IS NULL AND NEW.read_at IS NOT NULL BEGIN UPDATE zur_counts SET n = n - 1 WHERE kind = 'notices_unread'; END`,
+      `CREATE TRIGGER IF NOT EXISTS zur_counts_unread_unread AFTER UPDATE OF read_at ON zur_notices WHEN OLD.read_at IS NOT NULL AND NEW.read_at IS NULL BEGIN UPDATE zur_counts SET n = n + 1 WHERE kind = 'notices_unread'; END`,
+      `CREATE TRIGGER IF NOT EXISTS zur_counts_unread_delete AFTER DELETE ON zur_notices WHEN OLD.read_at IS NULL BEGIN UPDATE zur_counts SET n = n - 1 WHERE kind = 'notices_unread'; END`,
+      `CREATE TRIGGER IF NOT EXISTS zur_counts_notices_insert AFTER INSERT ON zur_notices BEGIN UPDATE zur_counts SET n = n + 1 WHERE kind = CASE NEW.category WHEN 'security' THEN 'security_notices' ELSE 'notices' END; END`,
+      `CREATE TRIGGER IF NOT EXISTS zur_counts_notices_delete AFTER DELETE ON zur_notices BEGIN UPDATE zur_counts SET n = n - 1 WHERE kind = CASE OLD.category WHEN 'security' THEN 'security_notices' ELSE 'notices' END; END`,
+      `CREATE TRIGGER IF NOT EXISTS zur_counts_alert_deliveries_insert AFTER INSERT ON zur_alert_deliveries BEGIN UPDATE zur_counts SET n = n + 1 WHERE kind = 'alert_deliveries'; END`,
+      `CREATE TRIGGER IF NOT EXISTS zur_counts_alert_deliveries_delete AFTER DELETE ON zur_alert_deliveries BEGIN UPDATE zur_counts SET n = n - 1 WHERE kind = 'alert_deliveries'; END`,
+    ],
+  },
 ];
 
 export const LATEST_SCHEMA_VERSION = MIGRATIONS.at(-1)?.version ?? 0;

@@ -137,7 +137,8 @@ describe("the Free plan budget of each route", () => {
   it("keeps the heartbeat, sent once a minute while the app is open, to a couple of rows", async () => {
     const beat = await cost("POST", "/auth/heartbeat", { active: true });
     expect(beat.status).toBe(200);
-    expect(beat.read).toBeLessThanOrEqual(2);
+    // The session row, plus one counter row for the bell (step 11): never a count of the notices.
+    expect(beat.read).toBeLessThanOrEqual(3);
     expect(beat.written).toBeLessThanOrEqual(2);
   });
 
@@ -145,7 +146,8 @@ describe("the Free plan budget of each route", () => {
     for (const path of ["/auth/session", "/settings"]) {
       const res = await cost("GET", path);
       expect(res.status, path).toBe(200);
-      expect(res.read, path).toBeLessThanOrEqual(2);
+      // GET /auth/session also carries the bell's count: one more row, from its counter (step 11).
+      expect(res.read, path).toBeLessThanOrEqual(path === "/auth/session" ? 3 : 2);
       expect(res.written, path).toBe(0);
     }
   });

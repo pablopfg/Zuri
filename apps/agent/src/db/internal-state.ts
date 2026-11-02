@@ -24,8 +24,13 @@ export type InternalKey =
   | "setup_tries"
   | "setup_alerted_at"
   | "setup_second_step_required"
-  // The one alarm of the automations: "<UTC ISO>|<schedule id>" (step 10).
-  | "automation_alarm";
+  // The object's one alarm, "<UTC ISO>|<schedule id>": the automations (step 10) and, from step 11,
+  // the tries of insisting notices and the watchers share it (rule P8).
+  | "automation_alarm"
+  // Step 11: when the watchers run next, the local day of the last digest, and the interface errors of this hour.
+  | "alert_watch_at"
+  | "alert_digest_day"
+  | "diagnostics_client_window";
 
 export class InternalState {
   constructor(private readonly db: Database) {}
