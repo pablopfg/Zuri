@@ -39,9 +39,18 @@ Para gerar um valor aleatório, use o gerador do seu gerenciador de senhas
 senhas: trocá-lo depois apaga a senha e desliga a verificação em duas etapas
 (é a redefinição completa).
 
-Sem um desses, o Zuri não abre: a API responde 503 `NOT_CONFIGURED`, e o log do
-Worker, ao chamar `https://zuri.exemplo.com.br/api/health`, lista só os
-**nomes** do que falta, nunca os valores.
+O que acontece quando falta algo (detalhes em
+[arquitetura.md](arquitetura.md#configuração)):
+
+- `PUBLIC_URL` ausente ou malformado: tudo, inclusive a interface, responde 503
+  `NOT_CONFIGURED`, sem log.
+- Outro segredo ausente ou curto: a interface abre, mas a API responde 503
+  `NOT_CONFIGURED`. O log do Worker, ao chamar
+  `https://zuri.exemplo.com.br/api/health`, lista só os **nomes** do que falta,
+  nunca os valores (se faltarem as chaves do Turnstile, elas aparecem primeiro;
+  corrija e chame de novo).
+- `SETUP_CODE` só é preciso enquanto não há senha: sem ele, a instalação nova
+  fica em 503 até você gravá-lo.
 
 ## Criar o widget do Turnstile
 
@@ -83,15 +92,19 @@ O código de instalação prova que quem abre o primeiro acesso é o dono da con
 na Cloudflare. Ele vale **1 hora**, contada da primeira vez que alguém digita
 o código certo, e **uma vez só**. Por isso, grave-o só quando for usar.
 
-1. Gere um código aleatório de 32 caracteres ou mais (no gerenciador de senhas
-   ou com `openssl rand -base64 32`). Códigos curtos ou repetitivos
-   (`aaaa…`, `abcabc…`) são recusados, e o Zuri responde 503 até trocar.
+1. Gere um código aleatório de 32 a 256 caracteres, com pelo menos 10
+   caracteres diferentes (no gerenciador de senhas, ou com
+   `openssl rand -base64 32`). Um código fora disso, curto, longo demais ou
+   repetitivo (`aaaa…`, `abcabc…`), deixa a API inteira em 503 até você
+   trocá-lo.
 2. Grave-o como segredo `SETUP_CODE`.
 3. Abra `https://zuri.exemplo.com.br/entrar`. Numa instalação nova, a tela
    leva sozinha a `/primeiro-acesso`.
 4. **Código.** Cole o código e passe pela verificação contra robôs. Cinco
-   erros em 15 minutos fazem a sua rede esperar; vinte em 24 horas bloqueiam a
-   rede até o fim do dia. Errar não gasta a hora do código.
+   tentativas erradas em 15 minutos fazem a sua rede esperar; vinte em 24
+   horas bloqueiam a rede até a mais antiga delas completar 24 horas. Uma
+   verificação contra robôs que falha também conta. Errar não gasta a hora do
+   código.
 5. **Seus dados.** Seu nome (opcional, aparece no cumprimento), e-mail, senha
    (15 caracteres ou mais, sem partes previsíveis nem senha que já vazou),
    idioma e fuso. Este formulário fica aberto por até 15 minutos.
@@ -103,8 +116,10 @@ o código certo, e **uma vez só**. Por isso, grave-o só quando for usar.
    enquanto o segredo continuar gravado. O código já está gasto, mas não há
    motivo para deixá-lo lá.
 
-Se a hora passar antes de terminar, a tela diz que o código é inválido ou
-venceu: grave um código **novo** e comece de novo.
+Se os 15 minutos do formulário passarem, a tela diz que o tempo para concluir
+acabou: digite o **mesmo** código de novo, que ele ainda vale até completar a
+hora. Se a hora toda passar, a tela diz que o código é inválido ou venceu:
+grave um código **novo** e comece de novo.
 
 ### Recuperar o acesso
 
@@ -119,7 +134,10 @@ Perdeu também o aplicativo autenticador e os códigos de recuperação? Só a
 redefinição completa resolve: troque o `PASSWORD_PEPPER` e grave junto um
 `SETUP_CODE` novo. O pepper novo apaga a senha e desliga a verificação em duas
 etapas e as passkeys; o código recupera o acesso, como acima. Os dados ficam.
-Depois, ligue a verificação em duas etapas de novo em Configurações.
+Até você ligar a verificação em duas etapas de novo em Configurações, a conta
+fica protegida só pela senha, então faça isso logo. Se a instalação ainda tiver
+`OWNER_PASSWORD` ou `OWNER_PASSWORD_HASH` gravado, apague-o: com o pepper novo,
+esse segredo voltaria a valer como senha.
 
 ### Instalações anteriores ao primeiro acesso
 
