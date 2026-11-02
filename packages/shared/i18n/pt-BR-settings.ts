@@ -87,6 +87,13 @@ export const ptBRSettings = {
   "web.password.hint": "Trocar a senha encerra as outras sessões abertas.",
   "web.theme.title": "Aparência",
   "web.settings.sections": "Seções das configurações",
+  "web.settings.morePages": "Outras páginas",
+  "web.settings.hint.automations": "Lembretes, resumo das tarefas e rotinas da Zuri",
+  // Shown by the passkeys card in Settings › Security, so it travels with that screen (rule P11).
+  "auth.passkey.needsMfa": "Ligue antes a verificação em duas etapas com um aplicativo autenticador. Os códigos de recuperação dele são o caminho de volta se você perder as passkeys.",
+  // Only the Settings screen shows these, so they travel with it (rule P11).
+  "web.copied": "Copiado",
+  "web.settings.title": "Configurações",
   "web.account.ownerName": "Seu nome",
   "web.account.ownerNameHint": "Aparece nos cumprimentos da tela inicial. Até 40 caracteres, só texto; pode ser um apelido. Em branco, o cumprimento sai sem nome.",
   "web.account.ownerNameSave": "Salvar nome",

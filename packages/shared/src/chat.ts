@@ -48,11 +48,17 @@ export const TOOL_NAMES = [
   "forget_memory",
   "search",
   "propose_task_plan",
+  "create_reminder",
+  "create_automation",
+  "list_automations",
+  "cancel_automation",
+  "propose_ai_routine",
+  "notify_owner",
 ] as const;
 export type ToolName = (typeof TOOL_NAMES)[number];
 
 /** The destructive ones: they only ever become a proposal the owner approves. */
-export const DESTRUCTIVE_TOOLS = ["delete_task", "replace_task_description", "replace_note_content", "delete_note", "forget_memory"] as const;
+export const DESTRUCTIVE_TOOLS = ["delete_task", "replace_task_description", "replace_note_content", "delete_note", "forget_memory", "cancel_automation"] as const;
 export type DestructiveToolName = (typeof DESTRUCTIVE_TOOLS)[number];
 
 export type ToolStatus = "running" | "success" | "error";
@@ -69,6 +75,8 @@ export interface ToolActivity {
   actionId?: string;
   /** Set when the call proposed a task plan. */
   planId?: string;
+  /** Set when the call proposed an AI routine, which waits for the owner on the Automations page. */
+  automationId?: string;
 }
 
 export const PENDING_ACTION_STATUSES = ["pending", "approved", "cancelled", "expired", "failed"] as const;

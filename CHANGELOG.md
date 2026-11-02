@@ -2,23 +2,35 @@
 
 Todas as mudanças visíveis do Zuri ficam aqui, em pt-BR. O formato segue o
 [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e as versões seguem
-o [SemVer](https://semver.org/lang/pt-BR/). Cada PR escreve a sua entrada em
-"Não lançado"; a release copia a seção para a versão.
+o [SemVer](https://semver.org/lang/pt-BR/). Cada PR escreve a sua entrada num
+arquivo próprio em [`changelog/nao-lancado/`](changelog/nao-lancado/), para
+dois PRs nunca mexerem nas mesmas linhas. O release junta esses arquivos em
+"Não lançado" (`node scripts/changelog.ts --gravar`) e copia a seção para a
+versão.
 
 ## Não lançado
 
 ### Adicionado
 
-- O primeiro acesso pergunta como você quer ser chamado. O campo "Seu nome" é
-  opcional, segue as regras de Configurações > Conta e já aparece no
-  cumprimento da tela inicial.
-
+- Automações (etapa 10), em uma tela nova com lembretes, o resumo das tarefas e
+  as rotinas da Zuri. Cada uma pode rodar uma vez, todo dia, em dias da semana,
+  num dia do mês ou a cada algumas horas (no mínimo 1), sempre no seu fuso.
+  Antes de salvar, a tela mostra as próximas três execuções. Dá para executar
+  na hora, pausar, editar e excluir. O histórico guarda o que cada execução
+  entregou. Por enquanto o resultado fica só nessa tela; os avisos chegam na
+  etapa 11.
+- Na conversa, a Zuri cria lembretes e resumos na hora. Rotinas que usam IA
+  ficam esperando a sua aprovação em Automações, e a conversa mostra o link
+  "Revisar em Automações". Para excluir uma automação pelo chat, você aprova
+  um cartão.
+- Limite de rotinas com IA por dia em Configurações › IA: 6 por padrão, até 48.
+- "Nova automação" e "Automações" na paleta (Ctrl/⌘ K). No celular,
+  Automações também aparece na lista de Configurações.
 - Planejado para o bot do Telegram (etapa 14): quando um áudio passar do
   limite de 5 min e 5 MB, a Zuri avisa, diz quanto deve gastar da cota do dia
   e pergunta se processa mesmo assim, em vez de recusar. Acima do que dá para
   processar de graça (20 MB que o Telegram deixa baixar, ou a cota do dia), ela
   explica o motivo.
-
 - Plano para a troca automática de provedor de IA e para proteger os dados
   enviados aos modelos, em `docs/planos/troca-de-provedores-e-protecao-de-dados.md`.
   A troca fica no próprio Zuri, com um disjuntor por provedor, em vez do AI
@@ -404,6 +416,10 @@ o [SemVer](https://semver.org/lang/pt-BR/). Cada PR escreve a sua entrada em
   (`docs/seguranca.md`).
 
 ### Atualização
+
+- Migration 9 cria `zur_automations` e `zur_automation_runs`, com os
+  contadores de automações e de execuções. Nada muda nos dados que já existem
+  e não há segredo novo. A configuração "Rotinas com IA por dia" começa em 6.
 
 - Migration 8 cria `zur_conversations`, `zur_messages`,
   `zur_pending_actions` e `zur_task_plan_drafts`, com os contadores de

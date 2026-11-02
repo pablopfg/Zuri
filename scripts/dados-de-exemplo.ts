@@ -1,13 +1,14 @@
 /**
- * Sample data for screenshots: invented tasks, notes and memories, never the
+ * Sample data for screenshots: invented tasks, notes, memories and automations, never the
  * owner's. Shared by capturas-do-readme.ts and capturas-da-interface.ts.
  */
 import type { Page } from "@playwright/test";
 import { CSRF } from "../tests/e2e/ui-helpers.ts";
 
-/** A deadline `days` from today, at 18:00 in São Paulo. */
-const dueIn = (days: number) => `${new Date(Date.now() + days * 86_400_000).toISOString().slice(0, 10)}T21:00:00.000Z`;
-const dayIn = (days: number) => new Date(Date.now() + days * 86_400_000).toISOString().slice(0, 10);
+/** The day `days` from today in São Paulo (not UTC's day: late in the evening they differ). */
+const dayIn = (days: number) => new Date(Date.now() + days * 86_400_000).toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" });
+/** A deadline `days` from today, at 18:00 in São Paulo (UTC-3, no summer time since 2019). */
+const dueIn = (days: number) => `${dayIn(days)}T21:00:00.000Z`;
 
 /**
  * Creates the sample projects, tasks, notes, memories and a conversation with a
@@ -73,6 +74,23 @@ export async function seed(page: Page, base: string): Promise<{ conversationId: 
     ],
   };
   const conversationId = await chat(`call propose_task_plan ${JSON.stringify(plan)}`);
+  // Automations (step 10): a reminder, the morning digest with one run in the history, a paused
+  // one, and a routine the assistant proposed that waits for approval.
+  const reminder = await post("/api/automations", { name: "Remédio da pressão", kind: "reminder", message: "Tomar o remédio da pressão com água.", schedule: { type: "daily", time: "08:00" } });
+  const digest = await post("/api/automations", { name: "Resumo da manhã", kind: "task_digest", schedule: { type: "weekly", days: [1, 2, 3, 4, 5], time: "07:30" } });
+  await post(`/api/automations/${digest.automation?.id}/run`, {});
+  await post(`/api/automations/${reminder.automation?.id}/run`, {});
+  const rent = await post("/api/automations", { name: "Pagar o aluguel", kind: "reminder", message: "O aluguel vence amanhã.", schedule: { type: "monthly", day: 31, time: "09:00" } });
+  const paused = await page.request.patch(`${base}/api/automations/${rent.automation?.id}`, { headers: CSRF, data: { paused: true } });
+  if (!paused.ok()) throw new Error(`pause: ${paused.status()}`);
+  const routine = {
+    name: "Revisão de sexta",
+    prompt: "Veja minhas tarefas da semana e me diga o que ficou atrasado e o que posso adiar.",
+    schedule: { type: "weekly", days: [5], time: "17:00" },
+    quiet: true,
+  };
+  const proposed = await chat(`call propose_ai_routine ${JSON.stringify(routine)}`);
+  await page.request.delete(`${base}/api/conversations/${proposed}`, { headers: CSRF });
   const renamed = await page.request.patch(`${base}/api/conversations/${conversationId}`, { headers: CSRF, data: { title: "Organizar a mudança" } });
   if (!renamed.ok()) throw new Error(`rename: ${renamed.status()}`);
   return { conversationId };

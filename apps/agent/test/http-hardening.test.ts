@@ -118,6 +118,7 @@ function api(auth: AuthService) {
     settings: unused,
     productivity: unused,
     memories: unused,
+    automations: unused,
     aiUsage: unused,
     chat: unused,
     passwordSecretSet: () => true,

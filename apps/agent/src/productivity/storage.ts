@@ -9,6 +9,7 @@ const LIMIT_MESSAGE: Record<StorageKind, MessageKey> = {
   memories: "error.storageLimit.memories",
   conversations: "error.storageLimit.conversations",
   messages: "error.storageLimit.messages",
+  automations: "error.storageLimit.automations",
 };
 
 export type CountKind =
@@ -18,7 +19,8 @@ export type CountKind =
   | "memories_active"
   | "memories_uncertain"
   | "memories_historical"
-  | "memory_reviews";
+  | "memory_reviews"
+  | "automation_runs";
 
 /**
  * The limits per kind and the database ceiling (rule 9). They only ever refuse

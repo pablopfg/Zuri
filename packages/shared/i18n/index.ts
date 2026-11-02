@@ -11,6 +11,8 @@ import { ptBRSettings } from "./pt-BR-settings.ts";
 import { ptBRGreeting } from "./pt-BR-greeting.ts";
 import { ptBRNotices } from "./pt-BR-notices.ts";
 import { ptBRSetup } from "./pt-BR-setup.ts";
+import { ptBRAutomations } from "./pt-BR-automations.ts";
+import { ptBRMarkdown } from "./pt-BR-markdown.ts";
 
 export type MessageKey = keyof typeof ptBR;
 export type Messages = Record<MessageKey, string>;
@@ -23,11 +25,27 @@ export const catalogs: Record<Locale, Messages> = { "pt-BR": ptBR, en };
 
 /**
  * The default catalog. The server carries all of it (`ptBR`); the interface
- * starts with `ptBRCore` and adds a screen's part (`ptBRAi`, `ptBRChat`, `ptBRMemory`,
- * `ptBRGreeting`, `ptBRNotices`, `ptBRPalette`, `ptBRProductivity`, `ptBRSecurity`, `ptBRSettings`, `ptBRSetup`) when that screen loads.
+ * starts with `ptBRCore` and adds a screen's part when that screen loads.
  * `ptBRServer` holds what only the server says: it never reaches the interface.
+ * One name per line, so two pull requests that add a part add separate lines.
  */
-export { ptBR, ptBRAi, ptBRChat, ptBRCore, ptBRGreeting, ptBRMemory, ptBRNotices, ptBRPalette, ptBRProductivity, ptBRSecurity, ptBRServer, ptBRSettings, ptBRSetup };
+export {
+  ptBR,
+  ptBRCore,
+  ptBRAi,
+  ptBRChat,
+  ptBRMemory,
+  ptBRProductivity,
+  ptBRSecurity,
+  ptBRPalette,
+  ptBRServer,
+  ptBRSettings,
+  ptBRGreeting,
+  ptBRSetup,
+  ptBRNotices,
+  ptBRAutomations,
+  ptBRMarkdown,
+};
 
 export type Params = Record<string, string | number>;
 

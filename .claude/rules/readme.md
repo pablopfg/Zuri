@@ -6,6 +6,7 @@ paths:
   - ".claude/memoria/progresso.md"
   - "README.md"
   - "CHANGELOG.md"
+  - "changelog/**"
 ---
 
 # README sempre atualizado
@@ -14,7 +15,7 @@ Decisão do Pablo (31/10/2026): o `README.md` é a vitrine do Zuri e anda junto 
 
 ## Quando o PR atualiza o README
 
-Todo PR que muda um destes itens atualiza o README **no mesmo PR**, junto com a entrada do `CHANGELOG.md`:
+Todo PR que muda um destes itens atualiza o README **no mesmo PR**, junto com o arquivo do changelog em `changelog/nao-lancado/`:
 
 | O PR muda | O que mexer no README |
 | --- | --- |

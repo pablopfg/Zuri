@@ -23,3 +23,8 @@
 | Substituição | Vínculo `superseded_by` de uma memória passada para a que tomou o lugar dela. Nunca forma ciclo. |
 | Revisão de memória | Item da fila "Para revisar", aberto quando um fato novo parece mudar ou contradizer um antigo. Só o dono resolve. |
 | Atualizar o fato | Gravar um fato novo que substitui o antigo, que vira passado (rota `correct`). Diferente de editar, que corrige a mesma memória. |
+| Automação | Lembrete, resumo das tarefas ou rotina da Zuri que roda num horário, no fuso do dono (`zur_automations`). Ativa, pausada, esperando aprovação ou concluída. |
+| Rotina da Zuri | Automação do tipo `agent_prompt`: a cada execução a Zuri responde a um pedido com ferramentas de leitura. Quando vem do chat, só roda depois da aprovação do dono. |
+| Horário (`slot`) | O instante previsto de uma execução. Cada horário é reivindicado uma vez só; o índice único `(automation_id, slot)` impede repetição. |
+| Execução recuperada | Execução de um horário perdido há menos de 24 h, rodada quando o objeto acorda (`catch_up`). Com 24 h ou mais, o horário é pulado. |
+| Só me avise quando houver algo | Modo sentinela de uma rotina: a resposta `NADA` vira "Nada a avisar" e não incomoda o dono. |

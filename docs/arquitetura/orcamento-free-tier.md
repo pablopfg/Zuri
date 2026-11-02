@@ -102,7 +102,7 @@ especificação usados até o fim.
 | Duração do DO, com hibernação | ~160 GB-s | 1,2% | ~600 GB-s | 5% | folgada |
 | Duração do DO, se algo impedir a hibernação | 5.400 GB-s | 42% | ~11.000 GB-s | 85% | apertada |
 | Linhas lidas | ~110.000 | 2,2% | ~1,5 milhão | 30% | folgada |
-| Linhas escritas | ~4.000 | 4% | ~25.000 | 25% | boa |
+| Linhas escritas | ~4.100 | 4,1% | ~48.000 | 48% | boa |
 | Neurons do Workers AI | ~6.500 | 65% | ~16.800 | 168% | **apertada** |
 | Eventos de log | ~3.000 | 1,5% | ~8.000 | 4% | folgada |
 | Armazenamento | cresce devagar | — | teto próprio de 900 MB | 90% do objeto | boa |
@@ -125,6 +125,18 @@ Como cheguei nos números:
 - **Linhas.** 100 listas a ~400 linhas, 30 buscas em 1.000 tarefas, o
   heartbeat e o histórico do chat. O pior caso põe 20.000 tarefas, 30 buscas
   (600.000 linhas) e 5.000 atrasadas na vista "Hoje" aberta 80 vezes.
+- **Automações (etapa 10).** O teste de orçamento mede um despertar do
+  alarme com uma automação vencida: 21 linhas lidas e 13 escritas (a execução
+  com índices e contador, a automação, a finalização e o alarme). O histórico
+  guarda 2.000 execuções e só poda quando passa de 2.050, apagando 50 de uma
+  vez; cada linha apagada custa umas 6 escritas (índices e contador), umas 6
+  por execução no longo prazo. No dia cheio, 5 automações diárias somam umas
+  100 escritas. No pior caso, 50 automações de hora em hora dão 1.200
+  execuções por dia: 1.200 × (13 + 6) ≈ 23.000 escritas, que somadas às
+  25.000 do chat dão as 48.000 da tabela. Uma execução manual ("Executar
+  agora") custa 15 lidas e 10 escritas. Cada despertar roda no máximo 2
+  rotinas com IA (cada uma com prazo de 5 min), para ficar longe do limite de
+  15 min do alarme.
 - **Neurons.** Um chamado ao modelo com 6.000 tokens de contexto custa uns 33
   Neurons de entrada; 400 tokens de resposta, uns 15. Um turno com duas
   iterações fica perto de 100. Os padrões da especificação (200 pedidos de IA

@@ -89,6 +89,7 @@ describe("the migration list", () => {
       6: "fcebcd8e24cdf35cfa227b8e884e5a8fef72dd5858b886054fa7dade848e5730",
       7: "975245f3b1af6fcdea2793c1cc14adf75da337311943fffb54de586f2ae81701",
       8: "2c9dc9a7347e9929d8e8e517201b749352f14e8dfc44cf1d306bdfa16b4f49fd",
+      9: "bc70a4e518b48d148475ac3881abb565015f4f21b69c26c36a28054c47429c91",
     };
     for (const m of MIGRATIONS) {
       const digest = createHash("sha256").update(statementText(m).replace(/\r\n/g, "\n")).digest("hex");
@@ -104,7 +105,7 @@ describe("migrate", () => {
       expect(zurObjects(db)).toEqual([]);
 
       expect(migrate(db)).toBe(LATEST_SCHEMA_VERSION);
-      expect(schemaVersion(db)).toBe(8);
+      expect(schemaVersion(db)).toBe(9);
       // FTS5 keeps shadow tables of its own (zur_notes_fts_data and others): only ours are listed.
       expect(zurObjects(db).filter((name) => !/^table:zur_(notes|memories)_fts_/.test(name))).toEqual([
         "table:zur_activity",
@@ -114,9 +115,21 @@ describe("migrate", () => {
         "index:zur_auth_events_at",
         "table:zur_auth_events_daily",
         "index:zur_auth_events_network",
+        "table:zur_automation_runs",
+        "index:zur_automation_runs_automation",
+        "index:zur_automation_runs_slot",
+        "index:zur_automation_runs_started",
+        "index:zur_automation_runs_status",
+        "table:zur_automations",
+        "index:zur_automations_created",
+        "index:zur_automations_due",
         "table:zur_conversations",
         "index:zur_conversations_updated",
         "table:zur_counts",
+        "trigger:zur_counts_automation_runs_delete",
+        "trigger:zur_counts_automation_runs_insert",
+        "trigger:zur_counts_automations_delete",
+        "trigger:zur_counts_automations_insert",
         "trigger:zur_counts_conversations_delete",
         "trigger:zur_counts_conversations_insert",
         "trigger:zur_counts_memories_delete",
@@ -282,12 +295,52 @@ describe("migrate", () => {
     });
   });
 
+  it("upgrades a database at version 8 to 9: automations and their runs, with their checks and counter, the owner's data kept", async () => {
+    await withEmptyDatabase("from-8", (db) => {
+      expect(migrate(db, MIGRATIONS.slice(0, 8))).toBe(8);
+      db.run(`INSERT INTO zur_tasks (id, title, created_at, updated_at) VALUES ('t1', 'Pagar a luz', 'x', 'x')`);
+      expect(migrate(db)).toBe(9);
+      expect(db.one(`SELECT title FROM zur_tasks WHERE id = 't1'`)).toEqual({ title: "Pagar a luz" });
+      const count = () => db.one<{ n: number }>(`SELECT n FROM zur_counts WHERE kind = 'automations'`)?.n;
+      expect(count()).toBe(0);
+      const insert = (id: string, kind = "reminder", status = "active") =>
+        db.run(
+          `INSERT INTO zur_automations (id, name, kind, schedule, status, created_at, updated_at) VALUES (?, 'Lembrete', ?, '{"type":"daily","time":"09:00"}', ?, 'x', 'x')`,
+          id,
+          kind,
+          status,
+        );
+      insert("a1");
+      insert("a2", "agent_prompt", "pending_approval");
+      expect(count()).toBe(2);
+      db.run(`DELETE FROM zur_automations WHERE id = 'a1'`);
+      expect(count()).toBe(1);
+      // Values outside the lists are refused by the tables themselves.
+      expect(() => insert("a3", "shell")).toThrow();
+      expect(() => insert("a4", "reminder", "running")).toThrow();
+      const run = (id: string, slot: string | null, trigger = "schedule") =>
+        db.run(
+          `INSERT INTO zur_automation_runs (id, automation_id, automation_name, kind, trigger, slot, status, started_at) VALUES (?, 'a2', 'n', 'reminder', ?, ?, 'running', 'x')`,
+          id,
+          trigger,
+          slot,
+        );
+      run("r1", "2026-11-01T12:00:00.000Z");
+      // One run per automation and slot: the same slot can never run twice.
+      expect(() => run("r2", "2026-11-01T12:00:00.000Z")).toThrow();
+      run("r3", null, "manual");
+      run("r4", null, "manual");
+      expect(db.one<{ n: number }>(`SELECT n FROM zur_counts WHERE kind = 'automation_runs'`)?.n).toBe(3);
+      expect(() => run("r5", null, "cron")).toThrow();
+    });
+  });
+
   it("upgrades a database at version 7 to 8: the chat tables and their counters, the owner's data kept", async () => {
     await withEmptyDatabase("from-7", (db) => {
       expect(migrate(db, MIGRATIONS.slice(0, 7))).toBe(7);
       db.run(`INSERT INTO zur_tasks (id, title, created_at, updated_at) VALUES ('t1', 'Pagar a luz', 'x', 'x')`);
       db.run(`INSERT INTO zur_memories (id, content, dedupe_key, created_at, updated_at) VALUES ('mem1', 'Mora em BH', 1, 'x', 'x')`);
-      expect(migrate(db)).toBe(8);
+      expect(migrate(db, MIGRATIONS.slice(0, 8))).toBe(8);
       expect(db.one(`SELECT title FROM zur_tasks WHERE id = 't1'`)).toEqual({ title: "Pagar a luz" });
       // A memory saved before version 8 was the owner's: nothing else could save one.
       expect(db.one(`SELECT content, author FROM zur_memories WHERE id = 'mem1'`)).toEqual({ content: "Mora em BH", author: "owner" });
@@ -435,9 +488,9 @@ describe("migrate", () => {
   it("leaves a database newer than the code as it is", async () => {
     await withEmptyDatabase("newer", (db) => {
       migrate(db);
-      db.run(`UPDATE zur_schema_version SET version = 9`);
-      expect(migrate(db)).toBe(9);
-      expect(schemaVersion(db)).toBe(9);
+      db.run(`UPDATE zur_schema_version SET version = ?`, LATEST_SCHEMA_VERSION + 1);
+      expect(migrate(db)).toBe(LATEST_SCHEMA_VERSION + 1);
+      expect(schemaVersion(db)).toBe(LATEST_SCHEMA_VERSION + 1);
     });
   });
 });

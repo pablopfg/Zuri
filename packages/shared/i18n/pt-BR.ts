@@ -9,6 +9,8 @@ import { ptBRSettings } from "./pt-BR-settings.ts";
 import { ptBRGreeting } from "./pt-BR-greeting.ts";
 import { ptBRNotices } from "./pt-BR-notices.ts";
 import { ptBRSetup } from "./pt-BR-setup.ts";
+import { ptBRAutomations } from "./pt-BR-automations.ts";
+import { ptBRMarkdown } from "./pt-BR-markdown.ts";
 
 // Default and fallback catalog. Every key must also exist in en.ts and be used in the code (npm run lint).
 // The texts of the lazy screens live in their own files (pt-BR-memory.ts, pt-BR-productivity.ts,
@@ -17,14 +19,12 @@ export const ptBRCore = {
   "app.name": "Zuri",
   "error.internal": "Algo deu errado. Seus dados estão seguros; tente de novo.",
   "format.dateTime": "{date} às {time}",
-  "auth.passkey.needsMfa": "Ligue antes a verificação em duas etapas com um aplicativo autenticador. Os códigos de recuperação dele são o caminho de volta se você perder as passkeys.",
   "web.loading": "Carregando…",
   "web.retry": "Tentar de novo",
   "web.cancel": "Cancelar",
   "web.close": "Fechar",
   "web.save": "Salvar",
   "web.saved": "Salvo.",
-  "web.copied": "Copiado",
   "web.error.network": "Sem conexão com a Zuri. Confira a internet e tente de novo.",
   "web.session.checking": "Conferindo a sua sessão…",
   "web.nav.main": "Navegação principal",
@@ -98,7 +98,6 @@ export const ptBRCore = {
   "web.crash.reload": "Recarregar",
   "web.password.show": "Mostrar senha",
   "web.password.hide": "Ocultar senha",
-  "web.settings.title": "Configurações",
   "web.mfaReminder.body": "A verificação em duas etapas está desligada. Ligue para proteger a sua conta.",
   "web.mfaReminder.short": "Duas etapas desligadas",
   "web.mfaReminder.action": "Ligar agora",
@@ -117,30 +116,39 @@ export const ptBRCore = {
   "web.nav.accessLog": "Acessos",
   "web.nav.tasks": "Tarefas",
   "web.nav.notes": "Notas",
-  "web.markdown.image": "[imagem: {alt}]",
-  "web.markdown.done": "Feito",
-  "web.markdown.open": "A fazer",
   "web.nav.memory": "Memória",
   "web.nav.chat": "Conversa",
+  "web.nav.automations": "Automações",
 } as const;
 
+/** The intersection of every part's type, so each key stays a literal key. */
+type Joined<T extends readonly object[]> = T extends readonly [infer Head, ...infer Rest extends readonly object[]]
+  ? Head & Joined<Rest>
+  : unknown;
+
 /** Joins catalog parts. Marked pure so a bundle that never uses the whole catalog drops the call. */
-function join<A extends object, B extends object, C extends object, D extends object, E extends object, F extends object, G extends object, H extends object, I extends object, J extends object, K extends object, L extends object>(
-  a: A,
-  b: B,
-  c: C,
-  d: D,
-  e: E,
-  f: F,
-  g: G,
-  h: H,
-  i: I,
-  j: J,
-  k: K,
-  l: L,
-): A & B & C & D & E & F & G & H & I & J & K & L {
-  return { ...a, ...b, ...c, ...d, ...e, ...f, ...g, ...h, ...i, ...j, ...k, ...l };
+function join<const T extends readonly object[]>(...parts: T): Joined<T> {
+  return Object.assign({}, ...parts) as Joined<T>;
 }
 
-/** The whole pt-BR catalog: what the server, the tests and the lint use. */
-export const ptBR = /* @__PURE__ */ join(ptBRCore, ptBRMemory, ptBRProductivity, ptBRSecurity, ptBRAi, ptBRChat, ptBRSettings, ptBRServer, ptBRPalette, ptBRGreeting, ptBRSetup, ptBRNotices);
+/**
+ * The whole pt-BR catalog: what the server, the tests and the lint use. One
+ * part per line: a screen that adds its part adds one line at the end, so two
+ * pull requests never edit the same line.
+ */
+export const ptBR = /* @__PURE__ */ join(
+  ptBRCore,
+  ptBRMemory,
+  ptBRProductivity,
+  ptBRSecurity,
+  ptBRAi,
+  ptBRChat,
+  ptBRSettings,
+  ptBRServer,
+  ptBRPalette,
+  ptBRGreeting,
+  ptBRSetup,
+  ptBRNotices,
+  ptBRAutomations,
+  ptBRMarkdown,
+);

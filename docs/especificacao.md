@@ -25,7 +25,7 @@ O novo sistema se chama **Zuri** (escolha do Pablo em 30/10/2026). O prefixo té
 - [ ] Testes unitários novos cobrindo o caminho feliz, os limites e as recusas de segurança.
 - [ ] Teste e2e (Playwright) quando houver tela nova.
 - [ ] Todas as strings novas nos catálogos de tradução; o teste de i18n passa.
-- [ ] Documento da funcionalidade em `docs/` (pt-BR) e entrada no `CHANGELOG.md`.
+- [ ] Documento da funcionalidade em `docs/` (pt-BR) e entrada de changelog em `changelog/nao-lancado/`.
 - [ ] Migrations só de acréscimo (nunca `DROP`), com teste.
 - [ ] Auditoria de segurança feita e achados corrigidos ou listados no corpo do PR.
 - [ ] CI verde no PR.
@@ -723,7 +723,7 @@ Nenhum teste chama a Cloudflare, o Telegram ou provedores de IA de verdade. Um *
 
 - `ci.yml` em `pull_request`: instalar com `npm ci`, typecheck, lint, testes, i18n, build, e2e, `npm audit`.
 - `deploy.yml` em push para `main`: mesmos testes, depois `wrangler deploy` do Worker único com o ambiente `production` (só `main`, com aprovação) e geração do binding `SEND_EMAIL` com `destination_address` a partir da variável `ZURI_ALERT_EMAIL_TO` do ambiente. O webhook e o menu do bot são registrados pelo próprio Worker (etapa 12), nunca pelo Actions. O deploy falha se `workers_dev` ou `preview_urls` estiverem ligados com domínio próprio.
-- `release.yml` por tag `vX.Y.Z` (SemVer): o CHANGELOG.md é escrito à mão em cada PR e o release copia a seção "Não lançado" para a versão.
+- `release.yml` por tag `vX.Y.Z` (SemVer): cada PR escreve o changelog à mão em `changelog/nao-lancado/<assunto>.md`; o release junta os arquivos em "Não lançado" (`node scripts/changelog.ts --gravar`) e copia a seção para a versão.
 - Segredos do Worker são gravados pelo dono no painel da Cloudflare, nunca no GitHub.
 
 ### Documentação (toda em pt-BR)

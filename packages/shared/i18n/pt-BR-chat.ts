@@ -136,4 +136,12 @@ export const ptBRChat = {
   "web.chat.priority.medium": "Média",
   "web.chat.priority.high": "Alta",
   "web.chat.priority.urgent": "Urgente",
+  "web.chat.tool.create_reminder": "Criar lembrete",
+  "web.chat.tool.create_automation": "Criar automação",
+  "web.chat.tool.list_automations": "Consultar automações",
+  "web.chat.tool.cancel_automation": "Propor excluir automação",
+  "web.chat.tool.propose_ai_routine": "Propor rotina",
+  "web.chat.tool.notify_owner": "Avisar você",
+  "web.chat.approval.cancel_automation": "Excluir a automação “{target}”. Ela para de rodar na hora.",
+  "web.chat.automationLink": "Revisar em Automações",
 } as const;

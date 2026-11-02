@@ -34,6 +34,9 @@ function api(auth: AuthService) {
     productivity: () => {
       throw new Error("not used");
     },
+    automations: () => {
+      throw new Error("not used");
+    },
     memories: () => {
       throw new Error("not used");
     },
