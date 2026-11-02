@@ -5,7 +5,7 @@ import type { MeteredAI } from "../ai/metered.ts";
 import { estimateTokens, type ProviderTool } from "../ai/provider.ts";
 import type { ConversationRepository, Quoted } from "../chat/conversations.ts";
 import { AppError } from "../http/errors.ts";
-import { memoryPromptSection, memoryTokenBudget, selectRelevantMemories } from "../memory/recall.ts";
+import { MAX_RELEVANT_MEMORIES, memoryPromptSection, memoryTokenBudget, selectRelevantMemories } from "../memory/recall.ts";
 import { ALL_TOOLS } from "../tools/index.ts";
 import { type Notice, type ToolContext, type ToolDefinition, ToolExecutor } from "../tools/registry.ts";
 import { contextBudget, contextWindow, SUMMARIZE_THRESHOLD, summaryRequest } from "./context.ts";
@@ -139,7 +139,8 @@ export class AgentRunner {
 
       // Memories: a fifth of the budget at most, every one a <data> line.
       const repo = this.deps.tools.memories.repo;
-      const memories = memoryPromptSection(selectRelevantMemories(repo, input.message), memoryTokenBudget(budget), (id) => repo.get(id));
+      const meaning = await this.meaning(input.message, input.signal);
+      const memories = memoryPromptSection(selectRelevantMemories(repo, input.message, meaning), memoryTokenBudget(budget), (id) => repo.get(id));
       const row = conversations.row(conversation.id);
       let summary = row.summary;
       let summaryUpto = row.summary_upto;
@@ -256,6 +257,22 @@ export class AgentRunner {
   }
 
   /**
+   * The memories closest in meaning to the message (step 17): empty with the
+   * module off, or when the question could not become a vector. A failure
+   * here never fails the turn: the keyword recall still runs.
+   */
+  private async meaning(text: string, signal: AbortSignal): Promise<string[]> {
+    const semantic = this.deps.tools.semantic;
+    if (!semantic) return [];
+    try {
+      return (await semantic.search(text, ["memory"], MAX_RELEVANT_MEMORIES, signal))?.memory ?? [];
+    } catch (error) {
+      log("warn", "semantic_recall_failed", { error });
+      return [];
+    }
+  }
+
+  /**
    * One run of an AI routine the owner approved (step 10): no conversation and
    * nobody watching, so only the read tools and notify_owner are offered
    * (mode "scheduled"); nothing is written, deleted or proposed. The routine's
@@ -272,7 +289,8 @@ export class AgentRunner {
     const offered = executor.available();
     const budget = chainBudget(ai, settings.aiMaxContextTokens, settings.aiMaxOutputTokens, offered.length ? toolTokens(offered) : 0);
     const repo = this.deps.tools.memories.repo;
-    const memories = memoryPromptSection(selectRelevantMemories(repo, input.prompt), memoryTokenBudget(budget), (id) => repo.get(id));
+    const meaning = await this.meaning(input.prompt, input.signal);
+    const memories = memoryPromptSection(selectRelevantMemories(repo, input.prompt, meaning), memoryTokenBudget(budget), (id) => repo.get(id));
     const system = buildSystemPrompt({
       agentName: this.deps.agentName,
       language: LANGUAGE[locale],

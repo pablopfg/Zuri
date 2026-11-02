@@ -45,6 +45,8 @@ import { TaskPlanService } from "../chat/plans.ts";
 import { MemoryService } from "../memory/service.ts";
 import { Productivity } from "../productivity/index.ts";
 import { log } from "../log.ts";
+import { MockEmbedder, type Embedder, WorkersAIEmbedder } from "../semantic/embedder.ts";
+import { SemanticSearch } from "../semantic/service.ts";
 import { ALL_TOOLS } from "../tools/index.ts";
 import type { ToolContext } from "../tools/registry.ts";
 import { AgentRunner } from "./runner.ts";
@@ -96,6 +98,8 @@ interface Store {
   diagnostics: DiagnosticsService;
   push: PushService;
   telegram: TelegramService;
+  /** The search by meaning (step 17): off by default. */
+  semantic: SemanticSearch;
   /** The bot's conversation with the agent (step 14). */
   telegramConversation: TelegramConversation;
 }
@@ -126,6 +130,8 @@ export class ZuriAgent extends Agent<WorkerEnv> {
   /** The AI providers' breaker: in memory, so it lasts as long as the object stays awake. */
   #breaker: CircuitBreaker | undefined;
   testTranscriber: Transcriber | null = null;
+  /** Tests only: a stand-in embedding model (step 17). */
+  testEmbedder: Embedder | null = null;
   /** How often a running chat stream writes a ping (SSE_PING_MS); the tests shorten it. */
   streamPingMs = SSE_PING_MS;
   readonly #api = createApi({
@@ -155,6 +161,13 @@ export class ZuriAgent extends Agent<WorkerEnv> {
       pingMs: () => this.streamPingMs,
     }),
     notices: () => ({ alerts: this.store.alerts, diagnostics: this.store.diagnostics, auth: this.store.auth, push: this.store.push }),
+    semantic: () => ({
+      service: this.store.semantic,
+      productivity: this.store.productivity,
+      memories: this.store.memories,
+      automations: this.store.automations,
+      rearm: () => this.store.automations.rearm(),
+    }),
     telegram: () => ({
       telegram: this.store.telegram,
       auth: this.store.auth,
@@ -176,8 +189,8 @@ export class ZuriAgent extends Agent<WorkerEnv> {
   }
 
   private toolServices(): Omit<ToolContext, "conversationId" | "mode" | "timeZone"> {
-    const { db, productivity, memories, conversations, plans, actions, automations } = this.store;
-    return { db, productivity, memories, conversations, plans, actions, automations };
+    const { db, productivity, memories, conversations, plans, actions, automations, semantic } = this.store;
+    return { db, productivity, memories, conversations, plans, actions, automations, semantic };
   }
 
   /** How an automation runs: reminders and the digest without AI, routines through the runner. */
@@ -224,6 +237,8 @@ export class ZuriAgent extends Agent<WorkerEnv> {
     // The watchers go first, since their round moves the next one forward before anything else.
     const steps = [
       () => watchers.tick(),
+      // The search by meaning's indexing (step 17): nothing at all while it is off.
+      () => this.store.semantic.tick(),
       () => diagnostics.flush(),
       () => alerts.sweep(),
       () => this.store.push.prune(),
@@ -317,7 +332,18 @@ export class ZuriAgent extends Agent<WorkerEnv> {
           breaker,
         });
     const transcriber = this.testTranscriber ?? (this.development() ? new MockTranscriber() : this.env.AI ? new WorkersAITranscriber(this.env.AI) : null);
-    return new MeteredAI(chain, this.store.usage, () => this.aiLimits(), undefined, transcriber, this.secretValues());
+    return new MeteredAI(chain, this.store.usage, () => this.aiLimits(), undefined, transcriber, this.secretValues(), this.embedder());
+  }
+
+  /**
+   * The embedding model (step 17): the owner's Workers AI, or the mock in local
+   * development. Never the chat chain, whatever model or fallback the owner
+   * picked: the index reads everything stored (D8).
+   */
+  embedder(): Embedder | null {
+    if (this.testEmbedder) return this.testEmbedder;
+    if (this.development()) return new MockEmbedder();
+    return this.env.AI ? new WorkersAIEmbedder(this.env.AI) : null;
   }
 
   /** The breaker, made once per wake of the object; the spent allocation is read back from the database. */
@@ -444,7 +470,8 @@ export class ZuriAgent extends Agent<WorkerEnv> {
         otherDue: () => {
           const tries = alerts.nextDue();
           const watch = watchers.nextDue();
-          const due = tries && tries < watch ? tries : watch;
+          const indexing = semantic.nextDue();
+          const due = [tries, watch, indexing].filter((at): at is string => Boolean(at)).sort()[0] ?? watch;
           // Work already past due is only left there when its step failed on the last
           // alarm (a full disk, say): wait a minute before trying again, never at once,
           // so a step that keeps failing can't spin the alarm through the day's quota.
@@ -462,6 +489,13 @@ export class ZuriAgent extends Agent<WorkerEnv> {
         },
       });
       const usage = new UsageMeter(db);
+      const semantic = new SemanticSearch({
+        db,
+        state,
+        ai: () => this.ai(),
+        lockdown: () => auth.lockdown.active(),
+        neuronsPerDay: () => settings.field("aiNeuronsPerDay"),
+      });
       // The owner's conversation in the bot (step 14): the same runner, meter and turns as the app.
       const telegramConversation = new TelegramConversation({
         db,
@@ -538,6 +572,7 @@ export class ZuriAgent extends Agent<WorkerEnv> {
         productivity,
         memories,
         automations,
+        semantic,
         alerts: () => alerts,
         usage: () => usage.report(this.aiLimits(), this.development() ? "mock" : "workers-ai", settings.field("aiModel")),
         diagnostics: () => diagnostics.report(),
@@ -582,7 +617,7 @@ export class ZuriAgent extends Agent<WorkerEnv> {
         // Local development never reaches Telegram (src/telegram/dev-telegram.ts).
         ...(this.development() ? { fetcher: developmentTelegramFetcher as typeof fetch } : {}),
       });
-      this.#store = { db, settings, auth, productivity, memories, usage, conversations, actions, plans, automations, alerts, watchers, diagnostics, push, telegram, telegramConversation };
+      this.#store = { db, settings, auth, productivity, memories, usage, conversations, actions, plans, automations, alerts, watchers, diagnostics, push, telegram, telegramConversation, semantic };
     }
     return this.#store;
   }

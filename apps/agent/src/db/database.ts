@@ -1,4 +1,5 @@
-export type SqlValue = string | number | null;
+/** Bound values: text, numbers, null, and bytes (the packed vectors of step 17). */
+export type SqlValue = string | number | null | ArrayBuffer;
 export type Row = Record<string, SqlValue>;
 
 /**

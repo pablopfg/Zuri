@@ -157,7 +157,7 @@ O que está na `develop` hoje, etapa por etapa. "extra" marca melhorias feitas f
 | 📱 | **2FA e passkeys** | Aplicativo autenticador (TOTP), 10 códigos de recuperação e passkeys no segundo passo. Ligar o 2FA e criar uma passkey pedem a senha na hora. Alerta a cada 3 códigos errados seguidos; com 30 erros em 24 h, o segundo passo fica suspenso para redes desconhecidas. | 4 |
 | 🧭 | **Interface web (PWA)** | Barra lateral recolhível, navegação inferior no celular, tema claro, escuro ou do sistema, instalável no celular e no computador. | 5 |
 | 👋 | **Cumprimento no Início** | Bom dia, boa tarde ou boa noite pelo seu fuso, com o seu nome (Configurações > Conta) e uma frase curta da Zuri que muda a cada dia. | extra |
-| ⌨️ | **Paleta de comandos** | Ctrl/⌘ K (ou o botão Buscar) abre a busca de tarefas, notas e memórias e o caminho para qualquer página ou seção das configurações, tudo pelo teclado. | extra |
+| ⌨️ | **Paleta de comandos** | Ctrl/⌘ K (ou o botão Buscar) abre a busca de tarefas, notas e memórias (também pelo significado, com a busca semântica ligada) e o caminho para qualquer página ou seção das configurações, tudo pelo teclado. | extra |
 | 👀 | **Acessos** | Cada tentativa de entrar, com IP, cidade, país, rede, navegador e resultado, filtrável por período e tipo. | extra |
 | ✅ | **Tarefas e projetos** | Hoje, próximas, atrasadas e concluídas, com prioridade, prazo no seu fuso e projetos. | 6 |
 | 📝 | **Notas** | Markdown seguro, busca de texto completo (com ou sem acento) e lixeira de 30 dias. | 6 |
@@ -177,13 +177,14 @@ O que está na `develop` hoje, etapa por etapa. "extra" marca melhorias feitas f
 | ⚡ | **Comandos rápidos no Telegram** | `/hoje`, `/tarefas`, `/nova`, `/feito`, `/lembrar`, `/nota`, `/buscar`, `/memoria`, `/rotinas`, `/avisos`, `/uso`, `/status` e `/backup` respondem na hora, sem gastar IA. `/nova pagar a luz amanhã 9h` entende a data, com o botão Corrigir; a lista de tarefas tem Feito e Adiar, e concluir tem Desfazer por 5 minutos. Foto ou documento com legenda vira nota, sem guardar o arquivo. | 15b |
 | ✋ | **Aprovar pelo Telegram** | Quando a Zuri propõe apagar ou reescrever algo numa conversa pelo bot, a proposta chega com o botão Aprovar e uma prévia montada com o que está guardado, nunca com as palavras dela. Tocar não basta: você confirma com a passkey, numa página do app, ou com um código no seu e-mail, e só então a proposta é feita, uma vez. `/aprovar` mostra o que espera por você, e cada aprovação aparece em Acessos. | 16a |
 | 🚨 | **Emergência pelo Telegram** | `/acessos` e `/sessoes` mostram quem entrou e o que está aberto; `/encerrar_sessoes`, `/pausar_rotinas` e `/bloquear` agem com um toque, mesmo com a IA fora do ar. O modo de bloqueio derruba as sessões do app, para as rotinas com IA e deixa o bot só com `/status`, `/avisos` e `/ajuda`. Na primeira hora só se entra com um código de recuperação; depois, o app abre em Sair do bloqueio, com **Não fui eu: desvincular o Telegram**. Os alertas que o bot causa só param quando você confirma no app, com a senha. | 16b |
+| 🔎 | **Busca pelo significado** | Opcional, em Configurações > IA. Ligada, a busca acha "carro" na memória sobre o "automóvel": a paleta ganha o grupo "Pelo significado", a Zuri lembra das memórias certas na conversa e `/buscar` também acha rotinas. Tudo fica no banco da sua Zuri, com o modelo grátis do Workers AI e no máximo 2.000 textos por dia, sem passar de metade do teto de IA. Desligada, nada muda. | 17 |
 | 🎯 | **Prioridade que aprende** | O tipo de aviso que você quase sempre deixa de lado desce um nível, e o que você abre logo sobe, no máximo um nível por semana e sempre com "Desfazer". Lembretes e segurança nunca mudam, e cada automação tem a sua prioridade. | 11 |
 
 ## 🔭 O que vem a seguir
 
 | | Funcionalidade | O que faz | Etapa |
 | :---: | --- | --- | :---: |
-| 🔌 | **Integrações** | Busca semântica, servidores MCP, Google Agenda, Google Contatos por etiqueta, acesso remoto para o n8n e monitor de sites, todos opcionais. | 17–22 |
+| 🔌 | **Integrações** | Servidores MCP, Google Agenda, Google Contatos por etiqueta, acesso remoto para o n8n e monitor de sites, todos opcionais. | 18–22 |
 | 💾 | **Backup e instalação** | Backup e importação, guia de instalação só pelo navegador e auditoria final. | 23–25 |
 
 ## 🧭 Como funciona
@@ -346,6 +347,7 @@ scripts/        Lint de i18n, ícones, tamanho do pacote e capturas do README
 | [Interface](docs/interface.md) | Telas, acessibilidade e a identidade visual Sinal |
 | [Produtividade](docs/produtividade.md) | Tarefas, notas, projetos e lixeira |
 | [Memória](docs/memoria.md) | Estados, histórico e revisão de conflitos |
+| [Busca por significado](docs/semantic-recall.md) | Busca semântica opcional, limites e custo |
 | [Avisos e Diagnóstico](docs/avisos.md) | Central de avisos, insistência, resumo do dia, vigias e registro de falhas |
 | [Configurar a Cloudflare](docs/configuracao-cloudflare.md) | Segredos, Turnstile, primeiro acesso e recuperação |
 | [Configurar o GitHub](docs/configuracao-github.md) | Rulesets e proteção das branches |

@@ -67,6 +67,7 @@ Medido dentro do workerd por `apps/agent/test/free-tier-budget.test.ts`, com
 | `POST /api/plans/:id/confirm` (3 tarefas) | 19 | 26 |
 | `POST /api/transcribe` | 4 | 4 |
 | `DELETE /api/conversations/:id` | cerca de 3 por mensagem (1.224 com 406) | cerca de 2 por mensagem (816 com 406) |
+| `GET /api/search/semantic` (busca semântica ligada; medido em `semantic.test.ts`) | até 20 com poucos itens; 1 por bloco de 64 vetores (cerca de 550 com todos os tetos) | até 4 (contador do dia) |
 
 Os números contam só o SQL do Zuri (`Database.usage`): a cada despertar o
 Agents SDK lê algumas linhas das tabelas `cf_agents_*`, quase vazias hoje. O
@@ -137,6 +138,12 @@ Como cheguei nos números:
   agora") custa 15 lidas e 10 escritas. Cada despertar roda no máximo 2
   rotinas com IA (cada uma com prazo de 5 min), para ficar longe do limite de
   15 min do alarme.
+- **Busca por significado (etapa 17, opcional).** Desligada, custa zero.
+  Ligada, o preparo usa no máximo 2.000 textos e metade do teto de Neurons por
+  dia: com 150 tokens por item, uns 320 Neurons por dia nos dias de preparo
+  (35.000 itens em 18 dias) e cerca de 3 gravações por item (6.000 por dia).
+  Cada busca faz um embedding da pergunta (perto de 0,01 Neuron), com teto de
+  500 por dia e cache das 32 últimas. Detalhes em `docs/semantic-recall.md`.
 - **Neurons.** Um chamado ao modelo com 6.000 tokens de contexto custa uns 33
   Neurons de entrada; 400 tokens de resposta, uns 15. Um turno com duas
   iterações fica perto de 100. Os padrões da especificação (200 pedidos de IA

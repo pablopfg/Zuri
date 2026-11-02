@@ -75,7 +75,10 @@ export type InternalKey =
   // and when the owner last left one (ISO).
   | "lockdown_until"
   | "lockdown_source"
-  | "lockdown_exited_at";
+  | "lockdown_exited_at"
+  // Step 17, the search by meaning: one JSON object (on or off, the module's schema version, the
+  // generation the vectors belong to, the full pass's place, today's counts and the wait after a failure).
+  | "semantic";
 
 export class InternalState {
   constructor(private readonly db: Database) {}

@@ -370,6 +370,7 @@ export const ptBRServer = {
   "telegram.cmd.buscar.tarefas": "Tarefas",
   "telegram.cmd.buscar.notas": "Notas",
   "telegram.cmd.buscar.memorias": "Memórias",
+  "telegram.cmd.buscar.automacoes": "Automações",
   "telegram.cmd.memoria.exemplo": "/memoria prefiro reuniões de manhã",
   "telegram.cmd.memoria.ok": "Vou lembrar disso: {fato}",
   "telegram.cmd.memoria.duplicada": "Eu já sabia disso: {fato}",

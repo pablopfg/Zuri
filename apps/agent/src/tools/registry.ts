@@ -10,6 +10,7 @@ import { AppError } from "../http/errors.ts";
 import type { MemoryService } from "../memory/service.ts";
 import type { Productivity } from "../productivity/index.ts";
 import { log } from "../log.ts";
+import type { SemanticSearch } from "../semantic/service.ts";
 
 export type ToolPermission = "read" | "write" | "destructive";
 
@@ -22,6 +23,8 @@ export interface ToolContext {
   plans: TaskPlanService;
   actions: PendingActionRepository;
   automations: AutomationService;
+  /** The search by meaning (step 17); absent or off, searches go by the words alone. */
+  semantic?: SemanticSearch;
   timeZone: string;
   /** "chat" for the owner's turns; "scheduled" for automations (step 10): read tools only. */
   mode: "chat" | "scheduled";

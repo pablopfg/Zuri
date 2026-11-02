@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { type Memory, type NoteSummary, ptBRPalette, type Task } from "@zuri/shared";
+import { type Automation, type Memory, type NoteSummary, ptBRPalette, type Task } from "@zuri/shared";
 import {
   Activity,
   Bell,
@@ -141,10 +141,39 @@ export function CommandPalette({ onClose, navigate }: { onClose: () => void; nav
     },
   });
 
+  // The search by meaning (step 17), only when the owner turned it on: one look at its state per opening.
+  const semantic = useQuery({
+    queryKey: ["palette", "semantic"],
+    staleTime: 5 * 60_000,
+    queryFn: ({ signal }) => api<{ enabled: boolean }>("/semantic", { signal }),
+  });
+  const byMeaning = useQuery({
+    queryKey: ["palette", "meaning", term],
+    enabled: term !== "" && semantic.data?.enabled === true,
+    staleTime: 30_000,
+    queryFn: ({ signal }) =>
+      api<{ tasks: Task[]; notes: NoteSummary[]; memories: Memory[]; automations: Automation[] }>(
+        `/search/semantic?q=${encodeURIComponent(term)}&limit=${PER_KIND}`,
+        { signal },
+      ),
+  });
+
   const items = useMemo<Item[]>(() => {
     const list = commands.filter((item) => matches(query, item.label));
     if (term === "" || !found.data) return list;
     const { tasks, notes, memories } = found.data;
+    // What the words already listed is not repeated under "Pelo significado".
+    const listed = new Set([...tasks, ...notes, ...memories].map((item) => item.id));
+    const meaning = byMeaning.data;
+    const group = t("web.palette.groupMeaning");
+    const extra: Item[] = meaning
+      ? [
+          ...meaning.memories.filter((m) => !listed.has(m.id)).map((memory) => ({ id: `meaning-memory-${memory.id}`, group, label: memory.content, detail: t("web.nav.memory"), icon: Brain, to: "/memoria", before: () => askMemorySearch([...memory.content].slice(0, 80).join("")) })),
+          ...meaning.tasks.filter((task) => !listed.has(task.id)).map((task) => ({ id: `meaning-task-${task.id}`, group, label: task.title, detail: t("web.nav.tasks"), icon: ListTodo, to: "/tarefas", state: { openTask: task } })),
+          ...meaning.notes.filter((note) => !listed.has(note.id)).map((note) => ({ id: `meaning-note-${note.id}`, group, label: note.title, detail: t("web.nav.notes"), icon: NotebookPen, to: `/notas/${note.id}` })),
+          ...meaning.automations.map((automation) => ({ id: `meaning-automation-${automation.id}`, group, label: automation.name, detail: t("web.nav.automations"), icon: Clock, to: "/automacoes" })),
+        ].slice(0, PER_KIND * 2)
+      : [];
     return [
       ...list,
       ...tasks.map((task) => ({
@@ -158,8 +187,9 @@ export function CommandPalette({ onClose, navigate }: { onClose: () => void; nav
       })),
       ...notes.map((note) => ({ id: `note-${note.id}`, group: t("web.nav.notes"), label: note.title, detail: note.excerpt, icon: NotebookPen, to: `/notas/${note.id}` })),
       ...memories.map((memory) => ({ id: `memory-${memory.id}`, group: t("web.nav.memory"), label: memory.content, icon: Brain, to: "/memoria", before: () => askMemorySearch(term) })),
+      ...extra,
     ];
-  }, [commands, query, term, found.data, t]);
+  }, [commands, query, term, found.data, byMeaning.data, t]);
 
   const current = Math.min(active, Math.max(items.length - 1, 0));
   const optionId = (index: number) => `${listId}-${index}`;

@@ -33,9 +33,16 @@ etapas ficam detalhadas; as mais antigas viram uma linha na tabela.
 | 15a | mesclada (02/11/2026) | #84 | Trava de leitura do bot com `/destravar` (passkey na página `/aprovar` ou código por e-mail), `/nova_conversa`, 60 comandos/hora |
 | 15b | mesclada (02/11/2026) | #89 | Comandos rápidos sem IA (`/hoje`, `/tarefas`, `/nova`, `/feito`, `/lembrar`, `/nota`, `/buscar`, `/memoria`, `/rotinas`, `/avisos`, `/uso`, `/status`, `/backup`), gramática de datas, fotos e documentos viram nota, botão Destravar |
 | 16a | mesclada (02/11/2026) | #93 | Aprovações pelo bot: botão **Aprovar** com prévia do servidor, `/aprovar`, confirmação por passkey ou e-mail presa à proposta e ao hash, `TARGET_CHANGED`, alerta `telegram_approved` |
-| 16b | em revisão | — | Comandos de segurança (`/acessos`, `/sessoes`, `/encerrar_sessoes`, `/tokens`, `/pausar_rotinas`, `/bloquear`), modo de bloqueio com a tela **Sair do bloqueio**, rebloqueio que suspende o vínculo, **Confirmar que vi** no app |
+| 16b | mesclada (02/11/2026) | #96 | Comandos de segurança (`/acessos`, `/sessoes`, `/encerrar_sessoes`, `/tokens`, `/pausar_rotinas`, `/bloquear`), modo de bloqueio com a tela **Sair do bloqueio**, rebloqueio que suspende o vínculo, **Confirmar que vi** no app |
+| 17 | em revisão | — | Busca por significado opcional: vetores `bge-m3` em `int8` no SQLite do objeto, fila por gatilhos, preparo no alarme único com tetos diários, busca híbrida na paleta, na recordação, na ferramenta `search` e no `/buscar` |
 
 ## Últimas etapas (detalhe)
+
+### Etapa 17 · Busca por significado
+- Entregou: `apps/agent/src/semantic/` (`schema.ts` trilha própria `SEMANTIC_MIGRATIONS` com versão na chave `semantic` da `InternalState` e gatilhos de fila; `vectors.ts`; `embedder.ts` com `WorkersAIEmbedder` e `MockEmbedder`; `store.ts` `VectorStore` em blocos de 64; `service.ts` `SemanticSearch`; `hybrid.ts` `hybridSearch`), `MeteredAI.embed` com `reserveEmbedding`/`settleEmbedding`, rotas em `api/semantic.ts`, cartão em `AiTab.tsx`, grupo "Pelo significado" na paleta, `packages/shared/src/semantic.ts`. Doc: `docs/semantic-recall.md`. Plano: `docs/planos/etapa-17-busca-semantica.md`.
+- Migrations: nenhuma na trilha principal (18 continua livre); tabelas `zur_semantic_*` só ao ligar, pela trilha do módulo.
+- Decisões técnicas: embedder só Workers AI ou simulado (D8); preparo até 2.000 textos/dia e 50% do teto de Neurons; 500 buscas/dia com cache de 32; piso 0,55/0,10 no bge-m3; rotas fora de `WHILE_LOCKDOWN`; o ícone novo na paleta estourava o orçamento do JS inicial (139.099 B hoje), então automações usam `Clock`.
+- Para as próximas: item novo com texto (etapas 18–22) que deva aparecer na busca ganha uma entrada em `KIND_SOURCES` e uma migration nova em `SEMANTIC_MIGRATIONS` (só acréscimo).
 
 ### Etapa 16b · Comandos de segurança e modo de bloqueio
 - Entregou: `apps/agent/src/telegram/security.ts` (`TelegramSecurity`, `maskAddress`), `apps/agent/src/auth/lockdown.ts` (`Lockdown`, `RemoteTokenHook`/`NO_REMOTE_TOKENS`), recusas no login (`LOCKDOWN_ACTIVE`), na API (lista `WHILE_LOCKDOWN` em `api/app.ts`) e no bot (`#duringLockdown`), `GET /api/lockdown`, `POST /api/lockdown/exit`, `POST /api/notices/:id/acknowledge` (`acknowledgeInApp`, `Notice.ackInApp`), executor com problema `lockdown`, tela `LockdownPage.tsx` (no chunk de `PasswordChangePage`), menu v5. Plano: `docs/planos/etapa-16b-modo-de-bloqueio.md`.
@@ -48,12 +55,6 @@ etapas ficam detalhadas; as mais antigas viram uma linha na tabela.
 - Migrations: nenhuma (18 continua livre).
 - Decisões técnicas: a etapa 16 virou 16a e 16b; o título e o texto atual da prévia saem do primeiro e do segundo campo do `snapshot`; planos e rotinas propostos continuam com **Abrir no app**; o aviso da aprovação segue a regra do destravamento (uma vez, sem insistir); um pedido novo encerra o aberto.
 - Para a 16b: bloco em `docs/agente/prompts-das-etapas.md`; durante o bloqueio, `#approve`, `/aprovar` e o código de aprovação devem recusar; `/bloquear`, `/pausar_rotinas` e `/encerrar_sessoes` entram em `OPEN_COMMANDS` (ou equivalente no serviço); menu sobe para a versão 5; tokens remotos só na etapa 20.
-
-### Etapa 15b · Comandos rápidos no Telegram
-- Entregou: `apps/agent/src/telegram/{commands,dates}.ts` (`TelegramCommands`, um método por comando; `parseWhen`/`extractWhen`, a gramática de datas), `CommandButtons` em `callbacks.ts` (linhas `target_type = 'command'` em `zur_telegram_callbacks`, validade por botão, uso único), roteamento em `service.ts` (comandos, botões, Corrigir por `force_reply`, fotos e documentos, botão Destravar em todo aviso de trava), menu v3 com 16 comandos. Plano: `docs/planos/etapa-15b-comandos-telegram.md`.
-- Migrations: nenhuma (17 continua a última; a próxima é a 18). Chaves novas em `zur_settings`: `telegram_task_numbers`, `telegram_fix`.
-- Decisões técnicas: respostas em texto puro com `disarm()`; fotos e documentos contam nos 60 comandos/h e pedem destravamento; Adiar = um dia adiante na mesma hora (vencida: amanhã; 09:00 sem prazo); lembrete do bot nasce com origem `app`; "semana que vem" sozinha = segunda seguinte; agenda, monitores, MCP, embeddings e idade do backup ficam para as etapas 17, 18, 19, 22 e 23.
-- Para a 16: botões novos entram em `COMMAND_ACTIONS` (`callbacks.ts`) e passam por `TelegramCommands.tap`; `OPEN_COMMANDS` diz o que não pede destravamento (a 16 soma `/bloquear`, `/pausar_rotinas`, `/encerrar_sessoes`); o menu sobe para a versão 4.
 
 ### Notas que continuam valendo
 - Um alarme só (P8): use `AutomationService.rearm()`/`otherDue`, nunca outro alarme. O runner aceita `context: "scheduled"` (só leitura, sem dono presente). Toda IA por `agent.ai()`.

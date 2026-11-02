@@ -1,6 +1,7 @@
 import type { DataSource } from "../agent/data.ts";
 import { dataLine } from "../agent/data.ts";
 import { hasHistoricalIntent } from "./intent.ts";
+import { fuse } from "../semantic/vectors.ts";
 import type { MemoryRepository, MemoryRow } from "./repository.ts";
 import { anyWordQuery } from "./text.ts";
 
@@ -20,17 +21,30 @@ export function memoryTokenBudget(maxContextTokens: number): number {
 }
 
 /**
- * Memories for a question, by keywords (until semantic recall, step 17):
- * matches first, then a few recent preferences. Past facts stay out unless the
- * question is about the past; then the versions before each match come too.
- * A few index reads; never the whole table.
+ * Memories for a question: matches by keywords and, with the search by meaning
+ * on (step 17), the `meaning` ids closest to it, fused by rank; then a few
+ * recent preferences. Past facts stay out unless the question is about the
+ * past; then the versions before each match come too. A few index reads;
+ * never the whole table. Without `meaning`, exactly the keyword recall.
  */
-export function selectRelevantMemories(repo: MemoryRepository, query: string): MemoryRow[] {
+export function selectRelevantMemories(repo: MemoryRepository, query: string, meaning: readonly string[] = []): MemoryRow[] {
   const past = hasHistoricalIntent(query);
   const selected = new Map<string, MemoryRow>();
   const match = anyWordQuery(query);
-  if (match) {
-    for (const m of repo.match(match, { filter: past ? "all" : "current", limit: MAX_RELEVANT_MEMORIES })) selected.set(m.id, m);
+  const matched = match ? repo.match(match, { filter: past ? "all" : "current", limit: MAX_RELEVANT_MEMORIES }) : [];
+  if (meaning.length === 0) {
+    for (const m of matched) selected.set(m.id, m);
+  } else {
+    const known = new Map(matched.map((m) => [m.id, m]));
+    const extra = meaning.filter((id) => !known.has(id)).slice(0, MAX_RELEVANT_MEMORIES);
+    for (const m of repo.many(extra).values()) if (past || m.status !== "historical") known.set(m.id, m);
+    for (const id of fuse(
+      matched.map((m) => m.id),
+      [...meaning],
+    )) {
+      const m = known.get(id);
+      if (m && selected.size < MAX_RELEVANT_MEMORIES) selected.set(m.id, m);
+    }
   }
   if (past) {
     for (const m of [...selected.values()]) {
