@@ -32,20 +32,17 @@ chama o Pablo com este documento e uma recomendação.
 Estes itens não mudam código e são o que separa "migração em dias" de "perda
 de dados". Recomendo fazer já, mesmo sem plano de migrar.
 
-1. **Guardar cópia dos segredos fora da Cloudflare.** Worker secrets não podem
-   ser lidos de volta pelo painel. O Pablo guarda num gerenciador de senhas os
-   valores de `SESSION_SECRET`, `PASSWORD_PEPPER` e, quando existirem,
-   `MCP_CREDENTIAL_KEY`, `TELEGRAM_BOT_TOKEN`, `VAPID_PUBLIC_KEY`/`VAPID_PRIVATE_KEY`
-   e `TURNSTILE_SECRET_KEY`. Por quê:
-   - o segredo do TOTP (2FA) é cifrado com chave derivada do `PASSWORD_PEPPER`
-     (`apps/agent/src/auth/mfa.ts`), e a senha usa o mesmo pepper. Pepper
-     diferente na VPS é tratado como "redefinição completa de credenciais":
-     senha e 2FA deixam de abrir e o dono precisa do código de recuperação;
-   - as sessões, os tokens do 2FA e o segredo do webhook do Telegram saem de
-     HMAC com o `SESSION_SECRET`. Com o mesmo valor, nada disso muda;
-   - credenciais MCP e do Google (etapas 18 e 19) são cifradas com
-     `MCP_CREDENTIAL_KEY`; sem a chave, precisam ser cadastradas de novo;
-   - as chaves VAPID trocadas invalidam todas as assinaturas de push.
+1. **Saber o que o backup não leva.** Pelo contrato do backup
+   (`docs/especificacao.md`, "Avisos, MCP, agenda, remoto e backup"), a
+   exportação nunca inclui segredos do TOTP, passkeys, sessões, tokens,
+   vínculo do Telegram nem credenciais MCP e Google. Isso é de propósito: um
+   arquivo de backup vazado não abre a conta. Na VPS, então, a instalação é
+   nova: segredos novos (`SESSION_SECRET`, `PASSWORD_PEPPER` e os demais,
+   gerados na hora), primeiro acesso com `SETUP_CODE`, 2FA e passkey
+   cadastrados de novo, bot vinculado de novo, MCP e Google conectados de
+   novo, push assinado de novo. Não é preciso guardar cópia dos segredos da
+   Cloudflare; basta o acesso ao @BotFather (o token do bot pode ser gerado de
+   novo lá) e ao painel do Turnstile ou da alternativa.
 2. **Domínio fora da conta que pode ser suspensa.** O registro do domínio fica
    num registrador que não seja a Cloudflare (domínio `.com.br` já fica no
    Registro.br). Os nameservers podem continuar na Cloudflare: em emergência,
@@ -55,13 +52,17 @@ de dados". Recomendo fazer já, mesmo sem plano de migrar.
    SQLite do Durable Object só sai pelo próprio código do Zuri. Se a conta for
    suspensa antes da etapa 23, os dados ficam presos. Por isso a etapa 23
    precisa, além do que a especificação já pede:
-   - exportação completa (todas as tabelas `zur_*`, inclusive automações,
-     configurações, 2FA e passkeys cifrados), com número de versão do formato
-     e o número da última migration;
+   - exportação de tudo o que o contrato do backup permite (tarefas, notas,
+     projetos, memórias, conversas, automações e configurações não sensíveis),
+     com a versão do formato e o número da última migration, sem nada que
+     dependa da Cloudflare para ser lido;
    - teste que exporta, importa num banco vazio e confere linha a linha;
-   - um lembrete mensal para o dono baixar o arquivo (aviso da central da
-     etapa 11 e, com o bot, envio como documento no Telegram, dentro dos 50 MB
-     de envio do bot). O arquivo fica com o dono, fora da Cloudflare.
+   - backup automático diário, cifrado, num bucket R2 com as 7 cópias mais
+     novas (decisão do Pablo de 02/11/2026; ⚠ R2 aprovado, dentro do grátis).
+     Ele cobre erro e banco corrompido, mas fica na mesma conta;
+   - por isso, uma vez por mês, a cópia cifrada vai ao dono pelo Telegram. É
+     essa cópia, fora da Cloudflare, que garante a migração se a conta for
+     suspensa.
 4. **Código da Cloudflare só nas pontas** (cuidado 2 da avaliação). As etapas
    11 (e-mail), 17 (vetores) e 22 (Workflows) colocam uma interface pequena na
    frente do binding, como já fazem `Database`, `AIProvider` e o `AlarmClock`
@@ -115,9 +116,9 @@ Regras desta arquitetura:
 - **O Node só escuta em 127.0.0.1.** Só o Caddy alcança o Zuri, então os
   cabeçalhos que o Caddy põe são confiáveis e os que vêm da internet são
   sobrescritos.
-- **Mesmo domínio de antes.** As passkeys pertencem ao domínio (`rpId` = host
-  do `PUBLIC_URL`). Mudar de domínio invalida todas; com o mesmo domínio, elas
-  seguem funcionando. O Turnstile também é ligado ao nome do site.
+- **Mesmo domínio de antes.** O endereço que o dono usa, o webhook do bot e o
+  Turnstile (ligado ao nome do site) continuam iguais. As passkeys são
+  cadastradas de novo de qualquer jeito, porque o backup não as leva.
 
 ## Caminho A: emergência com `workerd`
 
@@ -385,19 +386,21 @@ dependências novas entram com versão exata e só onde a PR diz.
 Com B (ou A) pronto e ensaiado:
 
 1. **Uma semana antes:** baixar o TTL do registro DNS do domínio para 300 s.
-   Conferir a cópia dos segredos (preparação, item 1).
-2. **Na VPS:** subir o Zuri com os mesmos segredos e o mesmo `PUBLIC_URL`,
-   ainda sem DNS. Conferir pelo `curl --resolve` que o certificado e o
+2. **Na VPS:** subir o Zuri com segredos novos e o mesmo `PUBLIC_URL`, ainda
+   sem DNS. Conferir pelo `curl --resolve` que o certificado e o
    `/api/health` respondem.
 3. **Congelar:** avisar no Telegram, pausar automações (modo de bloqueio da
    etapa 16, se existir) e esperar terminar a conversa em curso.
-4. **Exportar** pela etapa 23 na Cloudflare e **importar** na VPS. Conferir a
-   contagem de itens por tela.
-5. **Apontar o DNS** para o IP da VPS. Com o domínio em outro DNS, trocar os
+4. **Apontar o DNS** para o IP da VPS. Com o domínio em outro DNS, trocar os
    nameservers no registrador.
-6. **Telegram:** chamar `setWebhook` com o mesmo endereço (o segredo do
-   cabeçalho é o mesmo, porque sai do `SESSION_SECRET`).
-7. **Conferir:** login com senha e 2FA, uma passkey, Início, tarefas, notas,
+5. **Primeiro acesso na VPS** com o `SETUP_CODE`: nome, e-mail, senha, 2FA e
+   passkey. Depois, **exportar** pela etapa 23 na Cloudflare (ou usar a última
+   cópia cifrada do R2 ou do Telegram) e **importar** na VPS. Conferir a
+   contagem de itens por tela; as automações chegam pausadas e são ligadas à
+   mão.
+6. **Telegram:** vincular o bot de novo pela tela (o `setWebhook` usa o
+   segredo novo, derivado do `SESSION_SECRET` da VPS).
+7. **Conferir:** login com senha, 2FA e passkey, Início, tarefas, notas,
    memórias, conversa com ferramenta, voz, uma automação que vence em poucos
    minutos, `/status` no bot, página Acessos mostrando o IP.
 8. **Desligar a Cloudflare só depois de 7 dias** sem problema: remover a rota
@@ -405,16 +408,18 @@ Com B (ou A) pronto e ensaiado:
 
 ## Como voltar atrás
 
-Até o passo 8, voltar é apontar o DNS de novo para a Cloudflare e o webhook do
-Telegram também. O que foi criado na VPS nesse meio tempo volta pela
-exportação da VPS e importação na Cloudflare (a mesma etapa 23, nos dois
-sentidos). Por isso a etapa 23 precisa de uma importação que aceite um arquivo
-com dados que já existem do outro lado, sem duplicar.
+Até o passo 8, voltar é apontar o DNS de novo para a Cloudflare e vincular o
+bot de novo lá; os dados e as credenciais da Cloudflare continuam intactos. O
+que foi criado na VPS nesse meio tempo volta pela exportação da VPS e
+importação na Cloudflare. A importação mescla com ids novos, então itens que
+já existiam nos dois lados aparecem em dobro: por isso a janela de volta é
+curta e, nela, vale anotar à mão o que foi criado.
 
 ## O que muda para o dono
 
-- Login, 2FA, passkeys, dados e bot ficam iguais, desde que os segredos e o
-  domínio sejam os mesmos.
+- Os dados voltam pelo backup. Senha, 2FA, passkey, vínculo do bot e
+  conexões MCP e Google são cadastrados de novo no primeiro acesso (o backup
+  nunca leva credenciais). Com o mesmo domínio, nada mais muda.
 - Some o Cloudflare Access (se estava ligado) e a proteção contra DDoS da
   Cloudflare; o resto dos portões continua igual.
 - Com Ollama, as respostas ficam mais lentas e a qualidade das ferramentas
@@ -426,7 +431,7 @@ com dados que já existem do outro lado, sem duplicar.
 
 | Bloco | PRs | Observação |
 | --- | --- | --- |
-| Preparação (segredos, domínio) | 0 | Só ação do Pablo |
+| Preparação (domínio, acessos ao @BotFather e ao Turnstile) | 0 | Só ação do Pablo |
 | Etapa 23 com os itens da preparação | dentro da etapa | Sem PR extra |
 | Caminho A | 2 a 3 | Emergência |
 | Caminho B | 10 (B1 a B10) | B1 a B4 são a maior parte; B5 depende do backend escolhido |
