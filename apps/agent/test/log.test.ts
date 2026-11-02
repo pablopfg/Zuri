@@ -33,6 +33,19 @@ describe("log line shape", () => {
     expect(info).toHaveBeenCalledWith('{"level":"info","event":"not_configured"}');
   });
 
+  it("keeps an automation's kind and a count, and drops anything that looks like stored text", () => {
+    expect(logLine("warn", "automation_interrupted", { count: 2 })).toEqual({ level: "warn", event: "automation_interrupted", count: 2 });
+    expect(logLine("error", "automation_failed", { kind: "agent_prompt", error: new RangeError("Lembrar a Ana") })).toEqual({
+      level: "error",
+      event: "automation_failed",
+      kind: "agent_prompt",
+      error: "RangeError",
+    });
+    // A name or message in the kind slot, a fractional, negative or huge count: dropped.
+    expect(logLine("error", "automation_failed", { kind: "Tomar remédio às 8h" })).toEqual({ level: "error", event: "automation_failed" });
+    for (const count of [-1, 1.5, Number.NaN, 2 ** 60]) expect(logLine("warn", "automation_interrupted", { count })).toEqual({ level: "warn", event: "automation_interrupted" });
+  });
+
   it("accepts a cf-ray without the data center and drops malformed ones", () => {
     const ray = (value: string) => logLine("error", "unhandled_error", { request: request("https://h/api", { "cf-ray": value }) }).requestId;
     expect(ray("8f1a2b3c4d5e6f70")).toBe("8f1a2b3c4d5e6f70");

@@ -32,4 +32,6 @@ export const AI_LIMIT_RANGES = {
   aiMaxToolCalls: { min: 1, max: 20, default: 6 },
   aiMaxIterations: { min: 1, max: 10, default: 4 },
   aiMaxContextTokens: { min: 2_000, max: 32_000, default: 6_000 },
+  /** Step 10: AI routine runs per day ("Execuções de IA agendadas"); 0 turns them off. Resets at 00:00 UTC. */
+  aiScheduledRunsPerDay: { min: 0, max: 48, default: 6 },
 } as const;

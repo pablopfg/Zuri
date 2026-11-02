@@ -4,10 +4,12 @@ import type { ZuriAgent } from "../src/agent/zuri-agent.ts";
 import { MeteredAI } from "../src/ai/metered.ts";
 import type { AgentEvent, AIProvider, GenerateRequest, ToolRequest } from "../src/ai/provider.ts";
 import { UsageMeter } from "../src/ai/usage.ts";
+import { type AlarmClock, AutomationService } from "../src/automations/service.ts";
 import { PendingActionRepository } from "../src/chat/actions.ts";
 import { ConversationRepository } from "../src/chat/conversations.ts";
 import { TaskPlanService } from "../src/chat/plans.ts";
 import { Database } from "../src/db/database.ts";
+import { InternalState } from "../src/db/internal-state.ts";
 import { migrate } from "../src/db/migrations.ts";
 import { MemoryService } from "../src/memory/service.ts";
 import { Productivity } from "../src/productivity/index.ts";
@@ -26,6 +28,9 @@ export interface ChatWorld {
   actions: PendingActionRepository;
   plans: TaskPlanService;
   meter: UsageMeter;
+  automations: AutomationService;
+  /** The automations' alarm, faked: what is set, and when. */
+  alarm: FakeAlarm;
   clock: { now: number };
   settings: Settings;
   /** The tools' context for a conversation (the chat), or for a scheduled run. */
@@ -33,6 +38,41 @@ export interface ChatWorld {
   services(): Omit<ToolContext, "conversationId" | "mode" | "timeZone">;
   /** The model behind the real meter, as the runner gets it. */
   ai(provider: AIProvider): MeteredAI;
+}
+
+/** The Agents SDK's schedule, in memory: one row per alarm set, as the SDK keeps them. */
+export class FakeAlarm implements AlarmClock {
+  readonly pending = new Map<string, Date>();
+  scheduled = 0;
+  cancelled = 0;
+  private next = 0;
+
+  async schedule(at: Date): Promise<string> {
+    const id = `alarm-${++this.next}`;
+    this.pending.set(id, at);
+    this.scheduled++;
+    return id;
+  }
+
+  async cancel(id: string): Promise<void> {
+    if (this.pending.delete(id)) this.cancelled++;
+  }
+
+  async exists(id: string): Promise<boolean> {
+    return this.pending.has(id);
+  }
+
+  /** The one pending alarm (the tests expect never more than one). */
+  only(): { id: string; at: Date } | null {
+    if (this.pending.size > 1) throw new Error(`${this.pending.size} alarms pending`);
+    const [entry] = this.pending;
+    return entry ? { id: entry[0], at: entry[1] } : null;
+  }
+
+  /** The SDK runs a one-shot schedule once and drops it. */
+  fire(id: string): void {
+    this.pending.delete(id);
+  }
 }
 
 let objects = 0;
@@ -44,14 +84,16 @@ export function withChatWorld<T>(fn: (world: ChatWorld) => T | Promise<T>): Prom
     migrate(db);
     const clock = { now: NOON };
     const tick = () => clock.now;
-    const productivity = new Productivity(db, { timeZone: () => TIME_ZONE });
+    const productivity = new Productivity(db, { timeZone: () => TIME_ZONE, clock: tick });
     const memories = new MemoryService(db, productivity.storage, { conflictReview: () => true, clock: tick });
     const conversations = new ConversationRepository(db, productivity.storage, () => "pt-BR");
     const actions = new PendingActionRepository(db, tick);
     const plans = new TaskPlanService(db, productivity, () => TIME_ZONE, tick);
     const meter = new UsageMeter(db, tick);
     const settings: Settings = { ...DEFAULT_SETTINGS, timeZone: TIME_ZONE };
-    const services = () => ({ db, productivity, memories, conversations, plans, actions });
+    const alarm = new FakeAlarm();
+    const automations = new AutomationService(db, productivity.storage, new InternalState(db), { timeZone: () => TIME_ZONE, alarm, clock: tick });
+    const services = () => ({ db, productivity, memories, conversations, plans, actions, automations });
     const world: ChatWorld = {
       db,
       productivity,
@@ -60,6 +102,8 @@ export function withChatWorld<T>(fn: (world: ChatWorld) => T | Promise<T>): Prom
       actions,
       plans,
       meter,
+      automations,
+      alarm,
       clock,
       settings,
       services,

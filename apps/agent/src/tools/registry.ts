@@ -4,6 +4,7 @@ import { dataLine } from "../agent/data.ts";
 import type { PendingActionRepository } from "../chat/actions.ts";
 import type { ConversationRepository } from "../chat/conversations.ts";
 import type { TaskPlanService } from "../chat/plans.ts";
+import type { AutomationService } from "../automations/service.ts";
 import type { Database } from "../db/database.ts";
 import { AppError } from "../http/errors.ts";
 import type { MemoryService } from "../memory/service.ts";
@@ -20,6 +21,7 @@ export interface ToolContext {
   conversations: ConversationRepository;
   plans: TaskPlanService;
   actions: PendingActionRepository;
+  automations: AutomationService;
   timeZone: string;
   /** "chat" for the owner's turns; "scheduled" for automations (step 10): read tools only. */
   mode: "chat" | "scheduled";
@@ -31,6 +33,16 @@ export interface ToolContext {
    * delete it would put the model's own words on the owner's card.
    */
   changed?: Set<string>;
+  /** Scheduled runs only: what notify_owner hands the owner, delivered when the run ends. */
+  notices?: Notice[];
+  /** Scheduled runs only: the routine's name, which titles its notices. */
+  routineName?: string;
+}
+
+/** A notice a scheduled run writes for the owner (notify_owner). */
+export interface Notice {
+  title: string;
+  body: string;
 }
 
 interface BaseTool<S extends z.ZodType> {
@@ -47,6 +59,8 @@ interface BaseTool<S extends z.ZodType> {
 
 export interface ImmediateTool<S extends z.ZodType = z.ZodType> extends BaseTool<S> {
   permission: "read" | "write";
+  /** Offered only in scheduled runs, never in the chat (notify_owner). */
+  scheduledOnly?: boolean;
   execute: (input: z.output<S>, ctx: ToolContext) => unknown;
 }
 
@@ -71,6 +85,8 @@ export interface DestructiveTool<S extends z.ZodType = z.ZodType> extends BaseTo
   target: (input: z.output<S>, ctx: ToolContext) => Target;
   snapshot: (targetId: string, ctx: ToolContext) => unknown;
   commit: (targetId: string, payload: { text: string } | null, ctx: ToolContext) => void;
+  /** Work that can't run inside the commit's transaction (setting an alarm again). */
+  afterCommit?: (ctx: ToolContext) => Promise<void>;
 }
 
 export type ToolDefinition = ImmediateTool | DestructiveTool;
@@ -148,6 +164,7 @@ export class ToolExecutor {
   private readonly signatures = new Set<string>();
   private readonly actionsByCall = new Map<string, string>();
   private readonly plansByCall = new Map<string, string>();
+  private readonly automationsByCall = new Map<string, string>();
 
   private readonly ctx: ToolContext;
 
@@ -167,10 +184,12 @@ export class ToolExecutor {
     return this.calls >= this.limits.maxToolCalls;
   }
 
-  /** The tools offered in this context: scheduled runs only ever get the read ones. */
+  /** The tools offered in this context: scheduled runs only ever get the read ones, plus notify_owner. */
   available(): ToolDefinition[] {
     if (this.limits.maxToolCalls <= 0) return [];
-    return this.ctx.mode === "chat" ? [...this.tools] : this.tools.filter((tool) => tool.permission === "read");
+    return this.ctx.mode === "chat"
+      ? this.tools.filter((tool) => !(tool.permission !== "destructive" && tool.scheduledOnly))
+      : this.tools.filter((tool) => tool.permission === "read" || (tool.permission !== "destructive" && tool.scheduledOnly === true));
   }
 
   find(name: string): ToolDefinition | undefined {
@@ -183,6 +202,11 @@ export class ToolExecutor {
 
   planFor(callId: string): string | undefined {
     return this.plansByCall.get(callId);
+  }
+
+  /** The AI routine a call proposed (propose_ai_routine), waiting for the owner on the Automations page. */
+  automationFor(callId: string): string | undefined {
+    return this.automationsByCall.get(callId);
   }
 
   proposedPlans(): string[] {
@@ -221,6 +245,7 @@ export class ToolExecutor {
       if (tool.permission === "destructive") return presentResult(tool.name, await this.propose(tool, parsed.data, callId));
       const result = await tool.execute(parsed.data, this.ctx);
       if (result && typeof result === "object" && "planId" in result && typeof result.planId === "string") this.plansByCall.set(callId, result.planId);
+      if (result && typeof result === "object" && "routineId" in result && typeof result.routineId === "string") this.automationsByCall.set(callId, result.routineId);
       return presentResult(tool.name, result);
     } catch (error) {
       // A refused call gives back its place in the tool's cap, so the model can fix the input once.
@@ -301,4 +326,5 @@ export async function runApprovedAction(tools: readonly ToolDefinition[], ctx: T
     actions.fail(actionId, error instanceof AppError && error.code === "TARGET_CHANGED" ? "changed" : "failed");
     throw error;
   }
+  await tool.afterCommit?.(ctx);
 }

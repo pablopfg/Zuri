@@ -8,6 +8,8 @@ import type { AiLimits } from "../ai/usage.ts";
 import { createApi } from "../api/app.ts";
 import { SSE_PING_MS } from "../api/chat.ts";
 import { AuthService } from "../auth/service.ts";
+import { automationExecutor } from "../automations/executor.ts";
+import { AutomationService } from "../automations/service.ts";
 import { createTurnstile, type Turnstile } from "../auth/turnstile.ts";
 import { MIN_OWNER_PASSWORD_LENGTH, parsePublicUrl } from "../config.ts";
 import { Database } from "../db/database.ts";
@@ -54,6 +56,7 @@ interface Store {
   conversations: ConversationRepository;
   actions: PendingActionRepository;
   plans: TaskPlanService;
+  automations: AutomationService;
 }
 
 /**
@@ -81,6 +84,10 @@ export class ZuriAgent extends Agent<WorkerEnv> {
     settings: () => this.store.settings,
     productivity: () => this.store.productivity,
     memories: () => this.store.memories,
+    automations: () => ({
+      service: this.store.automations,
+      runNow: (id: string) => this.store.automations.runNow(id, this.executor()),
+    }),
     aiUsage: () => this.store.usage.report(this.aiLimits(), this.development() ? "mock" : "workers-ai", this.store.settings.field("aiModel")),
     passwordSecretSet: () =>
       isPasswordHash(this.env.OWNER_PASSWORD_HASH) || (this.env.OWNER_PASSWORD?.length ?? 0) >= MIN_OWNER_PASSWORD_LENGTH,
@@ -101,8 +108,42 @@ export class ZuriAgent extends Agent<WorkerEnv> {
   });
 
   private toolServices(): Omit<ToolContext, "conversationId" | "mode" | "timeZone"> {
-    const { db, productivity, memories, conversations, plans, actions } = this.store;
-    return { db, productivity, memories, conversations, plans, actions };
+    const { db, productivity, memories, conversations, plans, actions, automations } = this.store;
+    return { db, productivity, memories, conversations, plans, actions, automations };
+  }
+
+  /** How an automation runs: reminders and the digest without AI, routines through the runner. */
+  private executor() {
+    return automationExecutor({
+      automations: this.store.automations,
+      productivity: this.store.productivity,
+      settings: () => this.store.settings.get(),
+      locale: () => this.locale(),
+      runner: () => this.runner(),
+    });
+  }
+
+  /**
+   * The object starts (deploy, eviction, crash): runs cut short are closed and
+   * the one alarm of the automations is checked, so a run missed by less than
+   * a day happens once and none happens twice.
+   */
+  override async onStart(): Promise<void> {
+    // A database that was never opened has nothing scheduled: the health check
+    // and the first visit must not create it (it is made on demand).
+    const opened = this.ctx.storage.sql.exec(`SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'zur_automations'`).toArray().length > 0;
+    if (!opened) return;
+    try {
+      const { interrupted } = await this.store.automations.reconcile();
+      if (interrupted > 0) log("warn", "automation_interrupted", { count: interrupted });
+    } catch (error) {
+      log("error", "automation_reconcile_failed", { error });
+    }
+  }
+
+  /** The automations' alarm (Agents SDK schedule): runs whatever is due, then sets the next one. */
+  async runAutomations(_payload: unknown, schedule?: { id: string }): Promise<void> {
+    await this.store.automations.wake(schedule?.id ?? null, this.executor());
   }
 
   /** A chat turn's runner, over the store and the metered model. */
@@ -204,7 +245,17 @@ export class ZuriAgent extends Agent<WorkerEnv> {
       const conversations = new ConversationRepository(db, productivity.storage, () => this.locale());
       const actions = new PendingActionRepository(db);
       const plans = new TaskPlanService(db, productivity, () => settings.field("timeZone"));
-      this.#store = { db, settings, auth, productivity, memories, usage: new UsageMeter(db), conversations, actions, plans };
+      const automations = new AutomationService(db, productivity.storage, new InternalState(db), {
+        timeZone: () => settings.field("timeZone"),
+        alarm: {
+          schedule: async (at) => (await this.schedule(at, "runAutomations", {}, { idempotent: false })).id,
+          cancel: async (id) => {
+            await this.cancelSchedule(id);
+          },
+          exists: async (id) => (await this.getScheduleById(id)) !== undefined,
+        },
+      });
+      this.#store = { db, settings, auth, productivity, memories, usage: new UsageMeter(db), conversations, actions, plans, automations };
     }
     return this.#store;
   }

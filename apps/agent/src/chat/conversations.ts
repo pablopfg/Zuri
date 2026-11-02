@@ -66,13 +66,14 @@ export function decodeTools(json: string): ToolActivity[] {
   const out: ToolActivity[] = [];
   for (const item of raw.slice(0, 40)) {
     if (!item || typeof item !== "object") continue;
-    const { id, name, status, detail, actionId, planId } = item as Record<string, unknown>;
+    const { id, name, status, detail, actionId, planId, automationId } = item as Record<string, unknown>;
     if (typeof id !== "string" || id.length > 100 || typeof name !== "string" || !NAMES.has(name)) continue;
     if (status !== "running" && status !== "success" && status !== "error") continue;
     const activity: ToolActivity = { id, name: name as ToolActivity["name"], status };
     if (typeof detail === "string") activity.detail = detail.slice(0, 120);
     if (typeof actionId === "string") activity.actionId = actionId;
     if (typeof planId === "string") activity.planId = planId;
+    if (typeof automationId === "string") activity.automationId = automationId;
     out.push(activity);
   }
   return out;
