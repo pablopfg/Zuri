@@ -41,7 +41,9 @@ export function tooSmallControls(page: Page) {
       // Visible ones only; the skip link is 1 px until focused, then a full-size target.
       .filter((el) => el.offsetParent !== null && !el.classList.contains("sr-only"))
       .map((el) => ({ text: el.textContent?.trim() || el.getAttribute("aria-label") || el.tagName, height: el.getBoundingClientRect().height }))
-      .filter((el) => el.height < 44),
+      // Layout works in 1/64 px units and a transform or zoom can leave a 44 px box at
+      // 43.9999 px: anything within one layout unit of 44 is 44, never a smaller target.
+      .filter((el) => el.height < 44 - 1 / 64),
   );
 }
 

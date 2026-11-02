@@ -146,10 +146,19 @@ export const DEFAULT_ALERT_ROUTES: Readonly<Record<AlertCategory, readonly Alert
   events: ["push", "telegram"],
 });
 
-const channels = /* @__PURE__ */ z.array(z.enum(ALERT_CHANNELS)).max(ALERT_CHANNELS.length).transform((list) => [...new Set(list)]);
-
-/** Channels per category; a category left out keeps its default. */
-export const alertRoutesSchema = /* @__PURE__ */ z.partialRecord(z.enum(ALERT_CATEGORIES), channels);
+/**
+ * Channels per category; a category left out keeps its default. Built inside a
+ * function marked pure: the bundler keeps the arguments of a pure call, so a
+ * plain call would leave Zod in the interface, which never validates settings.
+ */
+export const alertRoutesSchema = /* @__PURE__ */ (() =>
+  z.partialRecord(
+    z.enum(ALERT_CATEGORIES),
+    z
+      .array(z.enum(ALERT_CHANNELS))
+      .max(ALERT_CHANNELS.length)
+      .transform((list) => [...new Set(list)]),
+  ))();
 export type AlertRoutes = Partial<Record<AlertCategory, AlertChannelName[]>>;
 
 // ---------- Delivery history ----------
