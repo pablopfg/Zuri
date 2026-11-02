@@ -25,6 +25,16 @@ const VARIANTS: Record<Variant, string> = {
   danger: "border border-danger bg-surface text-danger hover:bg-danger-soft",
 };
 
+/** The look of a button, for a link that acts as one (an external link opened in a new tab). */
+export function buttonClass(variant: Variant, className?: string): string {
+  return cn(
+    // 44 px: the smallest touch target the rules allow.
+    "inline-flex min-h-11 items-center justify-center gap-2 rounded-xl px-4 text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-60",
+    VARIANTS[variant],
+    className,
+  );
+}
+
 export function Button({
   variant = "primary",
   loading = false,
@@ -39,12 +49,7 @@ export function Button({
       type={type}
       disabled={disabled || loading}
       aria-busy={loading || undefined}
-      className={cn(
-        // 44 px: the smallest touch target the rules allow.
-        "inline-flex min-h-11 items-center justify-center gap-2 rounded-xl px-4 text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-60",
-        VARIANTS[variant],
-        className,
-      )}
+      className={buttonClass(variant, className)}
       {...rest}
     >
       {loading && <LoaderCircle className="h-4 w-4 motion-safe:animate-spin" aria-hidden />}

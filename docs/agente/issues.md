@@ -75,18 +75,28 @@ Use a skill `abrir-issue` (`.claude/skills/abrir-issue/`). Em resumo:
 
 Busca de duplicadas: `gh api -X GET search/issues -f q='repo:pablopfg/Zuri is:issue is:open label:erro <termos>'`.
 
-### 3. A Zuri em produção (proposta, depende do Pablo)
+### 3. A Zuri em produção: botão "Relatar no GitHub"
 
-O Diagnóstico (etapa 11, `zur_diagnostics`) já guarda cada tipo de falha
-com origem, código, nome do erro, contagem, datas, `cf-ray` e versão, sem
-texto do dono. Há três caminhos para isso virar issue:
+Escolha do Pablo (02/11/2026). Na aba **Configurações > Diagnóstico**, cada
+falha ainda não resolvida tem o botão **Relatar no GitHub**. Ele abre, numa
+aba nova, o formulário `erro.yml` deste repositório já preenchido
+(`apps/web/src/lib/issue-report.ts`):
 
-| Opção | Como | Avaliação |
-| --- | --- | --- |
-| **Botão "Relatar no GitHub"** (recomendada) | Na aba Diagnóstico, cada falha abre `https://github.com/<repo>/issues/new?template=erro.yml&...` no navegador com o formulário já preenchido. O Pablo revisa e envia. | Sem token, sem HTTP novo no servidor, custo zero. Nada sai sem o dono ver. |
-| Abertura automática pelo servidor | O Worker chama a API do GitHub com um token de escopo fino (`issues: write`) guardado como Worker secret, com o mesmo controle de repetição do item 1. | Precisa de segredo novo e de uma exceção na regra de HTTP do servidor. Num repositório público, qualquer campo mal filtrado vira vazamento. Não recomendo. |
-| Nada em produção | Diagnóstico e alertas continuam como estão; issues só dos itens 1 e 2. | Mais simples; o Pablo copia à mão quando quiser. |
+- título `[erro] <código> <nome do erro> (<origem>)`;
+- contexto com a origem, a rota (ids já trocados por `id` ou `:id`) e as
+  datas em UTC, arredondadas para o minuto;
+- obtido com as contagens; código do erro com o `cf-ray` (sem o sufixo do
+  data center, que indicaria a região do dono) e o id do registro.
 
-Até o Pablo decidir, vale a terceira linha. Se ele escolher o botão, a
-mudança é só na interface: os campos vêm de `zur_diagnostics`, entram na URL
-(limite prático de ~8 KB) e nenhum texto livre do dono vai junto.
+Fica de fora a versão da implantação: é um id da conta do dono que não
+aponta para nenhum commit. O GitHub só preenche campos de texto pelo link,
+então "Onde aconteceu", passos, esperado, possível solução e impacto ficam
+para o dono completar.
+Nada sai sem ele conferir e apertar **Submit** no GitHub: não há token, nem
+chamada do servidor ao GitHub, e só entram campos que o Diagnóstico já
+guarda, nunca texto do dono. O texto vai em pt-BR, o idioma do tracker,
+qualquer que seja o idioma da interface.
+
+Descartadas: abertura automática pelo servidor com um token (segredo novo,
+exceção na regra de HTTP e risco de vazamento num repositório público) e não
+ter nada em produção.
