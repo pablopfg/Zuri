@@ -34,9 +34,10 @@ Antes de declarar qualquer tarefa pronta: `npm run typecheck`, `npm run lint` e 
 ## Skills de agente
 
 Além de `.claude/skills/`, o Claude Code instala sozinho, no início de cada
-sessão, o plugin `cloudflare` e quatro pacotes de terceiros fixados por commit
+sessão, o plugin `cloudflare` e seis pacotes de terceiros fixados por commit
 (`mattpocock/skills`, `nateherkai/scroll-craft`,
-`cloudflare/security-audit-skill`, `blader/humanizer`). Quando e como cada um é
+`cloudflare/security-audit-skill`, `blader/humanizer`, `anthropics/skills` só
+com `frontend-design` e `DietrichGebert/ponytail` só com as skills). Quando e como cada um é
 usado, a revisão de segurança e a atualização estão em
 [docs/agente/skills-externas.md](docs/agente/skills-externas.md). Outros
 agentes podem ler as mesmas skills nos repositórios de origem, no commit fixado.
@@ -70,6 +71,7 @@ agentes podem ler as mesmas skills nos repositórios de origem, no commit fixado
 - PR que cria ou muda uma tela traz na descrição capturas de como ela ficou (computador e celular, claro e escuro), geradas com `node scripts/capturas-da-interface.ts` e gravadas em `docs/capturas/pr/<assunto>/`. Veja `.claude/rules/capturas.md`.
 - Preencha `.github/pull_request_template.md`, inclusive a matriz de rastreabilidade e o relatório de auditoria.
 - Conflito: traga a `develop`, resolva preservando os dois lados, rode tudo de novo.
+- PRs abertas para a `develop` não ficam paradas: a passada de merge confere, atualiza, resolve conflitos e mescla na ordem certa. Critérios e ordem em [docs/agente/merge-de-prs.md](docs/agente/merge-de-prs.md).
 - Ao terminar: skills `verificar`, `revisao-qa` e `auditoria-seguranca`, nessa ordem, e corrija o que elas acharem.
 
 ## Como evitar erros

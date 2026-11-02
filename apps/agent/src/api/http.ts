@@ -120,12 +120,37 @@ export async function readJson<S extends z.ZodType>(request: Request, schema: S,
 }
 
 async function readLimited(request: Request, maxBytes: number): Promise<string> {
-  if (!request.body) return "";
-  const reader = request.body.getReader();
+  const bytes = await readBodyBytes(request.body, maxBytes);
+  return new TextDecoder("utf-8", { fatal: true, ignoreBOM: false }).decode(bytes);
+}
+
+/**
+ * The whole body, of at most `maxBytes`: the declared length is checked first,
+ * then the bytes are counted as they arrive (a chunked body declares nothing).
+ * Over the limit, the rest is cancelled and the request refused as too large.
+ */
+export async function readBodyLimited(request: Request, maxBytes: number): Promise<Uint8Array> {
+  if (Number(request.headers.get("content-length") ?? 0) > maxBytes) {
+    await request.body?.cancel();
+    throw new AppError("VALIDATION_FAILED", "error.bodyTooLarge", { fields: ["_body"] });
+  }
+  return readBodyBytes(request.body, maxBytes);
+}
+
+async function readBodyBytes(body: ReadableStream<Uint8Array> | null, maxBytes: number): Promise<Uint8Array> {
+  if (!body) return new Uint8Array();
+  const reader = body.getReader();
   const chunks: Uint8Array[] = [];
   let total = 0;
   for (;;) {
-    const { done, value } = await reader.read();
+    let chunk: ReadableStreamReadResult<Uint8Array>;
+    try {
+      chunk = await reader.read();
+    } catch {
+      // The client went away mid-body: a bad request, never a shorter body or an internal error.
+      throw new AppError("VALIDATION_FAILED", undefined, { fields: ["_body"] });
+    }
+    const { done, value } = chunk;
     if (done) break;
     total += value.byteLength;
     if (total > maxBytes) {
@@ -140,5 +165,5 @@ async function readLimited(request: Request, maxBytes: number): Promise<string> 
     bytes.set(chunk, offset);
     offset += chunk.byteLength;
   }
-  return new TextDecoder("utf-8", { fatal: true, ignoreBOM: false }).decode(bytes);
+  return bytes;
 }
