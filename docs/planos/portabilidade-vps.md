@@ -197,6 +197,8 @@ adotar três cuidados baratos nas etapas que faltam.**
 
 E, se um dia a Cloudflare virar problema: Caminho A como emergência (dias) e
 Caminho B como mudança definitiva (uma fase), restaurando o backup da etapa 23.
+O roteiro detalhado, PR por PR, com a preparação, o dia da troca e como voltar
+atrás, está em [migracao-vps.md](migracao-vps.md).
 
 Nenhum desses cuidados muda tela, custo ou cota; entram nos prompts das
 etapas quando o Pablo aprovar.

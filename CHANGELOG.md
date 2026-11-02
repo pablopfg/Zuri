@@ -14,6 +14,10 @@ o [SemVer](https://semver.org/lang/pt-BR/). Cada PR escreve a sua entrada em
   o equivalente de cada peça, dois caminhos de migração, custo estimado de uma
   VPS (⚠ nada contratado) e três cuidados para as próximas etapas, entre eles
   um backup que dê para restaurar fora da Cloudflare.
+- Plano detalhado da migração para VPS em `docs/planos/migracao-vps.md`,
+  pronto para quando for preciso: o que guardar desde já (cópia dos segredos,
+  domínio fora da Cloudflare, backup da etapa 23), dez PRs com arquivos, testes
+  e critério de pronto, montagem da VPS, dia da troca e como voltar atrás.
 - Planejado para o bot do Telegram (etapa 14): quando um áudio passar do
   limite de 5 min e 5 MB, a Zuri avisa, diz quanto deve gastar da cota do dia
   e pergunta se processa mesmo assim, em vez de recusar. Acima do que dá para
