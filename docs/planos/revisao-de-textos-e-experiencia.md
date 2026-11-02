@@ -32,7 +32,7 @@ Entra tudo o que o dono lê:
 | Interface web | `packages/shared/i18n/pt-BR*.ts` e `en.ts`, componentes em `apps/web/src` |
 | Mensagens do servidor (erros, avisos, resumos, e-mails) | `pt-BR-server.ts`, `pt-BR-alerts.ts`, `pt-BR-notices.ts` e o que vier |
 | Bot do Telegram | textos do bot no catálogo (etapas 12 a 16) |
-| Notificação push | só "Zuri: você tem um novo aviso" (decisão de 02/11, não muda) |
+| Notificação push | só "Zuri: você tem um novo aviso" (pedido do Pablo para a etapa 11b, 02/11; não muda) |
 | Fala da Zuri | prompt de personalidade (`apps/agent/src/agent/prompt.ts`) e frases do Início |
 | PWA | `manifest`, título das páginas, tela "Conferindo a sua sessão" |
 
@@ -86,8 +86,12 @@ tradução palavra por palavra.
    "aqui está", "espero que ajude", negrito decorativo, ponto de exclamação
    em texto de sistema. A exceção é a voz da Zuri no cumprimento, que pode ter
    um "!" quando natural ("Bom dia, Ana!").
-9. **Não citar infraestrutura.** Nada de Cloudflare, Worker, Durable Object,
-   Turnstile, cron, SQLite, Neurons fora da aba IA (decisão de 31/10).
+9. **Não citar infraestrutura nas telas de uso.** Nada de Worker, Durable
+   Object, Turnstile, cron ou SQLite (pedido do Pablo na revisão de design,
+   PR #24). Exceção: instrução de configuração em que o dono precisa agir no
+   painel do provedor ("apague o segredo no painel da Cloudflare") e os
+   Neurons na aba IA. O lint de microcopy aceita essas chaves numa lista
+   comentada.
 10. **Datas e números no formato do idioma.** "02/11/2026 às 05:08", "3
     avisos sem ler" (plural pelo `plural()`), horas no fuso do dono.
 11. **A Zuri é "a Zuri", no feminino, e não trata o dono por gênero.** Texto
@@ -118,7 +122,8 @@ etapa 26 (a lista de hoje está no inventário).
 | Ver | ir ao detalhe de algo | Abrir (exceto "Abrir avisos"), Visualizar |
 | Desfazer | no toast, quando dá para voltar | Reverter |
 | Aviso | item da central (sino) | Notificação, Alerta (alerta é o envio por canal) |
-| Automação | rotina agendada | Rotina, Tarefa agendada, Job |
+| Automação | nome geral de tudo o que roda sozinho | Tarefa agendada, Job, Agendamento |
+| Rotina da Zuri | automação com IA (`agent_prompt`), como em `.claude/memoria/glossario.md` | Rotina com IA, Prompt agendado |
 | Conversa | chat com a Zuri | Chat, Sessão |
 | Entrar / Sair | login e logout | Logar, Login, Deslogar |
 | Verificação em duas etapas | 2FA | 2FA, autenticação de dois fatores |
@@ -153,11 +158,16 @@ lendo todos os catálogos e percorrendo todas as telas.
   (`pages/productivity/shared.tsx`).
 - "Excluir" nas automações (`web.automations.delete`, `deleteTitle`,
   aprovação `cancel_automation`) contra "Apagar" no resto.
+- "Login" e "Logins" em Segurança (`pt-BR-security.ts`) contra "Entrar"
+  no resto.
 - Pontos de exclamação fora do cumprimento: "Nada para hoje. Aproveite!",
   "Nada atrasado e nada para hoje. Dia livre!".
 - "Algo deu errado" no erro interno e na tela de falha: rever para dizer o que
   fazer primeiro.
-- `Dialog` sem X; cada tela põe o próprio botão de fechar.
+- `Dialog` sem X; cada tela põe o próprio botão de fechar. O X da central de
+  avisos é `absolute` dentro do `<dialog>`: em tela baixa ele rola junto com o
+  conteúdo e some enquanto a lista carrega. O X padrão do `Dialog` fica num
+  cabeçalho fixo (sticky), sempre visível.
 
 ## Como a etapa trabalha
 

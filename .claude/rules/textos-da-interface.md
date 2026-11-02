@@ -2,8 +2,7 @@
 paths:
   - "apps/web/**"
   - "packages/shared/i18n/**"
-  - "apps/agent/src/telegram/**"
-  - "apps/agent/src/alerts/**"
+  - "apps/agent/src/**"
 ---
 
 # Textos e controles da interface
@@ -23,11 +22,12 @@ novo ou mexido** já segue isto. Detalhes, glossário completo e exemplos:
   Nada de "Ops", "Erro!" ou código cru na frente.
 - Glossário: Apagar (não Excluir), Remover só para ligações sem perda de dado,
   Salvar, Editar, Cancelar, Tentar de novo, Ligar/Desligar, Aprovar/Recusar,
-  Aviso, Automação, Conversa, Entrar/Sair.
+  Aviso, Automação (e "Rotina da Zuri" para a com IA), Conversa, Entrar/Sair.
 - Sem marcas de IA: sem travessão (—), sem "!" em texto de sistema (só no
   cumprimento da Zuri), sem "não é só X, é Y", trios forçados, "com
   certeza", "perfeito", emoji. Passe o `humanizer:humanizer` antes do commit.
-- Sem citar infraestrutura (Cloudflare, Worker, Turnstile, cron, Neurons fora
-  da aba IA). A Zuri é "a Zuri", no feminino; texto de sistema não fala como
-  ela.
+- Sem citar infraestrutura nas telas de uso (Worker, Turnstile, cron,
+  SQLite). Pode citar a Cloudflare só em instrução de configuração em que o
+  dono age no painel dela; Neurons só na aba IA.
+- A Zuri é "a Zuri", no feminino; texto de sistema não fala como ela.
 - Todo texto sai do catálogo em pt-BR e en (`.claude/rules/i18n.md`).
