@@ -2,6 +2,10 @@
  * A short "Browser on System" for a user agent, for the activity list. Only
  * well-known names are recognized; anything else shows nothing rather than a
  * guess. The raw string stays available as the row's detail.
+ *
+ * The agent comes from the request, so every pattern here is a plain literal
+ * with no repetition: matching stays linear however the string is crafted
+ * (CodeQL js/polynomial-redos).
  */
 export function describeUserAgent(ua: string): { browser: string | null; system: string | null } {
   const browser = /Edg\//.test(ua)
@@ -14,7 +18,7 @@ export function describeUserAgent(ua: string): { browser: string | null; system:
           ? "Samsung Internet"
           : /Chrome\//.test(ua)
             ? "Chrome"
-            : /Version\/[\d.]+.*Safari\//.test(ua)
+            : /Version\/\d/.test(ua) && /Safari\//.test(ua)
               ? "Safari"
               : null;
   const system = /Android/.test(ua)
