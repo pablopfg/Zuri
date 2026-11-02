@@ -1,0 +1,82 @@
+name: Erro
+description: Algo do Zuri não funciona como deveria. Descreva o erro e, se souber, a possível solução.
+title: "[erro] "
+labels: ["erro"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        O repositório é **público**. Não cole domínio, e-mail, ids do Telegram, IP, tokens, chaves nem texto de conversa, nota ou memória. Use `exemplo.com.br` nos exemplos.
+        Falha de segurança não entra aqui: use **Security → Report a vulnerability** (veja `SECURITY.md`).
+  - type: dropdown
+    id: onde
+    attributes:
+      label: Onde aconteceu
+      options:
+        - Interface (web ou PWA)
+        - Servidor (API)
+        - IA (conversa ou modelo)
+        - Automações e avisos
+        - Telegram
+        - Automação do GitHub (CI)
+        - Desenvolvimento (encontrado por uma thread do Claude)
+    validations:
+      required: true
+  - type: textarea
+    id: contexto
+    attributes:
+      label: Contexto
+      description: O que estava sendo feito, em que tela ou rota, versão ou commit.
+    validations:
+      required: true
+  - type: textarea
+    id: passos
+    attributes:
+      label: Passos para reproduzir
+      placeholder: |
+        1. Abrir Configurações > Diagnóstico
+        2. ...
+    validations:
+      required: true
+  - type: textarea
+    id: esperado
+    attributes:
+      label: Esperado
+    validations:
+      required: true
+  - type: textarea
+    id: obtido
+    attributes:
+      label: Obtido
+      description: O que aconteceu de fato. Mensagem de erro sem dados pessoais.
+    validations:
+      required: true
+  - type: input
+    id: codigo
+    attributes:
+      label: Código do erro
+      description: Código da API (ex. INTERNAL_ERROR), cf-ray, impressão digital do Diagnóstico ou link da execução da CI.
+  - type: textarea
+    id: solucao
+    attributes:
+      label: Possível solução
+      description: Causa provável, arquivos envolvidos e o teste que provaria a correção.
+    validations:
+      required: true
+  - type: dropdown
+    id: impacto
+    attributes:
+      label: Impacto
+      options:
+        - "Alto: o dono perde dado, acesso ou segurança, ou uma função principal parou"
+        - "Médio: uma função falha mas há caminho alternativo"
+        - "Baixo: incômodo visual ou de texto"
+    validations:
+      required: true
+  - type: checkboxes
+    id: confirmacao
+    attributes:
+      label: Confirmação
+      options:
+        - label: Revisei o texto e não há dados pessoais, domínio, ids, IP, tokens ou chaves.
+          required: true
