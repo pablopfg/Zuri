@@ -1,4 +1,4 @@
-// The pt-BR texts of the /aprovar page (step 15): the bot's confirmation by passkey.
+// The pt-BR texts of the /aprovar page (steps 15 and 16): the bot's confirmation by passkey.
 // Part of the pt-BR catalog, kept apart so the interface downloads them with the page,
 // never in its first bundle (rule P11).
 export const ptBRApprove = {
@@ -26,4 +26,28 @@ export const ptBRApprove = {
   "web.approve.unsupportedTitle": "Este navegador não oferece passkey",
   "web.approve.unsupportedBody": "Abra o link no navegador do celular, fora do Telegram.",
   "web.approve.askAgain": "Para tentar de novo, mande /destravar no bot.",
+  "web.approve.titleGeneric": "Confirmar pelo Telegram",
+  "web.approve.leadGeneric": "Confirme com a sua passkey o pedido que você fez no bot.",
+  "web.approve.titleApproval": "Aprovar pelo Telegram",
+  "web.approve.leadApproval": "Confira a proposta e confirme com a sua passkey. Só depois disso ela é feita.",
+  "web.approve.preview.heading": "O que você vai aprovar",
+  "web.approve.preview.action": "Ação",
+  "web.approve.preview.item": "Item",
+  "web.approve.preview.before": "Texto atual",
+  "web.approve.preview.after": "Texto novo",
+  "web.approve.preview.expires": "Vale até",
+  "web.approve.preview.empty": "(vazio)",
+  "web.approve.action.delete_task": "Apagar a tarefa",
+  "web.approve.action.replace_task_description": "Trocar a descrição da tarefa",
+  "web.approve.action.replace_note_content": "Trocar o texto da nota",
+  "web.approve.action.delete_note": "Apagar a nota",
+  "web.approve.action.forget_memory": "Esquecer a memória",
+  "web.approve.action.cancel_automation": "Cancelar a automação",
+  "web.approve.approvedBody": "A proposta foi aprovada e já está feita.",
+  "web.approve.changedTitle": "O item mudou",
+  "web.approve.changedBody": "O item mudou depois da proposta, então nada foi feito. Se ainda quiser, peça de novo à Zuri.",
+  "web.approve.handledTitle": "Essa proposta já foi tratada",
+  "web.approve.handledBody": "Ela foi aprovada, cancelada ou venceu antes da confirmação. Nada mais foi feito.",
+  "web.approve.askAgainApproval": "Para tentar de novo, toque em Aprovar no bot.",
+  "web.approve.askAgainGeneric": "Para tentar de novo, peça outro link no bot: /destravar ou o botão Aprovar.",
 } as const;

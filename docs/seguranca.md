@@ -813,6 +813,22 @@ Etapa 12, fundação. O bot obedece a uma conta só, no chat privado
   alerta `telegram_confirm_locked`, no máximo 1 por dia. Cada destravamento gera
   `telegram_unlocked` em Acessos e um aviso de segurança que não insiste. Os dois
   têm origem `bot`: só o app os reconhece.
+- **Aprovações pelo bot (etapa 16a).** A proposta da Zuri chega com um
+  cartão montado pelo servidor a partir da linha de `zur_pending_actions` e do
+  retrato atual do alvo (o mesmo `snapshot` da etapa 9): título do banco e,
+  nas reescritas, texto atual e novo, desarmados. O texto do modelo nunca
+  entra no cartão, na página nem no e-mail. **Aprovar** confere o hash do alvo
+  e abre uma linha de `zur_telegram_approvals` com `purpose = 'approval'`,
+  `pending_action_id` e `target_hash`; a página confere o hash de novo antes da
+  passkey (409 `TARGET_CHANGED`), e a execução usa `runApprovedAction` (claim
+  numa instrução, hash dentro da transação). O código por e-mail é HMAC preso
+  ao id da linha, então não serve para outra proposta; um pedido novo encerra
+  o aberto. Tocar **Aprovar** de novo na mesma proposta troca só o link da
+  passkey (o anterior deixa de valer). Uma lista fechada (`BOT_APPROVABLE`)
+  diz que ferramentas o bot aprova; ferramenta destrutiva nova fica no app.
+  Cada aprovação gera `telegram_approved` (origem `bot`, sem insistir, só
+  reconhecível no app). Sem `TELEGRAM_ADMIN_ID`, passkey e e-mail, o cartão
+  só mostra **Abrir no app**.
 - **Limites.** 60 comandos por hora e 30 mensagens por hora, contadas antes de qualquer resposta (também com a conversa desligada ou a leitura travada). Arquivo
   de áudio (não a nota de voz) e mensagem de bot inline entram como dado de
   terceiros.

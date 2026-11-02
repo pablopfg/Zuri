@@ -97,6 +97,13 @@ export class PendingActionRepository {
       .map((row) => present(row, at));
   }
 
+  /** The pending proposals still good, newest first (the bot's /aprovar). */
+  pendingIds(limit: number): string[] {
+    return this.db
+      .all<{ id: string }>(`SELECT id FROM zur_pending_actions WHERE status = 'pending' AND expires_at > ? ORDER BY created_at DESC LIMIT ?`, this.now(), limit)
+      .map((row) => row.id);
+  }
+
   /**
    * Moves a pending, unexpired action to `status` in one statement. False when
    * it was already resolved or expired: whoever comes second gets nothing.

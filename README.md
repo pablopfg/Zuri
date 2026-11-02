@@ -12,7 +12,7 @@
 [![Licença: MIT](https://img.shields.io/badge/licen%C3%A7a-MIT-0b0f19)](LICENSE)
 [![Roda na Cloudflare](https://img.shields.io/badge/roda%20na-Cloudflare-f38020?logo=cloudflare&logoColor=white)](https://developers.cloudflare.com/workers/)
 [![Plano Free](https://img.shields.io/badge/plano%20Free-compat%C3%ADvel-22c55e)](#-plano-free-sem-surpresa-na-fatura)
-[![Etapas](https://img.shields.io/badge/etapas-12%20de%2028-22c55e)](#️-mapa-das-etapas)
+[![Etapas](https://img.shields.io/badge/etapas-16%20de%2028-22c55e)](#️-mapa-das-etapas)
 [![Sem telemetria](https://img.shields.io/badge/telemetria-nenhuma-0b0f19)](#-segurança-e-privacidade)
 [![Node.js 24+](https://img.shields.io/badge/node-24%2B-339933?logo=nodedotjs&logoColor=white)](.nvmrc)
 
@@ -24,7 +24,7 @@ de um Durable Object e conversa com você pelo navegador e, em breve, pelo Teleg
 </div>
 
 > [!NOTE]
-> **Em construção.** A Zuri sai em 28 etapas, uma por PR, a partir da [especificação](docs/especificacao.md). As etapas 0 a 15b estão na `develop`, da conversa com o agente às automações, à central de avisos e ao bot do Telegram, que já manda avisos, conversa por texto e voz, responde a comandos rápidos sem IA e trava a leitura depois de horas sem uso. O [mapa das etapas](#️-mapa-das-etapas) mostra o que já existe e o que vem a seguir; o estado detalhado fica em [`progresso.md`](.claude/memoria/progresso.md).
+> **Em construção.** A Zuri sai em 28 etapas, uma por PR, a partir da [especificação](docs/especificacao.md). As etapas 0 a 16a estão na `develop`, da conversa com o agente às automações, à central de avisos e ao bot do Telegram, que já manda avisos, conversa por texto e voz, responde a comandos rápidos sem IA, trava a leitura depois de horas sem uso e aprova as propostas da Zuri com passkey ou código por e-mail. O [mapa das etapas](#️-mapa-das-etapas) mostra o que já existe e o que vem a seguir; o estado detalhado fica em [`progresso.md`](.claude/memoria/progresso.md).
 
 ## Sumário
 
@@ -173,13 +173,14 @@ O que está na `develop` hoje, etapa por etapa. "extra" marca melhorias feitas f
 | 💬 | **Conversa e voz no Telegram** | Com a conversa ligada no cartão do Telegram, você escreve ou manda um áudio para o bot e a Zuri responde como no app, com as mesmas memórias e ferramentas; a conversa aparece na sua lista. Áudio de até 5 min e 5 MB é transcrito na hora; acima disso a Zuri pergunta antes, com o custo, e nada é baixado sem o seu toque. Texto encaminhado ou citado vale como dado, nunca como ordem. | 14 |
 | 🔐 | **Trava de leitura do bot** | Depois de 12 horas sem usar o bot (você escolhe de 1 a 72), a Zuri para de ler o que chega pelo Telegram até você mandar `/destravar` e confirmar com a passkey, numa página do app, ou com um código de 6 dígitos enviado ao seu e-mail. A leitura fica liberada por 12 horas, e cada destravamento aparece em Acessos. `/nova_conversa` começa outra conversa. | 15a |
 | ⚡ | **Comandos rápidos no Telegram** | `/hoje`, `/tarefas`, `/nova`, `/feito`, `/lembrar`, `/nota`, `/buscar`, `/memoria`, `/rotinas`, `/avisos`, `/uso`, `/status` e `/backup` respondem na hora, sem gastar IA. `/nova pagar a luz amanhã 9h` entende a data, com o botão Corrigir; a lista de tarefas tem Feito e Adiar, e concluir tem Desfazer por 5 minutos. Foto ou documento com legenda vira nota, sem guardar o arquivo. | 15b |
+| ✋ | **Aprovar pelo Telegram** | Quando a Zuri propõe apagar ou reescrever algo numa conversa pelo bot, a proposta chega com o botão Aprovar e uma prévia montada com o que está guardado, nunca com as palavras dela. Tocar não basta: você confirma com a passkey, numa página do app, ou com um código no seu e-mail, e só então a proposta é feita, uma vez. `/aprovar` mostra o que espera por você, e cada aprovação aparece em Acessos. | 16a |
 | 🎯 | **Prioridade que aprende** | O tipo de aviso que você quase sempre deixa de lado desce um nível, e o que você abre logo sobe, no máximo um nível por semana e sempre com "Desfazer". Lembretes e segurança nunca mudam, e cada automação tem a sua prioridade. | 11 |
 
 ## 🔭 O que vem a seguir
 
 | | Funcionalidade | O que faz | Etapa |
 | :---: | --- | --- | :---: |
-| 🤖 | **Aprovações e bloqueio pelo bot** | Aprovar propostas da Zuri com passkey ou código por e-mail, e o modo de bloqueio de emergência. | 16 |
+| 🚨 | **Segurança e bloqueio pelo bot** | Ver acessos e sessões, encerrar sessões, pausar rotinas e o modo de bloqueio de emergência pelo Telegram. | 16b |
 | 🔌 | **Integrações** | Busca semântica, servidores MCP, Google Agenda, Google Contatos por etiqueta, acesso remoto para o n8n e monitor de sites, todos opcionais. | 17–22 |
 | 💾 | **Backup e instalação** | Backup e importação, guia de instalação só pelo navegador e auditoria final. | 23–25 |
 
@@ -268,7 +269,8 @@ O orçamento de cada cota está em [docs/arquitetura/orcamento-free-tier.md](doc
 | | 14 | Conversa e voz | ✅ |
 | | 15a | Trava de leitura e `/destravar` | ✅ |
 | | 15b | Comandos administrativos | ✅ |
-| | 16 | Aprovações seguras e modo de bloqueio | ⬜ |
+| | 16a | Aprovações pelo bot | ✅ |
+| | 16b | Comandos de segurança e modo de bloqueio | 🚧 |
 | **D · Integrações** | 17 | Busca semântica | ⬜ |
 | | 18 | Servidores MCP remotos | ⬜ |
 | | 19 | Google Agenda | ⬜ |
@@ -356,7 +358,7 @@ Leia o [CONTRIBUTING.md](CONTRIBUTING.md) e o [AGENTS.md](AGENTS.md). Em resumo:
 
 ## 🌎 In English
 
-**Zuri** is a self-hosted, single-owner AI assistant that runs entirely in your own Cloudflare account: one Worker, one Durable Object with SQLite and Workers AI, designed to fit the Free plan. It has a web app (PWA) today and will get a Telegram admin bot in phase C. Sign-in uses Turnstile, TOTP 2FA and passkeys, and the agent has no shell, code execution or open HTTP. It's built in public in 26 steps; steps 0 to 7 are merged. The docs and the UI default to Brazilian Portuguese, and the interface is also available in English.
+**Zuri** is a self-hosted, single-owner AI assistant that runs entirely in your own Cloudflare account: one Worker, one Durable Object with SQLite and Workers AI, designed to fit the Free plan. It has a web app (PWA) and a Telegram admin bot that sends notifications, chats, answers quick commands and approves the agent's proposals with a passkey or an e-mailed code. Sign-in uses Turnstile, TOTP 2FA and passkeys, and the agent has no shell, code execution or open HTTP. It's built in public in 28 steps; steps 0 to 16a are merged. The docs and the UI default to Brazilian Portuguese, and the interface is also available in English.
 
 ## 🙌 Créditos e licença
 

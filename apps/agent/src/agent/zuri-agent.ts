@@ -22,13 +22,14 @@ import { PushDevices } from "../push/devices.ts";
 import { PushService } from "../push/service.ts";
 import { usableVapidKeys, type VapidKeys } from "../push/webpush.ts";
 import { developmentTelegramFetcher } from "../telegram/dev-telegram.ts";
+import { TelegramApprovals } from "../telegram/approvals.ts";
 import { CommandButtons, TelegramCallbacks } from "../telegram/callbacks.ts";
 import { TelegramCommands } from "../telegram/commands.ts";
 import { TelegramChannel } from "../telegram/channel.ts";
 import { TelegramConfirmations } from "../telegram/confirmations.ts";
 import { TelegramConversation } from "../telegram/conversation.ts";
 import { TelegramLinks } from "../telegram/links.ts";
-import { TelegramService } from "../telegram/service.ts";
+import { TelegramService, telegramHour } from "../telegram/service.ts";
 import { createTurnstile, type Turnstile } from "../auth/turnstile.ts";
 import { MIN_OWNER_PASSWORD_LENGTH, parsePublicUrl, secretProblems } from "../config.ts";
 import { Database } from "../db/database.ts";
@@ -43,6 +44,7 @@ import { TaskPlanService } from "../chat/plans.ts";
 import { MemoryService } from "../memory/service.ts";
 import { Productivity } from "../productivity/index.ts";
 import { log } from "../log.ts";
+import { ALL_TOOLS } from "../tools/index.ts";
 import type { ToolContext } from "../tools/registry.ts";
 import { AgentRunner } from "./runner.ts";
 
@@ -482,6 +484,19 @@ export class ZuriAgent extends Agent<WorkerEnv> {
         locale: () => this.locale(),
         timeZone: () => settings.field("timeZone"),
         origin: () => this.publicUrl().origin,
+        proposalCards: (ids) => telegramApprovals.turnCards(ids, telegram.canConfirm()),
+      });
+      // The commands' buttons (step 15b) and Aprovar (step 16) share one table.
+      const commandButtons = new CommandButtons(db);
+      // The agent's proposals as the bot shows and approves them (step 16): the same path as the app's Approve.
+      const telegramApprovals = new TelegramApprovals({
+        actions: () => actions,
+        tools: ALL_TOOLS,
+        toolContext: (conversationId) => ({ db, productivity, memories, conversations, plans, actions, automations, timeZone: settings.field("timeZone"), mode: "chat", conversationId }),
+        buttons: commandButtons,
+        locale: () => this.locale(),
+        hour: (ms) => telegramHour(ms, this.locale(), settings.field("timeZone")),
+        origin: () => this.publicUrl().origin,
       });
       // Confirmations made outside Telegram (step 15): the passkey on /aprovar or a code by e-mail.
       const telegramConfirmations = new TelegramConfirmations({
@@ -491,8 +506,19 @@ export class ZuriAgent extends Agent<WorkerEnv> {
         relyingParty: () => auth.relyingParty,
         email: {
           configured: () => email.configured(),
-          send: (code, minutes) => {
+          send: async (code, minutes, about) => {
             const locale = this.locale();
+            if (about.purpose === "approval") {
+              // The preview from the database, links disarmed: the same the bot and the page show.
+              const found = about.pendingActionId === null ? null : await telegramApprovals.preview(about.pendingActionId);
+              if (found?.status !== "ok" || found.targetHash !== about.targetHash) return "error";
+              return email.send({
+                subject: t(locale, "notice.email.approve.subject"),
+                text: t(locale, "notice.email.approve.body", { code, minutes, previa: telegramApprovals.text(found.preview, true) }),
+                security: true,
+                quota: "confirmations",
+              });
+            }
             return email.send({
               subject: t(locale, "notice.email.unlock.subject"),
               text: t(locale, "notice.email.unlock.body", { code, minutes }),
@@ -514,7 +540,7 @@ export class ZuriAgent extends Agent<WorkerEnv> {
         diagnostics: () => diagnostics.report(),
         healthy: () => this.healthy(),
         aiAvailable: () => usage.room(this.aiLimits()).neurons > 0,
-        buttons: new CommandButtons(db),
+        buttons: commandButtons,
         state,
         locale: () => this.locale(),
         timeZone: () => settings.field("timeZone"),
@@ -527,6 +553,7 @@ export class ZuriAgent extends Agent<WorkerEnv> {
         conversation: telegramConversation,
         commands: telegramCommands,
         confirmations: telegramConfirmations,
+        approvals: telegramApprovals,
         timeZone: () => settings.field("timeZone"),
         afterUpdate: () => flushSecurityAlerts(db, alerts),
         state,

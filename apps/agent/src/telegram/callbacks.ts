@@ -80,7 +80,10 @@ export class TelegramCallbacks {
 }
 
 /** The buttons under the commands' answers (step 15): each points to one row with its target. */
-export const COMMAND_ACTIONS = ["task_done", "task_later", "task_undo", "task_fix", "reminder_fix", "routine_pause", "unlock"] as const;
+export const COMMAND_ACTIONS = ["task_done", "task_later", "task_undo", "task_fix", "reminder_fix", "routine_pause", "unlock", "approve"] as const;
+
+/** Buttons a tap never uses up: Aprovar can be asked again, and reuses the open confirmation (step 16). */
+const REUSABLE: readonly CommandAction[] = ["approve"];
 export type CommandAction = (typeof COMMAND_ACTIONS)[number];
 
 export type CommandTap =
@@ -120,7 +123,7 @@ export class CommandButtons {
     return `v1:${action}:${id}`;
   }
 
-  /** Uses the button once: a second tap (or two quick ones) gets "used". */
+  /** Uses the button once: a second tap (or two quick ones) gets "used". Aprovar is never used up: the proposal is. */
   take(data: string | null | undefined): CommandTap {
     const match = typeof data === "string" ? DATA.exec(data) : null;
     if (!match) return { status: "unknown" };
@@ -134,6 +137,7 @@ export class CommandButtons {
     if (row.used_at !== null) return { status: "used" };
     const now = new Date(this.clock()).toISOString();
     if (row.expires_at <= now) return { status: "expired" };
+    if (REUSABLE.includes(row.action as CommandAction)) return { status: "ok", action: row.action as CommandAction, targetId: row.target_id };
     const { rowsWritten } = this.db.run(`UPDATE zur_telegram_callbacks SET used_at = ? WHERE id = ? AND used_at IS NULL`, now, id);
     if (rowsWritten === 0) return { status: "used" };
     return { status: "ok", action: row.action as CommandAction, targetId: row.target_id };

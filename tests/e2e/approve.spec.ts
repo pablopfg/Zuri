@@ -2,7 +2,7 @@ import type { Page, Route } from "@playwright/test";
 import { expect, test } from "./fixtures.ts";
 import { expectAccessible } from "./ui-helpers.ts";
 
-// The bot's confirmation page, /aprovar (step 15). The server's answers are
+// The bot's confirmation page, /aprovar (steps 15 and 16). The server's answers are
 // stood in for: an unknown token would spend one of this network's sign-in
 // tries on the shared e2e Worker, and the other files sign in from it. WebAuthn can't run
 // on 127.0.0.1 (an IP is never a passkey's host), so the browser's passkey
@@ -49,10 +49,11 @@ async function passkeyPrompt(page: Page, mode: "ok" | "cancel" = "ok") {
 test("a link the server doesn't know says so, with how to ask again @mobile", async ({ page }) => {
   await page.route("**/api/approvals/telegram/options", (route) => refusal(route, 410, "APPROVAL_EXPIRED", "x", { approval: "invalid" }));
   await page.goto(`/aprovar#${TOKEN}`);
-  await expect(page.getByRole("heading", { level: 1, name: "Destravar o bot do Telegram" })).toBeVisible();
+  // The server never said what the link was for: the page speaks of both.
+  await expect(page.getByRole("heading", { level: 1, name: "Confirmar pelo Telegram" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Este link não serve mais" })).toBeFocused();
   await expect(page.getByText("Não reconheci este link.")).toBeVisible();
-  await expect(page.getByText("Para tentar de novo, mande /destravar no bot.")).toBeVisible();
+  await expect(page.getByText("Para tentar de novo, peça outro link no bot: /destravar ou o botão Aprovar.")).toBeVisible();
   // The token left the address bar before anything else.
   expect(new URL(page.url()).hash).toBe("");
   await expectAccessible(page, "aprovar link inválido");
@@ -163,6 +164,66 @@ test("a failure that may pass offers to try again", async ({ page }) => {
   await expect(page.getByRole("alert")).toContainText("O serviço está indisponível agora.");
   await page.getByRole("button", { name: "Tentar de novo" }).click();
   await expect(page.getByRole("button", { name: "Confirmar com passkey" })).toBeVisible();
+});
+
+// Step 16: approving one of the Zuri's proposals.
+const APPROVAL = {
+  ...OPTIONS,
+  purpose: "approval",
+  approval: {
+    tool: "replace_note_content",
+    target: "Viagem",
+    before: "Levar o passaporte",
+    after: "Levar o passaporte e o carregador\nConferir o hotel",
+    expiresAt: "2030-01-01T12:30:00.000Z",
+  },
+};
+
+test("shows the proposal from the server and approves it with the passkey @mobile", async ({ page }) => {
+  await passkeyPrompt(page);
+  await page.route("**/api/approvals/telegram/options", (route) => route.fulfill({ json: APPROVAL }));
+  await page.route("**/api/approvals/telegram/verify", (route) => route.fulfill({ json: { purpose: "approval", status: "approved" } }));
+  await page.goto(`/aprovar#${TOKEN}`);
+  await expect(page.getByRole("heading", { level: 1, name: "Aprovar pelo Telegram" })).toBeVisible();
+  const preview = page.getByRole("region", { name: "O que você vai aprovar" });
+  await expect(preview.getByText("Trocar o texto da nota")).toBeVisible();
+  await expect(preview.getByText("Viagem")).toBeVisible();
+  await expect(preview.getByText("Levar o passaporte", { exact: true })).toBeVisible();
+  await expect(preview.getByText(/Conferir o hotel/)).toBeVisible();
+  // 12:30 UTC is 09:30 in São Paulo.
+  await expect(preview.getByText("09:30")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Confirmar com passkey" })).toBeFocused();
+  await expectAccessible(page, "aprovar proposta");
+  await page.getByRole("button", { name: "Confirmar com passkey" }).click();
+  await expect(page.getByRole("heading", { name: "Pronto! Pode voltar ao Telegram." })).toBeFocused();
+  await expect(page.getByText("A proposta foi aprovada e já está feita.")).toBeVisible();
+  await expectAccessible(page, "aprovar proposta pronta");
+});
+
+test("says nothing was done when the target changed or the proposal was handled", async ({ page }) => {
+  await passkeyPrompt(page);
+  const cases = [
+    { status: 409, code: "TARGET_CHANGED", title: "O item mudou", body: /^O item mudou depois da proposta, então nada foi feito/ },
+    { status: 409, code: "CONFLICT", title: "Essa proposta já foi tratada", body: /^Ela foi aprovada, cancelada ou venceu/ },
+  ];
+  for (const { status, code, title, body } of cases) {
+    await page.unrouteAll({ behavior: "ignoreErrors" });
+    await page.route("**/api/approvals/telegram/options", (route) => route.fulfill({ json: APPROVAL }));
+    await page.route("**/api/approvals/telegram/verify", (route) => refusal(route, status, code, "x"));
+    await page.goto("about:blank");
+    await page.goto(`/aprovar#${TOKEN}`);
+    await page.getByRole("button", { name: "Confirmar com passkey" }).click();
+    await expect(page.getByRole("heading", { name: title })).toBeFocused();
+    await expect(page.getByText(body)).toBeVisible();
+    await expect(page.getByText("Para tentar de novo, toque em Aprovar no bot.")).toBeVisible();
+  }
+});
+
+test("refuses on the spot a target that changed before the passkey", async ({ page }) => {
+  await page.route("**/api/approvals/telegram/options", (route) => refusal(route, 409, "TARGET_CHANGED", "x"));
+  await page.goto(`/aprovar#${TOKEN}`);
+  await expect(page.getByRole("heading", { name: "O item mudou" })).toBeFocused();
+  await expect(page.getByRole("button", { name: "Confirmar com passkey" })).toHaveCount(0);
 });
 
 test.describe("in English", () => {

@@ -1,7 +1,7 @@
 import { type DestructiveToolName, sha256Hex, type ToolName } from "@zuri/shared";
 import type { z } from "zod";
 import { dataLine } from "../agent/data.ts";
-import type { PendingActionRepository } from "../chat/actions.ts";
+import type { ActionRow, PendingActionRepository } from "../chat/actions.ts";
 import type { ConversationRepository } from "../chat/conversations.ts";
 import type { TaskPlanService } from "../chat/plans.ts";
 import type { AutomationService } from "../automations/service.ts";
@@ -284,6 +284,20 @@ export class ToolExecutor {
       note: "Nothing has changed yet. The owner now sees an Approve button for exactly this action. Say briefly what you proposed. Do not call this tool again for the same item and never say it is done.",
     };
   }
+}
+
+/**
+ * The target of a proposal as it is now: its snapshot (null when gone) and
+ * that snapshot's hash, to compare with the hash taken when it was proposed.
+ * The bot's preview reads it (step 16), so what the owner approves is what is
+ * stored, never the model's words.
+ */
+export async function targetState(tools: readonly ToolDefinition[], ctx: ToolContext, row: ActionRow): Promise<{ snapshot: unknown; hash: string | null } | null> {
+  const tool = tools.find((item): item is DestructiveTool => item.permission === "destructive" && item.name === row.tool);
+  if (!tool) return null;
+  const snapshot = tool.snapshot(row.target_id, ctx);
+  if (snapshot === null || snapshot === undefined) return { snapshot: null, hash: null };
+  return { snapshot, hash: await sha256Hex(stableStringify(snapshot)) };
 }
 
 /**

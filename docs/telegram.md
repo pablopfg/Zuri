@@ -12,8 +12,9 @@ diz o que já existe e como usar.
 | 13 | Avisos no Telegram com botões, grupo de avisos opcional | pronta |
 | 14 | Conversa por texto e voz | pronta |
 | 15a | Trava de leitura com `/destravar` (passkey ou código por e-mail), `/nova_conversa` | pronta |
-| 15b | Comandos de consulta e ação rápida | a fazer |
-| 16 | Aprovações com passkey ou e-mail e modo de bloqueio | a fazer |
+| 15b | Comandos de consulta e ação rápida | pronta |
+| 16a | Aprovar as propostas da Zuri com passkey ou código por e-mail, `/aprovar` | pronta |
+| 16b | Comandos de segurança e modo de bloqueio | a fazer |
 
 ## Criar o bot
 
@@ -127,8 +128,9 @@ Telegram". Se você apagar essa conversa no app, a próxima mensagem abre outra.
   e links desarmados. Resposta longa chega em mais de uma mensagem, em blocos
   de até 4.096 caracteres que nunca cortam uma marcação no meio.
 - Quando a Zuri propõe algo que precisa da sua aprovação (apagar uma tarefa,
-  por exemplo), o bot avisa e mostra **Abrir no app**. Aprovar pelo bot chega
-  na etapa 16.
+  por exemplo), a proposta chega logo depois da resposta com o botão
+  **Aprovar** (veja "Aprovar pelo bot"). Um plano de tarefas ou uma rotina
+  proposta continua com **Abrir no app**.
 - Mensagem encaminhada, trecho citado e resposta à mensagem de outra pessoa
   são texto de terceiros: a Zuri lê como dado, nunca como ordem sua, e um
   `/comando` encaminhado não roda. No app, esse texto aparece numa caixa
@@ -213,6 +215,45 @@ O botão de passkey só aparece se houver passkey cadastrada; o de e-mail, só
 se o envio de e-mail estiver configurado. Sem nenhum dos dois, o bot explica
 como cadastrar uma passkey no app.
 
+## Aprovar pelo bot
+
+Quando a Zuri propõe apagar ou reescrever algo (apagar uma tarefa ou nota,
+trocar o texto de uma nota ou a descrição de uma tarefa, esquecer uma
+memória, cancelar uma automação), a proposta chega como um cartão:
+
+```text
+Proposta da Zuri: apagar a tarefa
+Item: comprar pão
+Vale até 15:30.
+```
+
+O cartão é montado pelo servidor com o que está guardado agora (o título do
+item, e nas reescritas o texto atual e o novo), nunca com as palavras da
+Zuri. Se o item mudou depois da proposta, o bot não deixa aprovar e diz por
+quê.
+
+Tocar em **Aprovar** não basta: o bot pede a mesma confirmação do
+`/destravar`, presa àquela proposta.
+
+- **Confirmar com passkey** abre `/aprovar` com a prévia da proposta num
+  cartão. Confirmado, a proposta é feita na hora e o bot troca a pergunta por
+  "Feito: apagar a tarefa «comprar pão»."
+- **Receber código por e-mail** manda o código junto com a prévia e o aviso
+  "Se não foi você que tocou em Aprovar no Telegram, não digite este código".
+  Responda à pergunta do bot com os 6 dígitos.
+
+O link e o código valem 5 minutos, uma vez só, e só para aquela proposta.
+Tocar em **Aprovar** de novo reaproveita o pedido aberto, com um link novo.
+A proposta roda pelo mesmo caminho do botão Aprovar do app, no máximo uma
+vez: se o item mudou nesse meio tempo, nada é feito. As mesmas 5 confirmações
+erradas em 15 minutos travam as aprovações pelo bot por 1 hora.
+
+Cada aprovação pelo bot aparece em Acessos e gera um aviso de segurança, uma
+vez, que só se reconhece no app. Sem o id da conta do Telegram na instalação,
+ou sem passkey e sem e-mail, o cartão traz **Abrir no app** no lugar de
+**Aprovar**. `/aprovar` mostra as propostas que ainda esperam por você (até 5)
+e pede a leitura destravada.
+
 ## Comandos
 
 Nenhum comando usa IA: eles leem e escrevem pelos mesmos serviços do app e
@@ -235,6 +276,7 @@ guardou. Todos contam nos 60 comandos por hora.
 | `/status` | Versão, saúde, falhas em 24 h e se a IA está disponível | não |
 | `/backup` | Situação do backup e **Abrir no app** | não |
 | `/nova_conversa` | Começa outra conversa com a Zuri | sim |
+| `/aprovar` | Propostas da Zuri esperando aprovação, com **Aprovar** | sim |
 | `/destravar` | Libera a leitura por 12 horas | não |
 | `/ajuda` | Lista os comandos | não |
 
@@ -266,8 +308,12 @@ documentos com legenda".
 
 ### O que nunca é feito pelo bot
 
-Trocar senha ou e-mail, desligar o 2FA, desvincular o próprio Telegram, entre
-outras: para essas o bot sempre manda abrir o app.
+Trocar senha ou e-mail, desligar o 2FA, criar token remoto, ligar modelo pago
+ou subir o teto em US$, conectar um MCP ou trocar a URL dele, importar
+backup, sair do modo de bloqueio e desvincular o próprio Telegram: para essas
+o bot sempre manda abrir o app, mesmo com passkey ou código por e-mail. Só as
+propostas da lista do bot (as seis acima) aceitam **Aprovar**; uma ação
+destrutiva nova nasce só no app.
 
 ## Quando algo falha por dentro
 

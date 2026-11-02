@@ -24,6 +24,7 @@ import type { InternalState } from "../db/internal-state.ts";
 import { telegramWebhookSecret, TELEGRAM_WEBHOOK_PATH } from "../gates/telegram.ts";
 import { AppError } from "../http/errors.ts";
 import { log } from "../log.ts";
+import type { ApprovalOutcome, TelegramApprovals } from "./approvals.ts";
 import { isCommandData, type TelegramCallbacks } from "./callbacks.ts";
 import { type BotCommand, TelegramApiError, TelegramClient } from "./client.ts";
 import { type Attachment, type Button, fixQuestions, OPEN_COMMANDS, type Out, TelegramCommands } from "./commands.ts";
@@ -33,7 +34,7 @@ import type { PrivateLink, TelegramLinks } from "./links.ts";
 import { ReadLock } from "./read-lock.ts";
 
 /** Bump when the menu's commands change: the object re-sends it on start (setMyCommands). */
-export const TELEGRAM_MENU_VERSION = 3;
+export const TELEGRAM_MENU_VERSION = 4;
 
 /** The commands in the bot's menu. Steps 13 to 16 add theirs and bump TELEGRAM_MENU_VERSION. */
 const MENU: readonly { command: string; description: MessageKey }[] = [
@@ -51,12 +52,13 @@ const MENU: readonly { command: string; description: MessageKey }[] = [
   { command: "status", description: "telegram.menu.status" },
   { command: "backup", description: "telegram.menu.backup" },
   { command: "nova_conversa", description: "telegram.menu.nova_conversa" },
+  { command: "aprovar", description: "telegram.menu.aprovar" },
   { command: "destravar", description: "telegram.menu.destravar" },
   { command: "ajuda", description: "telegram.menu.ajuda" },
 ];
 
-/** "Receber código por e-mail" under an unlock: "v1:unlock_email:<the confirmation's id>". */
-const UNLOCK_EMAIL = /^v1:unlock_email:([A-Za-z0-9_-]{16})$/;
+/** "Receber código por e-mail" under an unlock or an approval: "v1:unlock_email:<the confirmation's id>" or "v1:approve_email:<id>". */
+const CODE_EMAIL = /^v1:(unlock|approve)_email:([A-Za-z0-9_-]{16})$/;
 
 /** What the bot says for each way sending the code can end. */
 const SEND_CODE_ANSWER: Record<Exclude<SendCodeOutcome, "sent">, MessageKey> = {
@@ -67,6 +69,12 @@ const SEND_CODE_ANSWER: Record<Exclude<SendCodeOutcome, "sent">, MessageKey> = {
   error: "telegram.unlock.emailFailed",
   expired: "telegram.unlock.expired",
   locked: "telegram.unlock.blockedShort",
+};
+/** The same for an approval, where the words differ. */
+const SEND_APPROVE_CODE_ANSWER: Record<Exclude<SendCodeOutcome, "sent">, MessageKey> = {
+  ...SEND_CODE_ANSWER,
+  not_configured: "telegram.aprovar.noMethod",
+  expired: "telegram.aprovar.codigoVenceu",
 };
 
 const HOUR_MS = 3_600_000;
@@ -81,8 +89,10 @@ export interface TelegramDeps {
   conversation?: TelegramConversation;
   /** The quick commands (step 15b): /hoje, /tarefas, /nova and the rest; absent in tests that don't need them. */
   commands?: TelegramCommands;
-  /** Confirmations made outside Telegram (step 15: unlocking reading); absent in tests that don't need them. */
+  /** Confirmations made outside Telegram (step 15: unlocking reading; step 16: approvals); absent in tests that don't need them. */
   confirmations?: TelegramConfirmations;
+  /** The agent's proposals as the bot shows and approves them (step 16); absent in tests that don't need them. */
+  approvals?: TelegramApprovals;
   state: InternalState;
   events: AuthEvents;
   /** The bot token, or null while the secret isn't set. Read on every use, never kept. */
@@ -314,9 +324,9 @@ export class TelegramService {
     const locked = this.#lock.locked(link);
     if (!locked) this.deps.links.touch();
     if (incoming.kind === "callback_query") {
-      const unlockEmail = UNLOCK_EMAIL.exec(incoming.callbackData ?? "");
-      if (unlockEmail) {
-        await this.#sendUnlockCode(incoming, unlockEmail[1] ?? "");
+      const codeEmail = CODE_EMAIL.exec(incoming.callbackData ?? "");
+      if (codeEmail) {
+        await this.#sendCode(incoming, codeEmail[2] ?? "", codeEmail[1] === "approve" ? "approval" : "unlock");
         return null;
       }
       if (isCommandData(incoming.callbackData) && this.deps.commands) {
@@ -424,6 +434,23 @@ export class TelegramService {
       case "destravar":
         await this.#unlock(link, locked);
         return;
+      case "aprovar": {
+        if (locked) {
+          this.deps.links.audit("command", "aprovar", "locked");
+          await this.#sayLocked(link.chatId);
+          return;
+        }
+        const approvals = this.deps.approvals;
+        if (!approvals) {
+          this.deps.links.audit("command", "aprovar", "not_yet");
+          await this.#say(link.chatId, "telegram.notYet");
+          return;
+        }
+        const outs = await approvals.pending(this.canConfirm());
+        this.deps.links.audit("command", "aprovar", "ok");
+        for (const out of outs) await this.#send(link.chatId, out);
+        return;
+      }
       case "nova_conversa":
         if (locked) {
           this.deps.links.audit("command", "nova_conversa", "locked");
@@ -503,6 +530,10 @@ export class TelegramService {
     }
     if (outcome.unlock) {
       await this.#unlock(link, locked);
+      return;
+    }
+    if (outcome.approve) {
+      await this.#approve(link, outcome.approve, incoming.callbackMessageId);
       return;
     }
     if (outcome.out) await this.#send(link.chatId, outcome.out);
@@ -593,19 +624,19 @@ export class TelegramService {
   }
 
   /** "Receber código por e-mail": the code goes out and the bot asks for it in a force_reply message. */
-  async #sendUnlockCode(incoming: Incoming, id: string): Promise<void> {
+  async #sendCode(incoming: Incoming, id: string, purpose: "unlock" | "approval"): Promise<void> {
     const confirmations = this.deps.confirmations;
     if (!confirmations || this.deps.adminId() === null) {
       await this.#answer(incoming.callbackId);
       return;
     }
     const outcome = await confirmations.sendCode(id);
-    this.deps.links.audit("unlock", "email", outcome);
+    this.deps.links.audit(purpose === "approval" ? "approve" : "unlock", "email", outcome);
     if (outcome !== "sent") {
-      await this.#answer(incoming.callbackId, SEND_CODE_ANSWER[outcome]);
+      await this.#answer(incoming.callbackId, (purpose === "approval" ? SEND_APPROVE_CODE_ANSWER : SEND_CODE_ANSWER)[outcome]);
       if (outcome === "locked") {
         const until = confirmations.lockedUntil();
-        await this.#say(incoming.chat.id, "telegram.unlock.blocked", { hora: this.#hour(until ?? Date.now()) });
+        await this.#say(incoming.chat.id, purpose === "approval" ? "telegram.aprovar.travado" : "telegram.unlock.blocked", { hora: this.#hour(until ?? Date.now()) });
       }
       return;
     }
@@ -636,25 +667,120 @@ export class TelegramService {
         .deleteMessage(link.chatId, message.message_id)
         .catch(() => undefined);
     }
-    this.deps.links.audit("unlock", "code", check.status === "none" ? "loose" : check.status);
+    const approval = check.status !== "none" && check.purpose === "approval";
+    this.deps.links.audit(approval ? "approve" : "unlock", "code", check.status === "none" ? "loose" : check.status);
     switch (check.status) {
       case "none":
         return true;
       case "ok":
-        await this.#unlocked(check);
+        if (approval) await this.#approved(check);
+        else await this.#unlocked(check);
         return true;
       case "locked": {
         const until = confirmations.lockedUntil();
-        await this.#say(link.chatId, "telegram.unlock.blocked", { hora: this.#hour(until ?? Date.now()) });
+        await this.#say(link.chatId, approval ? "telegram.aprovar.travado" : "telegram.unlock.blocked", { hora: this.#hour(until ?? Date.now()) });
         return true;
       }
       case "expired":
-        await this.#say(link.chatId, "telegram.unlock.expired");
+        await this.#say(link.chatId, approval ? "telegram.aprovar.codigoVenceu" : "telegram.unlock.expired");
         return true;
       default:
         await this.#say(link.chatId, "telegram.unlock.codeWrong");
         return true;
     }
+  }
+
+  /** Whether an approval can be confirmed here: TELEGRAM_ADMIN_ID set (N11) and a passkey or e-mail that works. */
+  canConfirm(): boolean {
+    const confirmations = this.deps.confirmations;
+    if (!confirmations || this.deps.adminId() === null) return false;
+    const methods = confirmations.methods();
+    return methods.passkey || methods.email;
+  }
+
+  /**
+   * Aprovar under a proposal: the target is checked against the proposal's hash
+   * now, then a confirmation tied to both opens (or the open one is reused),
+   * with a button for each way that works here. Tapping is never enough.
+   */
+  async #approve(link: PrivateLink, actionId: string, cardMessageId: number | null): Promise<void> {
+    const approvals = this.deps.approvals;
+    const confirmations = this.deps.confirmations;
+    if (!approvals || !confirmations) return;
+    const found = await approvals.preview(actionId);
+    if (found.status !== "ok") {
+      this.deps.links.audit("callback", "approve", found.status);
+      if (found.status === "app_only") {
+        const card = await approvals.card(actionId, false);
+        if (card) await this.#send(link.chatId, card);
+        return;
+      }
+      // Gone, handled or changed: the card loses its button and says why.
+      if (cardMessageId !== null) {
+        await this.client()
+          .editMessageReplyMarkup(link.chatId, cardMessageId, { inline_keyboard: [] })
+          .catch(() => null);
+      }
+      await this.#say(link.chatId, found.status === "changed" ? "telegram.aprovar.alvo_mudou" : "telegram.aprovar.expirou");
+      return;
+    }
+    if (this.deps.adminId() === null) {
+      this.deps.links.audit("callback", "approve", "no_admin");
+      await this.#send(link.chatId, { text: t(this.deps.locale(), "telegram.aprovar.needsAdmin"), keyboard: [[approvals.openInApp(found.row.conversation_id)]] });
+      return;
+    }
+    const blocked = confirmations.lockedUntil();
+    if (blocked !== null) {
+      this.deps.links.audit("callback", "approve", "blocked");
+      await this.#say(link.chatId, "telegram.aprovar.travado", { hora: this.#hour(blocked) });
+      return;
+    }
+    const methods = confirmations.methods();
+    if (!methods.passkey && !methods.email) {
+      this.deps.links.audit("callback", "approve", "no_method");
+      await this.#send(link.chatId, { text: t(this.deps.locale(), "telegram.aprovar.noMethod"), keyboard: [[approvals.openInApp(found.row.conversation_id)]] });
+      return;
+    }
+    const opened = await confirmations.open("approval", { pendingActionId: actionId, targetHash: found.targetHash });
+    const locale = this.deps.locale();
+    const buttons: ({ text: string; url: string } | { text: string; callback_data: string })[] = [];
+    if (opened.token !== null) buttons.push({ text: t(locale, "telegram.unlock.passkey"), url: `${this.deps.origin()}${APPROVE_PATH}#${opened.token}` });
+    if (methods.email) buttons.push({ text: t(locale, "telegram.unlock.email"), callback_data: `v1:approve_email:${opened.id}` });
+    this.deps.links.audit("callback", "approve", "asked");
+    try {
+      const sent = await this.client().sendMessage(link.chatId, t(locale, "telegram.aprovar.escolha"), {
+        reply_markup: { inline_keyboard: buttons.map((button) => [button]) },
+      });
+      confirmations.attachMessage(opened.id, sent.message_id);
+    } catch (error) {
+      log("warn", "telegram_send_failed", { error, ...kindOf(error) });
+    }
+  }
+
+  /**
+   * An approval went through (passkey or code): the proposal runs once through
+   * the app's path, the bot's question becomes the result, and the owner is
+   * told on every channel (a security alert only the app can answer).
+   */
+  async #approved(confirmed: Confirmed): Promise<ApprovalOutcome> {
+    const approvals = this.deps.approvals;
+    if (!approvals || confirmed.pendingActionId === null) return "expired";
+    const before = await approvals.preview(confirmed.pendingActionId);
+    const outcome = await approvals.run(confirmed.pendingActionId, confirmed.targetHash);
+    this.deps.links.audit("approve", "confirm", outcome);
+    if (outcome === "approved") this.deps.events.record("telegram_approved", null, { alert: true });
+    const link = this.deps.links.private();
+    if (!link || !this.configured()) return outcome;
+    const text = approvals.result(outcome, before.status === "ok" ? before.preview : null);
+    const client = this.client();
+    try {
+      if (confirmed.messageId !== null) await client.editMessageText(link.chatId, confirmed.messageId, text, { reply_markup: { inline_keyboard: [] } });
+      else await client.sendMessage(link.chatId, text);
+    } catch {
+      // The question is gone (deleted, too old to edit): the answer goes as a new message.
+      await this.#send(link.chatId, { text });
+    }
+    return outcome;
   }
 
   /** A confirmation went through: reading opens for 12 hours and the bot's question becomes the answer. */
@@ -678,19 +804,32 @@ export class TelegramService {
 
   // --- The /aprovar page (no session: the token is the key) ---------------------
 
-  /** What the page needs to ask for the passkey. */
+  /**
+   * What the page needs to ask for the passkey; for an approval, the preview
+   * from the database, with the target checked against the proposal's hash again.
+   */
   async approveOptions(token: string): Promise<ApproveOptions> {
     const confirmations = this.#confirmations();
-    const { purpose, options, expiresAt } = await confirmations.pageOptions(token);
-    return { purpose, options, expiresAt };
+    const { purpose, options, expiresAt, pendingActionId, targetHash } = await confirmations.pageOptions(token);
+    if (purpose !== "approval") return { purpose, options, expiresAt };
+    const found = pendingActionId === null || !this.deps.approvals ? null : await this.deps.approvals.preview(pendingActionId);
+    if (found?.status !== "ok") throw approvalProblem(found?.status === "changed" ? "changed" : found?.status === "expired" ? "expired" : "handled");
+    if (found.targetHash !== targetHash) throw approvalProblem("changed");
+    return { purpose, options, expiresAt, approval: found.preview };
   }
 
-  /** The passkey's answer from the page: right, the bot unlocks and says so in the chat. */
+  /** The passkey's answer from the page: right, the bot unlocks (or the proposal runs) and says so in the chat. */
   async approveVerify(token: string, credential: PasskeyAssertion["response"]): Promise<ApproveResult> {
     const confirmed = await this.#confirmations().pageVerify(token, credential);
+    if (confirmed.purpose === "approval") {
+      this.deps.links.audit("approve", "passkey", "ok");
+      const outcome = await this.#approved(confirmed);
+      if (outcome !== "approved") throw approvalProblem(outcome);
+      return { purpose: "approval", status: "approved" };
+    }
     this.deps.links.audit("unlock", "passkey", "ok");
     const unlockedUntil = await this.#unlocked(confirmed);
-    return { purpose: confirmed.purpose, unlockedUntil };
+    return { purpose: "unlock", unlockedUntil };
   }
 
   #confirmations(): TelegramConfirmations {
@@ -702,18 +841,8 @@ export class TelegramService {
     return confirmations;
   }
 
-  /** "23:40" in the owner's language and time zone. */
-  /** HH:MM in the owner's time zone; with the day too when it isn't today (the lock can be up to 72 h away). */
   #hour(ms: number): string {
-    const timeZone = this.deps.timeZone?.() ?? "UTC";
-    const day = (at: number) => new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" }).format(at);
-    const withDay = day(ms) !== day(Date.now());
-    return new Intl.DateTimeFormat(this.deps.locale(), {
-      ...(withDay ? { day: "2-digit", month: "2-digit" } : {}),
-      hour: "2-digit",
-      minute: "2-digit",
-      timeZone,
-    }).format(ms);
+    return telegramHour(ms, this.deps.locale(), this.deps.timeZone?.() ?? "UTC");
   }
 
   async #answer(callbackId: string | null, key?: MessageKey): Promise<void> {
@@ -1138,6 +1267,32 @@ export class TelegramService {
 }
 
 /** What the owner reads after tapping a notice's button. */
+/** HH:MM in the owner's language and time zone; with the day too when it isn't today (the lock can be up to 72 h away). */
+export function telegramHour(ms: number, locale: Locale, timeZone: string): string {
+  const day = (at: number) => new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" }).format(at);
+  const withDay = day(ms) !== day(Date.now());
+  return new Intl.DateTimeFormat(locale, {
+    ...(withDay ? { day: "2-digit", month: "2-digit" } : {}),
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone,
+  }).format(ms);
+}
+
+/** Why the page can't approve: the target changed (409), the proposal ended (410) or was handled elsewhere (409). */
+function approvalProblem(outcome: Exclude<ApprovalOutcome, "approved">): AppError {
+  switch (outcome) {
+    case "changed":
+      return new AppError("TARGET_CHANGED", "error.actionTargetChanged");
+    case "expired":
+      return new AppError("APPROVAL_EXPIRED", "error.actionExpired", { approval: "expired" });
+    case "handled":
+      return new AppError("CONFLICT", "error.actionHandled");
+    case "failed":
+      return new AppError("INTERNAL_ERROR");
+  }
+}
+
 const BUTTON_ANSWER: Record<Awaited<ReturnType<AlertService["respondOutOfBand"]>>, MessageKey> = {
   done: "telegram.notice.answer.done",
   snoozed: "telegram.notice.answer.snoozed",

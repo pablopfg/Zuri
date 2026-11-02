@@ -38,6 +38,7 @@ const OWNER_KINDS: readonly AuthEventKind[] = [
   "telegram_group_linked",
   "telegram_unlocked",
   "telegram_confirm_locked",
+  "telegram_approved",
   "password_recovered",
 ];
 /** Repeated refusals from one network in the window fold into one row with a count. */

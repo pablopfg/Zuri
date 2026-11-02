@@ -511,6 +511,7 @@ O comportamento completo está na seção "Bot do Telegram do administrador"; aq
 - Comandos de segurança: `/acessos`, `/sessoes`, `/encerrar_sessoes`, `/tokens`, `/pausar_rotinas`, `/bloquear`.
 - Modo de bloqueio conforme a seção do bot (tokens suspensos e não revogados, login só com código de recuperação na primeira hora, tela Sair do bloqueio, rebloqueio em 24 h suspende o vínculo) e reconhecimento cruzado dos alertas de segurança.
 - Aceite: 5 falhas de confirmação travam aprovações pelo bot por 1 h e geram alerta; token da página /aprovar e código por e-mail não servem duas vezes nem para outra proposta; `/bloquear` funciona mesmo com a IA fora do ar; login durante o bloqueio é recusado com 2FA e aceito com código de recuperação; rebloqueio em 24 h suspende o vínculo; tokens suspensos voltam ao sair; alerta causado pelo bot não se reconhece pelo bot; a prévia de aprovação vem do banco, nunca do texto do modelo.
+- Dividida em duas PRs (02/11/2026, plano `docs/planos/etapa-16-aprovacoes-telegram.md`): **16a** entrega as aprovações pelo bot (botão **Aprovar** com a prévia do servidor, `/aprovar`, confirmação por passkey ou e-mail presa à proposta e ao hash, `TARGET_CHANGED`, alerta `telegram_approved`); **16b** entrega os comandos de segurança, o modo de bloqueio com a tela **Sair do bloqueio** e o reconhecimento no app dos alertas causados pelo bot.
 
 ### Fase D — Paridade com o Talorys (etapas independentes entre si)
 

@@ -289,6 +289,7 @@ describe("linking the owner's account", () => {
         { command: "status", description: "Como a Zuri está" },
         { command: "backup", description: "Situação do backup" },
         { command: "nova_conversa", description: "Começar uma conversa nova" },
+        { command: "aprovar", description: "Propostas esperando aprovação" },
         { command: "destravar", description: "Liberar a leitura por 12 h" },
         { command: "ajuda", description: "O que eu faço por aqui" },
       ],
