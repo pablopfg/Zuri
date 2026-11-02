@@ -28,9 +28,16 @@ etapas ficam detalhadas; as mais antigas viram uma linha na tabela.
 | 10 | mesclada (02/11/2026) | #46 | Automações: lembretes, resumo das tarefas e rotinas com IA, alarme único, recuperação após reinício, aprovação das rotinas do chat |
 | 11 | mesclada (02/11/2026) | #55, #56, #63, #64 | Central de avisos, Diagnóstico, notificação no aparelho, e-mail e recuperação de senha, prioridade que aprende |
 | 12 | mesclada (02/11/2026) | #70 | Fundação do bot do Telegram: cliente da Bot API, webhook com travas, vínculo por código confirmado no app, cartão em Configurações › Avisos |
-| 13 | em revisão | #73 | Avisos no Telegram: canal da central, discreto com "Texto completo", botões Feito/Adiar/Silenciar/Abrir, grupo opcional com tópicos |
+| 13 | mesclada (02/11/2026) | #73 | Avisos no Telegram: canal da central, discreto com "Texto completo", botões Feito/Adiar/Silenciar/Abrir, grupo opcional com tópicos |
+| 14 | em revisão | — | Conversa e voz no Telegram: conversa do app pelo bot, HTML em blocos, voz até 5 min/5 MB, pergunta antes de baixar arquivo grande, terceiros como `<data>` |
 
 ## Últimas etapas (detalhe)
+
+### Etapa 14 · Conversa e voz no Telegram
+- Entregou: `apps/agent/src/telegram/{conversation,format}.ts` (`TelegramConversation`: turno, "digitando…", voz, pergunta de arquivo grande; Markdown → HTML do Telegram e divisão em 4.096), `TelegramClient.download`, `MeteredAI.reserveAudio` (reserva antes do download), `UsageMeter.room`, `TurnInput.source/quoted`, `ToolContext.source` (memória com `origin: telegram`). Tela: interruptor "Conversar com a Zuri por aqui" no `TelegramCard`, `components/Switch.tsx`, marca "pelo Telegram" e caixa de texto citado na conversa. Plano: `docs/planos/etapa-14-conversa-telegram.md`.
+- Migrations: versão 16 (`zur_telegram_pending_files`, `zur_messages.quoted`).
+- Decisões técnicas: uma conversa do Telegram por vez (`telegram_conversation` em `zur_settings`), recriada se apagada; texto do próprio dono é a mensagem do turno e o de terceiros (encaminhada, citação, resposta a outra pessoa, voz encaminhada) vai em `quoted` e no prompt como `<data source="telegram_forward">`; botões `v1:large_file|large_skip:<id>` apontam para a linha do arquivo (sem `zur_telegram_callbacks`); teto extra de 30 min por arquivo (o Whisper não publica limite); o turno corre fora da fila do bot (`Started`), então a fila lê a próxima atualização enquanto responde.
+- Para a 15: trava de leitura, limite de 30 mensagens/hora e `/nova_conversa` (troca `telegram_conversation`); fotos e documentos hoje respondem "só texto e áudio". Para a 16: proposta no turno mostra **Abrir no app** (`/conversa/<id>`); trocar pelo botão Aprovar.
 
 ### Etapa 13 · Avisos no Telegram
 - Entregou: `apps/agent/src/telegram/{channel,callbacks}.ts` (canal `TelegramChannel`, botões `v1:<ação>:<id>`), grupo em `TelegramLinks` (`group`, `saveGroup`, `moveGroup`, `setTopics`), toques e grupo em `TelegramService` (`groupCode`, `unlinkGroup`), `AlertService.respondOutOfBand` e `snoozed_until` (volta como cópia em `escalate`), rotas `POST/DELETE /api/telegram/group`, configuração `alertFullText`, evento `telegram_group_linked` (origem `bot` em `alerts/security.ts`). Tela: seção do grupo no `TelegramCard`, coluna "Texto completo" no `RoutesCard`. Plano: `docs/planos/etapa-13-avisos-telegram.md`.
@@ -44,12 +51,9 @@ etapas ficam detalhadas; as mais antigas viram uma linha na tabela.
 - Decisões técnicas: segredo do webhook = HMAC **hex** do `SESSION_SECRET` (antes base64url); o `update_id` só é gravado quando a atualização vai ser tratada (conta estranha não grava nada); fila serial no objeto com `keepAliveWhile`; códigos errados em memória, 10 em 10 min apagam o código e gravam `telegram_code_invalidated`; `getWebhookInfo` em cache de 5 min; menu com versão `TELEGRAM_MENU_VERSION:idioma`, reenviado no `onStart`; só `/ajuda` no menu por enquanto; mensagens em texto puro sem prévia de link.
 - Para a 13: canal `AlertChannel` do Telegram usa `TelegramService.client()` e o `chatId` do vínculo ativo; somar comandos ao `MENU` sobe `TELEGRAM_MENU_VERSION`. Para a 15: `bot_read_lock_hours` e `last_used_at` já existem; limite de 60 comandos/30 mensagens por hora ainda não. Para a 14: `conversation_enabled` já é gravado pelo PATCH.
 
-### Etapa 11 · Prioridade que aprende (parte 11d)
-- Entregou: `apps/agent/src/alerts/learning.ts`, avisos `alerts.lowered`/`alerts.raised`, `DELETE /api/alerts/learning/:key`, configuração `alertLearning`, campo `priority` nas automações. Migration 13. Pendência de produto: "Marcar tudo como lido" conta como aberto.
-
 ### Notas que continuam valendo
 - Um alarme só (P8): use `AutomationService.rearm()`/`otherDue`, nunca outro alarme. O runner aceita `context: "scheduled"` (só leitura, sem dono presente). Toda IA por `agent.ai()`.
-- A etapa 14 passa `origin: telegram` e `author: agent` no `remember`. JS inicial em ~138,9 kB (teto 139): tela nova sob demanda, textos via `addMessages`.
+- JS inicial em ~138,9 kB (teto 139): tela nova sob demanda, textos via `addMessages`.
 
 <!-- Modelo, até 10 linhas por etapa:
 ### Etapa NN · <nome>

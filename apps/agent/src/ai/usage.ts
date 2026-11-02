@@ -206,6 +206,15 @@ export class UsageMeter {
     });
   }
 
+  /** What is left of today's audio hour and Neuron cap (a Telegram file asks before using it, step 14). */
+  room(limits: AiLimits): { audioSeconds: number; neurons: number } {
+    const row = this.row(this.today());
+    return {
+      audioSeconds: Math.max(0, AUDIO_SECONDS_PER_DAY - (row?.audio_seconds ?? 0)),
+      neurons: Math.max(0, limits.neuronsPerDay - (row?.neurons ?? 0)),
+    };
+  }
+
   /** Gives back a reservation whose call never reached the model. */
   release(reservation: Reservation): void {
     if (reservation.done) return;

@@ -1,7 +1,7 @@
 import { TELEGRAM_LIMITS } from "@zuri/shared";
 import { describe, expect, it, vi } from "vitest";
 import { telegramAdminId, telegramToken } from "../src/agent/zuri-agent.ts";
-import { isBlocked, isNotModified, TelegramApiError, TelegramBudgetError, TelegramClient } from "../src/telegram/client.ts";
+import { isBlocked, isNotModified, TelegramApiError, TelegramBudgetError, TelegramClient, TelegramFileTooLargeError } from "../src/telegram/client.ts";
 
 // The thin Bot API client (step 12): no network, a fake fetch answers each call.
 
@@ -170,5 +170,83 @@ describe("the bot's secrets", () => {
     for (const value of [undefined, "", "0", "-5", "1e5", "12a", "0123", "99999999999999999"]) {
       expect(telegramAdminId(value), String(value)).toBeNull();
     }
+  });
+});
+
+describe("TelegramClient.download (step 14)", () => {
+  /** A body that arrives in pieces, as a real download would. */
+  const pieces = (sizes: number[], headers: Record<string, string> = {}) =>
+    new Response(
+      new ReadableStream<Uint8Array>({
+        start(controller) {
+          for (const size of sizes) controller.enqueue(new Uint8Array(size));
+          controller.close();
+        },
+      }),
+      { headers },
+    );
+
+  it("GETs the file's URL without redirects, and returns the bytes joined", async () => {
+    const urls: string[] = [];
+    const fetcher = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      urls.push(String(input));
+      expect(init?.method).toBe("GET");
+      expect(init?.redirect).toBe("manual");
+      return pieces([3, 4]);
+    }) as typeof fetch;
+    const client = new TelegramClient({ token: TOKEN, fetcher });
+    expect((await client.download("voice/file_3.oga", 10)).byteLength).toBe(7);
+    expect(urls).toEqual([`https://api.telegram.org/file/bot${TOKEN}/voice/file_3.oga`]);
+    expect(client.calls).toBe(1);
+  });
+
+  it("cuts off a body past the cap while reading (n bytes pass, n+1 stop), and a declared length past it before reading", async () => {
+    const client = (response: () => Response) => new TelegramClient({ token: TOKEN, fetcher: (async () => response()) as typeof fetch });
+    expect((await client(() => pieces([5, 5])).download("voice/a.oga", 10)).byteLength).toBe(10);
+    await expect(client(() => pieces([5, 6])).download("voice/a.oga", 10)).rejects.toBeInstanceOf(TelegramFileTooLargeError);
+    await expect(client(() => pieces([1], { "content-length": "11" })).download("voice/a.oga", 10)).rejects.toBeInstanceOf(TelegramFileTooLargeError);
+  });
+
+  it("refuses a path that could point the token's URL elsewhere, without a request", async () => {
+    const fetcher = vi.fn();
+    const client = new TelegramClient({ token: TOKEN, fetcher: fetcher as unknown as typeof fetch });
+    for (const path of ["../bot/getMe", "voice/../x", "https://x.exemplo.com/a", "/abs", "voice/a b", "x".repeat(257)]) {
+      await expect(client.download(path, 10)).rejects.toMatchObject({ method: "download", description: "invalid path" });
+    }
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+
+  it("turns a refusal, a redirect, a network failure and a timeout into errors without the token", async () => {
+    const cases: [() => Response | Promise<Response>, number, string][] = [
+      [() => new Response("nope", { status: 404 }), 404, "failed"],
+      [() => new Response(null, { status: 302, headers: { location: "https://outro.exemplo.com.br/" } }), 302, "redirect"],
+      [() => Promise.reject(new TypeError(`fetch failed for https://api.telegram.org/file/bot${TOKEN}/x`)), 0, "network"],
+      [() => Promise.reject(new DOMException("timed out", "TimeoutError")), 0, "timeout"],
+      [
+        () =>
+          new Response(
+            new ReadableStream({
+              pull(controller) {
+                controller.error(new TypeError(`reset ${TOKEN}`));
+              },
+            }),
+          ),
+        0,
+        "network",
+      ],
+    ];
+    for (const [answer, status, description] of cases) {
+      const error = (await new TelegramClient({ token: TOKEN, fetcher: (async () => answer()) as typeof fetch })
+        .download("voice/a.oga", 10)
+        .catch((e: unknown) => e)) as TelegramApiError;
+      expect(error).toBeInstanceOf(TelegramApiError);
+      expect({ status: error.status, description: error.description }).toEqual({ status, description });
+      expect(JSON.stringify(error) + String(error.stack)).not.toContain(TOKEN);
+    }
+  });
+
+  it("counts against the budget like any call", async () => {
+    const client = new TelegramClient({ token: TOKEN, budget: 0, fetcher: (async () => pieces([1])) as typeof fetch });
+    await expect(client.download("voice/a.oga", 10)).rejects.toBeInstanceOf(TelegramBudgetError);
   });
 });

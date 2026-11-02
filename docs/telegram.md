@@ -106,13 +106,70 @@ título, a não ser que você ligue Texto completo. **Remover grupo** faz o bot
 sair do grupo e os avisos voltarem ao chat; desvincular a conta tira o grupo
 junto, e tirar o bot do grupo pelo Telegram também desfaz o vínculo.
 
+## Conversar com a Zuri pelo Telegram
+
+A conversa nasce desligada. Em Configurações › Avisos, no cartão do Telegram,
+ligue **Conversar com a Zuri por aqui**. Desligada, o bot responde como ligar
+e não lê nada do que você manda, nem baixa áudio.
+
+Ligada, tudo o que você escreve no chat privado com o bot vira uma conversa
+comum do app, com as mesmas memórias, ferramentas e limites. A conversa
+aparece na sua lista de conversas e cada mensagem dela leva a marca "pelo
+Telegram". Se você apagar essa conversa no app, a próxima mensagem abre outra.
+
+- Um turno por vez, com até 3 minutos. Mensagem que chega no meio recebe
+  "Ainda estou respondendo a sua mensagem anterior". Se o tempo acabar, a Zuri
+  avisa e o que ela já tinha escrito fica guardado no app.
+- Enquanto pensa, o bot mostra "digitando…" (no primeiro minuto, até 12
+  vezes).
+- A resposta vem formatada (negrito, itálico, código), com todo texto escapado
+  e links desarmados. Resposta longa chega em mais de uma mensagem, em blocos
+  de até 4.096 caracteres que nunca cortam uma marcação no meio.
+- Quando a Zuri propõe algo que precisa da sua aprovação (apagar uma tarefa,
+  por exemplo), o bot avisa e mostra **Abrir no app**. Aprovar pelo bot chega
+  na etapa 16.
+- Mensagem encaminhada, trecho citado e resposta à mensagem de outra pessoa
+  são texto de terceiros: a Zuri lê como dado, nunca como ordem sua, e um
+  `/comando` encaminhado não roda. No app, esse texto aparece numa caixa
+  separada ("Mensagem encaminhada", "Trecho citado").
+- Memórias que a Zuri guarda numa conversa do Telegram ficam marcadas como
+  vindas do Telegram na tela de Memória.
+
+### Voz e arquivos de áudio
+
+Mande uma mensagem de voz ou um arquivo de áudio. Até 5 minutos e 5 MB, a Zuri
+transcreve na hora, mostra "🎙️ o que entendeu" e responde. O áudio passa pelo
+mesmo serviço e pela mesma cota do app (uma hora por dia, app e bot juntos) e
+nunca é guardado. Áudio encaminhado de outra pessoa entra como dado, como um
+texto encaminhado.
+
+Acima de 5 minutos ou de 5 MB, nada é baixado antes de você decidir. A Zuri
+diz o tamanho, a duração, quantos Neurons a transcrição deve gastar e quantos
+sobram no dia, e pergunta com **Processar mesmo assim** e **Deixar pra lá**.
+O botão vale 10 minutos e um toque só; um arquivo novo acima do limite
+substitui a pergunta anterior. Se a cota do dia acabar entre a pergunta e o
+toque, a Zuri explica em vez de processar.
+
+Alguns arquivos não dá para processar nem com confirmação, e a Zuri só explica
+o motivo:
+
+| Teto | Por quê |
+| --- | --- |
+| 20 MB | O maior arquivo que o Telegram deixa um bot baixar (`getFile`) |
+| 30 minutos | A documentação do Whisper no Workers AI não publica limite por chamada; 30 min cabem com folga nos 3 minutos do turno. Revisar com a primeira medição real |
+| O áudio e os Neurons que sobram no dia | A cota de 3.600 s de áudio e o teto de 9.000 Neurons, que zeram às 00:00 UTC |
+
+O download confere o tamanho de novo e para no meio se o arquivo vier maior do
+que o Telegram tinha dito.
+
 ## O que o bot responde hoje
 
-Além dos avisos, o bot confirma o vínculo, manda a mensagem de teste e
-responde a `/ajuda`. Para o resto, ele diz que a conversa ainda é pelo app.
-Comandos e conversa chegam nas etapas 14 e 15. Algumas ações nunca serão
-feitas pelo bot (trocar senha ou e-mail, desligar o 2FA, desvincular o
-próprio Telegram, entre outras): para essas o bot sempre manda abrir o app.
+Além dos avisos e da conversa, o bot confirma o vínculo, manda a mensagem de
+teste e responde a `/ajuda`. Fotos e documentos recebem "por enquanto eu
+entendo só texto e áudio"; comandos de consulta chegam na etapa 15. Algumas
+ações nunca serão feitas pelo bot (trocar senha ou e-mail, desligar o 2FA,
+desvincular o próprio Telegram, entre outras): para essas o bot sempre manda
+abrir o app.
 
 ## Quando algo falha por dentro
 
@@ -134,3 +191,11 @@ externas (o limite do plano Free é 50). O registro do bot guarda só metadados
 Cada aviso é uma chamada à Bot API, dentro do limite por canal (6 por hora e 30
 por dia, por padrão); o tópico custa uma chamada a mais na primeira vez. Os
 toques nos botões chegam pelo mesmo webhook. Nada disso usa IA.
+
+Na conversa, cada turno usa as mesmas cotas de IA do app. Um turno faz no
+máximo 12 "digitando…", a resposta em blocos e, com áudio, duas chamadas a
+mais (`getFile` e o download), sempre abaixo das 45 chamadas externas. A
+transcrição custa cerca de 46,6 Neurons por minuto de áudio. O registro guarda
+só o tipo da mensagem (texto, voz, áudio) e o resultado; pergunta, confirmação,
+recusa e expiração de arquivo grande ficam com `kind = large_file`, sem o
+identificador nem o nome do arquivo.

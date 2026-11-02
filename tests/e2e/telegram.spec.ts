@@ -92,6 +92,33 @@ test("Settings > Avisos: the owner connects Telegram with a code, confirms the a
   await expect(toast(page, "Grupo removido.")).toBeVisible();
   await expect(card.getByRole("button", { name: "Adicionar grupo" })).toBeVisible();
 
+  // The conversation (step 14): off by default; on, a message to the bot becomes an app conversation.
+  const chatSwitch = card.getByRole("switch", { name: "Conversar com a Zuri por aqui" });
+  await expect(chatSwitch).not.toBeChecked();
+  await chatSwitch.click();
+  await expect(toast(page, "Conversa pelo Telegram ligada.")).toBeVisible();
+  await expect(chatSwitch).toBeChecked();
+  await expectAccessible(page, "telegram com conversa ligada");
+  for (const message of [
+    { text: "Lembra de comprar pão" },
+    { text: "Promoção imperdível, clique aqui", forward_origin: { type: "hidden_user", date: 1, sender_user_name: "Loja" } },
+  ]) {
+    const res = await page.request.post("/api/telegram/webhook", {
+      headers: { "x-telegram-bot-api-secret-token": e2eWebhookSecret(), "content-type": "application/json" },
+      data: { update_id: Math.floor(Math.random() * 1e9), message: { message_id: 3, date: 1, from: { id: 424242, is_bot: false, first_name: "Dono" }, chat: { id: 424242, type: "private" }, ...message } },
+    });
+    expect(res.status()).toBe(200);
+  }
+  await page.goto("/conversa");
+  await page.getByRole("link", { name: /Lembra de comprar pão/ }).first().click();
+  const log = page.locator("main");
+  await expect(log.getByText("Mensagem encaminhada")).toBeVisible();
+  await expect(log.locator("blockquote", { hasText: "Promoção imperdível, clique aqui" })).toBeVisible();
+  await expect(log.getByText("pelo Telegram").first()).toBeVisible();
+  await expectAccessible(page, "conversa pelo Telegram");
+  await page.goto("/configuracoes");
+  card = await openCard(page);
+
   await card.getByRole("button", { name: "Desvincular" }).click();
   const dialog = page.getByRole("dialog", { name: "Desvincular o Telegram?" });
   await expect(dialog).toBeVisible();

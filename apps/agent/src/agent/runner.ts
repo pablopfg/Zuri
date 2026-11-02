@@ -3,7 +3,7 @@ import { t } from "@zuri/shared";
 import { z } from "zod";
 import type { MeteredAI } from "../ai/metered.ts";
 import { estimateTokens, type ProviderTool } from "../ai/provider.ts";
-import type { ConversationRepository } from "../chat/conversations.ts";
+import type { ConversationRepository, Quoted } from "../chat/conversations.ts";
 import { AppError } from "../http/errors.ts";
 import { memoryPromptSection, memoryTokenBudget, selectRelevantMemories } from "../memory/recall.ts";
 import { ALL_TOOLS } from "../tools/index.ts";
@@ -24,6 +24,10 @@ export interface TurnInput {
   conversationId?: string | undefined;
   message: string;
   signal: AbortSignal;
+  /** Where the owner wrote from: "telegram" for the bot's conversation (step 14); the app otherwise. */
+  source?: "app" | "telegram";
+  /** Someone else's text the owner sent along (Telegram): stored with the message, in the prompt only as <data>. */
+  quoted?: Quoted;
 }
 
 export interface RunnerDeps {
@@ -87,7 +91,14 @@ export class AgentRunner {
       conversation = conversations.get(input.conversationId);
       conversations.assertRoomForTurn();
     } else conversation = conversations.create(input.message);
-    const userMessage = conversations.addMessage({ conversationId: conversation.id, role: "user", content: input.message });
+    const source = input.source ?? "app";
+    const userMessage = conversations.addMessage({
+      conversationId: conversation.id,
+      role: "user",
+      content: input.message,
+      source,
+      ...(input.quoted?.length ? { quoted: input.quoted } : {}),
+    });
     const assistantMessageId = crypto.randomUUID();
     yield { type: "start", conversation: conversations.get(conversation.id), userMessage, assistantMessageId };
 
@@ -100,7 +111,7 @@ export class AgentRunner {
       if (status === "cancelled" && executor) this.deps.tools.plans.discard(executor.proposedPlans());
       for (const tool of tools) if (tool.status === "running") tool.status = "error";
       try {
-        return conversations.addMessage({ id: assistantMessageId, conversationId: conversation.id, role: "assistant", content: text, tools, status, error, fallback });
+        return conversations.addMessage({ id: assistantMessageId, conversationId: conversation.id, role: "assistant", content: text, tools, status, error, fallback, source });
       } catch (failure) {
         if (!(failure instanceof AppError && failure.code === "NOT_FOUND")) throw failure;
         // The owner deleted the conversation meanwhile: nothing is stored, the tab only learns how it ended.
@@ -112,7 +123,7 @@ export class AgentRunner {
           tools: [],
           status: "cancelled",
           error: null,
-          source: "app",
+          source,
           createdAt: new Date().toISOString(),
         };
       }
@@ -121,7 +132,7 @@ export class AgentRunner {
     try {
       const ai = this.deps.ai();
       const registry = this.deps.registry ?? ALL_TOOLS;
-      const ctx: ToolContext = { ...this.deps.tools, timeZone: settings.timeZone, mode: "chat", conversationId: conversation.id };
+      const ctx: ToolContext = { ...this.deps.tools, timeZone: settings.timeZone, mode: "chat", conversationId: conversation.id, source };
       executor = new ToolExecutor(registry, ctx, { maxToolCalls: settings.aiMaxIterations > 1 ? settings.aiMaxToolCalls : 0 });
       const offered = executor.available();
       const budget = chainBudget(ai, settings.aiMaxContextTokens, settings.aiMaxOutputTokens, offered.length ? toolTokens(offered) : 0);

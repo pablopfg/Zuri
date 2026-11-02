@@ -34,6 +34,14 @@ export class TelegramBudgetError extends Error {
   override readonly name = "TelegramBudgetError";
 }
 
+/** A download passed the size Telegram declared or the hard cap: cut off in the middle (step 14). */
+export class TelegramFileTooLargeError extends Error {
+  override readonly name = "TelegramFileTooLargeError";
+}
+
+/** A file of up to 20 MB gets longer than an API call to arrive. */
+const DOWNLOAD_TIMEOUT_MS = 60_000;
+
 /** "message is not modified": an edit that changes nothing, which is not a failure. */
 export const isNotModified = (error: unknown) => error instanceof TelegramApiError && error.status === 400 && /message is not modified/i.test(error.description);
 
@@ -192,6 +200,61 @@ export class TelegramClient {
 
   getFile(fileId: string) {
     return this.call<{ file_id: string; file_size?: number; file_path?: string }>("getFile", { file_id: fileId });
+  }
+
+  /**
+   * The bytes of a file getFile pointed to (step 14), read in pieces and cut
+   * off as soon as they pass `maxBytes`: a file larger than Telegram said, or
+   * than the hard cap, is never read whole. Nothing of it is stored.
+   */
+  async download(filePath: string, maxBytes: number): Promise<Uint8Array> {
+    // Telegram's paths look like "voice/file_3.oga": anything else could point the token's URL elsewhere.
+    if (!/^[A-Za-z0-9_-]+(?:\/[A-Za-z0-9_.-]+)*$/.test(filePath) || filePath.includes("..") || filePath.length > 256) {
+      throw new TelegramApiError("download", 0, "invalid path");
+    }
+    if (this.calls >= this.#budget) throw new TelegramBudgetError();
+    this.calls += 1;
+    let response: Response;
+    try {
+      response = await this.#fetch(`${API_ORIGIN}/file/bot${this.#token}/${filePath}`, { method: "GET", redirect: "manual", signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS) });
+    } catch (error) {
+      const timeout = error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError");
+      throw new TelegramApiError("download", 0, timeout ? "timeout" : "network");
+    }
+    if (!response.ok || !response.body) {
+      await response.body?.cancel();
+      throw new TelegramApiError("download", response.status, response.status >= 300 && response.status < 400 ? "redirect" : "failed");
+    }
+    const declared = Number(response.headers.get("content-length"));
+    if (Number.isFinite(declared) && declared > maxBytes) {
+      await response.body.cancel();
+      throw new TelegramFileTooLargeError();
+    }
+    const reader = response.body.getReader();
+    const parts: Uint8Array[] = [];
+    let total = 0;
+    try {
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        total += value.byteLength;
+        if (total > maxBytes) {
+          await reader.cancel();
+          throw new TelegramFileTooLargeError();
+        }
+        parts.push(value);
+      }
+    } catch (error) {
+      if (error instanceof TelegramFileTooLargeError) throw error;
+      throw new TelegramApiError("download", 0, "network");
+    }
+    const out = new Uint8Array(total);
+    let offset = 0;
+    for (const part of parts) {
+      out.set(part, offset);
+      offset += part.byteLength;
+    }
+    return out;
   }
 
   /** A forum topic in a group (step 13); the bot needs the "Manage topics" right. */
