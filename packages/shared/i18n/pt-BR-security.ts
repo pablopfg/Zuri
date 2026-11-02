@@ -71,6 +71,8 @@ export const ptBRSecurity = {
   "web.activity.kind.recovery_code_used": "Código de recuperação usado",
   "web.activity.kind.passkey_added": "Passkey adicionada",
   "web.activity.kind.passkey_removed": "Passkey removida",
+  "web.activity.kind.push_added": "Aparelho adicionado aos avisos",
+  "web.activity.kind.push_removed": "Aparelho removido dos avisos",
   "web.activity.kind.setup_failure": "Código de instalação recusado",
   "web.activity.kind.setup_locked": "Código de instalação travado",
   "web.activity.kind.owner_created": "Primeiro acesso concluído",

@@ -94,6 +94,16 @@ export async function seed(page: Page, base: string): Promise<{ conversationId: 
   // A broken screen for the Diagnóstico tab (step 11): only a name and a path, as the interface sends.
   const failed = await page.request.post(`${base}/api/diagnostics/client`, { headers: CSRF, data: { name: "TypeError", route: "/notas/id" } });
   if (!failed.ok()) throw new Error(`/api/diagnostics/client: ${failed.status()}`);
+  // This browser getting notifications (step 11b): a made-up subscription with a real P-256 key.
+  // Over loopback the Worker never posts it to a push service.
+  const device = await page.request.post(`${base}/api/push/devices`, {
+    headers: CSRF,
+    data: {
+      endpoint: `https://fcm.googleapis.com/fcm/send/exemplo-${crypto.randomUUID()}`,
+      keys: { p256dh: "BJUYKldJw8ymzdyE_0MrUOJVPoYGzDOgY5laDZ4NQvGDxZxEABkaZpjy_g6jZZ92TIW9qhMcJm3dOGJQGzDQNH8", auth: "c2VncmVkby1kZS10ZXN0ZQ" },
+    },
+  });
+  if (!device.ok()) throw new Error(`/api/push/devices: ${device.status()}`);
   const renamed = await page.request.patch(`${base}/api/conversations/${conversationId}`, { headers: CSRF, data: { title: "Organizar a mudança" } });
   if (!renamed.ok()) throw new Error(`rename: ${renamed.status()}`);
   return { conversationId };

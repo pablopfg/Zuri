@@ -208,6 +208,14 @@ acrescente aqui cada armadilha nova que encontrar (sem dados pessoais).
   deixou os argumentos no pacote e trouxe o Zod clássico para a tela de
   Configurações, com +3,2 kB no JS inicial. A saída foi construir o schema
   dentro de uma função marcada: `/* @__PURE__ */ (() => z.partialRecord(...))()`.
+- Tudo o que uma tela sob demanda usa de um módulo do `packages/shared` que o
+  pacote inicial também importa vai para o chunk inicial (`i18n-*.js`), mesmo
+  que só a tela use. Na 11b, dois tipos novos de evento de acesso em `auth.ts`
+  passaram o teto em 0,06 kB. A saída foi mover a atividade de acesso para um
+  módulo próprio (`auth-activity.ts`), que só as telas de segurança importam: o
+  bundler o pôs num chunk sob demanda e o JS inicial caiu 0,4 kB. Para medir
+  em bytes, some o gzip nível 9 dos arquivos do `index.html` (o script de
+  orçamento arredonda para 0,1 kB).
 - Uma tela sob demanda que importa um módulo do pacote inicial que importa
   `ui.tsx` (o `Logo.tsx` importava `cn`) separou `ui.tsx` em `ui-*.js` e subiu
   o JS inicial em 1,1 KB, mas só junto com outra tela sob demanda (o

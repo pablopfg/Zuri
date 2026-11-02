@@ -113,8 +113,8 @@ describe("the notice routes", () => {
 
   it("show the delivery history and each channel's state", async () => {
     const overview = await json<{ channels: Record<string, string>; deliveries: unknown[] }>(await api("GET", "/alerts"), 200);
-    // No channel exists before step 11b: every one says so.
-    expect(overview.channels).toEqual({ push: "not_configured", telegram: "not_configured", email: "not_configured" });
+    // Push has its keys in the tests but no device yet; e-mail and Telegram come later.
+    expect(overview.channels).toEqual({ push: "no_target", telegram: "not_configured", email: "not_configured" });
   });
 });
 

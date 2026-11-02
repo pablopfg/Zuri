@@ -1,7 +1,7 @@
 import { hashPassword, isPasswordHash } from "@zuri/shared";
 import { describe, expect, it, vi } from "vitest";
 import type { AppError } from "../src/http/errors.ts";
-import { client, HOUR, live, MINUTE, noCookies, outcome, rebuild, right, TEST_PASSWORD, withAuth } from "./auth-harness.ts";
+import { client, HOUR, live, MINUTE, noCookies, outcome, pushCount, rebuild, right, seedPush, TEST_PASSWORD, withAuth } from "./auth-harness.ts";
 import { testEnv } from "./helpers.ts";
 
 const NET = "203.0.113.7";
@@ -156,6 +156,22 @@ describe("session lifetime", () => {
       expect(events().at(-1)).toMatchObject({ kind: "logout" });
     });
   });
+
+  it("logout drops this browser's push devices, and only them, without an alert", async () => {
+    await withAuth("logout-push", async ({ auth, db, events }) => {
+      seedPush(db, "browser-here");
+      seedPush(db, "browser-elsewhere");
+      const first = await auth.login(right(), client(NET), noCookies);
+      auth.logout(await live(auth, first.token), client(NET), "browser-here");
+      expect(db.all<{ browser: string }>(`SELECT browser FROM zur_push_devices`)).toEqual([{ browser: "browser-elsewhere" }]);
+      expect(events().at(-1)).toMatchObject({ kind: "push_removed", alert_pending: 0 });
+      // Nothing of this browser left: the logout writes no push row.
+      const second = await auth.login(right(), client(NET), noCookies);
+      auth.logout(await live(auth, second.token), client(NET), "browser-here");
+      expect(events().at(-1)).toMatchObject({ kind: "logout" });
+      expect(pushCount(db)).toBe(1);
+    });
+  });
 });
 
 describe("password typed recently (15 minutes)", () => {
@@ -277,7 +293,9 @@ describe("changing the password", () => {
   });
 
   it("stores the new hash, ends every session (this one too) and gives this browser a new one", async () => {
-    await withAuth("change-ok", async ({ auth, state, events }) => {
+    await withAuth("change-ok", async ({ auth, state, events, db }) => {
+      seedPush(db, "browser-a");
+      seedPush(db, "browser-b");
       const other = await auth.login(right(), client("198.51.100.9"), noCookies);
       const row = await signedIn(auth);
       const next = await auth.changePassword(row, { currentPassword: TEST_PASSWORD, newPassword: NEW_PASSWORD }, client(NET));
@@ -290,6 +308,8 @@ describe("changing the password", () => {
       expect(await outcome(auth.login(right(), client("198.51.100.2"), noCookies))).toBe("INVALID_CREDENTIALS");
       expect(await outcome(auth.login(right({ password: NEW_PASSWORD }), client("198.51.100.3"), noCookies))).toBe("ok");
       expect(events().find((e) => e.kind === "password_changed")).toMatchObject({ alert_pending: 1 });
+      // No device added under the old password keeps getting notices.
+      expect(pushCount(db)).toBe(0);
     });
   });
 });
@@ -393,6 +413,7 @@ describe("reset from the Cloudflare panel", () => {
       const same = rebuild(h, {});
       expect(await same.validate(changed.token, true)).not.toBeNull();
 
+      seedPush(h.db, "browser-a");
       const resetTo = "nova senha do painel bem longa";
       const after = rebuild(h, { passwordHash: await hashPassword(resetTo, testEnv.PASSWORD_PEPPER) });
       expect(await after.validate(changed.token, true)).toBeNull();
@@ -400,6 +421,7 @@ describe("reset from the Cloudflare panel", () => {
       expect(await outcome(after.login(right({ password: NEW_PASSWORD }), client("198.51.100.5"), noCookies))).toBe("INVALID_CREDENTIALS");
       expect(await outcome(after.login(right({ password: resetTo }), client("198.51.100.6"), noCookies))).toBe("ok");
       expect(h.events().find((e) => e.kind === "credentials_reset")).toMatchObject({ alert_pending: 1 });
+      expect(pushCount(h.db)).toBe(0);
     });
   });
 

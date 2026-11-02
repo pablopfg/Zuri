@@ -23,4 +23,7 @@ export type WorkerEnv = Env & {
   TURNSTILE_SECRET_KEY?: string;
   /** The Telegram bot (step 12). Its webhook secret is derived from SESSION_SECRET. */
   TELEGRAM_BOT_TOKEN?: string;
+  /** Web Push (step 11b): the installation's P-256 key pair, both base64url (scripts/gerar-chaves-vapid.ts). Both or neither. */
+  VAPID_PUBLIC_KEY?: string;
+  VAPID_PRIVATE_KEY?: string;
 };
