@@ -4,7 +4,7 @@ import type { ClientInfo } from "../src/auth/client.ts";
 import { AuthEvents } from "../src/auth/events.ts";
 import { InternalState } from "../src/db/internal-state.ts";
 import { AppError } from "../src/http/errors.ts";
-import { PushChannel } from "../src/push/channel.ts";
+import type { PushChannel } from "../src/push/channel.ts";
 import { PushDevices } from "../src/push/devices.ts";
 import { PushService } from "../src/push/service.ts";
 import { type ChatWorld, withChatWorld } from "./chat-world.ts";
@@ -353,5 +353,14 @@ describe("the subscription keys", () => {
     const { subscription } = await browser();
     expect(fromBase64Url(subscription.keys.p256dh)).toHaveLength(65);
     expect(fromBase64Url(subscription.keys.auth)).toHaveLength(16);
+  });
+});
+
+describe("local development", () => {
+  it("answers every post as a push service would, without the network", async () => {
+    const { developmentPushFetcher } = await import("../src/push/dev-push.ts");
+    const res = await developmentPushFetcher("https://fcm.googleapis.com/fcm/send/x", { method: "POST", body: new Uint8Array([1, 2, 3]) });
+    expect(res.status).toBe(201);
+    expect((await developmentPushFetcher("https://fcm.googleapis.com/fcm/send/x")).status).toBe(201);
   });
 });

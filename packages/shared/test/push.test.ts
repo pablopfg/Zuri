@@ -48,6 +48,8 @@ describe("pushSubscribeSchema", () => {
     expect(pushSubscribeSchema.safeParse({ endpoint, keys: { ...KEYS, extra: "x" } }).success).toBe(false);
     expect(pushSubscribeSchema.safeParse({ endpoint, keys: { ...KEYS, p256dh: "A".repeat(86) } }).success).toBe(false);
     expect(pushSubscribeSchema.safeParse({ endpoint, keys: { ...KEYS, auth: "A".repeat(21) } }).success).toBe(false);
+    expect(pushSubscribeSchema.safeParse({ endpoint, keys: { ...KEYS, auth: "A".repeat(23) } }).success).toBe(false);
+    expect(pushSubscribeSchema.safeParse({ endpoint, keys: { ...KEYS, p256dh: `B${"A".repeat(87)}` } }).success).toBe(false);
     expect(pushSubscribeSchema.safeParse({ endpoint, keys: { ...KEYS, auth: "A+/=".repeat(6) } }).success).toBe(false);
     expect(pushSubscribeSchema.safeParse({ endpoint: "https://exemplo.com.br/x", keys: KEYS }).success).toBe(false);
   });

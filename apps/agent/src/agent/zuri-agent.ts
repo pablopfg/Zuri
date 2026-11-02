@@ -15,6 +15,7 @@ import { flushSecurityAlerts } from "../alerts/security.ts";
 import { AlertService } from "../alerts/service.ts";
 import { Watchers } from "../alerts/watchers.ts";
 import { DiagnosticsService } from "../diagnostics/service.ts";
+import { developmentPushFetcher } from "../push/dev-push.ts";
 import { PushDevices } from "../push/devices.ts";
 import { PushService } from "../push/service.ts";
 import { validVapidKeys, type VapidKeys } from "../push/webpush.ts";
@@ -358,6 +359,8 @@ export class ZuriAgent extends Agent<WorkerEnv> {
         keys: () => this.vapidKeys(),
         subject: () => this.publicUrl().origin,
         locale: () => this.locale(),
+        // Local development never reaches a push service (src/push/dev-push.ts).
+        ...(this.development() ? { fetcher: developmentPushFetcher as typeof fetch } : {}),
       });
       // The notices, the watchers and the automations share one alarm: each refers to the others lazily.
       const alerts: AlertService = new AlertService(db, productivity.storage, {

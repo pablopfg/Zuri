@@ -65,9 +65,9 @@ export const pushSubscribeSchema = /* @__PURE__ */ (() =>
     endpoint: z.string().refine(isPushEndpoint),
     keys: z
       .object({
-        // A P-256 public key, uncompressed (65 bytes = 87 characters), and a 16-byte secret (22 characters).
-        p256dh: base64Url(87, 88),
-        auth: base64Url(22, 24),
+        // A P-256 public key, uncompressed (65 bytes = 87 characters), and a 16-byte secret (22 characters), unpadded.
+        p256dh: base64Url(87, 87),
+        auth: base64Url(22, 22),
       })
       .strict(),
   })

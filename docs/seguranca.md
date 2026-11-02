@@ -616,6 +616,30 @@ Detalhes em [avisos.md](avisos.md).
 - Contadores, deduplicação e limites por canal impedem que uma falha em laço
   vire uma enxurrada de avisos ou de escritas no banco.
 
+### Notificação no aparelho (Web Push)
+
+- A mensagem é cifrada no servidor só para o navegador inscrito (RFC 8291,
+  `aes128gcm`, uma chave efêmera e um sal novos por mensagem) e assinada com a
+  chave VAPID da instalação (RFC 8292, ES256, válida por 12 h). O serviço de
+  notificação do navegador só vê texto cifrado. A cifra confere byte a byte com
+  o vetor de teste da RFC.
+- O servidor só envia para os serviços de notificação conhecidos (Google,
+  Mozilla, Apple e Microsoft), por HTTPS, sem porta, usuário ou fragmento, e
+  não segue redirecionamento. Uma inscrição apontando para outro endereço é
+  recusada na entrada: ninguém escolhe para onde o servidor posta.
+- Até 3 aparelhos. Ativar ou remover um aparelho pede a senha digitada há pouco
+  e vira alerta de segurança nos outros canais, porque um aparelho a mais lê
+  todos os avisos e um aparelho a menos silencia o dono.
+- O endereço e as chaves da inscrição ficam só no servidor; a tela vê o id, o
+  navegador e as datas. O aparelho se liga ao navegador pelo HMAC do cookie de
+  aparelho, o mesmo do registro de acessos: abrir a Zuri naquele navegador o
+  mantém ativo, e 7 dias sem abrir o removem.
+- O que aparece na tela bloqueada é o título e o texto do aviso, em texto puro,
+  sem botões. Alerta de segurança não diz de onde veio. O service worker só abre
+  páginas do próprio app.
+- Em desenvolvimento local o servidor cifra e assina, mas não posta para
+  nenhum serviço (`src/push/dev-push.ts`).
+
 ## Logs da Cloudflare
 
 Os logs do Worker (`observability` no `wrangler.jsonc`) guardam cada
