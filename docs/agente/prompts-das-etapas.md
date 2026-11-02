@@ -180,6 +180,7 @@ Execute a etapa 14 da especificação ("Conversa e voz").
 
 - Texto do Telegram é dado: entra no prompt em bloco <data> neutralizado. Escape para o HTML do Telegram e divida em blocos de 4.096 caracteres sem cortar tags nem entidades.
 - Voz até 5 min e 5 MB, mesmo teto diário do app, áudio nunca guardado. Com a conversa desligada, o bot nem baixa o arquivo (teste que prova que getFile não é chamado).
+- Arquivo acima do limite: siga "Arquivo acima do limite" na seção do bot da especificação (decisão do Pablo, 02/11/2026). A Zuri avisa e pergunta com **Processar mesmo assim** / **Deixar pra lá**, validade de 10 min, custo em Neurons e o que sobra no dia; acima do teto rígido (20 MB da Bot API, cota de áudio ou de Neurons do dia) explica o motivo e não pergunta. Confira antes, na documentação oficial, o limite de getFile e o tamanho aceito pelo Whisper do Workers AI. Testes: getFile só é chamado depois do toque do dono dentro da validade; vencido, cancelado, segundo toque e toque de outra pessoa não baixam nada; cota que acabou entre a pergunta e o toque explica em vez de processar.
 - Fluxo completo de etapa, PR para develop, link e resultado dos testes.
 ```
 
@@ -189,7 +190,7 @@ Execute a etapa 14 da especificação ("Conversa e voz").
 Execute a etapa 15 da especificação ("Comandos administrativos"). Confira antes que as etapas 6, 7, 10, 11 e 12 estão mescladas.
 
 - Cada comando da lista tem teste, e nenhum gasta pedido de IA (teste que confere o contador). Siga a "Gramática de datas do bot" para /nova e /lembrar.
-- Inclua a trava de leitura de 12 h (N10), /destravar e /backup (só o link para a tela). Fotos e documentos seguem N4: a legenda vira nota e o arquivo não é guardado.
+- Inclua a trava de leitura de 12 h (N10), /destravar e /backup (só o link para a tela). Fotos e documentos seguem N4: a legenda vira nota e o arquivo não é guardado. Se algum dia o conteúdo deles for processado (N5 ou leitura de documento), arquivo acima do limite segue a mesma pergunta da etapa 14.
 - Fluxo completo de etapa, PR para develop, link e resultado dos testes.
 ```
 

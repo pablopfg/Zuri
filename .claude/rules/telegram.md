@@ -15,3 +15,4 @@ Releia a seção "Bot do Telegram do administrador" da especificação antes de 
 - Saída em HTML do Telegram com escape e links desarmados; blocos de 4.096 caracteres.
 - Alertas causados pelo bot só se reconhecem no app.
 - O token do bot nunca vai ao GitHub nem a log.
+- Arquivo acima do limite: pergunta antes de baixar (validade de 10 min, uso único, `file_id` fora do botão); acima do teto rígido explica e não pergunta. Seção "Arquivo acima do limite" da especificação.

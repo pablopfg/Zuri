@@ -9,6 +9,12 @@ o [SemVer](https://semver.org/lang/pt-BR/). Cada PR escreve a sua entrada em
 
 ### Adicionado
 
+- Planejado para o bot do Telegram (etapa 14): quando um áudio passar do
+  limite de 5 min e 5 MB, a Zuri avisa, diz quanto deve gastar da cota do dia
+  e pergunta se processa mesmo assim, em vez de recusar. Acima do que dá para
+  processar de graça (20 MB que o Telegram deixa baixar, ou a cota do dia), ela
+  explica o motivo.
+
 - Cumprimento no Início: bom dia, boa tarde ou boa noite pelo horário do seu
   fuso (o das configurações, não o do aparelho), com o seu nome e uma frase
   curta que muda a cada dia. A frase troca sozinha quando o período vira,
