@@ -154,9 +154,9 @@ describe("checkOrder (fake gh)", () => {
 
 describe("verdictText", () => {
   it("explains the wait, the way out and escapes file names", () => {
-    const text = verdictText({ status: "fail", blockers: [{ number: 50, files: ["a`b@c.ts"] }] }, 52);
+    const text = verdictText({ status: "fail", blockers: [{ number: 50, files: ["src/a`b@x"] }] }, 52);
     expect(text).toContain("#52 espera a vez");
-    expect(text).toContain("- #50: `a_b_c.ts`");
+    expect(text).toContain("- #50: `src/a_b_x`");
     expect(text).toContain(OVERRIDE_LABEL);
     expect(text).toContain("docs/agente/merge-de-prs.md");
   });
