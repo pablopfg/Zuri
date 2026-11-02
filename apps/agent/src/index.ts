@@ -5,6 +5,7 @@ import { TURNSTILE_ORIGIN, turnstileSiteKey } from "./auth/turnstile.ts";
 import { type Config, readConfig, secretProblems } from "./config.ts";
 import type { WorkerEnv } from "./env.ts";
 import { type AccessConfig, verifyAccessToken } from "./gates/access.ts";
+import { withBodyRead } from "./gates/body.ts";
 import { withApiHeaders, withWebHeaders } from "./gates/headers.ts";
 import { isTelegramWebhookSecret, TELEGRAM_SECRET_HEADER, TELEGRAM_WEBHOOK_PATH } from "./gates/telegram.ts";
 import { AppError, errorResponse } from "./http/errors.ts";
@@ -89,8 +90,9 @@ async function handle(request: Request, env: WorkerEnv): Promise<Response> {
   // getAgentByName: that adds an RPC per request, and each one counts toward the
   // Free plan's Durable Object requests; the object initializes itself on fetch.
   const agent = env.AGENT.getByName(AGENT_INSTANCE_NAME);
-  return withApiHeaders(withoutRawErrors(await agent.fetch(withClientGeo(withoutInternalHeaders(request)))));
+  return withApiHeaders(withoutRawErrors(await agent.fetch(withClientGeo(withoutInternalHeaders(await withBodyRead(request))))));
 }
+
 
 function isApiPath(pathname: string): boolean {
   return pathname === "/api" || pathname.startsWith("/api/");
