@@ -15,7 +15,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { approveHeldRuns, authEnv, OPT_OUT_LABEL, run, sleepMs, tryRun } from "./atualizar-prs.ts";
-import { applyPlan, BASE_BRANCH, computePlan, releaseName, releaseNotes, VERSION_FILE, type Version } from "./versao.ts";
+import { applyPlan, BASE_BRANCH, computePlan, noMentions, releaseName, releaseNotes, VERSION_FILE, type Version } from "./versao.ts";
 
 export const RELEASE_BRANCH = "chore/versao";
 /** Kept off the automatic update: this workflow rewrites the branch from develop itself. */
@@ -53,7 +53,7 @@ export function pullRequestTitle(pending: Version[]): string {
 
 export function pullRequestBody(pending: Version[]): string {
   const list = pending.map((v) => `- **${v.version}** · ${v.date} ${v.time} (${v.offset}) · ${v.commit.slice(0, 7)} · ${v.title}`);
-  return [
+  return noMentions([
     "Aberta pelo workflow de versão (`.github/workflows/versao.yml`). Escreve no `CHANGELOG.md` a seção de cada merge que ainda não tinha uma, apaga os arquivos de `changelog/nao-lancado/` que viraram seção e atualiza `packages/shared/src/version.ts`.",
     "",
     ...list,
@@ -61,7 +61,7 @@ export function pullRequestBody(pending: Version[]): string {
     "As tags e as pré-releases destas versões já existem. Esta PR mescla sozinha quando a CI passa; se a `develop` andar antes, o workflow refaz a branch a partir dela. Como funciona: `docs/agente/versionamento.md`.",
     "",
     "Sem mudança visível além do número da versão no Diagnóstico.",
-  ].join("\n");
+  ].join("\n"));
 }
 
 /** Tags on GitHub, by name, with the commit each one points to (annotated tags peeled). */

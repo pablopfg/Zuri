@@ -221,13 +221,21 @@ export function renderVersionFile(version: string): string {
   return `// Written by scripts/versao.ts when a merge into develop gets its version: do not edit by hand.\n// The history of each version is in CHANGELOG.md (docs/agente/versionamento.md).\nexport const APP_VERSION = "${version}";\n`;
 }
 
+/** Text posted on GitHub with "@name" outside code turned inert, so a release or its pull request never notifies anyone. */
+export function noMentions(text: string): string {
+  return text
+    .split("`")
+    .map((part, i) => (i % 2 === 0 ? part.replace(/@(?=[A-Za-z0-9])/g, "@\u200b") : part))
+    .join("`");
+}
+
 /** Notes of a GitHub release: the section of the version, with the merge line. */
 export function releaseNotes(v: Version): string {
-  return `${renderMeta(v)}\n\n${v.body.trim()}\n\nHistórico completo: [CHANGELOG.md](${REPO_URL}/blob/${BASE_BRANCH}/CHANGELOG.md)\n`;
+  return noMentions(`${renderMeta(v)}\n\n${v.body.trim()}\n\nHistórico completo: [CHANGELOG.md](${REPO_URL}/blob/${BASE_BRANCH}/CHANGELOG.md)\n`);
 }
 
 export function releaseName(v: Version): string {
-  return `v${v.version} · ${v.title}`;
+  return noMentions(`v${v.version} · ${v.title}`);
 }
 
 type Git = (...args: string[]) => string;
@@ -237,7 +245,7 @@ export function gitIn(root: string): Git {
 }
 
 /** Merges on the first-parent line of `ref` after `since` (or all of them), oldest first, with the fragments each added. */
-export function mergesSince(git: Git, root: string, since: string | null, ref = "HEAD"): Merge[] {
+export function mergesSince(git: Git, since: string | null, ref = "HEAD"): Merge[] {
   const range = since ? `${since}..${ref}` : ref;
   const out = git("log", "--first-parent", "--reverse", "--format=%H%x09%cI%x09%s", range).trim();
   if (!out) return [];
@@ -248,8 +256,11 @@ export function mergesSince(git: Git, root: string, since: string | null, ref = 
       .filter((path) => path.endsWith(".md"));
     const fragments = [...new Set(names)].map((path) => {
       // The text on the branch now wins: a later fix to the file is part of the same entry.
-      const text = existsSync(join(root, path)) ? readFileSync(join(root, path), "utf8") : git("show", `${commit}:${path}`);
-      return { name: path.slice(FRAGMENT_DIR.length + 1), text };
+      const at = git("ls-tree", ref, "--", path).trim() ? ref : commit;
+      // Read from git, never from disk, and only regular files: a symlink would pull a file of the runner into public notes.
+      const mode = git("ls-tree", at, "--", path).split(/\s/, 1)[0];
+      if (mode !== "100644" && mode !== "100755") throw new Error(`${path}: only regular files can be changelog fragments`);
+      return { name: path.slice(FRAGMENT_DIR.length + 1), text: git("show", `${at}:${path}`) };
     });
     return { commit, committedAt, subject: rest.join("\t"), fragments };
   });
@@ -265,15 +276,12 @@ export interface Plan {
 export function computePlan(root: string, git: Git = gitIn(root), ref = "HEAD"): Plan {
   const changelog = parseChangelog(readFileSync(join(root, "CHANGELOG.md"), "utf8"));
   const latest = changelog.versions[0];
-  if (latest) {
-    // The newest section must sit on this branch, or the merges after it cannot be found.
-    try {
-      git("merge-base", "--is-ancestor", latest.commit, ref);
-    } catch {
-      throw new Error(`commit ${latest.commit} of version ${latest.version} is not on ${ref}`);
-    }
+  // Every section must name a merge on the main line of this branch: a tag is never made for code that was not merged.
+  const mainLine = new Set(git("rev-list", "--first-parent", ref).trim().split("\n"));
+  for (const v of changelog.versions) {
+    if (!mainLine.has(v.commit)) throw new Error(`commit ${v.commit} of version ${v.version} is not a merge on ${ref}`);
   }
-  const merges = mergesSince(git, root, latest?.commit ?? null, ref);
+  const merges = mergesSince(git, latest?.commit ?? null, ref);
   const problems = fragmentProblems(merges.flatMap((m) => m.fragments));
   if (problems.length > 0) throw new Error(problems.join("\n"));
   const pending = planVersions(latest?.version ?? "0.0.0", merges);

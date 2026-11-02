@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { APP_VERSION } from "../../packages/shared/src/version.ts";
@@ -15,6 +15,7 @@ import {
   localTime,
   type Merge,
   mergeBody,
+  noMentions,
   parseChangelog,
   planVersions,
   pullRequestNumber,
@@ -24,6 +25,7 @@ import {
   renderVersionFile,
   type Version,
 } from "../../scripts/versao.ts";
+import { fragmentProblems, readFragments } from "../../scripts/changelog.ts";
 import { loadWorkflow, readText } from "./helpers.ts";
 
 const sha = (c: string) => c.repeat(40);
@@ -192,6 +194,15 @@ describe("release notes", () => {
   });
 });
 
+describe("noMentions", () => {
+  it("keeps @names from notifying anyone, except inside code", () => {
+    expect(noMentions("crie o bot no @BotFather e veja `@userinfobot`")).toBe("crie o bot no @\u200bBotFather e veja `@userinfobot`");
+    expect(noMentions("e-mail dono@exemplo.com.br")).toBe("e-mail dono@\u200bexemplo.com.br");
+    expect(releaseName(version({ title: "fala com @alguem" }))).toBe("v0.1.0 · fala com @\u200balguem");
+    expect(releaseNotes(version({ body: "### Adicionado\n\n- Avisa @time." }))).toContain("- Avisa @\u200btime.");
+  });
+});
+
 describe("releaseWork", () => {
   const a = version({ version: "0.1.0", commit: sha("a") });
   const b = version({ version: "0.1.1", commit: sha("b") });
@@ -320,7 +331,34 @@ describe("computePlan and applyPlan on a real repository", () => {
     write(dir, "CHANGELOG.md", renderChangelog({ intro: "I.", versions: [version({ commit: sha("d") })] }));
     write(dir, "changelog/nao-lancado/.gitkeep", "");
     commit(dir, "chore: base (#1)", "2026-10-30T22:15:05-03:00");
-    expect(() => computePlan(dir)).toThrow(/is not on HEAD/);
+    expect(() => computePlan(dir)).toThrow(/is not a merge on HEAD/);
+  });
+
+  it("stops when an older section names a commit off the main line, so no tag lands on unmerged code", () => {
+    const dir = mkdtempSync(join(tmpdir(), "versao-"));
+    dirs.push(dir);
+    git(dir, "init", "-q", "-b", "develop");
+    write(dir, "changelog/nao-lancado/.gitkeep", "");
+    const base = commit(dir, "chore: base (#1)", "2026-10-30T22:15:05-03:00");
+    git(dir, "checkout", "-q", "-b", "fora");
+    const outside = commit(dir, "feat: nunca mesclada (#2)", "2026-10-30T23:00:00-03:00");
+    git(dir, "checkout", "-q", "develop");
+    write(dir, "CHANGELOG.md", renderChangelog({ intro: "I.", versions: [version({ version: "0.0.2", commit: base }), version({ version: "0.0.1", commit: outside })] }));
+    commit(dir, "docs: x (#3)", "2026-10-31T00:00:00-03:00");
+    expect(() => computePlan(dir)).toThrow(new RegExp(`${outside} of version 0.0.1 is not a merge`));
+  });
+
+  it("refuses a fragment that is a symlink instead of reading what it points to", () => {
+    const dir = mkdtempSync(join(tmpdir(), "versao-"));
+    dirs.push(dir);
+    git(dir, "init", "-q", "-b", "develop");
+    write(dir, "CHANGELOG.md", renderChangelog({ intro: "I.", versions: [] }));
+    write(dir, "segredo.txt", "### Adicionado\n\n- conteúdo do runner\n");
+    mkdirSync(join(dir, "changelog/nao-lancado"), { recursive: true });
+    symlinkSync("../../segredo.txt", join(dir, "changelog/nao-lancado/link.md"));
+    commit(dir, "feat: x (#2)", "2026-10-30T22:15:05-03:00");
+    expect(() => computePlan(dir)).toThrow(/only regular files/);
+    expect(fragmentProblems(readFragments(dir)).join("\n")).toMatch(/link\.md: no entry/);
   });
 
   it("stops on a merged fragment that breaks the format", () => {

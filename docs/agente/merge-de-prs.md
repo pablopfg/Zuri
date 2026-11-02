@@ -89,6 +89,12 @@ Quando o resultado muda:
 
 ## 4. Depois de cada merge
 
+O workflow `Versão` (`.github/workflows/versao.yml`) dá o número da versão ao
+merge, cria a tag e a pré-release e abre ou refaz a PR `chore(release):` com
+as seções do `CHANGELOG.md`. Essa PR tem auto-merge e o rótulo
+`sem-atualizacao-automatica`; trate-a como qualquer outra PR verde e nunca
+edite a branch `chore/versao` à mão (`docs/agente/versionamento.md`).
+
 O workflow `Update PRs` (`.github/workflows/update-prs.yml`) cuida da maior
 parte sozinho. Cada vez que a `develop` muda, ele roda
 `scripts/atualizar-prs.ts` a partir da `develop` e, para cada PR aberta com

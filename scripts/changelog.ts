@@ -5,7 +5,7 @@
 // (docs/agente/versionamento.md).
 //
 //   node scripts/changelog.ts   checks the fragments and prints how each one bumps the version
-import { readdirSync, readFileSync } from "node:fs";
+import { lstatSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 export const FRAGMENT_DIR = "changelog/nao-lancado";
@@ -99,7 +99,8 @@ export function readFragments(root: string): Fragment[] {
   return readdirSync(dir)
     .filter((name) => name !== ".gitkeep")
     .sort()
-    .map((name) => ({ name, text: readFileSync(join(dir, name), "utf8") }));
+    // Only regular files: a symlink could point at anything on the machine.
+    .map((name) => ({ name, text: lstatSync(join(dir, name)).isFile() ? readFileSync(join(dir, name), "utf8") : "" }));
 }
 
 export function fragmentProblems(fragments: Fragment[]): string[] {
