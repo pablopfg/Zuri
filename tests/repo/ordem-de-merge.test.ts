@@ -4,7 +4,7 @@ import {
   checkOrder,
   findBlockers,
   type OpenPullRequest,
-  ORDER_WORKFLOW,
+  ORDER_RUN_NAME,
   OVERRIDE_LABEL,
   refreshStale,
   sharedFiles,
@@ -24,36 +24,46 @@ const pr = (number: number, extra: Partial<OpenPullRequest> = {}): OpenPullReque
   ...extra,
 });
 
-/** A fake gh that answers the open list and each pull request's files, and records what was asked. */
-type Run = { status: string; conclusion: string | null; started_at: string };
+/** A fake gh that answers the open list, each pull request's files and runs, and records what was asked. */
+type Run = { id: number; name?: string; status: string; conclusion: string | null; created_at: string; actor?: string };
 const fake = (
   open: OpenPullRequest[],
   files: Record<number, { filename: string; previous_filename?: string }[]>,
-  checkRuns: Record<string, Run[]> = {},
-  failDispatch = false,
+  runs: Record<string, Run[]> = {},
+  failPost = false,
 ) => {
   const asked: string[] = [];
-  const dispatched: string[] = [];
+  const posted: string[] = [];
   const ctx: Context = {
     repository: REPO,
     exec: (cmd, args) => {
       expect(cmd).toBe("gh");
-      if (args[0] === "workflow") {
-        if (failDispatch) throw new Error("workflow not found on ref");
-        dispatched.push(`${args[2]} ${args.at(-1)}`);
+      const path = args.at(-1) ?? "";
+      if (args.includes("POST")) {
+        if (failPost) throw new Error("403");
+        posted.push(path.replace(`repos/${REPO}/actions/runs/`, ""));
         return "";
       }
-      const path = args.at(-1) ?? "";
       asked.push(path);
-      const sha = path.match(/commits\/(\w+)\/check-runs/);
-      if (sha) return JSON.stringify({ check_runs: checkRuns[sha[1] as string] ?? [] });
+      const sha = path.match(/actions\/runs\?head_sha=(\w+)&event=pull_request/);
+      if (sha) {
+        const list = (runs[sha[1] as string] ?? []).map(({ actor, ...r }) => ({
+          name: ORDER_RUN_NAME,
+          event: "pull_request",
+          head_sha: sha[1],
+          actor: { login: actor ?? "dono" },
+          head_repository: { full_name: REPO },
+          ...r,
+        }));
+        return JSON.stringify({ workflow_runs: list });
+      }
       if (path.startsWith(`repos/${REPO}/pulls?state=open`)) return JSON.stringify([open]);
       const match = path.match(/pulls\/(\d+)\/files/);
       if (match) return JSON.stringify([files[Number(match[1])] ?? []]);
       throw new Error(`unexpected call ${path}`);
     },
   };
-  return { ctx, asked, dispatched };
+  return { ctx, asked, posted };
 };
 const f = (...names: string[]) => names.map((filename) => ({ filename }));
 
@@ -215,39 +225,59 @@ describe("targetFromEnv", () => {
 
 describe("refreshStale (fake gh)", () => {
   const prompt = "apps/agent/src/agent/prompt.ts";
-  const done = (conclusion: string, started_at = "2026-11-02T04:00:00Z"): Run => ({ status: "completed", conclusion, started_at });
+  const done = (id: number, conclusion: string, created_at = "2026-11-02T04:00:00Z"): Run => ({
+    id,
+    status: "completed",
+    conclusion,
+    created_at,
+  });
 
-  it("dispatches the check again where the older pull request is gone", () => {
+  it("reruns the pull_request run of the check where the older pull request is gone", () => {
     // #50 was closed: #52 still shows the failure from when it waited.
-    const { ctx, dispatched } = fake([pr(52)], { 52: f(prompt) }, { sha52: [done("failure")] });
-    expect(refreshStale(ctx)).toEqual([52]);
-    expect(dispatched).toEqual([`${ORDER_WORKFLOW} branch-52`]);
+    const { ctx, posted } = fake([pr(52)], { 52: f(prompt) }, { sha52: [done(7, "failure")] });
+    expect(refreshStale(ctx)).toEqual([{ pr: 52, action: "rerun" }]);
+    expect(posted).toEqual(["7/rerun"]);
   });
 
-  it("dispatches where a green result went stale (an older one left draft)", () => {
-    const { ctx } = fake([pr(50), pr(52)], { 50: f(prompt), 52: f(prompt) }, { sha50: [done("success")], sha52: [done("success")] });
-    expect(refreshStale(ctx)).toEqual([52]);
+  it("reruns where a green result went stale (an older one left draft) and leaves agreeing results alone", () => {
+    const { ctx, posted } = fake([pr(50), pr(52)], { 50: f(prompt), 52: f(prompt) }, {
+      sha50: [done(1, "success")],
+      sha52: [done(2, "success")],
+    });
+    expect(refreshStale(ctx)).toEqual([{ pr: 52, action: "rerun" }]);
+    expect(posted).toEqual(["2/rerun"]);
   });
 
-  it("dispatches where the check never ran and leaves agreeing results alone", () => {
-    const { ctx } = fake([pr(50), pr(52)], { 50: f(prompt), 52: f(prompt) }, { sha52: [done("failure")] });
-    expect(refreshStale(ctx)).toEqual([50]);
+  it("approves a run GitHub holds for the bot, but not one held for someone else", () => {
+    const held = { ...done(9, "action_required"), actor: "github-actions[bot]" };
+    const { ctx, posted } = fake([pr(52), pr(53)], { 52: f(prompt), 53: f("x.ts") }, {
+      sha52: [held],
+      sha53: [{ ...done(10, "action_required"), actor: "outra-pessoa" }],
+    });
+    expect(refreshStale(ctx)).toEqual([{ pr: 52, action: "approved" }]);
+    expect(posted).toEqual(["9/approve"]);
   });
 
-  it("reads only the newest run and never dispatches while one is going", () => {
-    const newest = [done("success", "2026-11-02T03:00:00Z"), done("failure", "2026-11-02T05:00:00Z")];
-    expect(refreshStale(fake([pr(52)], { 52: f(prompt) }, { sha52: newest }).ctx)).toEqual([52]);
-    const going = [{ status: "in_progress", conclusion: null, started_at: "2026-11-02T05:00:00Z" }];
+  it("reads only the newest run, and waits while one is going or none exists yet", () => {
+    const newest = [done(1, "success", "2026-11-02T03:00:00Z"), done(2, "failure", "2026-11-02T05:00:00Z")];
+    expect(refreshStale(fake([pr(52)], { 52: f(prompt) }, { sha52: newest }).ctx)).toEqual([{ pr: 52, action: "rerun" }]);
+    const going = [{ id: 3, status: "in_progress", conclusion: null, created_at: "2026-11-02T05:00:00Z" }];
     expect(refreshStale(fake([pr(52)], { 52: f(prompt) }, { sha52: going }).ctx)).toEqual([]);
+    expect(refreshStale(fake([pr(52)], { 52: f(prompt) }, {}).ctx)).toEqual([]);
   });
 
-  it("skips forks and pull requests into main, and survives a failed dispatch", () => {
+  it("ignores other workflows' runs", () => {
+    const ci = { ...done(4, "failure"), name: "CI" };
+    expect(refreshStale(fake([pr(52)], { 52: f(prompt) }, { sha52: [ci] }).ctx)).toEqual([]);
+  });
+
+  it("skips forks and pull requests into main, and survives a refused rerun", () => {
     const fork = pr(53, { head: { ref: "x", sha: "s", repo: { full_name: "outra/zuri" } } });
     const toMain = pr(54, { base: { ref: "main" } });
     const { ctx, asked } = fake([fork, toMain], {});
     expect(refreshStale(ctx)).toEqual([]);
-    expect(asked.some((p) => p.includes("check-runs"))).toBe(false);
-    expect(refreshStale(fake([pr(52)], { 52: f(prompt) }, {}, true).ctx)).toEqual([]);
+    expect(asked.some((p) => p.includes("actions/runs"))).toBe(false);
+    expect(refreshStale(fake([pr(52)], { 52: f(prompt) }, { sha52: [done(7, "failure")] }, true).ctx)).toEqual([]);
   });
 });
 
@@ -255,10 +285,9 @@ describe("merge-order workflow", () => {
   const wf = loadWorkflow(".github/workflows/merge-order.yml");
   const job = wf.jobs["merge-order"];
 
-  it("reruns on the pull request events that change the answer, or when dispatched", () => {
+  it("reruns on the pull request events that change the answer", () => {
     expect(wf.on).toEqual({
       pull_request: { types: ["opened", "synchronize", "reopened", "ready_for_review", "labeled", "unlabeled"] },
-      workflow_dispatch: null,
     });
   });
 
