@@ -62,7 +62,16 @@ test("a reminder's run reaches the bell: open, read, delete and read all @mobile
   await page.getByRole("button", { name: /^Abrir avisos/ }).first().click();
   await panel.getByRole("button", { name: "Marcar tudo como lido" }).click();
   await expect(panel.getByText("Tudo lido por aqui.")).toBeVisible();
-  await panel.getByRole("button", { name: "Fechar" }).click();
+  // One close control, an X in the dialog's top-right corner (no text button at the bottom).
+  const close = panel.getByRole("button", { name: "Fechar" });
+  await expect(close).toHaveCount(1);
+  const [box, frame] = await Promise.all([close.boundingBox(), panel.boundingBox()]);
+  expect(box && frame).toBeTruthy();
+  if (box && frame) {
+    expect(box.y - frame.y).toBeLessThan(24);
+    expect(frame.x + frame.width - (box.x + box.width)).toBeLessThan(24);
+  }
+  await close.click();
   await expect(page.getByRole("button", { name: "Abrir avisos", exact: true }).first()).toBeVisible();
 
   // The panel's shortcut to its settings.
