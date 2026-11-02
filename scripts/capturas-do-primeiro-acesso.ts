@@ -100,7 +100,7 @@ for (const [device, options] of [
     // Signed in: the second step first, then home with the reminder.
     await page.goto(`${BASE}/entrar`);
     await signIn(page);
-    await page.getByRole("heading", { level: 1, name: "Olá!" }).waitFor();
+    await page.getByRole("heading", { level: 1, name: /^(Bom dia|Boa tarde|Boa noite)/ }).waitFor();
     const sessionWith = async (extra: Record<string, boolean>) => {
       await page.unroute("**/api/auth/session");
       await page.route("**/api/auth/session", async (route) => {
