@@ -53,24 +53,38 @@ Uma PR por vez, sempre por squash.
 
 O auto-merge do GitHub não conhece ordem: ele mescla a PR que ficar verde
 primeiro. Por isso a regra 1 virou um check exigido, o `merge-order`
-(`ci.yml`, `scripts/ordem-de-merge.ts`). Ele fica vermelho enquanto existir
-uma PR **mais antiga** (número menor), aberta para a `develop`, fora de
-rascunho, que muda algum dos mesmos arquivos. Não contam os arquivos cujo
-conflito o `Update PRs` resolve sozinho (changelog, `README.md`, memória,
-`docs/**/*.md` e os catálogos de texto `pt-BR*.ts` e `en.ts`). Com o check
-vermelho, o auto-merge espera. Quando a mais antiga entra, a `develop` muda,
-o `Update PRs` traz a `develop` para a mais nova, dispara a CI e o check passa.
+(`.github/workflows/merge-order.yml`, `scripts/ordem-de-merge.ts`). Ele fica
+vermelho enquanto existir uma PR **mais antiga** (número menor), aberta para a
+`develop`, fora de rascunho e deste repositório (PR de fork nunca segura
+ninguém), que muda algum dos mesmos arquivos. Não contam os arquivos em que o
+`Update PRs` junta acréscimos sozinho (changelog, `README.md`, memória,
+`docs/**/*.md` e os catálogos de texto `pt-BR*.ts` e `en.ts`). Se nesses
+arquivos as duas PRs mudarem a mesma linha, o conflito ainda aparece, mas é
+texto e se resolve rápido; contar o `README.md`, que quase toda PR muda,
+enfileiraria todas as PRs. Com o check vermelho, o auto-merge espera.
 
-- **A PR mais antiga foi fechada ou virou rascunho:** a `develop` não mudou,
-  então ninguém roda o check de novo. Rode-o na PR que esperava ("Re-run" do
-  job `merge-order` ou `gh workflow run ci.yml --ref <branch>`).
+Quando o resultado muda:
+
+- **A mais antiga entra:** a `develop` muda, o `Update PRs` traz a `develop`
+  para a mais nova, dispara a CI e o `merge-order`, e o check passa.
+- **A mais antiga é fechada, sai do rascunho ou passa a mudar outros
+  arquivos:** nada acontece na PR mais nova, então o `Update PRs` também roda
+  a cada 15 minutos e, a cada rodada, recalcula o `merge-order` de toda PR
+  aberta para a `develop`. Onde o último resultado não bate (ou não existe),
+  ele dispara o check de novo naquela branch. Isso também cobre a PR com o
+  rótulo `sem-atualizacao-automatica` e a `develop` que mudou workflows. Fica
+  uma janela de até 15 minutos em que uma PR mais nova, já verde, pode entrar
+  na frente de uma mais antiga que acabou de sair do rascunho.
+- **Rótulo novo na PR** (veja abaixo): o check roda sozinho.
+
 - **Passar na frente de propósito** (a mais antiga está parada, esperando o
   Pablo ou com conflito que vai demorar): ponha o rótulo `fora-de-ordem` na
-  PR mais nova, diga o motivo na PR e rode o check de novo. Só a rotina de
-  merge ou o Pablo decidem isso; a thread dona da PR mais nova não se
-  autoriza. Quem fica para trás resolve o conflito depois, como na seção 4.
+  PR mais nova e diga o motivo na PR. Só a rotina de merge ou o Pablo decidem
+  isso; a thread dona da PR mais nova não se autoriza. Quem fica para trás
+  resolve o conflito depois, como na seção 4.
 - O check só lê a lista de PRs abertas e os arquivos de cada uma: não comenta,
-  não mescla, não muda nada.
+  não mescla, não muda nada. O script vem sempre da `develop`, então uma PR
+  não consegue mudar a regra que a julga.
 
 ## 4. Depois de cada merge
 

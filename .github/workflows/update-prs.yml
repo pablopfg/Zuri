@@ -10,6 +10,10 @@ name: Update PRs
 on:
   push:
     branches: [develop]
+  # Catches what no push shows: an older pull request closed or out of draft
+  # leaves a stale merge-order result on the newer ones.
+  schedule:
+    - cron: "*/15 * * * *"
   workflow_dispatch:
 
 permissions: {}
@@ -51,3 +55,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           node scripts/atualizar-prs.ts
+      - name: Refresh stale merge-order results
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/ordem-de-merge.ts --atualizar

@@ -1,4 +1,4 @@
-// The "merge-order" check (ci.yml). Auto-merge merges whichever pull request
+// The "merge-order" check (merge-order.yml). Auto-merge merges whichever pull request
 // turns green first, so a newer pull request could land before an older one
 // that changes the same code and leave the older one with a conflict nobody
 // can resolve automatically (#52 before #50, 02/11/2026). This check fails
@@ -6,9 +6,14 @@
 // same files. Files whose conflicts update-prs.yml resolves on its own
 // (changelog, README, memory, docs, text catalogs) do not count.
 //
-// It reads only: no write permission, no comment, no merge. When the older
-// pull request lands, develop moves, update-prs.yml brings it into this
-// branch and dispatches ci.yml again, and the check passes.
+// The check reads only: no comment, no merge. Its result can go stale (the
+// older pull request is closed, leaves draft, changes files), so
+// update-prs.yml runs `--atualizar` on every develop push and every 15
+// minutes and dispatches the check again where the result changed.
+//
+//   node scripts/ordem-de-merge.ts              one pull request (PR_NUMBER or HEAD_REF)
+//   node scripts/ordem-de-merge.ts --atualizar  re-dispatches stale results (update-prs.yml)
+//
 // See docs/agente/merge-de-prs.md.
 import { execFileSync } from "node:child_process";
 import { appendFileSync } from "node:fs";
@@ -20,7 +25,7 @@ export const OVERRIDE_LABEL = "fora-de-ordem";
 export interface OpenPullRequest {
   number: number;
   draft: boolean;
-  head: { ref: string; repo: { full_name: string } | null };
+  head: { ref: string; sha: string; repo: { full_name: string } | null };
   base: { ref: string };
   labels: { name: string }[];
 }
@@ -39,10 +44,11 @@ export function sharedFiles(a: readonly string[], b: readonly string[]): string[
 /** The older open pull requests that must be merged (or closed) before `current`. */
 export function findBlockers(
   current: { number: number; files: readonly string[] },
-  others: readonly { number: number; draft: boolean; baseRef: string; files: readonly string[] }[],
+  others: readonly { number: number; draft: boolean; baseRef: string; fork: boolean; files: readonly string[] }[],
 ): Blocker[] {
+  // A pull request from a fork never blocks: anyone can open one on a public repository.
   return others
-    .filter((pr) => pr.number < current.number && !pr.draft && pr.baseRef === BASE_BRANCH)
+    .filter((pr) => pr.number < current.number && !pr.draft && !pr.fork && pr.baseRef === BASE_BRANCH)
     .map((pr) => ({ number: pr.number, files: sharedFiles(current.files, pr.files) }))
     .filter((blocker) => blocker.files.length > 0)
     .sort((a, b) => a.number - b.number);
@@ -72,6 +78,12 @@ export interface Context {
   exec: Run;
 }
 
+const isFork = (ctx: Context, pr: OpenPullRequest) => pr.head.repo?.full_name !== ctx.repository;
+
+function openPullRequests(ctx: Context): OpenPullRequest[] {
+  return api(ctx, `repos/${ctx.repository}/pulls?state=open&per_page=100`) as OpenPullRequest[];
+}
+
 const api = (ctx: Context, path: string) =>
   (JSON.parse(ctx.exec("gh", ["api", "--paginate", "--slurp", path])) as unknown[][]).flat();
 
@@ -90,29 +102,72 @@ function changedFiles(ctx: Context, pr: number): string[] {
  * pull request into this repository: nothing to order.
  */
 export function checkOrder(ctx: Context, target: { number?: number; branch?: string }): { pr: number; verdict: Verdict } | null {
-  const open = api(ctx, `repos/${ctx.repository}/pulls?state=open&per_page=100`) as OpenPullRequest[];
-  const current = open.find((pr) =>
-    target.number ? pr.number === target.number : pr.head.ref === target.branch && pr.head.repo?.full_name === ctx.repository,
-  );
+  const open = openPullRequests(ctx);
+  // By branch (a dispatched run), the pull request into develop wins over one into main from the same branch.
+  const current = target.number
+    ? open.find((pr) => pr.number === target.number)
+    : open
+        .filter((pr) => pr.head.ref === target.branch && !isFork(ctx, pr))
+        .sort((a, b) => Number(b.base.ref === BASE_BRANCH) - Number(a.base.ref === BASE_BRANCH))[0];
   if (!current) return null;
-  if (current.base.ref !== BASE_BRANCH) return { pr: current.number, verdict: { status: "pass", reason: `base é ${current.base.ref}` } };
-  if (current.labels.some((label) => label.name === OVERRIDE_LABEL)) {
-    return { pr: current.number, verdict: { status: "pass", reason: `rótulo ${OVERRIDE_LABEL}` } };
-  }
-  const older = open.filter((pr) => pr.number < current.number && !pr.draft && pr.base.ref === BASE_BRANCH);
-  if (older.length === 0) return { pr: current.number, verdict: { status: "pass", reason: "nenhuma PR mais antiga aberta" } };
-  const files = changedFiles(ctx, current.number);
-  const blockers = findBlockers(
-    { number: current.number, files },
-    older.map((pr) => ({ number: pr.number, draft: pr.draft, baseRef: pr.base.ref, files: changedFiles(ctx, pr.number) })),
-  );
-  if (blockers.length === 0) {
-    return { pr: current.number, verdict: { status: "pass", reason: "nenhuma PR mais antiga muda os mesmos arquivos" } };
-  }
-  return { pr: current.number, verdict: { status: "fail", blockers } };
+  return { pr: current.number, verdict: verdictFor(ctx, current, open) };
 }
 
-/** Reads the target from the environment set by ci.yml; never from argv or event text in a shell. */
+function verdictFor(ctx: Context, current: OpenPullRequest, open: readonly OpenPullRequest[]): Verdict {
+  if (current.base.ref !== BASE_BRANCH) return { status: "pass", reason: `base é ${current.base.ref}` };
+  if (current.labels.some((label) => label.name === OVERRIDE_LABEL)) return { status: "pass", reason: `rótulo ${OVERRIDE_LABEL}` };
+  const older = open.filter((pr) => pr.number < current.number && !pr.draft && !isFork(ctx, pr) && pr.base.ref === BASE_BRANCH);
+  if (older.length === 0) return { status: "pass", reason: "nenhuma PR mais antiga aberta" };
+  const blockers = findBlockers(
+    { number: current.number, files: changedFiles(ctx, current.number) },
+    older.map((pr) => ({
+      number: pr.number,
+      draft: pr.draft,
+      baseRef: pr.base.ref,
+      fork: isFork(ctx, pr),
+      files: changedFiles(ctx, pr.number),
+    })),
+  );
+  if (blockers.length === 0) return { status: "pass", reason: "nenhuma PR mais antiga muda os mesmos arquivos" };
+  return { status: "fail", blockers };
+}
+
+/** The workflow that reports the check; update-prs.yml dispatches it again when its result went stale. */
+export const ORDER_WORKFLOW = "merge-order.yml";
+export const ORDER_CHECK = "merge-order";
+
+/**
+ * The check only runs on the newer pull request's own events. When an older
+ * one is closed, leaves draft or changes files, the result on the newer one
+ * goes stale. update-prs.yml calls this on every develop push and every 15
+ * minutes: it recomputes each open pull request into develop and dispatches
+ * the check again only where the last result disagrees (or there is none).
+ * Never while a run is still going. Returns the pull requests dispatched.
+ */
+export function refreshStale(ctx: Context): number[] {
+  const open = openPullRequests(ctx);
+  const dispatched: number[] = [];
+  for (const pr of open) {
+    if (pr.base.ref !== BASE_BRANCH || isFork(ctx, pr)) continue;
+    const runs = JSON.parse(
+      ctx.exec("gh", ["api", `repos/${ctx.repository}/commits/${pr.head.sha}/check-runs?check_name=${ORDER_CHECK}`]),
+    ) as { check_runs: { status: string; conclusion: string | null; started_at: string }[] };
+    const latest = [...runs.check_runs].sort((a, b) => b.started_at.localeCompare(a.started_at))[0];
+    if (latest && latest.status !== "completed") continue;
+    const passing = verdictFor(ctx, pr, open).status === "pass";
+    if (latest && (latest.conclusion === "success") === passing) continue;
+    // A branch made before merge-order.yml existed has no such workflow: the next develop update brings it.
+    try {
+      ctx.exec("gh", ["workflow", "run", ORDER_WORKFLOW, "--repo", ctx.repository, "--ref", pr.head.ref]);
+      dispatched.push(pr.number);
+    } catch (error) {
+      console.log(`#${pr.number}: dispatch failed: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
+  return dispatched;
+}
+
+/** Reads the target from the environment set by merge-order.yml; never from argv or event text in a shell. */
 export function targetFromEnv(env: NodeJS.ProcessEnv): { number?: number; branch?: string } {
   const number = Number(env.PR_NUMBER);
   if (Number.isInteger(number) && number > 0) return { number };
@@ -127,6 +182,11 @@ if (import.meta.main) {
   }
   const exec: Run = (cmd, args) =>
     execFileSync(cmd, args, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], maxBuffer: 64 * 1024 * 1024 });
+  if (process.argv.includes("--atualizar")) {
+    const dispatched = refreshStale({ repository, exec });
+    console.log(`ordem-de-merge: check dispatched again on ${dispatched.map((n) => `#${n}`).join(", ") || "none"}`);
+    process.exit(0);
+  }
   const result = checkOrder({ repository, exec }, targetFromEnv(process.env));
   if (!result) {
     console.log("ordem-de-merge: no open pull request for this branch; nothing to check");

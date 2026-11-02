@@ -21,7 +21,7 @@ export const OPT_OUT_LABEL = "sem-atualizacao-automatica";
 /** Hidden marker of the one comment the workflow keeps on each pull request. */
 export const NOTICE_MARKER = "<!-- zuri:atualizar-prs -->";
 /** Workflows dispatched after a push: a push made with GITHUB_TOKEN starts no pull_request run. */
-export const DISPATCHED_WORKFLOWS = ["ci.yml", "codeql.yml"];
+export const DISPATCHED_WORKFLOWS = ["ci.yml", "codeql.yml", "merge-order.yml"];
 
 /**
  * Files where two additions at the same place can simply be kept together:

@@ -138,27 +138,3 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
       - run: npm audit --audit-level=high
-
-  # Auto-merge takes whichever pull request turns green first. This check
-  # holds a pull request while an older open one into develop changes the same
-  # code (scripts/ordem-de-merge.ts, docs/agente/merge-de-prs.md). It only
-  # reads the list of open pull requests and their files; no install needed.
-  merge-order:
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    permissions:
-      contents: read
-      pull-requests: read
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version-file: .nvmrc
-      - run: node scripts/ordem-de-merge.ts
-        env:
-          GH_TOKEN: ${{ github.token }}
-          # Dispatched runs (update-prs.yml) have no pull request: the branch finds it.
-          PR_NUMBER: ${{ github.event.pull_request.number }}
-          HEAD_REF: ${{ github.head_ref || github.ref_name }}

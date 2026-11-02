@@ -4,7 +4,9 @@ import {
   checkOrder,
   findBlockers,
   type OpenPullRequest,
+  ORDER_WORKFLOW,
   OVERRIDE_LABEL,
+  refreshStale,
   sharedFiles,
   targetFromEnv,
   verdictText,
@@ -16,28 +18,42 @@ const REPO = "dono/zuri";
 const pr = (number: number, extra: Partial<OpenPullRequest> = {}): OpenPullRequest => ({
   number,
   draft: false,
-  head: { ref: `branch-${number}`, repo: { full_name: REPO } },
+  head: { ref: `branch-${number}`, sha: `sha${number}`, repo: { full_name: REPO } },
   base: { ref: "develop" },
   labels: [],
   ...extra,
 });
 
 /** A fake gh that answers the open list and each pull request's files, and records what was asked. */
-const fake = (open: OpenPullRequest[], files: Record<number, { filename: string; previous_filename?: string }[]>) => {
+type Run = { status: string; conclusion: string | null; started_at: string };
+const fake = (
+  open: OpenPullRequest[],
+  files: Record<number, { filename: string; previous_filename?: string }[]>,
+  checkRuns: Record<string, Run[]> = {},
+  failDispatch = false,
+) => {
   const asked: string[] = [];
+  const dispatched: string[] = [];
   const ctx: Context = {
     repository: REPO,
     exec: (cmd, args) => {
       expect(cmd).toBe("gh");
+      if (args[0] === "workflow") {
+        if (failDispatch) throw new Error("workflow not found on ref");
+        dispatched.push(`${args[2]} ${args.at(-1)}`);
+        return "";
+      }
       const path = args.at(-1) ?? "";
       asked.push(path);
+      const sha = path.match(/commits\/(\w+)\/check-runs/);
+      if (sha) return JSON.stringify({ check_runs: checkRuns[sha[1] as string] ?? [] });
       if (path.startsWith(`repos/${REPO}/pulls?state=open`)) return JSON.stringify([open]);
       const match = path.match(/pulls\/(\d+)\/files/);
       if (match) return JSON.stringify([files[Number(match[1])] ?? []]);
       throw new Error(`unexpected call ${path}`);
     },
   };
-  return { ctx, asked };
+  return { ctx, asked, dispatched };
 };
 const f = (...names: string[]) => names.map((filename) => ({ filename }));
 
@@ -71,7 +87,14 @@ describe("sharedFiles", () => {
 
 describe("findBlockers", () => {
   const current = { number: 52, files: ["apps/agent/src/agent/prompt.ts", "README.md"] };
-  const other = (number: number, files: string[], extra = {}) => ({ number, draft: false, baseRef: "develop", files, ...extra });
+  const other = (number: number, files: string[], extra = {}) => ({
+    number,
+    draft: false,
+    baseRef: "develop",
+    fork: false,
+    files,
+    ...extra,
+  });
 
   it("blocks on an older pull request that changes the same code (#50 before #52)", () => {
     expect(findBlockers(current, [other(50, ["apps/agent/src/agent/prompt.ts", "README.md"])])).toEqual([
@@ -79,7 +102,7 @@ describe("findBlockers", () => {
     ]);
   });
 
-  it("never blocks on a newer pull request, the same one, a draft or another base", () => {
+  it("never blocks on a newer pull request, the same one, a draft, another base or a fork", () => {
     const same = ["apps/agent/src/agent/prompt.ts"];
     expect(
       findBlockers(current, [
@@ -87,6 +110,7 @@ describe("findBlockers", () => {
         other(52, same),
         other(49, same, { draft: true }),
         other(48, same, { baseRef: "main" }),
+        other(47, same, { fork: true }),
       ]),
     ).toEqual([]);
   });
@@ -128,11 +152,23 @@ describe("checkOrder (fake gh)", () => {
   });
 
   it("finds the pull request by branch in a dispatched run, only from this repository", () => {
-    const fork = pr(53, { head: { ref: "branch-52", repo: { full_name: "outra/zuri" } } });
+    const fork = pr(53, { head: { ref: "branch-52", sha: "s53", repo: { full_name: "outra/zuri" } } });
     const { ctx } = fake([pr(50), fork, pr(52)], { 50: f(prompt), 52: f(prompt), 53: f(prompt) });
     expect(checkOrder(ctx, { branch: "branch-52" })?.pr).toBe(52);
     expect(checkOrder(ctx, { branch: "sem-pr" })).toBeNull();
     expect(checkOrder(ctx, {})).toBeNull();
+  });
+
+  it("never waits on an older pull request from a fork (anyone can open one)", () => {
+    const fork = pr(50, { head: { ref: "x", sha: "s", repo: { full_name: "outra/zuri" } } });
+    const { ctx } = fake([fork, pr(52)], { 50: f(prompt), 52: f(prompt) });
+    expect(checkOrder(ctx, { number: 52 })?.verdict.status).toBe("pass");
+  });
+
+  it("prefers the pull request into develop when one branch has two", () => {
+    const toMain = pr(51, { head: { ref: "branch-52", sha: "s", repo: { full_name: REPO } }, base: { ref: "main" } });
+    const { ctx } = fake([pr(50), toMain, pr(52)], { 50: f(prompt), 52: f(prompt) });
+    expect(checkOrder(ctx, { branch: "branch-52" })).toMatchObject({ pr: 52, verdict: { status: "fail" } });
   });
 
   it("passes with the override label without reading files", () => {
@@ -177,13 +213,63 @@ describe("targetFromEnv", () => {
   });
 });
 
-describe("merge-order job", () => {
-  const job = loadWorkflow(".github/workflows/ci.yml").jobs["merge-order"];
+describe("refreshStale (fake gh)", () => {
+  const prompt = "apps/agent/src/agent/prompt.ts";
+  const done = (conclusion: string, started_at = "2026-11-02T04:00:00Z"): Run => ({ status: "completed", conclusion, started_at });
 
-  it("only reads, and passes event data through the environment", () => {
+  it("dispatches the check again where the older pull request is gone", () => {
+    // #50 was closed: #52 still shows the failure from when it waited.
+    const { ctx, dispatched } = fake([pr(52)], { 52: f(prompt) }, { sha52: [done("failure")] });
+    expect(refreshStale(ctx)).toEqual([52]);
+    expect(dispatched).toEqual([`${ORDER_WORKFLOW} branch-52`]);
+  });
+
+  it("dispatches where a green result went stale (an older one left draft)", () => {
+    const { ctx } = fake([pr(50), pr(52)], { 50: f(prompt), 52: f(prompt) }, { sha50: [done("success")], sha52: [done("success")] });
+    expect(refreshStale(ctx)).toEqual([52]);
+  });
+
+  it("dispatches where the check never ran and leaves agreeing results alone", () => {
+    const { ctx } = fake([pr(50), pr(52)], { 50: f(prompt), 52: f(prompt) }, { sha52: [done("failure")] });
+    expect(refreshStale(ctx)).toEqual([50]);
+  });
+
+  it("reads only the newest run and never dispatches while one is going", () => {
+    const newest = [done("success", "2026-11-02T03:00:00Z"), done("failure", "2026-11-02T05:00:00Z")];
+    expect(refreshStale(fake([pr(52)], { 52: f(prompt) }, { sha52: newest }).ctx)).toEqual([52]);
+    const going = [{ status: "in_progress", conclusion: null, started_at: "2026-11-02T05:00:00Z" }];
+    expect(refreshStale(fake([pr(52)], { 52: f(prompt) }, { sha52: going }).ctx)).toEqual([]);
+  });
+
+  it("skips forks and pull requests into main, and survives a failed dispatch", () => {
+    const fork = pr(53, { head: { ref: "x", sha: "s", repo: { full_name: "outra/zuri" } } });
+    const toMain = pr(54, { base: { ref: "main" } });
+    const { ctx, asked } = fake([fork, toMain], {});
+    expect(refreshStale(ctx)).toEqual([]);
+    expect(asked.some((p) => p.includes("check-runs"))).toBe(false);
+    expect(refreshStale(fake([pr(52)], { 52: f(prompt) }, {}, true).ctx)).toEqual([]);
+  });
+});
+
+describe("merge-order workflow", () => {
+  const wf = loadWorkflow(".github/workflows/merge-order.yml");
+  const job = wf.jobs["merge-order"];
+
+  it("reruns on the pull request events that change the answer, or when dispatched", () => {
+    expect(wf.on).toEqual({
+      pull_request: { types: ["opened", "synchronize", "reopened", "ready_for_review", "labeled", "unlabeled"] },
+      workflow_dispatch: null,
+    });
+  });
+
+  it("only reads, runs the script from develop and passes event data through the environment", () => {
+    expect(wf.permissions).toEqual({ contents: "read" });
     expect(job?.permissions).toEqual({ contents: "read", "pull-requests": "read" });
+    const checkout = job?.steps?.find((s) => s.uses?.startsWith("actions/checkout@"));
+    expect(checkout?.with?.ref).toBe("develop");
     const step = job?.steps?.find((s) => s.run?.includes("scripts/ordem-de-merge.ts"));
     expect(step?.run).toBe("node scripts/ordem-de-merge.ts");
     expect(step?.env?.PR_NUMBER).toMatch(/^\$\{\{ github\.event\.pull_request\.number \}\}$/);
+    expect(step?.env?.HEAD_REF).toMatch(/^\$\{\{ github\.head_ref \|\| github\.ref_name \}\}$/);
   });
 });
