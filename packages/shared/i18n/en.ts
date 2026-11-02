@@ -78,6 +78,7 @@ export const en: Messages = {
   "web.nav.signOutConfirmTitle": "Sign out of Zuri?",
   "web.nav.collapse": "Collapse menu",
   "web.nav.expand": "Expand menu",
+  "web.nav.version": "Version {version}",
   "web.shell.removeSetupCode": "For safety, delete the SETUP_CODE secret in the Cloudflare dashboard (Workers › zuri › Settings › Variables and secrets). If you ever need to recover your access, just save a new code.",
   "web.setup.title": "First access",
   "web.setup.recoveryTitle": "Recover your access",

@@ -19,23 +19,40 @@ Enquanto o primeiro número for 0, tudo é desenvolvimento. A 1.0.0 é decisão 
 Pablo, junto com o primeiro release para a `main` (etapa 25); o workflow nunca
 gera um número maior que 0.x sozinho.
 
-A versão vale em três lugares, sempre iguais (um teste em
-`tests/repo/versao.test.ts` confere):
+A versão é a mesma em todos estes lugares (o `npm run lint` roda
+`node scripts/versao.ts --conferir` e falha se um deles divergir; um teste em
+`tests/repo/versao.test.ts` confere o mesmo):
 
 - a seção mais nova do [`CHANGELOG.md`](../../CHANGELOG.md), que é a fonte;
 - `packages/shared/src/version.ts` (`APP_VERSION`), escrito pelo script a
-  partir dela e mostrado em Configurações > Diagnóstico ("Versão da Zuri") e
+  partir dela e mostrado na interface: no pé do menu lateral, no pé da lista de
+  Configurações no celular, em Configurações > Diagnóstico ("Versão da Zuri") e
   no formulário de "Relatar no GitHub";
+- o campo `version` do `package.json` da raiz e de cada workspace
+  (`packages/shared`, `apps/agent`, `apps/web`, lidos do campo `workspaces`);
+- o `package-lock.json`: o `version` do topo, de `packages[""]` e de cada
+  workspace;
 - a tag `vX.Y.Z` no commit do merge, com a pré-release do GitHub (a partir da
   0.15.5; veja "Histórico").
 
-O `version.ts` só muda quando a PR `chore(release):` mescla, minutos depois do
+Os outros arquivos não guardam versão: o `wrangler.jsonc` não tem esse campo
+(cada deploy ganha o seu código, mostrado no Diagnóstico ao lado da versão), o
+`manifest.webmanifest` também não, e o service worker não guarda cache, então
+não tem número para trocar. Arquivo novo que passe a guardar a versão entra em `versionFiles` de
+`scripts/versao.ts`, com teste.
+
+Se algo ficar fora de sincronia (por exemplo, depois de resolver um conflito na
+mão), `node scripts/versao.ts --sincronizar` escreve a versão do `CHANGELOG.md`
+em todos os arquivos.
+
+Esses arquivos só mudam quando a PR `chore(release):` mescla, minutos depois do
 merge. Por isso o build do commit marcado com `vX.Y.Z` ainda mostra a versão
 anterior; o build da `develop` depois da PR de versão mostra a certa. Um deploy
 sempre parte da `develop` (ou da `main`) em dia, nunca de uma tag solta.
 
-Os `package.json` ficam em 0.0.0 de propósito: os pacotes são privados e nada
-vai para o npm.
+Os pacotes continuam privados (`"private": true`) e nada vai para o npm: o
+número nos `package.json` serve só para que todo arquivo diga a mesma versão
+(pedido do Pablo de 02/11/2026).
 
 ## O que cada PR faz
 
@@ -60,7 +77,7 @@ PR sem mudança visível (CI, docs internas, dependências) pode ficar sem arqui
 visível: <título da PR>". Por isso o título da PR importa: ele vira o título da
 versão no `CHANGELOG.md` e nas notas da pré-release.
 
-Nunca edite o `CHANGELOG.md` nem o `version.ts` à mão. "## [Não lançado]" fica
+Nunca edite o `CHANGELOG.md`, o `version.ts` nem o `version` dos `package.json` e do `package-lock.json` à mão. "## [Não lançado]" fica
 sempre vazio; o teste do repositório falha se alguém escrever ali.
 
 ## O que acontece depois do merge
@@ -79,8 +96,8 @@ sempre vazio; o teste do repositório falha se alguém escrever ali.
    Pré-release antiga com outro título tem o título trocado para "vX.Y.Z"
    no run seguinte; tag e notas não mudam. Pré-release nunca vira "Latest" e não publica nada: não é deploy.
 4. A branch `chore/versao` é refeita a partir da `develop` com as seções novas
-   no `CHANGELOG.md`, os arquivos de `changelog/nao-lancado/` apagados e o
-   `version.ts` novo. Uma única PR `chore(release): versão X` fica aberta com
+   no `CHANGELOG.md`, os arquivos de `changelog/nao-lancado/` apagados e a
+   versão nova no `version.ts`, nos `package.json` e no `package-lock.json`. Uma única PR `chore(release): versão X` fica aberta com
    ela, com o rótulo `sem-atualizacao-automatica` (o Update PRs não mexe nela)
    e auto-merge por squash. A CI que o push do bot dispara é aprovada pelo
    próprio workflow, como no Update PRs.
@@ -122,8 +139,9 @@ versão para a pré-release e de "Não lançado" para a comparação com a `deve
 - Fragmento fora do formato, `CHANGELOG.md` editado à mão ou a seção mais nova
   apontando para um commit fora da `develop` também param o workflow.
 - A rotina de merge e as threads tratam a PR `chore(release):` como qualquer
-  outra: ela não muda código, só `CHANGELOG.md`, `changelog/` e `version.ts`,
-  então o check `merge-order` nunca a segura.
+  outra: ela não muda código, só `CHANGELOG.md`, `changelog/` e as linhas de
+  versão. O check `merge-order` nunca a segura nem deixa que ela segure outra
+  PR (uma atualização de dependência também muda o `package.json`).
 
 ## Quando algo dá errado
 

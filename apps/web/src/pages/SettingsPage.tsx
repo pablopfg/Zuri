@@ -1,4 +1,4 @@
-import { ptBRSettings } from "@zuri/shared";
+import { APP_VERSION, ptBRSettings } from "@zuri/shared";
 import { Activity, Bell, Bot, ChevronLeft, ChevronRight, Clock, Database, Plug, Shield, User } from "lucide-react";
 import { useSyncExternalStore } from "react";
 import { Link, NavLink, Navigate, useParams } from "react-router";
@@ -98,6 +98,8 @@ export function SettingsPage() {
             </li>
           </ul>
         </nav>
+        {/* On a phone the sidebar is hidden: the version in use sits quietly at the foot of the list. */}
+        <p className="text-center text-xs text-fg-muted">{t("web.nav.version", { version: APP_VERSION })}</p>
       </>
     );
   }
