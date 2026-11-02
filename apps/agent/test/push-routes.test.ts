@@ -8,6 +8,8 @@ import { call, CSRF, HUMAN_TOKEN, ORIGIN, TEST_EMAIL, TEST_PASSWORD, testEnv } f
 
 const IP = "192.0.2.172";
 let cookie = "";
+/** The session and the browser's device cookie, as a browser sends both. */
+let withDevice = "";
 const owner = () => testEnv.AGENT.get(testEnv.AGENT.idFromName(AGENT_INSTANCE_NAME));
 const inOwner = <T>(fn: (agent: ZuriAgent) => T | Promise<T>) => runInDurableObject(owner(), (agent: ZuriAgent) => fn(agent));
 
@@ -19,10 +21,10 @@ const headers = (withCookie = true) => ({
   ...(withCookie ? { cookie } : {}),
 });
 
-function api(method: string, path: string, body?: unknown) {
+function api(method: string, path: string, body?: unknown, asBrowser = false) {
   return call(`${ORIGIN}/api${path}`, {
     method,
-    headers: headers(),
+    headers: { ...headers(), ...(asBrowser ? { cookie: withDevice } : {}) },
     ...(body === undefined ? {} : { body: typeof body === "string" ? body : JSON.stringify(body) }),
   });
 }
@@ -55,7 +57,11 @@ beforeAll(async () => {
     body: JSON.stringify({ email: TEST_EMAIL, password: TEST_PASSWORD, turnstileToken: HUMAN_TOKEN }),
   });
   expect(res.status).toBe(200);
-  cookie = res.headers.getSetCookie().find((c) => c.startsWith("__Host-zuri_session="))?.split(";")[0] ?? "";
+  const set = res.headers.getSetCookie();
+  cookie = set.find((c) => c.startsWith("__Host-zuri_session="))?.split(";")[0] ?? "";
+  const device = set.find((c) => c.startsWith("__Host-zuri_device="))?.split(";")[0] ?? "";
+  expect(device).not.toBe("");
+  withDevice = `${cookie}; ${device}`;
 });
 
 // Adding a device raises a security alert, which goes out by push at once: the push
@@ -84,8 +90,6 @@ describe("the push routes", () => {
     ["GET", "/push"],
     ["POST", "/push/devices"],
     ["DELETE", `/push/devices/${MISSING}`],
-    ["POST", "/push/seen"],
-    ["POST", "/push/forget"],
     ["POST", "/push/test"],
   ] as const;
 
@@ -147,18 +151,20 @@ describe("the push routes", () => {
     expect((await refusal(await api("DELETE", "/push/devices/nao-e-um-id"), 404)).code).toBe("NOT_FOUND");
   });
 
-  it("let a browser say it is still in use, or forget itself, by the endpoint only it knows", async () => {
+  it("mark the asking browser's own device, and keep it while that browser opens the app", async () => {
     await confirmNow();
-    const sub = await subscription();
-    await json(await api("POST", "/push/devices", sub), 201);
+    const { device } = await json<{ device: PushDevice }>(await api("POST", "/push/devices", await subscription(), true), 201);
+    expect(device.current).toBe(true);
+    expect((await json<PushStatus>(await api("GET", "/push", undefined, true), 200)).devices.map((d) => d.current)).toEqual([true]);
+    // Without the device cookie (another browser) it isn't this one.
+    expect((await json<PushStatus>(await api("GET", "/push"), 200)).devices.map((d) => d.current)).toEqual([false]);
+    const lastSeen = () => inOwner((agent) => agent.store.db.one<{ at: string }>(`SELECT last_seen_at AS at FROM zur_push_devices`)?.at ?? "");
     await inOwner((agent) => agent.store.db.run(`UPDATE zur_push_devices SET last_seen_at = '2026-01-01T00:00:00.000Z'`));
-    expect((await api("POST", "/push/seen", { endpoint: sub.endpoint })).status).toBe(204);
-    expect((await api("POST", "/push/seen", { endpoint: "https://fcm.googleapis.com/fcm/send/outro" })).status).toBe(204);
-    const seen = await inOwner((agent) => agent.store.db.one<{ at: string }>(`SELECT last_seen_at AS at FROM zur_push_devices`)?.at);
-    expect(seen && seen > "2026-01-01T00:00:00.000Z").toBe(true);
-    expect((await refusal(await api("POST", "/push/seen", { endpoint: "x".repeat(1025) }), 400)).code).toBe("VALIDATION_FAILED");
-    expect((await api("POST", "/push/forget", { endpoint: sub.endpoint })).status).toBe(204);
-    expect((await json<PushStatus>(await api("GET", "/push"), 200)).devices).toEqual([]);
+    // A session check from another browser leaves it; from its own browser it moves.
+    expect((await api("GET", "/auth/session")).status).toBe(200);
+    expect(await lastSeen()).toBe("2026-01-01T00:00:00.000Z");
+    expect((await api("GET", "/auth/session", undefined, true)).status).toBe(200);
+    expect((await lastSeen()) > "2026-01-01T00:00:00.000Z").toBe(true);
   });
 
   it("send a test notice to the devices, posting only to their push service", async () => {

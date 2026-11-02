@@ -1,4 +1,4 @@
-import { clientErrorSchema, diagnosticResolveSchema, noticeReadSchema, pushEndpointSchema, pushSubscribeSchema, RECORD_ID } from "@zuri/shared";
+import { clientErrorSchema, diagnosticResolveSchema, noticeReadSchema, pushSubscribeSchema, RECORD_ID } from "@zuri/shared";
 import type { Context, Hono } from "hono";
 import type { AlertService } from "../alerts/service.ts";
 import type { ClientInfo } from "../auth/client.ts";
@@ -7,7 +7,7 @@ import type { DiagnosticsService } from "../diagnostics/service.ts";
 import { AppError } from "../http/errors.ts";
 import type { PushService } from "../push/service.ts";
 import type { ApiEnv } from "./app.ts";
-import { readJson } from "./http.ts";
+import { readDeviceCookie, readJson } from "./http.ts";
 
 /** What the notice routes need from the object. */
 export interface NoticeDeps {
@@ -55,14 +55,16 @@ export function registerNoticeRoutes(app: Hono<ApiEnv>, deps: () => NoticeDeps, 
 
   // Push (step 11b). A new device asks for the password typed recently: a stolen
   // session can't quietly add a device that would then read every notice.
-  app.get("/push", () => Response.json(deps().push.status()));
+  const browser = (c: Context<ApiEnv>) => deps().auth.browserId(readDeviceCookie(c.req.raw));
+
+  app.get("/push", async (c) => Response.json(deps().push.status(await browser(c))));
 
   app.post("/push/devices", async (c) => {
     const input = await readJson(c.req.raw, pushSubscribeSchema, 4096);
     const { push, auth } = deps();
     const session = c.get("session");
     auth.requireRecentAuth(session);
-    return Response.json({ device: push.add(input, client(c), session.id) }, { status: 201 });
+    return Response.json({ device: push.add(input, client(c), session.id, await browser(c)) }, { status: 201 });
   });
 
   // Removing one also asks for it: silencing the owner's phone is the first step of hiding something.
@@ -72,17 +74,6 @@ export function registerNoticeRoutes(app: Hono<ApiEnv>, deps: () => NoticeDeps, 
     const session = c.get("session");
     auth.requireRecentAuth(session);
     push.remove(id, client(c), session.id);
-    return new Response(null, { status: 204 });
-  });
-
-  // The browser's own endpoint: only that device knows it. Unknown endpoints get the same answer.
-  app.post("/push/seen", async (c) => {
-    deps().push.seen((await readJson(c.req.raw, pushEndpointSchema, 2048)).endpoint);
-    return new Response(null, { status: 204 });
-  });
-
-  app.post("/push/forget", async (c) => {
-    deps().push.forget((await readJson(c.req.raw, pushEndpointSchema, 2048)).endpoint);
     return new Response(null, { status: 204 });
   });
 

@@ -57,7 +57,7 @@ interface Posted {
   url: string;
   headers: Headers;
   body: Uint8Array;
-  redirect: RequestRedirect | undefined;
+  redirect: RequestInit["redirect"];
 }
 
 /** A push service that answers each endpoint as told (201 by default) and keeps what it got. */
@@ -139,39 +139,55 @@ describe("push devices", () => {
   it("keeps three at most, and the same browser subscribing again only renews its keys", async () => {
     await withPush(async (w) => {
       const a = await browser();
-      const first = w.devices.add(a.subscription, CLIENT.userAgent);
+      const first = w.devices.add(a.subscription, CLIENT.userAgent, "b1");
       expect(first.created).toBe(true);
-      expect(first.device).toMatchObject({ userAgent: CLIENT.userAgent, lastSentAt: null });
-      const again = w.devices.add({ ...a.subscription, keys: (await browser()).subscription.keys }, "outro");
-      expect(again).toMatchObject({ created: false, device: { id: first.device.id, userAgent: CLIENT.userAgent } });
-      w.devices.add((await browser("updates.push.services.mozilla.com")).subscription, "b");
-      w.devices.add((await browser("web.push.apple.com")).subscription, "c");
+      expect(first.device).toMatchObject({ userAgent: CLIENT.userAgent, lastSentAt: null, current: true });
+      const again = w.devices.add({ ...a.subscription, keys: (await browser()).subscription.keys }, "outro", null);
+      expect(again).toMatchObject({ created: false, device: { id: first.device.id, userAgent: CLIENT.userAgent, current: false } });
+      w.world.clock.now += 1000;
+      w.devices.add((await browser("updates.push.services.mozilla.com")).subscription, "b", "b2");
+      w.world.clock.now += 1000;
+      w.devices.add((await browser("web.push.apple.com")).subscription, "c", null);
       expect(w.devices.count()).toBe(PUSH_LIMITS.maxDevices);
-      const full = await refusal(async () => w.devices.add((await browser()).subscription, "d"));
+      const full = await refusal(async () => w.devices.add((await browser()).subscription, "d", "b4"));
       expect(full).toMatchObject({ code: "CONFLICT", messageKey: "error.pushDeviceLimit" });
       expect(w.devices.count()).toBe(3);
-      // The list never carries the endpoint or the keys.
-      expect(JSON.stringify(w.devices.list())).not.toContain("fcm.googleapis.com");
+      // Renewing without a browser id kept the first one's; each browser sees only its own as current.
+      expect(w.devices.list("b1").map((d) => d.current)).toEqual([true, false, false]);
+      expect(w.devices.list("b2").map((d) => d.current)).toEqual([false, true, false]);
+      expect(w.devices.list(null).some((d) => d.current)).toBe(false);
+      // The list never carries the endpoint, the keys or the browser id.
+      expect(JSON.stringify(w.devices.list("b1"))).not.toMatch(/fcm\.googleapis|b1"/);
     });
   });
 
-  it("drops a device seven days after it last opened the app, not a moment before", async () => {
+  it("drops a device seven days after its browser last opened the app, not a moment before", async () => {
     await withPush(async (w) => {
-      const a = (await browser()).subscription;
-      const b = (await browser()).subscription;
-      w.devices.add(a, "a");
-      w.devices.add(b, "b");
+      w.devices.add((await browser()).subscription, "a", "ba");
+      w.devices.add((await browser()).subscription, "b", "bb");
       w.world.clock.now += PUSH_LIMITS.staleMs - 1000;
-      w.devices.seen(b.endpoint);
-      // Unknown endpoints change nothing.
-      w.devices.seen("https://fcm.googleapis.com/fcm/send/desconhecido");
+      w.devices.seen("bb");
+      // Unknown browsers change nothing.
+      w.devices.seen("desconhecido");
       w.world.clock.now += 1000;
       expect(w.devices.pruneStale()).toBe(0);
       w.world.clock.now += 1;
       expect(w.devices.pruneStale()).toBe(1);
-      expect(w.devices.list().map((d) => d.userAgent)).toEqual(["b"]);
-      expect(w.devices.removeEndpoint(b.endpoint)).toBe(true);
-      expect(w.devices.count()).toBe(0);
+      expect(w.devices.list(null).map((d) => d.userAgent)).toEqual(["b"]);
+    });
+  });
+
+  it("moves the last time seen at most once a day", async () => {
+    await withPush(async (w) => {
+      w.devices.add((await browser()).subscription, "a", "ba");
+      const at = () => w.devices.list(null)[0]?.lastSeenAt;
+      const added = at();
+      w.world.clock.now += PUSH_LIMITS.seenEveryMs;
+      w.devices.seen("ba");
+      expect(at()).toBe(added);
+      w.world.clock.now += 1;
+      w.devices.seen("ba");
+      expect(at()).toBe(new Date(w.world.clock.now).toISOString());
     });
   });
 });
@@ -185,7 +201,7 @@ describe("the push channel", () => {
       w.keys.current = KEYS;
       expect(w.channel.state()).toBe("no_target");
       expect(await w.channel.send({ notice: notice(), attempt: 1 })).toEqual({ status: "skipped", reason: "no_target" });
-      w.devices.add((await browser()).subscription, "a");
+      w.devices.add((await browser()).subscription, "a", null);
       expect(w.channel.state()).toBe("ready");
       expect(w.net.posted).toHaveLength(0);
     });
@@ -195,8 +211,8 @@ describe("the push channel", () => {
     await withPush(async (w) => {
       const a = await browser();
       const b = await browser("updates.push.services.mozilla.com");
-      w.devices.add(a.subscription, "a");
-      w.devices.add(b.subscription, "b");
+      w.devices.add(a.subscription, "a", null);
+      w.devices.add(b.subscription, "b", null);
       const sent = notice({ priority: "critical", category: "security", security: true, link: "/acessos" });
       expect(await w.channel.send({ notice: sent, attempt: 1 })).toEqual({ status: "sent" });
       expect(w.net.posted.map((p) => p.url).sort()).toEqual([a.subscription.endpoint, b.subscription.endpoint].sort());
@@ -212,14 +228,14 @@ describe("the push channel", () => {
       const toA = w.net.posted.find((p) => p.url === a.subscription.endpoint);
       expect(await open(toA?.body ?? new Uint8Array(), a.keys, a.auth)).toEqual({ id: sent.id, title: "Água", body: "Beber um copo de água", link: "/acessos", sticky: true });
       await expect(open(toA?.body ?? new Uint8Array(), b.keys, b.auth)).rejects.toThrow();
-      expect(w.devices.list().every((d) => d.lastSentAt !== null)).toBe(true);
+      expect(w.devices.list(null).every((d) => d.lastSentAt !== null)).toBe(true);
     });
   });
 
   it("clips long text, drops a link outside the app and marks low priority as such", async () => {
     await withPush(async (w) => {
       const a = await browser();
-      w.devices.add(a.subscription, "a");
+      w.devices.add(a.subscription, "a", null);
       await w.channel.send({ notice: notice({ title: "T".repeat(500), body: "🙂".repeat(5000), link: "https://exemplo.com.br/x", priority: "low" }), attempt: 1 });
       const post = w.net.posted[0];
       expect(post?.headers.get("urgency")).toBe("low");
@@ -235,12 +251,12 @@ describe("the push channel", () => {
     await withPush(async (w) => {
       const gone = (await browser()).subscription;
       const busy = (await browser()).subscription;
-      w.devices.add(gone, "gone");
-      w.devices.add(busy, "busy");
+      w.devices.add(gone, "gone", null);
+      w.devices.add(busy, "busy", null);
       w.net.answers.set(gone.endpoint, 410);
       w.net.answers.set(busy.endpoint, 503);
       expect(await w.channel.send({ notice: notice(), attempt: 1 })).toEqual({ status: "failed", reason: "unreachable" });
-      expect(w.devices.list().map((d) => d.userAgent)).toEqual(["busy"]);
+      expect(w.devices.list(null).map((d) => d.userAgent)).toEqual(["busy"]);
       w.net.answers.set(busy.endpoint, 400);
       expect(await w.channel.send({ notice: notice(), attempt: 1 })).toEqual({ status: "failed", reason: "error" });
       w.net.answers.set(busy.endpoint, "throw");
@@ -255,8 +271,8 @@ describe("the push channel", () => {
     await withPush(async (w) => {
       const ok = (await browser()).subscription;
       const bad = (await browser()).subscription;
-      w.devices.add(ok, "ok");
-      w.devices.add(bad, "bad");
+      w.devices.add(ok, "ok", null);
+      w.devices.add(bad, "bad", null);
       w.net.answers.set(bad.endpoint, 500);
       expect(await w.channel.send({ notice: notice(), attempt: 1 })).toEqual({ status: "sent" });
     });
@@ -266,39 +282,34 @@ describe("the push channel", () => {
 describe("Settings > Notices, push part", () => {
   it("shows the public key and the devices, never the endpoints", async () => {
     await withPush(async (w) => {
-      expect(w.service.status()).toEqual({ publicKey: KEYS.publicKey, devices: [], max: 3 });
-      w.service.add((await browser()).subscription, CLIENT, "s".repeat(64));
-      const status = w.service.status();
-      expect(status.devices).toHaveLength(1);
-      expect(JSON.stringify(status)).not.toMatch(/fcm|p256dh|auth/);
+      expect(w.service.status(null)).toEqual({ publicKey: KEYS.publicKey, devices: [], max: 3 });
+      w.service.add((await browser()).subscription, CLIENT, "s".repeat(64), "este");
+      const status = w.service.status("este");
+      expect(status.devices).toMatchObject([{ current: true }]);
+      expect(JSON.stringify(status)).not.toMatch(/fcm|p256dh|auth|este/);
       w.keys.current = null;
-      expect(w.service.status().publicKey).toBeNull();
+      expect(w.service.status(null).publicKey).toBeNull();
     });
   });
 
-  it("adding and removing a device are access events that alert the owner; renewing and forgetting are not", async () => {
+  it("adding and removing a device are access events that alert the owner; renewing is not", async () => {
     await withPush(async (w) => {
       const a = (await browser()).subscription;
-      const device = w.service.add(a, CLIENT, "s".repeat(64));
-      w.service.add(a, CLIENT, "s".repeat(64));
+      const device = w.service.add(a, CLIENT, "s".repeat(64), null);
+      w.service.add(a, CLIENT, "s".repeat(64), null);
       w.service.remove(device.id, CLIENT, "s".repeat(64));
       expect(events(w)).toEqual([
         { kind: "push_added", alert: 1 },
         { kind: "push_removed", alert: 1 },
       ]);
       expect((await refusal(() => w.service.remove(device.id, CLIENT, "s".repeat(64)))).code).toBe("NOT_FOUND");
-      const b = (await browser()).subscription;
-      w.service.add(b, CLIENT, "s".repeat(64));
-      w.service.forget(b.endpoint);
-      expect(w.devices.count()).toBe(0);
-      expect(events(w).map((e) => e.kind)).toEqual(["push_added", "push_removed", "push_added"]);
     });
   });
 
   it("refuses a device while push isn't set up", async () => {
     await withPush(async (w) => {
       w.keys.current = null;
-      const error = await refusal(async () => w.service.add((await browser()).subscription, CLIENT, "s".repeat(64)));
+      const error = await refusal(async () => w.service.add((await browser()).subscription, CLIENT, "s".repeat(64), null));
       expect(error).toMatchObject({ code: "NOT_CONFIGURED", messageKey: "error.pushNotConfigured" });
       expect((await refusal(() => w.service.test())).code).toBe("NOT_CONFIGURED");
     });
@@ -308,7 +319,7 @@ describe("Settings > Notices, push part", () => {
     await withPush(async (w) => {
       expect(await refusal(() => w.service.test())).toMatchObject({ code: "CONFLICT", messageKey: "error.pushNoDevice" });
       const a = await browser();
-      w.service.add(a.subscription, CLIENT, "s".repeat(64));
+      w.service.add(a.subscription, CLIENT, "s".repeat(64), null);
       // The refused try above counted too: two left.
       expect(await w.service.test()).toEqual({ sent: true });
       expect(await w.service.test()).toEqual({ sent: true });
@@ -323,12 +334,16 @@ describe("Settings > Notices, push part", () => {
     });
   });
 
-  it("prunes quiet devices from the wake", async () => {
+  it("keeps a device its browser opens, and prunes quiet ones from the wake", async () => {
     await withPush(async (w) => {
-      w.service.add((await browser()).subscription, CLIENT, "s".repeat(64));
-      w.world.clock.now += 8 * DAY;
+      w.service.add((await browser()).subscription, CLIENT, "s".repeat(64), "usado");
+      w.service.add((await browser()).subscription, CLIENT, "s".repeat(64), "esquecido");
+      w.world.clock.now += 6 * DAY;
+      w.service.seen("usado");
+      w.world.clock.now += 2 * DAY;
       w.service.prune();
-      expect(w.devices.count()).toBe(0);
+      expect(w.devices.count()).toBe(1);
+      expect(w.service.status("usado").devices).toMatchObject([{ current: true }]);
     });
   });
 });

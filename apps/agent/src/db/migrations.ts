@@ -637,16 +637,20 @@ export const MIGRATIONS: readonly Migration[] = [
       // seven days without opening the app or when the push service says the
       // subscription is gone. The endpoint and keys never leave the server. Not in
       // the backup: a restored installation subscribes its devices again.
+      // `browser` is the HMAC of the browser's device cookie (the same id the
+      // access log uses): opening the app from that browser keeps the device.
       `CREATE TABLE IF NOT EXISTS zur_push_devices (
         id TEXT PRIMARY KEY,
         endpoint TEXT NOT NULL UNIQUE,
         p256dh TEXT NOT NULL,
         auth TEXT NOT NULL,
+        browser TEXT,
         user_agent TEXT NOT NULL DEFAULT '',
         created_at TEXT NOT NULL,
         last_seen_at TEXT NOT NULL,
         last_sent_at TEXT
       )`,
+      `CREATE INDEX IF NOT EXISTS zur_push_devices_browser ON zur_push_devices (browser) WHERE browser IS NOT NULL`,
     ],
   },
 ];

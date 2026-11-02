@@ -92,7 +92,7 @@ describe("the migration list", () => {
       9: "bc70a4e518b48d148475ac3881abb565015f4f21b69c26c36a28054c47429c91",
       10: "e1033d98cc925094806c0b7829568e64c0a3cbdeef9df30fba265f4879b5102d",
       11: "fa7a411f3603944c4ac983fea3d0958275f683c89795325df12f71b77dd49a4d",
-      12: "81d0c751bd27a5c7c109103d785479bfd92cf8edc93b06169890cdd3c85d3999",
+      12: "a3693a5379d4aac08d00d243031ed8632cfd05a43759e77d3abded1ff5f6a785",
     };
     for (const m of MIGRATIONS) {
       const digest = createHash("sha256").update(statementText(m).replace(/\r\n/g, "\n")).digest("hex");
@@ -206,6 +206,7 @@ describe("migrate", () => {
         "index:zur_pending_actions_created",
         "table:zur_projects",
         "table:zur_push_devices",
+        "index:zur_push_devices_browser",
         "table:zur_recovery_codes",
         "table:zur_schema_version",
         "table:zur_sessions",

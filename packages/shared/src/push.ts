@@ -16,7 +16,7 @@ export const PUSH_LIMITS = {
   maxDevices: 3,
   /** A device that hasn't opened the app for this long stops receiving and is removed. */
   staleMs: 7 * DAY,
-  /** How often a device tells the server it is still in use (one write a day, at most). */
+  /** How often opening the app from a device moves its "last seen" (one write a day, at most). */
   seenEveryMs: DAY,
   /** Test notices per hour, from Settings > Notices. */
   testsPerHour: 3,
@@ -74,9 +74,6 @@ export const pushSubscribeSchema = /* @__PURE__ */ (() =>
   .strict())();
 export type PushSubscribe = z.infer<typeof pushSubscribeSchema>;
 
-/** A device saying it still opens the app, or forgetting itself; only the endpoint identifies it. */
-export const pushEndpointSchema = /* @__PURE__ */ (() => z.object({ endpoint: z.string().max(PUSH_LIMITS.endpointMax) }).strict())();
-
 export interface PushDevice {
   id: string;
   /** The browser's user agent when it signed up; the interface turns it into "Chrome on Android". */
@@ -85,6 +82,8 @@ export interface PushDevice {
   lastSeenAt: string;
   /** The last time a notice reached its push service, or null. */
   lastSentAt: string | null;
+  /** The browser asking is this device. */
+  current: boolean;
 }
 
 export interface PushStatus {

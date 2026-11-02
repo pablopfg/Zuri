@@ -265,7 +265,14 @@ export function createApi(deps: ApiDeps) {
   });
 
   // The bell's count rides on the session check and the heartbeat: no polling of its own (rule P11).
-  app.get("/auth/session", (c) => Response.json({ ...deps.auth().state(c.get("session")), ...unread(deps) }));
+  app.get("/auth/session", async (c) => {
+    const state = deps.auth().state(c.get("session"));
+    // Opening the app from a browser that gets push keeps its device (removed after 7 days without access).
+    const notices = deps.notices?.();
+    const browser = notices ? await notices.auth.browserId(readDeviceCookie(c.req.raw)) : null;
+    if (notices && browser) notices.push.seen(browser);
+    return Response.json({ ...state, ...unread(deps) });
+  });
 
   app.post("/auth/heartbeat", async (c) => {
     const { active } = await readJson(c.req.raw, heartbeatRequestSchema, 1024);

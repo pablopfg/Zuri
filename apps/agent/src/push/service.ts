@@ -42,14 +42,15 @@ export class PushService {
     return this.deps.clock?.() ?? Date.now();
   }
 
-  status(): PushStatus {
-    return { publicKey: this.deps.keys()?.publicKey ?? null, devices: this.deps.devices.list(), max: PUSH_LIMITS.maxDevices };
+  /** `browser`: the asking browser's id (the HMAC of its device cookie), to mark its own device. */
+  status(browser: string | null): PushStatus {
+    return { publicKey: this.deps.keys()?.publicKey ?? null, devices: this.deps.devices.list(browser), max: PUSH_LIMITS.maxDevices };
   }
 
   /** The route asked for the password typed recently before this ("novo aparelho pede passo extra"). */
-  add(input: PushSubscribe, client: ClientInfo, session: string): PushDevice {
+  add(input: PushSubscribe, client: ClientInfo, session: string, browser: string | null): PushDevice {
     if (!this.deps.keys()) throw new AppError("NOT_CONFIGURED", "error.pushNotConfigured");
-    const { device, created } = this.deps.devices.add(input, client.userAgent);
+    const { device, created } = this.deps.devices.add(input, client.userAgent, browser);
     if (created) this.deps.events.record("push_added", client, { session: session.slice(0, 16), alert: true });
     return device;
   }
@@ -59,16 +60,9 @@ export class PushService {
     this.deps.events.record("push_removed", client, { session: session.slice(0, 16), alert: true });
   }
 
-  /**
-   * The browser turned push off on its own device: it forgets itself with the
-   * endpoint only it knows. No alert, because the device asked for it.
-   */
-  forget(endpoint: string): void {
-    this.deps.devices.removeEndpoint(endpoint);
-  }
-
-  seen(endpoint: string): void {
-    this.deps.devices.seen(endpoint);
+  /** The browser opened the app: its device keeps receiving (spec: removed after 7 days without access). */
+  seen(browser: string): void {
+    this.deps.devices.seen(browser);
   }
 
   /** A test notice to every device, three an hour. */

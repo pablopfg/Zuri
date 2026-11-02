@@ -8,6 +8,8 @@
 // Nothing is written to disk or sent anywhere. Changing the pair later makes
 // every device subscribe again (Settings > Notifications).
 
+import { Buffer } from "node:buffer";
+
 const keys = (await crypto.subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, true, ["sign"])) as CryptoKeyPair;
 const publicKey = Buffer.from(await crypto.subtle.exportKey("raw", keys.publicKey)).toString("base64url");
 const { d } = await crypto.subtle.exportKey("jwk", keys.privateKey);

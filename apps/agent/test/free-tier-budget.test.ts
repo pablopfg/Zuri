@@ -18,6 +18,7 @@ const TASKS = 2000;
 const NOTES = 500;
 const MEMORIES = 2000;
 let cookie = "";
+let deviceCookie = "";
 
 const owner = () => testEnv.AGENT.get(testEnv.AGENT.idFromName(AGENT_INSTANCE_NAME));
 
@@ -51,6 +52,7 @@ beforeAll(async () => {
   });
   expect(res.status).toBe(200);
   cookie = res.headers.getSetCookie().find((c) => c.startsWith("__Host-zuri_session="))?.split(";")[0] ?? "";
+  deviceCookie = res.headers.getSetCookie().find((c) => c.startsWith("__Host-zuri_device="))?.split(";")[0] ?? "";
 
   // A busy owner: a long backlog with past, near and far deadlines, a quarter done.
   await runInDurableObject(owner(), (agent: ZuriAgent) => {
@@ -150,6 +152,37 @@ describe("the Free plan budget of each route", () => {
       // GET /auth/session also carries the bell's count: one more row, from its counter (step 11).
       expect(res.read, path).toBeLessThanOrEqual(path === "/auth/session" ? 3 : 2);
       expect(res.written, path).toBe(0);
+    }
+  });
+
+  it("keeps a push device alive from its browser's session check with one index probe, writing once a day", async () => {
+    const id = await runInDurableObject(owner(), async (agent: ZuriAgent) => {
+      const browser = await agent.store.auth.browserId(deviceCookie.split("=")[1] ?? null);
+      const row = crypto.randomUUID();
+      agent.store.db.run(
+        `INSERT INTO zur_push_devices (id, endpoint, p256dh, auth, browser, created_at, last_seen_at) VALUES (?, ?, 'k', 'a', ?, ?, ?)`,
+        row,
+        `https://fcm.googleapis.com/fcm/send/${row}`,
+        browser,
+        new Date().toISOString(),
+        new Date(Date.now() - 2 * 24 * 3_600_000).toISOString(),
+      );
+      return row;
+    });
+    const session = cookie;
+    cookie = `${session}; ${deviceCookie}`;
+    try {
+      const first = await cost("GET", "/auth/session");
+      expect(first.status).toBe(200);
+      // Two days quiet: the device's row is updated (with its index), once.
+      expect(first.read).toBeLessThanOrEqual(4);
+      expect(first.written).toBeLessThanOrEqual(3);
+      const again = await cost("GET", "/auth/session");
+      expect(again.read).toBeLessThanOrEqual(4);
+      expect(again.written).toBe(0);
+    } finally {
+      cookie = session;
+      await runInDurableObject(owner(), (agent: ZuriAgent) => agent.store.db.run(`DELETE FROM zur_push_devices WHERE id = ?`, id));
     }
   });
 

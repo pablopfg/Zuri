@@ -2,7 +2,7 @@
 import "./zod-config.ts";
 
 import { z } from "zod";
-import type { AuthEventKind } from "./auth.ts";
+import type { AuthEventKind } from "./auth-activity.ts";
 
 /**
  * The notice center (step 11): every notice the owner gets goes through

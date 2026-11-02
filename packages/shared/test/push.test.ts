@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { isPushEndpoint, PUSH_LIMITS, pushEndpointSchema, pushSubscribeSchema } from "../src/push.ts";
+import { isPushEndpoint, PUSH_LIMITS, pushSubscribeSchema } from "../src/push.ts";
 
 // Which subscriptions the server accepts (step 11b): only https endpoints of
 // the push services browsers use, so the server never posts anywhere else.
@@ -50,11 +50,5 @@ describe("pushSubscribeSchema", () => {
     expect(pushSubscribeSchema.safeParse({ endpoint, keys: { ...KEYS, auth: "A".repeat(21) } }).success).toBe(false);
     expect(pushSubscribeSchema.safeParse({ endpoint, keys: { ...KEYS, auth: "A+/=".repeat(6) } }).success).toBe(false);
     expect(pushSubscribeSchema.safeParse({ endpoint: "https://exemplo.com.br/x", keys: KEYS }).success).toBe(false);
-  });
-
-  it("an endpoint alone, up to the longest accepted", () => {
-    expect(pushEndpointSchema.safeParse({ endpoint: "x".repeat(PUSH_LIMITS.endpointMax) }).success).toBe(true);
-    expect(pushEndpointSchema.safeParse({ endpoint: "x".repeat(PUSH_LIMITS.endpointMax + 1) }).success).toBe(false);
-    expect(pushEndpointSchema.safeParse({ endpoint: "x", other: 1 }).success).toBe(false);
   });
 });

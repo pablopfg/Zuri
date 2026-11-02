@@ -616,6 +616,15 @@ export class AuthService {
     this.events.record("logout", client, { session: row.id.slice(0, 16) });
   }
 
+  /**
+   * The browser's id from its device cookie (the HMAC the access log uses), or
+   * null without a well-formed cookie. Push ties a device to its browser with it.
+   */
+  async browserId(cookie: string | null): Promise<string | null> {
+    if (!cookie || !/^[A-Za-z0-9_-]{43}$/.test(cookie)) return null;
+    return this.deviceId(cookie);
+  }
+
   /** Sensitive actions (rule 7) call this: the password typed in the last 15 minutes of this session. */
   requireRecentAuth(row: SessionRow): void {
     if (this.sessions.recentAuthUntil(row) === null) throw new AppError("RECENT_AUTH_REQUIRED");
