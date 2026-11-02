@@ -9,10 +9,11 @@ import { gzipSync } from "node:zlib";
 // came in; 158 kB after the design review left English and the QR and passkey
 // code out of the first load; 140 kB once the interface parsed with Zod Mini;
 // 139.5 kB once the texts only the server says left the first load; 139 kB
-// once the home page's title became the greeting, loaded on demand).
+// once the home page's title became the greeting, loaded on demand; 139.1 kB,
+// with the owner's OK on 02/11/2026, for the route of the bot's /aprovar page).
 // Never raise it without the owner's OK; the ceiling of P11 is 160 kB and its
 // goal 150 kB.
-const BUDGET_KB = 139.0;
+const BUDGET_KB = 139.1;
 
 const dist = join(import.meta.dirname, "..", "apps", "web", "dist");
 const html = readFileSync(join(dist, "index.html"), "utf8");
