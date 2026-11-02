@@ -1,9 +1,3 @@
-// Before any schema here: the package is marked side-effect free, so index.ts alone can't order it.
-import "./zod-config.ts";
-
-import { z } from "zod";
-import { hasControlCharacter, line } from "./productivity.ts";
-
 /**
  * Remote MCP servers (step 18): the owner adds a server in Settings ›
  * Integrations and turns on, one by one, the tools the agent may use. Zuri is
@@ -121,43 +115,3 @@ export interface McpOverview {
   credentialsAvailable: boolean;
   servers: McpServerInfo[];
 }
-
-const url = /* @__PURE__ */ z.string().trim().min(1).max(MCP_LIMITS.urlMax);
-const token = /* @__PURE__ */ z.string().trim().min(1).max(MCP_LIMITS.tokenMax);
-
-export const mcpServerCreateSchema = /* @__PURE__ */ z
-  .object({
-    name: line(MCP_LIMITS.nameMax),
-    url,
-    authType: z.enum(MCP_AUTH_CHOICES).default("none"),
-    token: token.optional(),
-  })
-  .strict();
-export type McpServerCreate = z.input<typeof mcpServerCreateSchema>;
-
-export const mcpServerUpdateSchema = /* @__PURE__ */ z
-  .object({
-    name: line(MCP_LIMITS.nameMax).optional(),
-    url: url.optional(),
-    enabled: z.boolean().optional(),
-    authType: z.enum(MCP_AUTH_CHOICES).optional(),
-    token: token.optional(),
-  })
-  .strict()
-  .refine((patch) => Object.keys(patch).length > 0);
-export type McpServerUpdate = z.input<typeof mcpServerUpdateSchema>;
-
-export const mcpToolUpdateSchema = /* @__PURE__ */ z
-  .object({
-    enabled: z.boolean().optional(),
-    policy: z.enum(MCP_TOOL_POLICIES).optional(),
-    hint: z
-      .string()
-      .trim()
-      .max(MCP_LIMITS.hintMax)
-      .refine((value) => !hasControlCharacter(value, true))
-      .optional(),
-  })
-  .strict()
-  .refine((patch) => Object.keys(patch).length > 0);
-export type McpToolUpdate = z.input<typeof mcpToolUpdateSchema>;

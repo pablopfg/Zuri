@@ -127,3 +127,4 @@ export * from "./email.ts";
 export * from "./semantic.ts";
 export { APP_VERSION } from "./version.ts";
 export * from "./mcp.ts";
+export * from "./mcp-schemas.ts";
