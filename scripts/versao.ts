@@ -28,6 +28,14 @@ export const VERSION_FILE = "packages/shared/src/version.ts";
 export const LOCK_FILE = "package-lock.json";
 /** The squash title of the pull request the workflow opens: never a version of its own. */
 export const RELEASE_SUBJECT = /^chore\(release\):/;
+/** The squash title of the README workflow's pull request (scripts/readme.ts): only the stage map, never a version. */
+export const README_SUBJECT = /^docs\(readme\): atualiza o estado das etapas \(automático\)/;
+/**
+ * Merges made by the workflows themselves: they never get a version or consume a fragment. The README one
+ * never adds a fragment, so a person's pull request that borrows the title and brings one is still a version.
+ */
+export const isAutomaticMerge = (merge: Pick<Merge, "subject" | "fragments">) =>
+  RELEASE_SUBJECT.test(merge.subject) || (README_SUBJECT.test(merge.subject) && merge.fragments.length === 0);
 
 const SEMVER = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
 const HEADING = /^## \[(\d+\.\d+\.\d+)\] - (\d{4}-\d{2}-\d{2})$/;
@@ -211,7 +219,7 @@ export function mergeBody(merge: Merge): string {
 export function planVersions(last: string, merges: Merge[], tagged: ReadonlyMap<string, string> = new Map()): Version[] {
   let current = last;
   return merges
-    .filter((merge) => !RELEASE_SUBJECT.test(merge.subject))
+    .filter((merge) => !isAutomaticMerge(merge))
     .map((merge) => {
       const bump: Bump = merge.fragments.some((f) => fragmentBump(f.text) === "minor") ? "minor" : "patch";
       const frozen = tagged.get(merge.commit);
@@ -437,7 +445,7 @@ export function computePlan(root: string, git: Git = gitIn(root), ref = "HEAD", 
   const consumed = [
     ...new Set(
       merges
-        .filter((m) => !RELEASE_SUBJECT.test(m.subject))
+        .filter((m) => !isAutomaticMerge(m))
         .flatMap((m) => m.fragments.map((f) => `${FRAGMENT_DIR}/${f.name}`))
         .filter((path) => existsSync(join(root, path))),
     ),

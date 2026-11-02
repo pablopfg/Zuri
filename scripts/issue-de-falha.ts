@@ -57,6 +57,10 @@ const HINTS: Record<string, string> = {
     "Abra o passo que falhou no link da execução. Conflito que não é só acréscimo já vira comentário na PR; erro aqui costuma ser permissão do `GITHUB_TOKEN`, branch protegida ou mudança em `scripts/atualizar-prs.ts` / `scripts/ordem-de-merge.ts`. Reproduza com os testes de `tests/repo/` e corrija o script.",
   Versão:
     "Abra o passo que falhou no link da execução. Tag apontando para outro commit, `CHANGELOG.md` fora do formato ou fragmento inválido param o workflow de propósito; sem permissão para abrir a PR, ligue \"Allow GitHub Actions to create and approve pull requests\" em Settings > Actions. Reproduza com `node scripts/versao.ts` e os testes de `tests/repo/versao.test.ts`. Passo a passo em `docs/agente/versionamento.md`.",
+  README:
+    "Abra o passo que falhou no link da execução. Marcador `<!-- inicio:etapas -->`/`<!-- fim:etapas -->`, selo de etapas ou uma das frases de contagem sumiu do `README.md`, ou a tabela de `.claude/memoria/progresso.md` mudou de formato; sem permissão para abrir a PR, ligue \"Allow GitHub Actions to create and approve pull requests\" em Settings > Actions. Reproduza com `node scripts/readme.ts --conferir` e os testes de `tests/repo/readme.test.ts`.",
+  Branches:
+    "Abra o passo que falhou no link da execução. Uma branch não apagada costuma ser push novo entre a leitura e a remoção (o `--force-with-lease` segura de propósito; a próxima execução resolve) ou permissão do `GITHUB_TOKEN`. Reproduza com os testes de `tests/repo/limpar-branches.test.ts`.",
 };
 
 const DEFAULT_HINT =

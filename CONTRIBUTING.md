@@ -49,8 +49,10 @@ sigam as regras abaixo.
 Se o seu PR muda uma funcionalidade, conclui uma etapa, muda uma tela que
 aparece nas capturas ou mexe na arquitetura, atualize o README **no mesmo PR**:
 
-- **Etapa concluída:** marque ✅ no mapa das etapas, 🚧 na próxima, e ajuste o
-  selo de etapas, o aviso do topo e o resumo em inglês.
+- **Etapa concluída:** atualize o `.claude/memoria/progresso.md` e o resumo do
+  aviso do topo. A coluna Situação do mapa das etapas, o selo de etapas e as
+  contagens ("0 a X", "steps 0 to X") se atualizam sozinhos pelo workflow
+  `README` depois do merge; não mexa neles à mão.
 - **Funcionalidade nova:** acrescente à tabela "O que já funciona" e tire de
   "O que vem a seguir".
 - **Tela mudou:** suba o servidor do e2e numa base vazia (o comando

@@ -169,6 +169,18 @@ describe("planVersions", () => {
     expect(plan.map((v) => v.commit)).toEqual([sha("1"), sha("2"), sha("3")]);
   });
 
+  it("never gives the README workflow's pull request a version of its own", async () => {
+    const { README_TITLE } = await import("../../scripts/readme.ts");
+    const plan = planVersions("0.17.0", [merge({ subject: `${README_TITLE} (#91)` }), merge({ commit: sha("4") })]);
+    expect(plan).toHaveLength(1);
+    expect(plan[0]).toMatchObject({ version: "0.17.1", commit: sha("4") });
+    // A person's README pull request is a version like any other.
+    expect(planVersions("0.17.0", [merge({ subject: "docs(readme): troca as capturas (#92)" })])).toHaveLength(1);
+    // Borrowing the title does not hide a change that brings a fragment.
+    const borrowed = planVersions("0.17.0", [merge({ subject: `${README_TITLE} (#93)`, fragments: [patch] })]);
+    expect(borrowed).toHaveLength(1);
+  });
+
   it("never gives the release pull request a version of its own", () => {
     const plan = planVersions("0.17.0", [merge({ subject: "chore(release): versão 0.17.1 (#90)" }), merge({ commit: sha("4") })]);
     expect(plan).toHaveLength(1);
