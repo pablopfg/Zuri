@@ -406,6 +406,31 @@ describe("review fixes: what each model takes, the end of a turn, its deadline a
     expect(steps).toHaveLength(1);
   });
 
+  it("stops metering an event over the 1 MiB buffer but passes the answer through byte for byte", async () => {
+    const { meteredBinding } = await import("../src/ai/workers-ai-usage.ts");
+    const encoder = new TextEncoder();
+    const small = `data: ${JSON.stringify(delta("ab"))}\n\n`;
+    // One chunk, no line break: the parser must give up inside the chunk, not after it.
+    const huge = `data: ${JSON.stringify(delta("x".repeat(1024 * 1024 + 1)))}`;
+    const after = `\n\ndata: ${JSON.stringify(delta("cd"))}\n\ndata: [DONE]\n\n`;
+    const chunks = [small, huge, after];
+    const { binding } = fakeAi(
+      () =>
+        new ReadableStream<Uint8Array>({
+          pull(controller) {
+            const next = chunks.shift();
+            if (next === undefined) controller.close();
+            else controller.enqueue(encoder.encode(next));
+          },
+        }),
+    );
+    const steps: import("../src/ai/workers-ai-usage.ts").StepMeter[] = [];
+    const stream = (await meteredBinding(binding, steps).run(GLM as never, { messages: [] } as never)) as unknown as ReadableStream<Uint8Array>;
+    expect(await new Response(stream).text()).toBe(small + huge + after);
+    // Only what came before the overflow was counted; nothing after it, and no error.
+    expect(steps[0]?.outputChars).toBe(2);
+  });
+
   it("starts no model call after the caller stops reading a turn with tools", async () => {
     await withAiWorld(async (world) => {
       const { binding, calls } = fakeAi((_call, index) => (index === 0 ? toolCall : { response: "nunca" }));
