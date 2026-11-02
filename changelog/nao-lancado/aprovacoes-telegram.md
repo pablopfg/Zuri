@@ -22,3 +22,6 @@
 - Cada aprovação pelo bot aparece em Acessos e gera um aviso de segurança, uma
   vez, que só se reconhece no app. Ações como trocar a senha ou desvincular o
   Telegram continuam fora do bot.
+- Nas reescritas, o bot mostra os textos como citação e até 300 caracteres do
+  atual e 600 do novo. Passando disso, avisa quanto ficou de fora e só a
+  passkey confirma, porque a página mostra o texto inteiro.
