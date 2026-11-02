@@ -6,6 +6,7 @@ import { ptBRChat } from "./pt-BR-chat.ts";
 import { ptBRSecurity } from "./pt-BR-security.ts";
 import { ptBRServer } from "./pt-BR-server.ts";
 import { ptBRSettings } from "./pt-BR-settings.ts";
+import { ptBRGreeting } from "./pt-BR-greeting.ts";
 
 // Default and fallback catalog. Every key must also exist in en.ts and be used in the code (npm run lint).
 // The texts of the lazy screens live in their own files (pt-BR-memory.ts, pt-BR-productivity.ts,
@@ -22,7 +23,7 @@ export const ptBRCore = {
   "web.save": "Salvar",
   "web.saved": "Salvo.",
   "web.copied": "Copiado",
-  "web.error.network": "Sem conexão com o Zuri. Confira a internet e tente de novo.",
+  "web.error.network": "Sem conexão com a Zuri. Confira a internet e tente de novo.",
   "web.session.checking": "Conferindo a sua sessão…",
   "web.nav.main": "Navegação principal",
   "web.nav.skip": "Pular para o conteúdo",
@@ -31,10 +32,10 @@ export const ptBRCore = {
   "web.nav.settings": "Configurações",
   "web.search.open": "Buscar",
   "web.nav.signOut": "Sair",
-  "web.nav.signOutConfirmTitle": "Sair do Zuri?",
+  "web.nav.signOutConfirmTitle": "Sair da Zuri?",
   "web.nav.collapse": "Recolher menu",
   "web.nav.expand": "Expandir menu",
-  "web.shell.removePlainSecret": "A senha já está guardada no Zuri. Apague o segredo OWNER_PASSWORD no painel da Cloudflare (Workers › zuri › Configurações › Variáveis e segredos).",
+  "web.shell.removePlainSecret": "A senha já está guardada na Zuri. Apague o segredo OWNER_PASSWORD no painel da Cloudflare (Workers › zuri › Configurações › Variáveis e segredos).",
   "web.login.email": "E-mail",
   "web.login.password": "Senha",
   "web.login.submit": "Entrar",
@@ -78,26 +79,24 @@ export const ptBRCore = {
   "web.notifications.open": "Abrir avisos",
   "web.notifications.title": "Avisos",
   "web.notifications.emptyTitle": "Nenhum aviso por enquanto",
-  "web.notifications.emptyBody": "Lembretes, alertas de segurança e mensagens do Zuri vão aparecer aqui.",
-  "web.home.title": "Olá!",
-  "web.home.subtitle": "Este é o seu Zuri.",
-  "web.home.emptyTitle": "A conversa com o Zuri chega em breve",
-  "web.home.emptyBody": "O chat com o assistente entra numa próxima etapa. Enquanto isso, deixe a sua conta protegida.",
+  "web.notifications.emptyBody": "Lembretes, alertas de segurança e mensagens da Zuri vão aparecer aqui.",
+  "web.home.emptyTitle": "A conversa com a Zuri chega em breve",
+  "web.home.emptyBody": "A conversa com ela entra numa próxima etapa. Enquanto isso, deixe a sua conta protegida.",
   "web.home.securityLink": "Revisar a segurança da conta",
   "web.home.securityTitle": "Segurança",
   "web.home.mfaOn": "Verificação em duas etapas ligada",
   "web.home.mfaOff": "Verificação em duas etapas desligada",
   "web.home.sessionTitle": "Sessão",
   "web.home.sessionUntil": "Aberta até {time}",
-  "web.home.sessionHint": "Ela termina antes se você ficar sem usar o Zuri pelo tempo definido nas configurações.",
+  "web.home.sessionHint": "Ela termina antes se você ficar sem usar a Zuri pelo tempo definido nas configurações.",
   "web.notFound.title": "Página não encontrada",
-  "web.notFound.body": "Este endereço não existe no Zuri.",
+  "web.notFound.body": "Este endereço não existe na Zuri.",
   "web.notFound.home": "Voltar ao início",
   "web.crash.title": "Algo deu errado",
-  "web.crash.body": "Esta tela parou por causa de um erro. Recarregue para tentar de novo; o que já estava salvo continua no Zuri.",
+  "web.crash.body": "Esta tela parou por causa de um erro. Recarregue para tentar de novo; o que já estava salvo continua na Zuri.",
   "web.crash.reload": "Recarregar",
   "web.passwordRequired.title": "Troque a sua senha",
-  "web.passwordRequired.body": "A senha atual não segue as regras de segurança. Escolha uma nova para continuar; o resto do Zuri fica bloqueado até lá.",
+  "web.passwordRequired.body": "A senha atual não segue as regras de segurança. Escolha uma nova para continuar; o resto da Zuri fica bloqueado até lá.",
   "web.password.current": "Senha atual",
   "web.password.new": "Nova senha",
   "web.password.repeat": "Repita a nova senha",
@@ -134,7 +133,7 @@ export const ptBRCore = {
 } as const;
 
 /** Joins catalog parts. Marked pure so a bundle that never uses the whole catalog drops the call. */
-function join<A extends object, B extends object, C extends object, D extends object, E extends object, F extends object, G extends object, H extends object, I extends object>(
+function join<A extends object, B extends object, C extends object, D extends object, E extends object, F extends object, G extends object, H extends object, I extends object, J extends object>(
   a: A,
   b: B,
   c: C,
@@ -144,9 +143,10 @@ function join<A extends object, B extends object, C extends object, D extends ob
   g: G,
   h: H,
   i: I,
-): A & B & C & D & E & F & G & H & I {
-  return { ...a, ...b, ...c, ...d, ...e, ...f, ...g, ...h, ...i };
+  j: J,
+): A & B & C & D & E & F & G & H & I & J {
+  return { ...a, ...b, ...c, ...d, ...e, ...f, ...g, ...h, ...i, ...j };
 }
 
 /** The whole pt-BR catalog: what the server, the tests and the lint use. */
-export const ptBR = /* @__PURE__ */ join(ptBRCore, ptBRMemory, ptBRProductivity, ptBRSecurity, ptBRAi, ptBRChat, ptBRSettings, ptBRServer, ptBRPalette);
+export const ptBR = /* @__PURE__ */ join(ptBRCore, ptBRMemory, ptBRProductivity, ptBRSecurity, ptBRAi, ptBRChat, ptBRSettings, ptBRServer, ptBRPalette, ptBRGreeting);

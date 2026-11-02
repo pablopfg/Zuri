@@ -84,12 +84,12 @@ for (const [device, options] of [
       ({ conversationId } = await seed(page, BASE));
       seeded = true;
     }
-    const visit = async (path: string, name: string, ready: string) => {
+    const visit = async (path: string, name: string, ready: string | RegExp) => {
       await page.goto(BASE + path);
       await page.getByText(ready).first().waitFor();
       await shot(name);
     };
-    await visit("/", "inicio", "Olá!");
+    await visit("/", "inicio", /^(Bom dia|Boa tarde|Boa noite)/);
     await page.route(`${BASE}/api/conversations/${conversationId}`, async (route) => {
       const response = await route.fetch();
       const body = (await response.json()) as { messages: { role: string; content: string; tools: unknown[] }[] };

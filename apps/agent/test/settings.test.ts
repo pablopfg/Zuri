@@ -121,7 +121,7 @@ describe("API errors in the owner's language", () => {
   it("stay in the default language for the Worker's gates, which answer before the object is woken", async () => {
     await inOwner((agent) => agent.store.settings.update({ language: "en" }));
     const res = await call("https://outro.exemplo.com.br/api/tasks", { headers: CSRF });
-    expect(await errorBody(res)).toEqual({ code: "HOST_NOT_ALLOWED", message: "Este endereço não atende o Zuri." });
+    expect(await errorBody(res)).toEqual({ code: "HOST_NOT_ALLOWED", message: "Este endereço não atende a Zuri." });
   });
 
   it("fall back to pt-BR if the database cannot be read, and log only the error's name", async () => {
