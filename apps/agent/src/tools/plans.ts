@@ -1,3 +1,4 @@
+import { localDueToInstant } from "../chat/local-due.ts";
 import { TASK_PLAN_LIMITS, TASK_PRIORITIES } from "@zuri/shared";
 import { z } from "zod";
 import { defineTool, ToolError } from "./registry.ts";
@@ -60,11 +61,20 @@ export const planTools = [
           dueIsSuggestion: task.due_is_suggestion,
         })),
       });
+      // A plan's past dates get the same warning as create_task (a slipped year or weekday).
+      const now = ctx.automations.now();
+      const past = input.tasks.filter((task) => {
+        const instant = task.due ? localDueToInstant(task.due, ctx.timeZone) : null;
+        return instant !== null && Date.parse(instant) < now;
+      });
       return {
         status: "awaiting_owner_review",
         planId: plan.id,
         tasks: plan.plan.tasks.length,
         ...(skipped.length ? { left_out_as_repeated: skipped } : {}),
+        ...(past.length
+          ? { past_due: `These due dates are already past: ${past.map((task) => task.due).join(", ")}. Tell the owner, and propose the plan again with the right dates if it was a mistake.` }
+          : {}),
         note: "No task exists yet. The owner now sees the plan with Edit, Confirm and Cancel. Say in one or two sentences that you proposed it. Do not list every task again, do not call create_task for them, and never say they were created.",
       };
     },

@@ -197,6 +197,28 @@ describe("tasks and projects", () => {
     });
   });
 
+  it("create_task and update_task tell the model when a due date is already past", async () => {
+    await withChatWorld(async (world) => {
+      // world.clock: 09:00 on 31 October 2026 in São Paulo.
+      const id0 = conversation(world);
+      let run = executor(world, id0, { maxToolCalls: 20 });
+      const past = payload(await run.execute("create_task", { title: "Ano errado", due: "2025-11-05" }, "1"));
+      expect(past.note).toBe("This due date is already past (now it is 2026-10-31T09:00 in the owner's time zone). Tell the owner, and fix the date if it was a mistake.");
+      // Earlier today is past too; later today and the date-only form for today are not.
+      expect(payload(await run.execute("create_task", { title: "Cedo", due: "2026-10-31T08:59" }, "2")).note).toMatch(/already past/);
+      expect(payload(await run.execute("create_task", { title: "Agora", due: "2026-10-31T09:00" }, "3")).note).toBeUndefined();
+      expect(payload(await run.execute("create_task", { title: "Hoje", due: "2026-10-31" }, "4")).note).toBeUndefined();
+      expect(payload(await run.execute("create_task", { title: "Sem data" }, "5")).note).toBeUndefined();
+      const id = (past.created as { id: string }).id;
+      run = executor(world, id0, { maxToolCalls: 20 });
+      expect(payload(await run.execute("update_task", { task: id, due: "2026-11-05" }, "6")).note).toBeUndefined();
+      expect(payload(await run.execute("update_task", { task: id, due: "2026-10-30" }, "7")).note).toMatch(/already past/);
+      // A change that doesn't touch the date says nothing about it.
+      expect(payload(await run.execute("update_task", { task: id, title: "Outro" }, "8")).note).toBeUndefined();
+      expect(payload(await run.execute("update_task", { task: id, due: null }, "9")).note).toBeUndefined();
+    });
+  });
+
   it("update_task never overwrites a description and can't mark a task done", async () => {
     await withChatWorld(async (world) => {
       const task = world.productivity.tasks.create({ title: "Relatório", description: "Texto do dono" });
@@ -439,6 +461,18 @@ describe("destructive tools: a proposal the owner approves", () => {
       await runApprovedAction(ALL_TOOLS, world.ctx(id), run.actionFor("d1") as string);
       expect(world.memories.list().memories).toHaveLength(0);
       expect(world.productivity.trash.list({ limit: 10 }).map((item) => item.title)).toEqual(["Rascunho"]);
+    });
+  });
+
+  it("a proposed plan with a past due date carries the same warning as create_task", async () => {
+    await withChatWorld(async (world) => {
+      const run = executor(world, conversation(world));
+      const result = payload(
+        await run.execute("propose_task_plan", { title: "Viagem", tasks: [{ title: "Comprar passagem", due: "2025-11-03" }, { title: "Fazer a mala", due: "2026-11-05" }, { title: "Sem data" }] }, "1"),
+      );
+      expect(result.past_due).toBe("These due dates are already past: 2025-11-03. Tell the owner, and propose the plan again with the right dates if it was a mistake.");
+      const fine = executor(world, conversation(world));
+      expect(payload(await fine.execute("propose_task_plan", { title: "Casa", tasks: [{ title: "Pintar", due: "2026-11-05" }, { title: "Limpar" }] }, "2")).past_due).toBeUndefined();
     });
   });
 
