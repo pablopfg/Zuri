@@ -29,7 +29,7 @@ pare e chame o Pablo (passo 4).
 
 Leia a linha "Avanço" em `progresso.md`:
 
-- **mescla sozinho**: mescle o PR na `develop` (squash). Nunca na `main`, nunca
+- **mescla sozinho**: ligue o auto-merge do PR por squash (`docs/agente/merge-de-prs.md`); o GitHub mescla na `develop` quando a CI fica verde com a branch em dia. Espere o evento de mesclagem antes do passo 3. Nunca na `main`, nunca
   release, nunca deploy.
 - **Pablo mescla**: avise o Pablo que o PR está pronto e espere o evento de
   mesclagem antes do passo 3.

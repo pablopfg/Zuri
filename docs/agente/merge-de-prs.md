@@ -143,12 +143,15 @@ combinação que a CI nunca testou; ela fica.
   roda e a primeira que terminar verde entra. Quem perder a corrida é
   atualizada de novo sem ninguém mexer.
 
-Recomendação: o Pablo liga "Allow auto-merge". A partir daí, a thread que
-termina uma PR (CI, QA e auditoria registrados, nada pendente do Pablo, sem
-⚠️ sem OK) liga o auto-merge na PR em vez de mesclar na mão, e a rotina de
-hora em hora só confere PRs paradas e conflitos que precisam de pessoa. Sem o
-auto-merge ligado, a regra é uma só: **só a rotina "Mesclar PRs prontas para
-develop" mescla**, uma PR por vez, e as threads param ao deixar a PR pronta.
+**Regra (02/11/2026, o Pablo ligou "Allow auto-merge"):** a thread que
+termina uma PR e cumpre a seção 2 em tudo que não é a CI (QA e auditoria
+registrados, nada pendente do Pablo, nenhum ⚠️ sem OK) liga o auto-merge na
+PR, por squash, em vez de mesclar na mão. O GitHub mescla quando a CI fica
+verde com a branch em dia; o `Update PRs` mantém a branch em dia. A rotina de
+hora em hora não disputa corrida: ela só cuida das PRs paradas e dos conflitos
+que precisam de uma pessoa, e liga o auto-merge nas PRs prontas cuja thread
+já terminou. Se o auto-merge estiver desligado no repositório, só a rotina
+mescla, uma PR por vez.
 
 ## 5. O que nunca fazer
 
