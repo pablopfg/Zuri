@@ -187,6 +187,11 @@ acrescente aqui cada armadilha nova que encontrar (sem dados pessoais).
   senha desenham o próprio `<main>` e recebem `go` por propriedade.
   Lembrete: um `lazy()` sem uso continua no pacote (a chamada não é pura), então
   para medir tire a declaração inteira, não só o uso.
+- Uma tela sob demanda que importa um módulo do pacote inicial que importa
+  `ui.tsx` (o `Logo.tsx` importava `cn`) separou `ui.tsx` em `ui-*.js` e subiu
+  o JS inicial em 1,1 KB, mas só junto com outra tela sob demanda (o
+  `Greeting`). Por isso o `Logo` não importa nada de `ui.tsx`. Para achar a
+  causa: troque o conteúdo da tela por imports isolados e meça cada um.
 - Um `import` de `react-router` numa tela sob demanda que ainda não o usava
   (a Memória, ou o componente da paleta) separou o roteador num pedaço próprio
   (`hooks-*.js`) e subiu o JS inicial em 1,5 KB. A paleta recebe o `navigate`

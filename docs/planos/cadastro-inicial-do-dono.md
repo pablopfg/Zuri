@@ -265,7 +265,7 @@ auditoria completa (a área é autenticação).
 2. **`feat(web): tela de primeiro acesso e segundo passo obrigatório`**
    - Tela lazy `/primeiro-acesso` (três passos), textos em pt-BR e en pelo
      catálogo, redirecionamento a partir da tela de entrar, aviso para apagar o
-     código no Início. O JS inicial não pode subir (teto de 139,5 kB; desceu para 139,4 kB neste PR): a tela
+     código no Início. O JS inicial não pode passar do teto (139 kB depois do PR #34; fica em 138,8 kB com este PR): a tela
      carrega sob demanda.
    - e2e: instalação nova do começo ao fim, código errado, recarregar no meio,
      fechar no segundo passo e voltar; axe; teclado; leitor de tela; celular e

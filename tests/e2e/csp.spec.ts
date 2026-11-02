@@ -25,7 +25,7 @@ test("no page breaks the Content Security Policy @mobile", async ({ page }) => {
   await page.goto("/entrar");
   await expect(page.getByRole("button", { name: "Entrar" })).toBeVisible();
   await signIn(page);
-  await expect(page.getByRole("heading", { level: 1, name: "Olá!" })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: /^(Bom dia|Boa tarde|Boa noite)/ })).toBeVisible();
   for (const [path, heading] of [
     ["/conversa", "Conversa"],
     ["/tarefas", "Tarefas"],

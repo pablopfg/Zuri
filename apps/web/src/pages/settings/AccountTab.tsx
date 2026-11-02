@@ -1,8 +1,8 @@
-import { isLocale, LOCALES } from "@zuri/shared";
-import { useMemo } from "react";
+import { isLocale, type Locale, LOCALES, normalizeOwnerName } from "@zuri/shared";
+import { type FormEvent, useEffect, useMemo, useState } from "react";
 import { ChangePasswordForm } from "../../components/ChangePasswordForm.tsx";
 import { ThemeSwitcher } from "../../components/ThemeSwitcher.tsx";
-import { Button, Card, ErrorNotice, SelectField, Spinner } from "../../components/ui.tsx";
+import { Button, Card, ErrorNotice, SelectField, Spinner, TextField } from "../../components/ui.tsx";
 import { useSession } from "../../hooks/session.tsx";
 import { useSettings, useSettingsMutation } from "../../hooks/settings.ts";
 import { errorMessage } from "../../lib/api.ts";
@@ -10,6 +10,44 @@ import { useI18n } from "../../lib/i18n.tsx";
 import { LANGUAGE_NAMES, timeZones } from "../../lib/zones.ts";
 import { useToast } from "../../components/Toaster.tsx";
 
+
+/** How the owner likes to be called: the greeting on the home page uses it. */
+function OwnerNameForm({ stored }: { stored: string }) {
+  const { t } = useI18n();
+  const save = useSettingsMutation();
+  const toast = useToast();
+  const [value, setValue] = useState(stored);
+  // A change saved in another tab (or the server's tidied version) shows up here.
+  useEffect(() => setValue(stored), [stored]);
+  const unchanged = normalizeOwnerName(value) === stored;
+
+  const submit = (event: FormEvent) => {
+    event.preventDefault();
+    if (unchanged) return;
+    save.mutate({ ownerName: value }, { onSuccess: () => toast(t("web.saved")) });
+  };
+
+  return (
+    <form onSubmit={submit} className="flex flex-col gap-3 sm:flex-row sm:items-start">
+      <TextField
+        className="min-w-0 flex-1"
+        label={t("web.account.ownerName")}
+        hint={t("web.account.ownerNameHint")}
+        error={save.isError ? errorMessage(save.error) : null}
+        value={value}
+        onChange={(e) => {
+          setValue(e.target.value);
+          if (save.isError) save.reset();
+        }}
+        autoComplete="nickname"
+        spellCheck={false}
+      />
+      <Button type="submit" variant="secondary" className="sm:mt-7" loading={save.isPending} disabled={unchanged}>
+        {t("web.account.ownerNameSave")}
+      </Button>
+    </form>
+  );
+}
 
 export function AccountTab() {
   const { t } = useI18n();
@@ -29,6 +67,9 @@ export function AccountTab() {
           <ErrorNotice error={settings.error} onRetry={() => void settings.refetch()} />
         ) : (
           <div className="grid gap-4 sm:grid-cols-2">
+            <div className="sm:col-span-2">
+              <OwnerNameForm stored={settings.data.ownerName} />
+            </div>
             <SelectField
               label={t("web.account.language")}
               value={settings.data.language}

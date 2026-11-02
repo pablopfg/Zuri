@@ -9,6 +9,12 @@ o [SemVer](https://semver.org/lang/pt-BR/). Cada PR escreve a sua entrada em
 
 ### Adicionado
 
+- Cumprimento no Início: bom dia, boa tarde ou boa noite pelo horário do seu
+  fuso (o das configurações, não o do aparelho), com o seu nome e uma frase
+  curta que muda a cada dia. A frase troca sozinha quando o período vira,
+  mesmo com a tela aberta, e de madrugada tem frases próprias.
+- Campo "Seu nome" em Configurações > Conta. Aceita apelido, até 40
+  caracteres; em branco, o cumprimento sai sem nome.
 - Primeiro acesso protegido por um código de instalação (servidor). Enquanto
   não existe dono, `GET /api/setup`, `POST /api/setup/code` e
   `POST /api/setup/owner` criam o dono uma vez só. O código é um segredo de 32
@@ -175,9 +181,12 @@ o [SemVer](https://semver.org/lang/pt-BR/). Cada PR escreve a sua entrada em
 
 ### Alterado
 
+- A agente agora é "a Zuri": textos da interface, mensagens do servidor,
+  README, manifesto do app e banner passam a tratá-la no feminino.
 - A tela de trocar a senha obrigatória e os avisos de segredo para apagar
-  passaram a carregar só quando aparecem. O JavaScript inicial caiu de 139,5
-  para 139,4 kB, e o teto da CI desceu junto.
+  passaram a carregar só quando aparecem, e o logotipo deixou de depender do
+  módulo de componentes. Com a tela de primeiro acesso, o JavaScript inicial
+  fica em 138,8 kB, dentro do teto de 139 kB.
 - O aviso de login fechado por falta da verificação contra robôs não cita mais
   o nome do serviço nem um arquivo do repositório: ele aponta para o guia de
   instalação. Os avisos de apagar segredos ganharam um pedaço próprio do
