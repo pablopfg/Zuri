@@ -26,6 +26,8 @@ export const TELEGRAM_LIMITS = {
   subrequestBudget: 45,
   /** Test messages per hour from Settings > Notices. */
   testsPerHour: 3,
+  /** Messages to the agent per hour from the bot (spec, "Bot do Telegram"); past it, one reply and then silence. */
+  chatPerHour: 30,
   /** The read lock (step 15): hours without use before content asks to be unlocked. */
   readLockHours: { min: 1, max: 72, default: 12 },
   /** Telegram's limit for one message's text. */

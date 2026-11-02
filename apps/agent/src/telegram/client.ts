@@ -207,7 +207,7 @@ export class TelegramClient {
    * off as soon as they pass `maxBytes`: a file larger than Telegram said, or
    * than the hard cap, is never read whole. Nothing of it is stored.
    */
-  async download(filePath: string, maxBytes: number): Promise<Uint8Array> {
+  async download(filePath: string, maxBytes: number, signal?: AbortSignal): Promise<Uint8Array> {
     // Telegram's paths look like "voice/file_3.oga": anything else could point the token's URL elsewhere.
     if (!/^[A-Za-z0-9_-]+(?:\/[A-Za-z0-9_.-]+)*$/.test(filePath) || filePath.includes("..") || filePath.length > 256) {
       throw new TelegramApiError("download", 0, "invalid path");
@@ -216,7 +216,7 @@ export class TelegramClient {
     this.calls += 1;
     let response: Response;
     try {
-      response = await this.#fetch(`${API_ORIGIN}/file/bot${this.#token}/${filePath}`, { method: "GET", redirect: "manual", signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS) });
+      response = await this.#fetch(`${API_ORIGIN}/file/bot${this.#token}/${filePath}`, { method: "GET", redirect: "manual", signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS)]) : AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS) });
     } catch (error) {
       const timeout = error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError");
       throw new TelegramApiError("download", 0, timeout ? "timeout" : "network");
@@ -231,30 +231,25 @@ export class TelegramClient {
       throw new TelegramFileTooLargeError();
     }
     const reader = response.body.getReader();
-    const parts: Uint8Array[] = [];
+    // One buffer of the most it may hold, filled in place: never the pieces and a whole copy at once.
+    const out = new Uint8Array(maxBytes);
     let total = 0;
     try {
       for (;;) {
         const { done, value } = await reader.read();
         if (done) break;
-        total += value.byteLength;
-        if (total > maxBytes) {
+        if (total + value.byteLength > maxBytes) {
           await reader.cancel();
           throw new TelegramFileTooLargeError();
         }
-        parts.push(value);
+        out.set(value, total);
+        total += value.byteLength;
       }
     } catch (error) {
       if (error instanceof TelegramFileTooLargeError) throw error;
       throw new TelegramApiError("download", 0, "network");
     }
-    const out = new Uint8Array(total);
-    let offset = 0;
-    for (const part of parts) {
-      out.set(part, offset);
-      offset += part.byteLength;
-    }
-    return out;
+    return out.subarray(0, total);
   }
 
   /** A forum topic in a group (step 13); the bot needs the "Manage topics" right. */

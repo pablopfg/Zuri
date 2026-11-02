@@ -43,6 +43,22 @@ export function markdownToHtml(markdown: string): string {
 
 /** Bold, italic and strikethrough within one line; a mark without its pair stays as it was. */
 function inline(line: string): string {
+  const html = marks(line);
+  // Crossed marks ("**a _b** c_") would make tags Telegram refuses: the line goes without formatting.
+  return nested(html) ? html : line;
+}
+
+/** Every tag closes the last one opened. */
+function nested(html: string): boolean {
+  const stack: string[] = [];
+  for (const [, close, name] of html.matchAll(/<(\/?)([a-z]+)>/g)) {
+    if (!close) stack.push(name ?? "");
+    else if (stack.pop() !== name) return false;
+  }
+  return stack.length === 0;
+}
+
+function marks(line: string): string {
   return line
     .replace(/\*\*(?=\S)(.+?)(?<=\S)\*\*/g, "<b>$1</b>")
     .replace(/__(?=\S)(.+?)(?<=\S)__/g, "<b>$1</b>")

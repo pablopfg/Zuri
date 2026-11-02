@@ -244,6 +244,8 @@ export class TelegramService {
    * message started, which runs past this update.
    */
   async #fromOwner(link: PrivateLink, incoming: Incoming): Promise<Started | null> {
+    // The idle time is measured before this update counts as use.
+    const lastUsed = link.lastUsedAt;
     this.deps.links.touch();
     if (incoming.kind === "callback_query") {
       if (isLargeFileData(incoming.callbackData) && this.deps.conversation) {
@@ -295,6 +297,21 @@ export class TelegramService {
     if (forwardedText) quoted.push({ kind: "forward", text: forwardedText });
     if (message.quote) quoted.push({ kind: "quote", text: message.quote });
     if (message.replyText) quoted.push({ kind: "reply", text: message.replyText });
+    // Until step 15's unlock (passkey or e-mail): after the read lock's hours without use the
+    // conversation turns itself off, and only the app (signed in) turns it back on.
+    if (lastUsed !== null && Date.now() - Date.parse(lastUsed) > this.#readLockHours() * HOUR_MS) {
+      this.deps.links.setConversation(false);
+      this.deps.links.audit("message", kind, "idle_off");
+      await this.#say(link.chatId, "telegram.chat.idle", { horas: this.#readLockHours() });
+      return null;
+    }
+    // 30 messages to the agent an hour: past that the bot says so once and ignores the rest until the hour turns.
+    const rate = this.#chatRate();
+    if (rate !== "ok") {
+      this.deps.links.audit("message", kind, "rate_limited");
+      if (rate === "first") await this.#say(link.chatId, "telegram.chat.rate");
+      return null;
+    }
     this.deps.links.audit("message", kind, "turn");
     return this.deps.conversation.receive(this.client(), {
       chatId: link.chatId,
@@ -440,9 +457,9 @@ export class TelegramService {
     await clearButtons();
   }
 
-  async #say(chatId: number, key: MessageKey): Promise<void> {
+  async #say(chatId: number, key: MessageKey, params?: Record<string, string | number>): Promise<void> {
     try {
-      await this.client().sendMessage(chatId, t(this.deps.locale(), key));
+      await this.client().sendMessage(chatId, t(this.deps.locale(), key, params));
     } catch (error) {
       log("warn", "telegram_send_failed", { error, ...kindOf(error) });
     }
@@ -563,6 +580,8 @@ export class TelegramService {
     if (patch.conversation !== undefined) {
       if (!this.deps.links.private()) throw new AppError("CONFLICT", "error.telegramNoLink");
       this.deps.links.setConversation(patch.conversation);
+      // Turned on in the app: the read lock's hours start over from now.
+      if (patch.conversation) this.deps.links.touch();
     }
     if (patch.readLockHours !== undefined) this.deps.state.set("bot_read_lock_hours", patch.readLockHours);
     return this.#statusNow(null);
@@ -599,9 +618,25 @@ export class TelegramService {
     return { ...base, ...(await this.#webhookHealth()) };
   }
 
-  #statusNow(health: { webhookError: TelegramStatus["webhookError"]; webhookMissing: boolean } | null): TelegramStatus {
+  #readLockHours(): number {
     const lock = this.deps.state.get<unknown>("bot_read_lock_hours");
-    const readLockHours = typeof lock === "number" && Number.isInteger(lock) && lock >= TELEGRAM_LIMITS.readLockHours.min && lock <= TELEGRAM_LIMITS.readLockHours.max ? lock : TELEGRAM_LIMITS.readLockHours.default;
+    return typeof lock === "number" && Number.isInteger(lock) && lock >= TELEGRAM_LIMITS.readLockHours.min && lock <= TELEGRAM_LIMITS.readLockHours.max ? lock : TELEGRAM_LIMITS.readLockHours.default;
+  }
+
+  /** Counts one message to the agent in the hour's window: "ok", "first" (the one past the limit) or "over". */
+  #chatRate(): "ok" | "first" | "over" {
+    const at = Date.now();
+    const stored = this.deps.state.get<string>("telegram_chat_window");
+    const [start, count] = typeof stored === "string" ? stored.split("|").map(Number) : [0, 0];
+    const fresh = !start || at - start >= HOUR_MS;
+    const used = fresh ? 0 : (count ?? 0);
+    this.deps.state.set("telegram_chat_window", `${fresh ? at : start}|${used + 1}`);
+    if (used < TELEGRAM_LIMITS.chatPerHour) return "ok";
+    return used === TELEGRAM_LIMITS.chatPerHour ? "first" : "over";
+  }
+
+  #statusNow(health: { webhookError: TelegramStatus["webhookError"]; webhookMissing: boolean } | null): TelegramStatus {
+    const readLockHours = this.#readLockHours();
     const link = this.deps.links.private();
     const code = this.deps.links.currentCode();
     let state: TelegramState;
@@ -817,7 +852,8 @@ function thirdParty(message: Record<string, unknown>): Partial<IncomingMessage> 
   const audio = audioOf(message.voice, "voice") ?? audioOf(message.audio, "audio");
   if (audio) out.audio = audio;
   else if (message.voice !== undefined || message.audio !== undefined || OTHER_CONTENT.some((key) => message[key] !== undefined)) out.other = true;
-  if (isObject(message.forward_origin)) out.forwarded = true;
+  // Forwarded, or written by an inline bot: someone else's words either way.
+  if (isObject(message.forward_origin) || isObject(message.via_bot)) out.forwarded = true;
   if (isObject(message.quote) && typeof message.quote.text === "string" && message.quote.text) out.quote = clip(message.quote.text);
   const reply = message.reply_to_message;
   const fromSelf = isObject(reply) && isFrom(reply.from) && isFrom(message.from) && (reply.from.id === message.from.id || reply.from.is_bot === true);

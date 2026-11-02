@@ -134,14 +134,26 @@ Telegram". Se você apagar essa conversa no app, a próxima mensagem abre outra.
   separada ("Mensagem encaminhada", "Trecho citado").
 - Memórias que a Zuri guarda numa conversa do Telegram ficam marcadas como
   vindas do Telegram na tela de Memória.
+- Mensagem escrita por um bot inline (`@algum_bot texto`) também conta como
+  texto de terceiros, e a conversa nunca ganha o título a partir dele.
+- Até 30 mensagens por hora para a Zuri. Na 31ª o bot avisa uma vez e ignora
+  o resto até a hora virar.
+- Depois de 12 horas sem usar o bot (o tempo da trava de leitura, de 1 a 72 h),
+  a conversa se desliga sozinha e o bot avisa. Para voltar, ligue de novo no
+  app. É uma trava provisória: na etapa 15 ela vira o destravamento por
+  passkey ou código por e-mail.
+- Se a resposta for longa demais para o limite de chamadas de um despertar, a
+  última mensagem avisa e mostra **Abrir no app**, onde está o resto.
 
 ### Voz e arquivos de áudio
 
 Mande uma mensagem de voz ou um arquivo de áudio. Até 5 minutos e 5 MB, a Zuri
 transcreve na hora, mostra "🎙️ o que entendeu" e responde. O áudio passa pelo
 mesmo serviço e pela mesma cota do app (uma hora por dia, app e bot juntos) e
-nunca é guardado. Áudio encaminhado de outra pessoa entra como dado, como um
-texto encaminhado.
+nunca é guardado. Só a sua nota de voz conta como fala sua: áudio encaminhado
+e arquivo de áudio (uma gravação salva, um podcast) entram como dado, como um
+texto encaminhado. O eco "🎙️" e a mensagem guardada são cortados com "…" se a
+transcrição passar do tamanho de uma mensagem.
 
 Acima de 5 minutos ou de 5 MB, nada é baixado antes de você decidir. A Zuri
 diz o tamanho, a duração, quantos Neurons a transcrição deve gastar e quantos
@@ -160,7 +172,11 @@ o motivo:
 | O áudio e os Neurons que sobram no dia | A cota de 3.600 s de áudio e o teto de 9.000 Neurons, que zeram às 00:00 UTC |
 
 O download confere o tamanho de novo e para no meio se o arquivo vier maior do
-que o Telegram tinha dito.
+que o Telegram tinha dito. Quando a mensagem não diz o tamanho, o bot pergunta
+o `getFile` e, acima de 5 MB, faz a mesma pergunta antes de baixar. A duração
+que o remetente declara não basta para o custo: depois do download a Zuri
+estima a duração pelos bytes (128 kbit/s, que nunca passa da real) e reserva o
+maior dos dois; a duração que o Whisper devolve acerta a conta no fim.
 
 ## O que o bot responde hoje
 

@@ -475,6 +475,7 @@ export class ZuriAgent extends Agent<WorkerEnv> {
           give: () => {
             this.#transcribing = false;
           },
+          busy: () => this.#transcribing,
         },
         locale: () => this.locale(),
         timeZone: () => settings.field("timeZone"),

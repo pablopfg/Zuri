@@ -782,7 +782,15 @@ Etapa 12, fundação. O bot obedece a uma conta só, no chat privado
   IS NULL`), só do dono no chat privado. A cota do dia é conferida de novo e
   reservada antes do download; o download não segue redirecionamento, recusa
   caminho fora do padrão do Telegram e para no meio acima do tamanho informado
-  ou de 20 MB. O áudio nunca é guardado nem vai a log.
+  ou de 20 MB. O áudio nunca é guardado nem vai a log. Sem tamanho na
+  mensagem, vale o do `getFile`, e acima de 5 MB o bot pergunta antes. O custo
+  reservado é o maior entre a duração declarada e a estimada pelos bytes (128
+  kbit/s), para um áudio longo declarado como curto não passar da cota.
+- **Trava provisória da conversa.** Até a etapa 15 trazer o destravamento por
+  passkey ou e-mail, a conversa pelo bot se desliga sozinha depois do tempo da
+  trava de leitura sem uso (12 h por padrão) e só volta pelo app, com sessão.
+  O limite de 30 mensagens por hora já vale. Arquivo de áudio (não a nota de
+  voz) e mensagem de bot inline entram como dado de terceiros.
 
 ## Logs da Cloudflare
 

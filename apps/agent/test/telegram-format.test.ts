@@ -35,6 +35,11 @@ describe("markdownToHtml", () => {
     );
   });
 
+  it("leaves a line with crossed marks unformatted, so Telegram never gets tags it refuses", () => {
+    expect(markdownToHtml("**a _b** c_ e **ok**")).toBe("**a _b** c_ e **ok**");
+    expect(markdownToHtml("**a _b** c_\n**ok**")).toBe("**a _b** c_\n<b>ok</b>");
+  });
+
   it("leaves a mark without its pair as it is", () => {
     expect(markdownToHtml("2 * 3 = 6 e snake_case_name e **aberto")).toBe("2 * 3 = 6 e snake_case_name e **aberto");
   });

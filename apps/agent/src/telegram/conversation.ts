@@ -1,4 +1,4 @@
-import { type Locale, type MessageKey, t, TELEGRAM_LIMITS } from "@zuri/shared";
+import { CHAT_MESSAGE_MAX, type Locale, type MessageKey, t, TELEGRAM_LIMITS } from "@zuri/shared";
 import type { AgentRunner } from "../agent/runner.ts";
 import type { HeldAudio, MeteredAI } from "../ai/metered.ts";
 import { audioNeurons } from "../ai/usage.ts";
@@ -9,7 +9,7 @@ import type { InternalState } from "../db/internal-state.ts";
 import { AppError } from "../http/errors.ts";
 import { log } from "../log.ts";
 import { TelegramApiError, TelegramBudgetError, type TelegramClient, TelegramFileTooLargeError } from "./client.ts";
-import { answerBlocks, plainHtml } from "./format.ts";
+import { answerBlocks, plainHtml, splitHtml } from "./format.ts";
 import type { TelegramLinks } from "./links.ts";
 
 /** A voice note or an audio file, as the update describes it (nothing downloaded yet). */
@@ -20,6 +20,8 @@ export interface IncomingAudio {
   duration: number;
   /** Bytes, when Telegram says. */
   size: number | null;
+  /** The owner tapped "Processar mesmo assim" for it. */
+  confirmed?: boolean;
 }
 
 /** What the owner sent: their own words, someone else's text they sent along, an audio. */
@@ -44,7 +46,7 @@ export interface TelegramConversationDeps {
   /** What is left today of the audio hour and the Neuron cap, and when it starts over. */
   room(): { audioSeconds: number; neurons: number; resetsAt: string };
   /** One clip at a time, app and bot together: false when another is being transcribed. */
-  audioLock: { take(): boolean; give(): void };
+  audioLock: { take(): boolean; give(): void; busy(): boolean };
   locale(): Locale;
   timeZone(): string;
   origin(): string;
@@ -81,6 +83,22 @@ const LARGE = /^v1:large_(file|skip):([A-Za-z0-9_-]{16})$/;
 export const isLargeFileData = (data: string | null): boolean => typeof data === "string" && LARGE.test(data);
 
 const CONVERSATION_KEY = "telegram_conversation";
+
+/** The echo of a transcription: well under Telegram's 4,096 once escaped. */
+const ECHO_MAX = 3_000;
+
+/** At most `max` characters (whole code points), with "…" when cut. */
+const clip = (text: string, max: number) => {
+  const chars = [...text];
+  return chars.length <= max ? text : `${chars.slice(0, max - 1).join("")}…`;
+};
+
+/**
+ * 128 kbit/s: no usual voice note or music file is denser, so the bytes give a
+ * length that never overstates the real one (a long audio declared as 1 s
+ * can't slip past the day's hour). Whisper's own length settles the rest.
+ */
+const BYTES_PER_SECOND = 16_000;
 
 type Button = { text: string; callback_data: string } | { text: string; url: string };
 
@@ -160,7 +178,7 @@ export class TelegramConversation {
   #overHardCap(audio: IncomingAudio): { cap: string; text: string } | null {
     const locale = this.deps.locale();
     if ((audio.size ?? 0) > TELEGRAM_LIMITS.downloadMaxBytes) {
-      return { cap: "telegram", text: t(locale, "telegram.arquivo.teto.telegram", { tamanho: this.#megabytes(audio.size ?? 0) }) };
+      return { cap: "telegram", text: t(locale, "telegram.arquivo.teto.telegram", { tamanho: this.#megabytes(audio.size ?? 0, true) }) };
     }
     if (audio.duration > TELEGRAM_LIMITS.audioHardSeconds) {
       return {
@@ -281,6 +299,11 @@ export class TelegramConversation {
       await answer("telegram.chat.busy");
       return null;
     }
+    // The app is transcribing a clip: the request stays, so the owner can tap again in a moment.
+    if (process && this.deps.audioLock.busy()) {
+      await answer("telegram.chat.voiceBusy");
+      return null;
+    }
     // One statement: two quick taps never both act.
     const { rowsWritten } = this.deps.db.run(`UPDATE zur_telegram_pending_files SET used_at = ? WHERE id = ? AND used_at IS NULL AND expires_at > ?`, nowIso, row.id, nowIso);
     if (rowsWritten === 0) {
@@ -310,7 +333,7 @@ export class TelegramConversation {
       chatId: tap.chatId,
       text: "",
       quoted: [],
-      audio: { kind: row.kind, fileId: row.file_id, duration: row.duration_s, size: row.size_bytes },
+      audio: { kind: row.kind, fileId: row.file_id, duration: row.duration_s, size: row.size_bytes, confirmed: true },
       // The size the question showed: a larger download is cut off.
       forwardedAudio: false,
     });
@@ -327,9 +350,13 @@ export class TelegramConversation {
       if (incoming.audio) {
         const heard = await this.#transcribe(client, incoming.chatId, incoming.audio, controller.signal);
         if (heard === null) return;
-        if (incoming.forwardedAudio) quoted = [...quoted, { kind: "voice" as const, text: heard }].slice(0, TELEGRAM_LIMITS.quotedItems);
-        else text = text ? `${text}\n\n${heard}` : heard;
-        await this.#send(client, incoming.chatId, plainHtml(t(this.deps.locale(), "telegram.chat.voiceEcho", { text: heard })), { html: true });
+        // Only the owner's own voice note is their word: a forwarded voice or an audio file (a saved
+        // recording, a podcast) is someone else's speech, so it goes as <data>.
+        if (incoming.forwardedAudio || incoming.audio.kind === "audio") {
+          quoted = [...quoted, { kind: "voice" as const, text: clip(heard, TELEGRAM_LIMITS.quotedMax) }].slice(0, TELEGRAM_LIMITS.quotedItems);
+        } else text = clip(text ? `${text}\n\n${heard}` : heard, CHAT_MESSAGE_MAX);
+        const echo = splitHtml(plainHtml(t(this.deps.locale(), "telegram.chat.voiceEcho", { text: clip(heard, ECHO_MAX) })))[0];
+        if (echo) await this.#send(client, incoming.chatId, echo, { html: true });
       }
       await this.#answer(client, incoming.chatId, text, quoted, controller);
     } finally {
@@ -361,15 +388,30 @@ export class TelegramConversation {
         throw error;
       }
       // At most what Telegram declared (when it did) and never past the hard cap: a bigger file is cut off mid-way.
-      const cap = Math.min(TELEGRAM_LIMITS.downloadMaxBytes, audio.size ?? TELEGRAM_LIMITS.downloadMaxBytes);
+      // With no size in the update and no tap yet, at most the limit that asks first.
+      const ceiling = audio.confirmed ? TELEGRAM_LIMITS.downloadMaxBytes : TELEGRAM_LIMITS.audioSoftBytes;
+      const cap = Math.min(TELEGRAM_LIMITS.downloadMaxBytes, audio.size ?? ceiling);
       let bytes: Uint8Array;
       try {
         const file = await client.getFile(audio.fileId);
-        if (typeof file.file_size === "number" && file.file_size > cap) throw new TelegramFileTooLargeError();
+        const reported = typeof file.file_size === "number" ? file.file_size : null;
+        if (reported !== null && reported > cap && audio.size === null && !audio.confirmed) {
+          // Only getFile told the size: over the limit it's the usual question (or the hard cap), nothing downloaded.
+          held.release();
+          held = null;
+          const sized = { ...audio, size: reported };
+          const hard = this.#overHardCap(sized);
+          if (hard) {
+            this.deps.links.audit("large_file", audio.kind, `refused_${hard.cap}`);
+            await this.#send(client, chatId, hard.text);
+          } else await this.#ask(client, chatId, sized);
+          return null;
+        }
+        if (reported !== null && reported > cap) throw new TelegramFileTooLargeError();
         if (typeof file.file_path !== "string") throw new TelegramApiError("getFile", 0, "no path");
-        bytes = await client.download(file.file_path, cap);
+        bytes = await client.download(file.file_path, cap, signal);
       } catch (error) {
-        held.release();
+        held?.release();
         held = null;
         if (error instanceof TelegramFileTooLargeError) {
           this.deps.links.audit("large_file", audio.kind, "cut_off");
@@ -380,11 +422,29 @@ export class TelegramConversation {
         }
         return null;
       }
+      // The length the sender declared isn't trusted for the cost: the bytes give a floor too.
+      const estimate = Math.ceil(bytes.byteLength / BYTES_PER_SECOND);
+      if (estimate > Math.ceil(audio.duration)) {
+        held.release();
+        held = null;
+        try {
+          held = this.deps.ai().reserveAudio(estimate, signal);
+        } catch (error) {
+          if (error instanceof AppError && error.code === "AI_LIMIT_REACHED") {
+            await this.#send(client, chatId, this.#quotaShort(estimate) ?? t(locale, error.messageKey));
+            return null;
+          }
+          throw error;
+        }
+      }
       const current = held;
       held = null;
+      // The bytes go as soon as they are base64: the transcription never holds both.
+      const encoded = toBase64(bytes);
+      bytes = new Uint8Array(0);
       let result: { text: string };
       try {
-        result = await current.transcribe(toBase64(bytes), { locale, signal });
+        result = await current.transcribe(encoded, { locale, signal });
       } catch (error) {
         const appError = error instanceof AppError ? error : new AppError("INTERNAL_ERROR");
         await this.#send(client, chatId, plainHtml(t(locale, isDeadline(signal) ? "telegram.chat.timeout" : appError.messageKey)), { html: true });
@@ -406,7 +466,7 @@ export class TelegramConversation {
   async #answer(client: TelegramClient, chatId: number, text: string, quoted: Quoted, controller: AbortController): Promise<void> {
     const locale = this.deps.locale();
     const conversations = this.deps.conversations();
-    const conversationId = this.#conversationId(conversations, text, quoted);
+    const conversationId = this.#conversationId(conversations, text);
     if (conversationId === null) {
       await this.#say(client, chatId, "telegram.chat.failed");
       return;
@@ -444,18 +504,20 @@ export class TelegramConversation {
     else if (errorText) blocks.push(plainHtml(errorText));
     else if (blocks.length === 0 && !proposals) blocks.push(plainHtml(t(locale, "telegram.chat.failed")));
     if (proposals) blocks.push(plainHtml(t(locale, "telegram.chat.pending")));
+    const openInApp = { reply_markup: { inline_keyboard: [[{ text: t(locale, "telegram.chat.openInApp"), url: new URL(`/conversa/${conversationId}`, this.deps.origin()).href }]] } };
     for (const [index, block] of blocks.entries()) {
       const last = index === blocks.length - 1;
-      const extra =
-        last && proposals
-          ? { reply_markup: { inline_keyboard: [[{ text: t(locale, "telegram.chat.openInApp"), url: new URL(`/conversa/${conversationId}`, this.deps.origin()).href }]] } }
-          : {};
-      if (!(await this.#send(client, chatId, block, { html: true, extra }))) break;
+      // The budget can't take this block and one more: the last request says where the rest is.
+      if (!last && client.remaining < 2) {
+        await this.#send(client, chatId, plainHtml(t(locale, "telegram.chat.truncated")), { html: true, extra: openInApp });
+        break;
+      }
+      if (!(await this.#send(client, chatId, block, { html: true, extra: last && proposals ? openInApp : {} }))) break;
     }
   }
 
   /** The bot's conversation: the one in use, or a new one (the first time, or after it was deleted in the app). */
-  #conversationId(conversations: ConversationRepository, text: string, quoted: Quoted): string | null {
+  #conversationId(conversations: ConversationRepository, text: string): string | null {
     const stored = this.deps.state.get<unknown>(CONVERSATION_KEY);
     if (typeof stored === "string") {
       try {
@@ -466,7 +528,8 @@ export class TelegramConversation {
       }
     }
     try {
-      const title = text.trim() || quoted[0]?.text || "Telegram";
+      // Someone else's words never name the conversation.
+      const title = text.trim() || "Telegram";
       const created = conversations.create(title);
       this.deps.state.set(CONVERSATION_KEY, created.id);
       return created.id;
@@ -531,8 +594,10 @@ export class TelegramConversation {
     return rest === 0 ? t(locale, "telegram.arquivo.min", { n: minutes }) : t(locale, "telegram.arquivo.minSeg", { n: minutes, s: rest });
   }
 
-  #megabytes(bytes: number): string {
-    const value = new Intl.NumberFormat(this.deps.locale(), { maximumFractionDigits: 1 }).format(bytes / (1024 * 1024));
+  /** Rounded up for a refusal: a file just over a limit never reads as the limit itself. */
+  #megabytes(bytes: number, up = false): string {
+    const mb = bytes / (1024 * 1024);
+    const value = new Intl.NumberFormat(this.deps.locale(), { maximumFractionDigits: 1 }).format(up ? Math.ceil(mb * 10) / 10 : mb);
     return t(this.deps.locale(), "telegram.arquivo.mb", { n: value });
   }
 

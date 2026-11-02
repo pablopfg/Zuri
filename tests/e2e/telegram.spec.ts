@@ -99,6 +99,7 @@ test("Settings > Avisos: the owner connects Telegram with a code, confirms the a
   await expect(toast(page, "Conversa pelo Telegram ligada.")).toBeVisible();
   await expect(chatSwitch).toBeChecked();
   await expectAccessible(page, "telegram com conversa ligada");
+  let sentCount = 0;
   for (const message of [
     { text: "Lembra de comprar pão" },
     { text: "Promoção imperdível, clique aqui", forward_origin: { type: "hidden_user", date: 1, sender_user_name: "Loja" } },
@@ -108,6 +109,17 @@ test("Settings > Avisos: the owner connects Telegram with a code, confirms the a
       data: { update_id: Math.floor(Math.random() * 1e9), message: { message_id: 3, date: 1, from: { id: 424242, is_bot: false, first_name: "Dono" }, chat: { id: 424242, type: "private" }, ...message } },
     });
     expect(res.status()).toBe(200);
+    sentCount += 1;
+    // One turn at a time on Telegram: the next message waits for this answer.
+    await expect
+      .poll(async () => {
+        const list = (await (await page.request.get("/api/conversations")).json()) as { conversations: { id: string }[] };
+        const id = list.conversations[0]?.id;
+        if (!id) return 0;
+        const conversation = (await (await page.request.get(`/api/conversations/${id}`)).json()) as { messages: { role: string; status?: string }[]; streaming: boolean };
+        return conversation.streaming ? 0 : conversation.messages.filter((m) => m.role === "assistant").length;
+      })
+      .toBe(sentCount);
   }
   await page.goto("/conversa");
   await page.getByRole("link", { name: /Lembra de comprar pão/ }).first().click();

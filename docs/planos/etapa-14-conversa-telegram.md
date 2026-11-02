@@ -112,13 +112,17 @@ Um PR `feat(telegram): conversa com o agente por texto e voz` para a `develop`, 
 ## 12. Riscos
 
 - A documentação do Whisper no Workers AI não publica limite por chamada; o teto de 30 min por arquivo e o prazo de 3 min são estimativas, a medir no primeiro uso real.
-- Memória: arquivo de 20 MB vira ~27 MB em base64; pico perto de 75 MB, abaixo de 128 MB.
+- Memória: o download enche um único buffer do tamanho máximo (sem pedaços e cópia juntos) e os bytes são soltos assim que viram base64; pico de um arquivo de 20 MB fica em torno de 20 MB + 27 MB + a cópia da chamada, abaixo de 128 MB. Medir no primeiro uso real.
+- Orçamento de 45 chamadas por despertar conta só a Bot API; as ferramentas do agente que saem para a rede no mesmo turno (agenda, MCP nas etapas 18 e 19) precisam somar ao mesmo contador quando chegarem.
+- Duração declarada pelo remetente: o custo reservado é o maior entre a declarada e a estimada pelos bytes (128 kbit/s); um áudio de taxa muito baixa ainda pode passar da cota do dia uma vez, porque o acerto final usa a duração que o Whisper devolve.
 
 ## 13. Suposições
 
 - A mensagem do próprio dono é a pergunta do turno (como no app); "Texto do Telegram é dado" vale para o que é de terceiros (seção "Conversa com o agente").
 - Uma conversa contínua por Telegram, recriada se apagada; `/nova_conversa` chega na 15.
 - Proposta de ação no turno mostra **Abrir no app** até a 16.
+- Trava provisória até a 15 (achado da auditoria): depois do tempo da trava de leitura sem uso, a conversa se desliga sozinha e só volta pelo app; limite de 30 mensagens por hora já nesta etapa. A 15 troca a trava provisória pelo destravamento por passkey ou e-mail.
+- Arquivo de áudio (não a nota de voz) e mensagem de bot inline são de terceiros e entram como `<data>`.
 
 ## 14. Entrevista com o Pablo
 

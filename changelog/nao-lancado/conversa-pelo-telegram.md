@@ -21,6 +21,12 @@
 - O identificador do arquivo nunca vai no botão, e o download para no meio se
   o arquivo vier maior do que o Telegram disse ou passar de 20 MB.
 - Toda resposta sai com o texto escapado e os links desarmados.
+- Depois de 12 horas sem uso do bot, a conversa se desliga sozinha e só volta
+  pelo app. O limite é de 30 mensagens por hora para a Zuri.
+- Arquivo de áudio e mensagem de bot inline entram como texto de terceiros; só
+  a sua nota de voz conta como fala sua.
+- O custo de um áudio também é estimado pelo tamanho do arquivo, então um
+  áudio longo que diz ser curto não passa da cota do dia.
 
 ### Atualização
 
