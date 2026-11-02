@@ -404,10 +404,12 @@ describe("the priority that learns, on the watchers' round", () => {
       const told = notices(w).filter((n) => n.kind === "alerts.lowered");
       expect(told).toEqual([{ kind: "alerts.lowered", priority: "low", params: JSON.stringify({ name: "Tarefas paradas" }), body: null }]);
       expect(w.alerts.page().notices[0]).toMatchObject({ title: "Menos prioridade para: Tarefas paradas", link: "/configuracoes/avisos" });
-      // The next round, the same day, doesn't review again.
+      // The next round, the same day, doesn't review again: the review's own mark stays as it was.
+      const reviewed = new InternalState(w.world.db).get<string>("alert_learning_at");
+      expect(reviewed).toBeDefined();
       w.world.clock.now += 15 * 60_000;
-      w.alerts.learning.reset("watch.taskStalled");
       round(w);
+      expect(new InternalState(w.world.db).get<string>("alert_learning_at")).toBe(reviewed);
       expect(notices(w).filter((n) => n.kind === "alerts.lowered")).toHaveLength(1);
     });
   });

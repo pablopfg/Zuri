@@ -181,7 +181,7 @@ export class AlertService {
         );
       }
       this.db.run(
-        `INSERT INTO zur_notices (id, kind, category, priority, params, body, link, origin, created_at, learn_key) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO zur_notices (id, kind, category, priority, params, body, link, origin, created_at, learn_key, asked_priority) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         row.id,
         row.kind,
         row.category,
@@ -192,6 +192,7 @@ export class AlertService {
         row.origin,
         row.created_at,
         learnKey,
+        learnKey === null ? null : asked,
       );
       this.prune(row.category === "security");
       return true;

@@ -7,6 +7,9 @@ const LEVELS = ["low", "normal", "high"] as const;
 /** Categories that never learn: a reminder is something the owner asked for, and security is always critical. */
 const FIXED: readonly AlertCategory[] = ["security", "reminders"];
 
+/** Kinds that never learn either: the day's AI used up and a failure repeating must keep reaching the phone. */
+const FIXED_KINDS: readonly string[] = ["watch.aiBudget100", "diagnostic.repeated", "watch.health"];
+
 export interface LearningChange {
   key: string;
   label: string;
@@ -20,8 +23,8 @@ interface SourceStats {
   total: number;
   ignored: number;
   quick: number;
-  /** The priority the newest notice of the source got (what the source asks for, plus its shift). */
-  priority: AlertPriority;
+  /** The priority the newest notice of the source asked for, before any shift. */
+  asked: AlertPriority;
   label: string;
 }
 
@@ -45,7 +48,7 @@ export class AlertLearning {
 
   /** The source's key, or null when it never learns. */
   keyOf(input: { kind: string; category: AlertCategory; priority: AlertPriority; source?: string | null | undefined }): string | null {
-    if (FIXED.includes(input.category) || input.priority === "critical" || input.source === null) return null;
+    if (FIXED.includes(input.category) || FIXED_KINDS.includes(input.kind) || input.priority === "critical" || input.source === null) return null;
     return input.source ?? input.kind;
   }
 
@@ -62,7 +65,8 @@ export class AlertLearning {
   list(): LearnedPriority[] {
     return this.db
       .all<{ key: string; label: string; shift: number; changed_at: string }>(`SELECT key, label, shift, changed_at FROM zur_alert_learning WHERE shift != 0 ORDER BY changed_at DESC`)
-      .map((row) => ({ key: row.key, label: row.label, shift: row.shift, changedAt: row.changed_at }));
+      // A kind of notice is named now, in the owner's language of today; an automation keeps its name.
+      .map((row) => ({ key: row.key, label: row.key.startsWith("automation:") ? row.label : this.deps.sourceName(row.key), shift: row.shift, changedAt: row.changed_at }));
   }
 
   /** Back to what the source asks for. Nothing changes it again for a week: the owner just said so. */
@@ -83,7 +87,7 @@ export class AlertLearning {
               count(*) AS total,
               sum(CASE WHEN read_at IS NULL OR escalation = 'muted' THEN 1 ELSE 0 END) AS ignored,
               sum(CASE WHEN read_at IS NOT NULL AND coalesce(escalation, '') != 'muted' AND julianday(read_at) - julianday(created_at) <= ? THEN 1 ELSE 0 END) AS quick,
-              (SELECT n.priority FROM zur_notices n WHERE n.learn_key = zur_notices.learn_key ORDER BY n.created_at DESC LIMIT 1) AS priority,
+              (SELECT coalesce(n.asked_priority, n.priority) FROM zur_notices n WHERE n.learn_key = zur_notices.learn_key ORDER BY n.created_at DESC LIMIT 1) AS asked,
               (SELECT n.params FROM zur_notices n WHERE n.learn_key = zur_notices.learn_key ORDER BY n.created_at DESC LIMIT 1) AS label
          FROM zur_notices
         WHERE learn_key IS NOT NULL AND created_at >= ? AND created_at <= ?
@@ -99,27 +103,34 @@ export class AlertLearning {
     for (const source of sources) {
       const stored = this.db.one<{ shift: number; changed_at: string }>(`SELECT shift, changed_at FROM zur_alert_learning WHERE key = ?`, source.key);
       if (stored && Date.parse(stored.changed_at) > nowMs - LEARNING.changeEveryMs) continue;
-      const level = LEVELS.indexOf(source.priority as (typeof LEVELS)[number]);
-      if (level < 0) continue;
-      const shift = stored?.shift ?? 0;
-      let step = 0;
-      if (source.ignored >= source.total * LEARNING.ignoredShare && level > 0 && shift > LEARNING.minShift) step = -1;
-      else if (source.quick >= source.total * LEARNING.quickShare && level < LEVELS.length - 1 && shift < LEARNING.maxShift) step = 1;
-      if (step === 0) continue;
+      const asked = LEVELS.indexOf(source.asked as (typeof LEVELS)[number]);
+      if (asked < 0) continue;
+      // From the level notices get now (asked plus shift, within low..high), never from a stored
+      // priority: the owner may have changed what the source asks for since.
+      const level = Math.max(0, Math.min(LEVELS.length - 1, asked + (stored?.shift ?? 0)));
+      let target = level;
+      if (source.ignored >= source.total * LEARNING.ignoredShare && level > 0) target = level - 1;
+      else if (source.quick >= source.total * LEARNING.quickShare && level < LEVELS.length - 1) target = level + 1;
+      if (target === level) continue;
+      const shift = target - asked;
       const label = (source.key.startsWith("automation:") ? labelOf(source.label) : "") || this.deps.sourceName(source.key);
       this.db.run(
         `INSERT INTO zur_alert_learning (key, shift, label, changed_at) VALUES (?, ?, ?, ?)
          ON CONFLICT (key) DO UPDATE SET shift = excluded.shift, label = excluded.label, changed_at = excluded.changed_at`,
         source.key,
-        shift + step,
+        shift,
         label,
         at,
       );
-      changes.push({ key: source.key, label, priority: LEVELS[level + step] ?? "normal", direction: step < 0 ? "down" : "up" });
+      changes.push({ key: source.key, label, priority: LEVELS[target] ?? "normal", direction: target < level ? "down" : "up" });
     }
     // Sources that went back to zero long ago, past the cap: the oldest go (the table stays small).
+    // A row changed this week stays: after an undo, it is what holds the source for a week.
     this.db.run(
-      `DELETE FROM zur_alert_learning WHERE key IN (SELECT key FROM zur_alert_learning ORDER BY shift != 0 DESC, changed_at DESC LIMIT -1 OFFSET ?)`,
+      `DELETE FROM zur_alert_learning
+        WHERE changed_at <= ?
+          AND key IN (SELECT key FROM zur_alert_learning ORDER BY shift != 0 DESC, changed_at DESC LIMIT -1 OFFSET ?)`,
+      new Date(nowMs - LEARNING.changeEveryMs).toISOString(),
       LEARNING.sourcesKept,
     );
     return changes;

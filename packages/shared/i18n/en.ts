@@ -917,7 +917,7 @@ export const en: Messages = {
   "web.automations.priority.normal": "Normal",
   "web.automations.priority.high": "High",
   "web.automations.priorityHint.low": "Stays in the app's bell, without calling your phone.",
-  "web.automations.priorityHint.normal": "Arrives through the channels you picked in Settings › Notices.",
+  "web.automations.priorityHint.normal": "Arrives through the channels you picked in Settings › Notifications.",
   "web.automations.priorityHint.high": "Arrives through the channels you picked, and Zuri calls again up to twice if you don't open it.",
   "web.automations.day.0": "Sun",
   "web.automations.day.1": "Mon",

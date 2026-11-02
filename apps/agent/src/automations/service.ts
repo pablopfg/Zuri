@@ -311,6 +311,8 @@ export class AutomationService {
   deleteNow(id: string): void {
     const row = this.row(id);
     this.db.run(`DELETE FROM zur_automations WHERE id = ?`, id);
+    // What the priority that learns kept for it goes too: nothing will raise that source again.
+    this.db.run(`DELETE FROM zur_alert_learning WHERE key = ?`, `automation:${id}`);
     recordActivity(this.db, "automation.deleted", { kind: row.kind });
   }
 

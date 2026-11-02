@@ -121,8 +121,8 @@ limites por canal (padrão 6 por hora e 30 por dia) ficam logo abaixo.
 
 Cada aviso guarda a sua origem (`learn_key`): a automação que o gerou
 (`automation:<id>`) ou, para os outros, o tipo do aviso (`watch.taskStalled`,
-`digest.daily`…). Lembretes, segurança, alertas críticos e os próprios avisos
-de mudança nunca têm origem e nunca mudam.
+`digest.daily`…). Lembretes, segurança, alertas críticos, a IA do dia esgotada,
+falha repetida e os próprios avisos de mudança nunca têm origem e nunca mudam.
 
 Uma vez por dia, na rodada dos vigias, a revisão olha os avisos de cada origem
 criados entre 14 dias e 24 horas atrás (o último dia fica de fora para o dono

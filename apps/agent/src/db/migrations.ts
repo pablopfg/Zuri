@@ -665,6 +665,9 @@ export const MIGRATIONS: readonly Migration[] = [
       // owner answered that source's notices. Null for security and reminders,
       // which never learn.
       `ALTER TABLE zur_notices ADD COLUMN learn_key TEXT`,
+      // What the source asked for, before the shift: the review moves from asked plus shift,
+      // so a priority the owner changed later never leaves the shift out of step.
+      `ALTER TABLE zur_notices ADD COLUMN asked_priority TEXT`,
       `CREATE INDEX IF NOT EXISTS zur_notices_learning ON zur_notices (learn_key, created_at) WHERE learn_key IS NOT NULL`,
       // One row per source the review changed: levels away from what the source
       // asks for (one a week at most) and the last notice's title for the

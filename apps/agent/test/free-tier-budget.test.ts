@@ -491,4 +491,47 @@ describe("the Free plan budget of each route", () => {
     expect(wake.read).toBeLessThanOrEqual(40);
     expect(wake.written).toBeLessThanOrEqual(30);
   });
+
+  it("the priority that learns: the daily review reads about the kept notices once, and Settings > Notices and an undo read and write a handful of rows", async () => {
+    const SOURCES = 20;
+    const PER_SOURCE = 25;
+    const review = await runInDurableObject(owner(), (agent: ZuriAgent) => {
+      const { db, alerts } = agent.store;
+      db.run(`DELETE FROM zur_notices`);
+      db.run(`DELETE FROM zur_alert_learning`);
+      const day = 86_400_000;
+      // 500 notices (the kept ceiling), 20 sources, spread over the last 13 days and never opened.
+      for (let s = 0; s < SOURCES; s++) {
+        for (let n = 0; n < PER_SOURCE; n++) {
+          const at = new Date(Date.now() - day - ((s * PER_SOURCE + n) % 12) * day - n * 60_000).toISOString();
+          db.run(
+            `INSERT INTO zur_notices (id, kind, category, priority, params, created_at, learn_key, asked_priority) VALUES (?, 'automation.result', 'routines', 'normal', '{"name":"R"}', ?, ?, 'normal')`,
+            crypto.randomUUID(),
+            at,
+            `automation:00000000-0000-4000-8000-${String(s).padStart(12, "0")}`,
+          );
+        }
+      }
+      const before = { ...db.usage };
+      const changes = alerts.learning.review(null) ?? [];
+      return { changes: changes.length, read: db.usage.rowsRead - before.rowsRead, written: db.usage.rowsWritten - before.rowsWritten };
+    });
+    // Every source changes once: one upsert each (and its index), nothing per notice.
+    expect(review.changes).toBe(SOURCES);
+    expect(review.read).toBeLessThanOrEqual(SOURCES * PER_SOURCE * 2 + 200);
+    expect(review.written).toBeLessThanOrEqual(SOURCES * 3);
+
+    const overview = await cost("GET", "/alerts");
+    expect(overview.status).toBe(200);
+    expect(overview.read).toBeLessThanOrEqual(150);
+    expect(overview.written).toBe(0);
+    const undo = await cost("DELETE", `/alerts/learning/automation:00000000-0000-4000-8000-000000000000`);
+    expect(undo.status).toBe(204);
+    expect(undo.read).toBeLessThanOrEqual(10);
+    expect(undo.written).toBeLessThanOrEqual(5);
+    await runInDurableObject(owner(), (agent: ZuriAgent) => {
+      agent.store.db.run(`DELETE FROM zur_notices`);
+      agent.store.db.run(`DELETE FROM zur_alert_learning`);
+    });
+  });
 });

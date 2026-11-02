@@ -97,7 +97,7 @@ describe("the priority that learns", () => {
     });
   });
 
-  it("moves a source one level a week at most, and never below low", async () => {
+  it("never moves a source below low, even a week later", async () => {
     await withLearning(async (w) => {
       history(w, 5, () => null);
       expect(review(w)).toHaveLength(1);
@@ -134,6 +134,12 @@ describe("the priority that learns", () => {
     });
     await withLearning(async (w) => {
       for (let i = 0; i < 5; i++) w.alerts.raise(routine());
+      w.world.clock.now += LEARNING.windowMs;
+      // Exactly 14 days old still counts; a millisecond later it doesn't.
+      expect(review(w)).toHaveLength(1);
+    });
+    await withLearning(async (w) => {
+      for (let i = 0; i < 5; i++) w.alerts.raise(routine());
       w.world.clock.now += LEARNING.windowMs + 1;
       expect(review(w)).toEqual([]);
     });
@@ -145,7 +151,10 @@ describe("the priority that learns", () => {
       w.alerts.raise({ kind: "automation.result", category: "reminders", priority: "normal", params: { name: "Remédio" }, source: `automation:${OTHER}` });
       w.alerts.raise({ kind: "watch.health", category: "system", priority: "critical" });
       w.alerts.raise({ kind: "alerts.lowered", category: "system", priority: "low", params: { name: "x" }, source: null });
-      expect(w.world.db.all<{ learn_key: string | null }>(`SELECT learn_key FROM zur_notices`).map((r) => r.learn_key)).toEqual([null, null, null, null]);
+      // The day's AI used up and a failure repeating keep reaching the phone, however often they are ignored.
+      w.alerts.raise({ kind: "watch.aiBudget100", category: "system", priority: "high" });
+      w.alerts.raise({ kind: "diagnostic.repeated", category: "system", priority: "high", params: { code: "x" } });
+      expect(w.world.db.all<{ learn_key: string | null }>(`SELECT learn_key FROM zur_notices`).map((r) => r.learn_key)).toEqual([null, null, null, null, null, null]);
       await w.alerts.settled();
     });
   });
@@ -192,14 +201,66 @@ describe("the priority that learns", () => {
     });
   });
 
-  it("keeps the table small", async () => {
+  it("leaves a source alone when 3 of 5 were opened quickly (60%)", async () => {
     await withLearning(async (w) => {
-      const at = new Date(w.world.clock.now).toISOString();
+      history(w, 5, (i) => (i < 3 ? MINUTE : 2 * HOUR));
+      expect(review(w)).toEqual([]);
+    });
+  });
+
+  it("keeps a reminder automation asked as high at high, however ignored", async () => {
+    await withLearning(async (w) => {
+      history(w, 5, () => null, { category: "reminders", priority: "high" });
+      expect(review(w)).toEqual([]);
+      expect(w.alerts.raise(routine({ category: "reminders", priority: "high" }))?.priority).toBe("high");
+    });
+  });
+
+  it("moves from what notices get now when the owner changes what the source asks for", async () => {
+    await withLearning(async (w) => {
+      // Asked low and opened at once, twice: up to high (shift +2).
+      history(w, 5, () => MINUTE, { priority: "low" });
+      expect(review(w)).toMatchObject([{ priority: "normal", direction: "up" }]);
+      w.world.clock.now += LEARNING.changeEveryMs;
+      w.world.db.run(`DELETE FROM zur_notices`);
+      history(w, 5, () => MINUTE, { priority: "low" });
+      expect(review(w)).toMatchObject([{ priority: "high", direction: "up" }]);
+      // The owner sets the automation to high, then ignores it: one level down is normal, at once.
+      w.world.clock.now += LEARNING.changeEveryMs;
+      w.world.db.run(`DELETE FROM zur_notices`);
+      history(w, 5, () => null, { priority: "high" });
+      expect(review(w)).toMatchObject([{ priority: "normal", direction: "down" }]);
+      // What the change notice said is what the next notice gets.
+      expect(w.alerts.raise(routine({ priority: "high" }))?.priority).toBe("normal");
+      expect(w.alerts.overview().learned).toMatchObject([{ shift: -1 }]);
+    });
+  });
+
+  it("names a kind of notice in the owner's language of today, and an automation by its name", async () => {
+    await withLearning(async (w) => {
+      for (let i = 0; i < 5; i++) w.alerts.raise({ kind: "watch.taskStalled", category: "tasks", priority: "normal", params: { title: "Tarefa" } });
+      history(w, 5, () => null);
+      review(w);
+      w.settings.language = "en";
+      expect(w.alerts.overview().learned.map((l) => l.label).sort()).toEqual(["Resumo das notícias", "Stalled tasks"]);
+    });
+  });
+
+  it("keeps the table small, but never drops an undo still holding its week", async () => {
+    await withLearning(async (w) => {
+      const old = new Date(w.world.clock.now - LEARNING.changeEveryMs).toISOString();
+      const fresh = new Date(w.world.clock.now - 1).toISOString();
       for (let i = 0; i < LEARNING.sourcesKept + 10; i++) {
-        w.world.db.run(`INSERT INTO zur_alert_learning (key, shift, label, changed_at) VALUES (?, 0, '', ?)`, `k${i}`, at);
+        w.world.db.run(`INSERT INTO zur_alert_learning (key, shift, label, changed_at) VALUES (?, 0, '', ?)`, `k${i}`, i < 5 ? fresh : old);
       }
       review(w);
       expect(w.world.db.one<{ n: number }>(`SELECT count(*) AS n FROM zur_alert_learning`)?.n).toBe(LEARNING.sourcesKept);
+      for (let i = LEARNING.sourcesKept + 10; i < LEARNING.sourcesKept + 20; i++) {
+        w.world.db.run(`INSERT INTO zur_alert_learning (key, shift, label, changed_at) VALUES (?, 0, '', ?)`, `k${i}`, fresh);
+      }
+      review(w);
+      // The ten fresh ones stay past the cap until their week is over.
+      expect(w.world.db.one<{ n: number }>(`SELECT count(*) AS n FROM zur_alert_learning WHERE changed_at = ?`, fresh)?.n).toBe(15);
     });
   });
 });

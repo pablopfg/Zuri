@@ -93,7 +93,7 @@ describe("the migration list", () => {
       10: "e1033d98cc925094806c0b7829568e64c0a3cbdeef9df30fba265f4879b5102d",
       11: "fa7a411f3603944c4ac983fea3d0958275f683c89795325df12f71b77dd49a4d",
       12: "7731fefa0ced903440fd2ecf1235715834e22347a37c93cbf71d7a25bb8a43a5",
-      13: "8e164cf74e55b9527d98b125defeb4983e141530c2023a00c9ab7fee9221615e",
+      13: "c624e0db89d6aed17b6a751b21cfe2fcec4b117206baeadc4d2c860967b1fe05",
     };
     for (const m of MIGRATIONS) {
       const digest = createHash("sha256").update(statementText(m).replace(/\r\n/g, "\n")).digest("hex");
@@ -403,7 +403,7 @@ describe("migrate", () => {
         `INSERT INTO zur_automations (id, name, kind, schedule, status, created_at, updated_at) VALUES ('a1', 'Resumo', 'task_digest', '{}', 'active', 'x', 'x')`,
       );
       expect(migrate(db)).toBe(13);
-      expect(db.one(`SELECT id, learn_key FROM zur_notices`)).toEqual({ id: "n1", learn_key: null });
+      expect(db.one(`SELECT id, learn_key, asked_priority FROM zur_notices`)).toEqual({ id: "n1", learn_key: null, asked_priority: null });
       expect(db.one(`SELECT name, priority FROM zur_automations`)).toEqual({ name: "Resumo", priority: "normal" });
       expect(() => db.run(`UPDATE zur_automations SET priority = 'critical'`)).toThrow();
       db.run(`INSERT INTO zur_alert_learning (key, shift, changed_at) VALUES ('digest.daily', -2, 'x')`);

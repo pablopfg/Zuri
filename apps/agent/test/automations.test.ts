@@ -475,6 +475,12 @@ describe("an automation's priority (step 11d)", () => {
       expect(critical.details).toEqual({ fields: ["priority"] });
       expect((await refusal(world.automations.update(a.id, { priority: "critical" as "high" }))).details).toEqual({ fields: ["priority"] });
       expect(world.db.one<{ priority: string }>(`SELECT priority FROM zur_automations WHERE id = ?`, a.id)?.priority).toBe("high");
+
+      // Deleting it drops what the priority that learns kept for it, and nothing else.
+      const at = new Date(world.clock.now).toISOString();
+      world.db.run(`INSERT INTO zur_alert_learning (key, shift, label, changed_at) VALUES (?, -1, 'x', ?), ('digest.daily', 1, '', ?)`, `automation:${a.id}`, at, at);
+      await world.automations.delete(a.id);
+      expect(world.db.all<{ key: string }>(`SELECT key FROM zur_alert_learning`)).toEqual([{ key: "digest.daily" }]);
     });
   });
 });
