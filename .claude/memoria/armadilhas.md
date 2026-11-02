@@ -78,6 +78,15 @@ acrescente aqui cada armadilha nova que encontrar (sem dados pessoais).
 - O `update-prs.yml` pode enviar um commit de merge para a sua branch a
   qualquer momento. Faça `git pull --no-rebase origin <branch>` antes de cada
   push; nunca force push para "limpar" esse commit.
+- Runner fixo: todo job usa `runs-on: ubuntu-26.04` (o teste em
+  `tests/repo/workflows.test.ts` barra `ubuntu-latest`). O `ubuntu-latest`
+  migra de 24.04 para 26.04 entre 19/10 e 19/11/2026 (actions/runner-images
+  #14748) e mostrava um aviso em cada job. Escolhemos 26.04 e não 24.04 porque
+  o Playwright 1.64.1 já trata o 26.04 como plataforma oficial (dependências
+  do `install --with-deps` próprias) e porque fixar em 24.04 só adiaria a
+  troca. No 26.04 o `sudo` é o sudo-rs: evite `sudo -E` (use
+  `--preserve-env=VAR`). Se algo quebrar só no 26.04, volte para
+  `ubuntu-24.04` na mesma constante do teste.
 - O GitHub ignora `merge=union` e drivers do `.gitattributes` no botão de
   merge e no cálculo de conflito. Por isso a resolução de acréscimos fica no
   script, e não no `.gitattributes`.

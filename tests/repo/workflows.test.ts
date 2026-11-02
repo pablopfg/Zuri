@@ -10,6 +10,7 @@ import {
   workflowFiles,
 } from "./helpers.ts";
 
+const PINNED_RUNNER = "ubuntu-26.04";
 const files = workflowFiles();
 const all = files.map((path) => ({ path, wf: loadWorkflow(path), text: readText(path) }));
 const steps = (wf: ReturnType<typeof loadWorkflow>) => Object.values(wf.jobs).flatMap((job) => job.steps ?? []);
@@ -51,6 +52,17 @@ describe("GitHub Actions workflows", () => {
   it.each(all)("$path declares top-level permissions", ({ wf }) => {
     expect(wf.permissions, "top-level permissions").toBeDefined();
     expect(JSON.stringify(wf.permissions)).not.toMatch(/write-all|read-all/);
+  });
+
+  // ubuntu-latest moves to a new Ubuntu release on GitHub's schedule (24.04 to
+  // 26.04 from October 2026), so the image under the suite would change
+  // without a commit. Every job names the release it was tested on.
+  it.each(all)("$path pins every job to a fixed Ubuntu runner", ({ wf }) => {
+    for (const [name, job] of Object.entries(wf.jobs)) {
+      const runsOn = (job as { "runs-on"?: unknown })["runs-on"];
+      if (runsOn === undefined) continue;
+      expect(runsOn, `${name} runs-on`).toBe(PINNED_RUNNER);
+    }
   });
 
   it.each(all)("$path checks out without persisting credentials", ({ wf }) => {
