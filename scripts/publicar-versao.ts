@@ -8,41 +8,67 @@
 //    chore/versao and keeps one pull request "chore(release): …" open for it,
 //    with auto-merge. develop only changes through pull requests (rulesets).
 //
-// It never pushes to develop or main and never deletes a tag. The only change
-// to a release that already exists is its title, set to the tag alone. A tag that points to another commit stops the
-// run so a person looks at it.
+// It never pushes to develop or main and never deletes a tag. A release that
+// already exists only has its title set to the tag alone and its notes set to
+// the current layout (releaseNotes), with the same content. A tag that points
+// to another commit stops the run so a person looks at it.
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { approveHeldRuns, authEnv, OPT_OUT_LABEL, run, sleepMs, tryRun } from "./atualizar-prs.ts";
-import { applyPlan, BASE_BRANCH, compareVersions, computePlan, noMentions, releaseName, releaseNotes, type Version, versionFiles } from "./versao.ts";
+import {
+  applyPlan,
+  BASE_BRANCH,
+  compareVersions,
+  computePlan,
+  FIRST_TAGGED_VERSION,
+  noMentions,
+  releaseName,
+  releaseNotes,
+  type Version,
+  versionFiles,
+} from "./versao.ts";
+
+export { FIRST_TAGGED_VERSION };
 
 export const RELEASE_BRANCH = "chore/versao";
 /** Kept off the automatic update: this workflow rewrites the branch from develop itself. */
 export const RELEASE_LABEL = OPT_OUT_LABEL;
 /** GitHub limits how fast content is created; a pause between releases keeps the backfill under it. */
 const RELEASE_PAUSE_MS = 1500;
-/**
- * The oldest version with a tag and a pre-release. GitHub refuses GITHUB_TOKEN a
- * tag on a commit whose workflow files differ from develop's ("refusing to allow
- * a GitHub App to create or update workflow ... without workflows permission"),
- * and that is every merge before #68 (0.15.5). Those versions live only in
- * CHANGELOG.md, with their commit and pull request (docs/agente/versionamento.md).
- */
-export const FIRST_TAGGED_VERSION = "0.15.5";
-
 export interface ReleaseWork {
   /** Versions that need a release (and the tag, when it is missing), oldest first. */
   create: Version[];
-  /** Releases that exist with a title other than the tag alone, made before titles were only the version. */
-  rename: string[];
+  /** Releases that exist with a title other than the tag alone or notes other than releaseNotes: both are rewritten. */
+  update: Version[];
   /** Tags that already point to another commit. */
   conflicts: string[];
 }
 
-/** What to create so every version has its tag and pre-release. */
-export function releaseWork(versions: Version[], tags: Map<string, string>, releases: ReadonlyMap<string, string>): ReleaseWork {
-  const work: ReleaseWork = { create: [], rename: [], conflicts: [] };
+export interface Release {
+  name: string;
+  body: string;
+}
+
+/** The version before each one, from every version oldest first (null for the first). */
+export function previousVersions(versions: Version[]): Map<string, Version | null> {
+  return new Map(versions.map((v, i) => [v.version, versions[i - 1] ?? null] as const));
+}
+
+/** GitHub may give the notes back with CRLF or without the last newline: neither is a change. */
+function sameNotes(a: string, b: string): boolean {
+  const normal = (text: string) => text.replace(/\r\n/g, "\n").trimEnd();
+  return normal(a) === normal(b);
+}
+
+/** What to create or rewrite so every version has its tag and a pre-release in the current layout. */
+export function releaseWork(
+  versions: Version[],
+  tags: Map<string, string>,
+  releases: ReadonlyMap<string, Release>,
+  notesOf: (v: Version) => string,
+): ReleaseWork {
+  const work: ReleaseWork = { create: [], update: [], conflicts: [] };
   for (const v of versions) {
     const tag = `v${v.version}`;
     const sha = tags.get(tag);
@@ -50,9 +76,9 @@ export function releaseWork(versions: Version[], tags: Map<string, string>, rele
       work.conflicts.push(`${tag} points to ${sha.slice(0, 7)}, CHANGELOG.md says ${v.commit.slice(0, 7)}`);
       continue;
     }
-    const name = releases.get(tag);
-    if (name === undefined) work.create.push(v);
-    else if (name !== releaseName(v)) work.rename.push(tag);
+    const release = releases.get(tag);
+    if (release === undefined) work.create.push(v);
+    else if (release.name !== releaseName(v) || !sameNotes(release.body, notesOf(v))) work.update.push(v);
   }
   return work;
 }
@@ -122,11 +148,20 @@ function main(root: string): number {
 
   // 1. Tags and pre-releases.
   const releases = new Map(
-    (JSON.parse(gh(["api", "--paginate", "--slurp", `repos/${repository}/releases?per_page=100`])) as { tag_name: string; name: string | null }[][])
+    (
+      JSON.parse(gh(["api", "--paginate", "--slurp", `repos/${repository}/releases?per_page=100`])) as {
+        tag_name: string;
+        name: string | null;
+        body: string | null;
+      }[][]
+    )
       .flat()
-      .map((r) => [r.tag_name, r.name ?? ""] as const),
+      .map((r) => [r.tag_name, { name: r.name ?? "", body: r.body ?? "" }] as const),
   );
-  const work = releaseWork(taggable(versions), tags, releases);
+  // The notes compare each version with the one before it, tagged or not (0.15.4 has only its commit).
+  const previous = previousVersions(versions);
+  const notesOf = (v: Version) => releaseNotes(v, previous.get(v.version) ?? null);
+  const work = releaseWork(taggable(versions), tags, releases, notesOf);
   if (work.conflicts.length === 0) {
     // Tags go by git push, never by the releases API: the API refuses GITHUB_TOKEN a tag on a commit whose
     // workflow files differ from develop's (HTTP 403 "Resource not accessible by integration", run of #76).
@@ -150,7 +185,7 @@ function main(root: string): number {
       }
       if (i > 0) sleepMs(RELEASE_PAUSE_MS);
       const notes = join(dir, `${v.version}.md`);
-      writeFileSync(notes, releaseNotes(v));
+      writeFileSync(notes, notesOf(v));
       // A version in development is a pre-release: it is never "Latest" and nothing is deployed.
       // --verify-tag: the tag pushed above, never a new one made by the API.
       const created = tryRun(() =>
@@ -164,18 +199,22 @@ function main(root: string): number {
         console.log(`::error::release v${v.version} not created: ${created.out.trim().split("\n").at(-1)}`);
       }
     }
+    // Only the title and the layout of the notes change: the tag, the content and the pre-release mark stay.
+    for (const [i, v] of (work.conflicts.length === 0 ? work.update : []).entries()) {
+      if (i > 0 || work.create.length > 0) sleepMs(RELEASE_PAUSE_MS);
+      const tag = `v${v.version}`;
+      const notes = join(dir, `${v.version}.md`);
+      writeFileSync(notes, notesOf(v));
+      const updated = tryRun(() => gh(["release", "edit", tag, "--repo", repository, "--title", releaseName(v), "--notes-file", notes]));
+      if (updated.ok) {
+        console.log(`release ${tag}: title and notes updated`);
+      } else {
+        releaseFailures++;
+        console.log(`::error::release ${tag} not updated: ${updated.out.trim().split("\n").at(-1)}`);
+      }
+    }
   } finally {
     rmSync(dir, { recursive: true, force: true });
-  }
-  // Only the title changes: the tag, the notes and the pre-release mark stay as they are.
-  for (const tag of work.conflicts.length === 0 ? work.rename : []) {
-    const renamed = tryRun(() => gh(["release", "edit", tag, "--repo", repository, "--title", tag]));
-    if (renamed.ok) {
-      console.log(`release ${tag}: title set to ${tag}`);
-    } else {
-      releaseFailures++;
-      console.log(`::error::release ${tag} not renamed: ${renamed.out.trim().split("\n").at(-1)}`);
-    }
   }
   if (work.conflicts.length > 0) {
     // A tag and the changelog disagree: nothing more is written until a person looks (docs/agente/versionamento.md).
