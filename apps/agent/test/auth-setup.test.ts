@@ -21,8 +21,10 @@ import {
   MINUTE,
   noCookies,
   outcome,
+  pushCount,
   rawRebuild,
   rebuild,
+  seedPush,
   withAuth,
 } from "./auth-harness.ts";
 
@@ -381,8 +383,10 @@ describe("recovering the access with a new code", () => {
   it("the registered e-mail and a new password: sessions end, data and settings stay, the code is spent", async () => {
     await withAuth("setup-recover", async (h) => {
       const { next, t, old } = await recoverable(h);
+      seedPush(h.db, "browser-a");
       await next.setupRecover(t.token, { email: " pessoa@EXEMPLO.com.br", password: NEW_PASSWORD }, client(NET));
       expect(await next.validate(old.token, true)).toBeNull();
+      expect(pushCount(h.db)).toBe(0);
       expect(h.settings.get().timeZone).toBe("America/Recife");
       expect(h.events().find((e) => e.kind === "access_recovered")?.alert_pending).toBe(1);
       expect(await outcome(next.login({ email: OWNER_EMAIL, password: OWNER_PASSWORD }, client(NET), noCookies))).toBe("INVALID_CREDENTIALS");

@@ -32,7 +32,9 @@ export type InternalKey =
   // Step 11: when the watchers run next, the local day of the last digest, and the interface errors of this hour.
   | "alert_watch_at"
   | "alert_digest_day"
-  | "diagnostics_client_window";
+  | "diagnostics_client_window"
+  // Step 11b: the test push notices of this hour.
+  | "push_test_window";
 
 export class InternalState {
   constructor(private readonly db: Database) {}

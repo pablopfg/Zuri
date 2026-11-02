@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { authActivityQuerySchema, authActivitySchema } from "../src/auth.ts";
+import { authActivityQuerySchema, authActivitySchema } from "../src/auth-activity.ts";
 
 const event = {
   id: 1,
