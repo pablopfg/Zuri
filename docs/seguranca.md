@@ -116,6 +116,44 @@ Decisão do Pablo de 31/10/2026; plano completo em
   http fora de loopback, sempre consulta o serviço de verdade; um teste confere
   essa escolha.
 
+## Recuperação de senha por e-mail
+
+Etapa 11c. Só funciona com o e-mail configurado (`SEND_EMAIL`, `ALERT_EMAIL_FROM`
+e o e-mail do dono); sem ele, a página aponta para o código de instalação.
+
+- `POST /api/auth/recover/request` responde 202 para qualquer e-mail, sem dizer
+  se é o do dono, e no mesmo tempo: o envio do e-mail continua depois da
+  resposta. Antes de olhar o e-mail, passa pelo limite de 3 pedidos por rede em
+  15 minutos (no máximo 200 redes lembradas) e pela verificação de robô, que
+  falha fechada como no login.
+- De todas as redes juntas, saem no máximo 3 links em 24 horas, com pelo menos
+  10 minutos entre um e outro. Um pedido fora disso não envia nada e mantém o
+  link anterior (motivo "link anterior mantido" no registro de acessos). Assim,
+  quem sabe o e-mail do dono não gasta os 10 e-mails do dia nem fica trocando o
+  link dele. Risco aceito: essa pessoa pode gastar os 3 links do dia; aí a
+  recuperação fica com o código de instalação até o dia seguinte. Um link cujo
+  envio falhou substitui o anterior.
+- O link leva 32 bytes aleatórios no fragmento (`/recuperar-senha#…`): o
+  fragmento não vai em nenhuma requisição, então o token não aparece em log
+  nenhum, e a página o tira da barra de endereço assim que o lê. O servidor
+  guarda só o HMAC do token, com validade de 30 minutos. Um pedido novo troca o
+  link anterior; usar, trocar a senha de outro jeito ou recuperar com o código
+  de instalação apaga o link.
+- Com a verificação em duas etapas ligada, a senha nova exige um código do app
+  autenticador ou de recuperação, com os mesmos limites de erro do login. Cinco
+  códigos errados no mesmo link o encerram. Quem lê o e-mail do dono, sozinho,
+  não toma a conta.
+- A senha nova passa pelas mesmas regras da troca de senha (tamanho, vazamento,
+  nome do dono). Ao salvar: todas as sessões terminam, os desafios abertos caem,
+  os navegadores conhecidos são esquecidos, os aparelhos do push são aposentados
+  e o evento `password_recovered` vira alerta de segurança em todos os canais.
+- O registro de acessos guarda cada pedido (`recovery_requested`), com o motivo:
+  e-mail diferente do da conta, envio desligado, link enviado ou e-mail que não
+  saiu.
+- O e-mail sai em texto puro, com assunto de uma linha só, sem caracteres de
+  controle e com links de fora desarmados, e termina com "A Zuri nunca pede a sua
+  senha por e-mail".
+
 ## Política de senha
 
 - 15 caracteres ou mais (cada letra acentuada ou emoji conta um), até 256.
