@@ -39,6 +39,9 @@ export function automationExecutor(deps: ExecutorDeps): Executor {
   };
 }
 
+/** The longest a scheduled routine may take, all its model calls together. */
+const ROUTINE_DEADLINE_MS = 5 * 60_000;
+
 async function routine(automation: Automation, runId: string, deps: ExecutorDeps): Promise<RunOutcome> {
   const cap = deps.settings().aiScheduledRunsPerDay;
   if (deps.automations.aiRunsToday() >= cap) return { status: "skipped", result: null, problem: "ai_budget" };
@@ -48,7 +51,9 @@ async function routine(automation: Automation, runId: string, deps: ExecutorDeps
       name: automation.name,
       prompt: automation.message,
       quiet: automation.sentinel,
-      signal: new AbortController().signal,
+      // Each model call already has its own deadline; this bounds the whole routine, so two in a
+      // wake stay well inside the alarm's time.
+      signal: AbortSignal.timeout(ROUTINE_DEADLINE_MS),
     });
     const delivered = notices.map((notice) => `${notice.title}\n${notice.body}`);
     const answer = automation.sentinel && isQuietAnswer(text) ? "" : text;

@@ -63,7 +63,8 @@ export function registerAutomationRoutes(app: Hono<ApiEnv>, deps: () => Automati
   /** The owner approves an AI routine the agent proposed. */
   app.post("/automations/:id/approve", async (c) => {
     const id = recordId(c.req.param("id"));
-    return Response.json({ automation: await deps().service.approve(id) });
+    const input = await readJson(c.req.raw, anyObject, 1024);
+    return Response.json({ automation: await deps().service.approve(id, input) });
   });
 
   /** Runs once now, outside the schedule (which stays as it is). */

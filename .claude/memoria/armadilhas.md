@@ -239,3 +239,8 @@ acrescente aqui cada armadilha nova que encontrar (sem dados pessoais).
   `PLAYWRIGHT_CHROMIUM_EXECUTABLE=/opt/pw-browsers/chromium-*/chrome-linux*/chrome`.
 - O Biome lê a pasta `coverage/` se ela existir; ela está fora do lint em
   `biome.json`.
+- `String.prototype.trim()` também tira U+FEFF. Um teste de caractere
+  invisível com o caractere no fim passa pelo `trim` do schema e não testa
+  nada: ponha o caractere no meio do texto.
+- Desde os cumprimentos (PR #34) o título do Início é "Bom dia/Boa tarde/Boa
+  noite…", não "Olá!": no e2e use `/^(Bom dia|Boa tarde|Boa noite)/`.

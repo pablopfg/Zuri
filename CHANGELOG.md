@@ -366,6 +366,10 @@ o [SemVer](https://semver.org/lang/pt-BR/). Cada PR escreve a sua entrada em
 
 ### Atualização
 
+- Migration 9 cria `zur_automations` e `zur_automation_runs`, com os
+  contadores de automações e de execuções. Nada muda nos dados que já existem
+  e não há segredo novo. A configuração "Rotinas com IA por dia" começa em 6.
+
 - Migration 8 cria `zur_conversations`, `zur_messages`,
   `zur_pending_actions` e `zur_task_plan_drafts`, com os contadores de
   conversas e mensagens, e acrescenta a coluna `author` em `zur_memories`

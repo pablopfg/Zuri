@@ -1,5 +1,6 @@
 import { log } from "../log.ts";
 import {
+  automationApproveSchema,
   AUTOMATION_CATCH_UP_MS,
   AUTOMATION_LIMITS,
   type Automation,
@@ -83,6 +84,8 @@ interface RunRow {
 
 /** Due automations run per wake; more wait for the next alarm, set right away. */
 const RUNS_PER_WAKE = 10;
+/** AI routines per wake: each can take up to the AI deadline, so only two share a handler. */
+const AI_RUNS_PER_WAKE = 2;
 /** A run that starts this late after its slot is a catch-up (the object was asleep or down). */
 const LATE_MS = 5 * 60_000;
 
@@ -179,7 +182,8 @@ export class AutomationService {
   async create(input: unknown, origin: AutomationOrigin, options: { pendingApproval?: boolean } = {}): Promise<Automation> {
     const data = parse(automationCreateSchema, input);
     checkContent(data.kind, data.message, data.sentinel);
-    const pending = options.pendingApproval === true;
+    // An AI routine from the chat always waits for the owner, whatever the caller asked.
+    const pending = options.pendingApproval === true || (origin === "chat" && data.kind === "agent_prompt");
     const id = crypto.randomUUID();
     this.db.transaction(() => {
       this.storage.assertRoom("automations");
@@ -258,11 +262,17 @@ export class AutomationService {
     return this.get(id);
   }
 
-  /** The owner approves a routine the agent proposed: it becomes active with its first run. */
-  async approve(id: string): Promise<Automation> {
+  /**
+   * The owner approves a routine the agent proposed: it becomes active with its
+   * first run. Only the version the owner read (`updatedAt`): if it changed
+   * since, the approval is refused and the screen shows the new text.
+   */
+  async approve(id: string, input: unknown): Promise<Automation> {
+    const { updatedAt } = parse(automationApproveSchema, input);
     this.db.transaction(() => {
       const row = this.row(id);
       if (row.status !== "pending_approval") throw new AppError("CONFLICT", "error.automationNotPending");
+      if (row.updated_at !== updatedAt) throw new AppError("TARGET_CHANGED", "error.automationChanged");
       this.assertActiveRoom();
       const next = this.firstRun(parseSchedule(row.schedule));
       this.db.run(
@@ -398,7 +408,12 @@ export class AutomationService {
         nowIso,
         RUNS_PER_WAKE,
       );
+      let ai = 0;
       for (const row of due) {
+        // A wake runs its AI routines one after another: two at most, the rest go to the next wake
+        // (the alarm is set again at once), so a long chain can't outlast the handler's time.
+        if (row.kind === "agent_prompt" && ai >= AI_RUNS_PER_WAKE) continue;
+        if (row.kind === "agent_prompt") ai++;
         const claim = this.claim(row);
         if (!claim) continue;
         if (claim.missed) continue;
@@ -417,30 +432,31 @@ export class AutomationService {
       const fresh = this.db.one<AutomationRow>(`SELECT * FROM zur_automations WHERE id = ?`, row.id);
       if (fresh?.status !== "active" || fresh.next_run !== row.next_run || !fresh.next_run) return null;
       const now = this.now();
-      const slot = fresh.next_run;
-      const late = now - Date.parse(slot);
-      // A manual run of the same automation is still going: this slot is skipped, never run twice at once.
-      const busy = this.db.one(`SELECT 1 AS found FROM zur_automation_runs WHERE automation_id = ? AND status = 'running' LIMIT 1`, fresh.id) !== null;
-      const missed = late >= AUTOMATION_CATCH_UP_MS || busy;
-      const trigger: AutomationRunTrigger = late > LATE_MS ? "catch_up" : "schedule";
-      const runId = crypto.randomUUID();
       const at = new Date(now).toISOString();
-      const inserted = this.db.all(
-        `INSERT INTO zur_automation_runs (id, automation_id, automation_name, kind, trigger, slot, status, problem, started_at, finished_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT DO NOTHING RETURNING id`,
-        runId,
-        fresh.id,
-        fresh.name,
-        fresh.kind,
-        trigger,
-        slot,
-        missed ? "skipped" : "running",
-        busy ? "busy" : missed ? "missed" : null,
-        at,
-        missed ? at : null,
-      );
+      const schedule = parseSchedule(fresh.schedule);
+      const stored = fresh.next_run;
+      let recorded = false;
+      let slot: string | null = stored;
+      if (now - Date.parse(stored) >= AUTOMATION_CATCH_UP_MS) {
+        // A day or more late: that slot goes to the history as missed (never a stale reminder), and
+        // the latest slot of the last 24 h, if the rule has one, still runs once below.
+        recorded = this.insertRun(crypto.randomUUID(), fresh, stored, "catch_up", "missed", at);
+        const recent = nextRun(schedule, this.deps.timeZone(), new Date(Math.max(Date.parse(stored), now - AUTOMATION_CATCH_UP_MS)));
+        slot = recent && recent.getTime() <= now ? recent.toISOString() : null;
+      }
+      let run: { runId: string; trigger: AutomationRunTrigger } | null = null;
+      if (slot) {
+        const trigger: AutomationRunTrigger = now - Date.parse(slot) > LATE_MS ? "catch_up" : "schedule";
+        const runId = crypto.randomUUID();
+        // A run of the same automation is still going (a manual one): this slot is skipped, never run twice at once.
+        const busy = this.isRunning(fresh.id);
+        if (this.insertRun(runId, fresh, slot, trigger, busy ? "busy" : null, at)) {
+          recorded = true;
+          if (!busy) run = { runId, trigger };
+        }
+      }
       // The next run counts from the slot or from now, whichever is later: missed repeats collapse into one.
-      const next = nextRun(parseSchedule(fresh.schedule), this.deps.timeZone(), new Date(Math.max(now, Date.parse(slot))));
+      const next = nextRun(schedule, this.deps.timeZone(), new Date(Math.max(now, Date.parse(stored))));
       this.db.run(
         `UPDATE zur_automations SET next_run = ?, status = ?, updated_at = ? WHERE id = ?`,
         next ? next.toISOString() : null,
@@ -448,13 +464,42 @@ export class AutomationService {
         at,
         fresh.id,
       );
-      if (inserted.length === 0) return null;
-      if (missed) {
+      if (!recorded) return null;
+      if (!run) {
         this.db.run(`UPDATE zur_automations SET last_run_at = ?, last_run_status = 'skipped' WHERE id = ?`, at, fresh.id);
         this.pruneRuns();
+        return { automation: present(fresh), runId: "", trigger: "catch_up", missed: true };
       }
-      return { automation: present(fresh), runId, trigger, missed };
+      return { automation: present(fresh), runId: run.runId, trigger: run.trigger, missed: false };
     });
+  }
+
+  /** Inserts a run for a slot: `running`, or `skipped` with its problem. False when that slot already has one. */
+  private insertRun(runId: string, automation: AutomationRow, slot: string, trigger: AutomationRunTrigger, problem: AutomationRunProblem | null, at: string): boolean {
+    const inserted = this.db.all(
+      `INSERT INTO zur_automation_runs (id, automation_id, automation_name, kind, trigger, slot, status, problem, started_at, finished_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT DO NOTHING RETURNING id`,
+      runId,
+      automation.id,
+      automation.name,
+      automation.kind,
+      trigger,
+      slot,
+      problem ? "skipped" : "running",
+      problem,
+      at,
+      problem ? at : null,
+    );
+    return inserted.length > 0;
+  }
+
+  /**
+   * A run of this automation is going in this object right now. A `running` row this object
+   * isn't running is what a restart cut short: `reconcile()` closes it, and it never blocks a slot.
+   */
+  private isRunning(automationId: string): boolean {
+    const rows = this.db.all<{ id: string }>(`SELECT id FROM zur_automation_runs WHERE automation_id = ? AND status = 'running'`, automationId);
+    return rows.some((r) => this.#inFlight.has(r.id));
   }
 
   /** "Run now": outside the schedule, which stays as it is. One run of an automation at a time. */
@@ -463,8 +508,7 @@ export class AutomationService {
     if (automation.status === "pending_approval") throw new AppError("CONFLICT", "error.automationPending");
     const runId = crypto.randomUUID();
     this.db.transaction(() => {
-      const running = this.db.one(`SELECT 1 AS found FROM zur_automation_runs WHERE automation_id = ? AND status = 'running' LIMIT 1`, id);
-      if (running) throw new AppError("CONFLICT", "error.automationRunning");
+      if (this.isRunning(id)) throw new AppError("CONFLICT", "error.automationRunning");
       this.db.run(
         `INSERT INTO zur_automation_runs (id, automation_id, automation_name, kind, trigger, status, started_at) VALUES (?, ?, ?, ?, 'manual', 'running', ?)`,
         runId,
@@ -473,6 +517,7 @@ export class AutomationService {
         automation.kind,
         new Date(this.now()).toISOString(),
       );
+      this.#inFlight.add(runId);
     });
     await this.execute(automation, runId, "manual", execute);
     return this.run(runId);
@@ -520,12 +565,18 @@ export class AutomationService {
     this.db.run(`UPDATE zur_automation_runs SET ai = 1 WHERE id = ?`, runId);
   }
 
-  /** The oldest runs past the history's size go, a few at a time. */
+  /**
+   * The oldest runs past the history's size go, in batches: the history may grow
+   * `runsPruneBatch` past its size, then one delete brings it back (fewer writes than one per run).
+   */
   private pruneRuns(): void {
     const total = this.storage.count("automation_runs");
-    if (total <= AUTOMATION_LIMITS.runsKept) return;
+    if (total <= AUTOMATION_LIMITS.runsKept + AUTOMATION_LIMITS.runsPruneBatch) return;
+    // Today's AI runs stay: they are what the daily cap counts.
+    const dayStart = `${new Date(this.now()).toISOString().slice(0, 10)}T00:00:00.000Z`;
     this.db.run(
-      `DELETE FROM zur_automation_runs WHERE id IN (SELECT id FROM zur_automation_runs WHERE status != 'running' ORDER BY started_at, id LIMIT ?)`,
+      `DELETE FROM zur_automation_runs WHERE id IN (SELECT id FROM zur_automation_runs WHERE status != 'running' AND NOT (ai = 1 AND started_at >= ?) ORDER BY started_at, id LIMIT ?)`,
+      dayStart,
       total - AUTOMATION_LIMITS.runsKept,
     );
   }

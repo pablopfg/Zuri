@@ -246,7 +246,7 @@ export class ZuriAgent extends Agent<WorkerEnv> {
       const automations = new AutomationService(db, productivity.storage, new InternalState(db), {
         timeZone: () => settings.field("timeZone"),
         alarm: {
-          schedule: async (at) => (await this.schedule(at, "runAutomations", {})).id,
+          schedule: async (at) => (await this.schedule(at, "runAutomations", {}, { idempotent: false })).id,
           cancel: async (id) => {
             await this.cancelSchedule(id);
           },

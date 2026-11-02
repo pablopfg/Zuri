@@ -61,9 +61,10 @@ export function AutomationsPage() {
   // A link from the chat points at one automation: bring it into view once the list is here.
   const loaded = list.data !== undefined;
   useEffect(() => {
-    const hash = window.location.hash;
+    // Only the anchors this page makes; anything else in the address is ignored.
+    const hash = /^#(automacao-[0-9a-f-]{36})$/.exec(window.location.hash)?.[1];
     if (!loaded || !hash) return;
-    document.getElementById(decodeURIComponent(hash.slice(1)))?.scrollIntoView({ block: "center" });
+    document.getElementById(hash)?.scrollIntoView({ block: "center" });
   }, [loaded]);
 
   const all = list.data?.automations ?? [];
@@ -277,7 +278,7 @@ function PendingCard({ routines, onDecline }: { routines: Automation[]; onDeclin
                 loading={busy === routine.id}
                 onClick={() =>
                   void act(routine.id, async () => {
-                    await api(`/automations/${routine.id}/approve`, { method: "POST" });
+                    await api(`/automations/${routine.id}/approve`, { method: "POST", body: { updatedAt: routine.updatedAt } });
                     return t("web.automations.pending.approved");
                   })
                 }

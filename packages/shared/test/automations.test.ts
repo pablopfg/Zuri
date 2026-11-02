@@ -3,10 +3,12 @@ import {
   AI_LIMIT_RANGES,
   AUTOMATION_CATCH_UP_MS,
   AUTOMATION_LIMITS,
+  automationApproveSchema,
   automationCreateSchema,
   automationRunsQuerySchema,
   automationUpdateSchema,
   DEFAULT_SETTINGS,
+  hasInvisibleCharacter,
   isLocalMinute,
   isQuietAnswer,
   nextRun,
@@ -145,6 +147,22 @@ describe("the next run", () => {
     ]);
   });
 
+  it("in a zone where summer time is still in force (New York, 08/03/2026 and 01/11/2026)", () => {
+    const NY = "America/New_York";
+    // 02:30 doesn't exist on 8 March: it runs at 03:30 EDT, then back at 02:30 EDT.
+    expect(upcomingRuns({ type: "daily", time: "02:30" }, NY, at("2026-03-07T12:00:00Z"), 3).map(iso)).toEqual([
+      "2026-03-08T07:30:00.000Z",
+      "2026-03-09T06:30:00.000Z",
+      "2026-03-10T06:30:00.000Z",
+    ]);
+    // 01:30 happens twice on 1 November: it runs once, at the first pass (EDT).
+    expect(upcomingRuns({ type: "daily", time: "01:30" }, NY, at("2026-10-31T12:00:00Z"), 3).map(iso)).toEqual([
+      "2026-11-01T05:30:00.000Z",
+      "2026-11-02T06:30:00.000Z",
+      "2026-11-03T06:30:00.000Z",
+    ]);
+  });
+
   it("follows the zone it is given: the same rule in Lisbon is another instant", () => {
     expect(iso(nextRun({ type: "daily", time: "09:00" }, "Europe/Lisbon", at("2026-11-05T00:00:00Z")))).toBe("2026-11-05T09:00:00.000Z");
   });
@@ -171,6 +189,25 @@ describe("what the API takes", () => {
     expect(automationCreateSchema.safeParse({ ...base, kind: "webhook" }).success).toBe(false);
     expect(automationCreateSchema.safeParse({ ...base, name: "a\u0000b" }).success).toBe(false);
     expect(automationCreateSchema.safeParse({ ...base, status: "active" }).success).toBe(false);
+  });
+
+  it("refuses invisible characters that could hide text from the owner's review", () => {
+    for (const hidden of ["\u200B", "\u202E", "\u2066", "\uFEFF", "\u{E0041}"]) {
+      expect(hasInvisibleCharacter(`a${hidden}b`), JSON.stringify(hidden)).toBe(true);
+      expect(automationCreateSchema.safeParse({ ...base, name: `Revi${hidden}são` }).success).toBe(false);
+      expect(automationCreateSchema.safeParse({ ...base, message: `Res${hidden}uma` }).success).toBe(false);
+      expect(automationUpdateSchema.safeParse({ message: `Res${hidden}uma` }).success).toBe(false);
+    }
+    // Accents, emoji and line breaks are fine.
+    expect(hasInvisibleCharacter("Revisão de sexta 🗓️\nàçõ")).toBe(false);
+    expect(automationCreateSchema.safeParse({ ...base, message: "Revisão 🗓️\nde sexta" }).success).toBe(true);
+  });
+
+  it("an approval names the version the owner saw, and nothing else", () => {
+    expect(automationApproveSchema.safeParse({ updatedAt: "2026-11-05T12:00:00.000Z" }).success).toBe(true);
+    expect(automationApproveSchema.safeParse({}).success).toBe(false);
+    expect(automationApproveSchema.safeParse({ updatedAt: "x".repeat(41) }).success).toBe(false);
+    expect(automationApproveSchema.safeParse({ updatedAt: "2026-11-05T12:00:00.000Z", status: "active" }).success).toBe(false);
   });
 
   it("a change names at least one known field", () => {

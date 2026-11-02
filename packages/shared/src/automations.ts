@@ -45,6 +45,8 @@ export const AUTOMATION_LIMITS = {
   result: 2_000,
   /** Runs kept in the history; older ones go first. */
   runsKept: 2_000,
+  /** How far past `runsKept` the history may grow before one delete trims it back. */
+  runsPruneBatch: 50,
   /** Runs per page of the history. */
   runsPage: 30,
 } as const;
@@ -154,11 +156,25 @@ export interface AutomationRunPage {
 
 // ---------- What the API takes ----------
 
+/**
+ * Invisible characters: zero-width, direction overrides and Unicode tags. The
+ * owner approves the text they read, so nothing a model reads may hide in it
+ * ("ASCII smuggling"). Refused in the name and the message of an automation.
+ */
+const INVISIBLE = /[\u200B-\u200F\u202A-\u202E\u2060-\u2064\u2066-\u2069\uFEFF]|\uDB40[\uDC00-\uDC7F]/;
+
+/** True when `value` hides characters the owner can't see. */
+export function hasInvisibleCharacter(value: string): boolean {
+  return INVISIBLE.test(value);
+}
+
+const visible = (value: string) => !hasInvisibleCharacter(value);
+
 export const automationCreateSchema = /* @__PURE__ */ z
   .object({
-    name: line(AUTOMATION_LIMITS.name),
+    name: line(AUTOMATION_LIMITS.name).refine(visible),
     kind: z.enum(AUTOMATION_KINDS),
-    message: text(AUTOMATION_LIMITS.message).default(""),
+    message: text(AUTOMATION_LIMITS.message).refine(visible).default(""),
     schedule: scheduleSchema,
     sentinel: z.boolean().default(false),
   })
@@ -167,8 +183,8 @@ export type AutomationCreate = z.input<typeof automationCreateSchema>;
 
 export const automationUpdateSchema = /* @__PURE__ */ z
   .object({
-    name: line(AUTOMATION_LIMITS.name),
-    message: text(AUTOMATION_LIMITS.message),
+    name: line(AUTOMATION_LIMITS.name).refine(visible),
+    message: text(AUTOMATION_LIMITS.message).refine(visible),
     schedule: scheduleSchema,
     sentinel: z.boolean(),
     /** true pauses, false resumes. */
@@ -178,6 +194,9 @@ export const automationUpdateSchema = /* @__PURE__ */ z
   .strict()
   .refine((patch) => Object.keys(patch).length > 0);
 export type AutomationUpdate = z.input<typeof automationUpdateSchema>;
+
+/** POST /api/automations/:id/approve: the version the owner read (its `updatedAt`), so a changed routine is never approved unseen. */
+export const automationApproveSchema = /* @__PURE__ */ z.object({ updatedAt: z.string().max(40) }).strict();
 
 export const automationRunsQuerySchema = /* @__PURE__ */ z
   .object({

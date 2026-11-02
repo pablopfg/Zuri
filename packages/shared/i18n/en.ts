@@ -885,6 +885,7 @@ export const en: Messages = {
   "error.automationPendingLimit": "10 routines are already waiting for your approval. Review those first.",
   "error.automationPending": "This routine is still waiting for your approval.",
   "error.automationNotPending": "This routine was already approved or declined.",
+  "error.automationChanged": "This routine changed after you opened the page. Check the new text before approving.",
   "error.automationInPast": "That time has already passed. Pick a moment in the future.",
   "error.automationRunning": "This automation is already running. Wait for it to finish.",
   "error.automationQuietOnlyAi": "Only Zuri's routines can stay quiet when there is nothing to report.",

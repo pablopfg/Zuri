@@ -61,6 +61,7 @@ export const ptBRServer = {
   "error.automationPendingLimit": "Já há 10 rotinas esperando a sua aprovação. Revise essas primeiro.",
   "error.automationPending": "Esta rotina ainda espera a sua aprovação.",
   "error.automationNotPending": "Esta rotina já foi aprovada ou recusada.",
+  "error.automationChanged": "Esta rotina mudou depois que você abriu a tela. Confira o texto novo antes de aprovar.",
   "error.automationInPast": "Esse horário já passou. Escolha um momento no futuro.",
   "error.automationRunning": "Esta automação já está rodando. Espere terminar.",
   "error.automationQuietOnlyAi": "Só as rotinas da Zuri podem ficar quietas quando não há nada a avisar.",

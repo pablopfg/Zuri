@@ -124,12 +124,24 @@ describe("an AI routine from the chat", () => {
       world.clock.now += 30 * 24 * HOUR;
       expect(await world.automations.wake(null, recorder().execute)).toBe(0);
 
-      const approved = await world.automations.approve(proposed.id);
+      // The owner approves what they saw: a routine changed since then is refused.
+      expect((await refusal(world.automations.approve(proposed.id, { updatedAt: "2026-01-01T00:00:00.000Z" }))).code).toBe("TARGET_CHANGED");
+      const approved = await world.automations.approve(proposed.id, { updatedAt: proposed.updatedAt });
       expect(approved.status).toBe("active");
       expect(approved.nextRunAt).not.toBeNull();
       expect(world.alarm.pending.size).toBe(1);
       // Approving twice does nothing more.
-      expect((await refusal(world.automations.approve(proposed.id))).messageKey).toBe("error.automationNotPending");
+      expect((await refusal(world.automations.approve(proposed.id, { updatedAt: approved.updatedAt }))).messageKey).toBe("error.automationNotPending");
+    });
+  });
+
+  it("from the chat it always waits for approval, even when the caller didn't ask", async () => {
+    await withChatWorld(async (world) => {
+      expect((await world.automations.create(routine(), "chat")).status).toBe("pending_approval");
+      // From the app, the owner is the one asking: it starts active.
+      expect((await world.automations.create(routine("Minha"), "app")).status).toBe("active");
+      // A reminder from the chat runs no AI: active at once.
+      expect((await world.automations.create(reminder(), "chat")).status).toBe("active");
     });
   });
 
@@ -220,13 +232,78 @@ describe("the alarm", () => {
     await withChatWorld(async (world) => {
       const a = await world.automations.create(reminder(), "app");
       const { runs, execute } = recorder();
-      // Exactly 24 h after the 13:00 UTC slot: the boundary counts as missed.
+      // Exactly 24 h after the 13:00 UTC slot: the boundary counts as missed, and today's slot,
+      // due at this same instant, runs on time.
       world.clock.now = Date.parse("2026-11-01T13:00:00Z");
       await fire(world, execute);
-      expect(runs).toEqual([]);
-      expect(runRows(world)).toEqual([{ status: "skipped", trigger: "catch_up", problem: "missed", slot: "2026-10-31T13:00:00.000Z" }]);
-      // The slot at the same instant (today's 10:00) is ahead of "now or the slot", so it's next.
+      expect(runs).toEqual([{ name: "Remédio", trigger: "schedule" }]);
+      expect(runRows(world)).toEqual([
+        { status: "skipped", trigger: "catch_up", problem: "missed", slot: "2026-10-31T13:00:00.000Z" },
+        { status: "success", trigger: "schedule", problem: null, slot: "2026-11-01T13:00:00.000Z" },
+      ]);
       expect(row(world, a.id)?.next_run).toBe("2026-11-02T13:00:00.000Z");
+    });
+  });
+
+  it("down for two days: the old slot is recorded as missed and the latest one, under a day late, still runs once", async () => {
+    await withChatWorld(async (world) => {
+      const a = await world.automations.create(reminder(), "app");
+      const { runs, execute } = recorder();
+      // Saturday's 10:00 lost; it's Monday 11:00 in São Paulo. Sunday's slot is past a day too.
+      world.clock.now = Date.parse("2026-11-02T14:00:00Z");
+      expect(await fire(world, execute)).toBe(1);
+      expect(runs).toEqual([{ name: "Remédio", trigger: "catch_up" }]);
+      expect(runRows(world)).toEqual([
+        { status: "skipped", trigger: "catch_up", problem: "missed", slot: "2026-10-31T13:00:00.000Z" },
+        { status: "success", trigger: "catch_up", problem: null, slot: "2026-11-02T13:00:00.000Z" },
+      ]);
+      expect(row(world, a.id)?.next_run).toBe("2026-11-03T13:00:00.000Z");
+      // Firing again finds nothing to claim.
+      await world.automations.wake(null, execute);
+      expect(runs).toHaveLength(1);
+    });
+  });
+
+  it("a one-time reminder lost for a day or more is only recorded as missed, and completes", async () => {
+    await withChatWorld(async (world) => {
+      const a = await world.automations.create(reminder({ schedule: { type: "once", at: "2026-10-31T10:00" } }), "app");
+      const { runs, execute } = recorder();
+      world.clock.now = Date.parse("2026-11-03T13:00:00Z");
+      expect(await fire(world, execute)).toBe(0);
+      expect(runs).toEqual([]);
+      expect(runRows(world).map((r) => r.problem)).toEqual(["missed"]);
+      expect(row(world, a.id)?.status).toBe("completed");
+    });
+  });
+
+  it("runs at most two AI routines per wake; the rest run right after, on the next alarm", async () => {
+    await withChatWorld(async (world) => {
+      for (const name of ["R1", "R2", "R3"]) await world.automations.create(reminder({ name, kind: "agent_prompt", message: "Resuma" }), "app");
+      await world.automations.create(reminder({ name: "Lembrete" }), "app");
+      world.clock.now = Date.parse("2026-10-31T13:00:00Z");
+      const { runs, execute } = recorder();
+      expect(await fire(world, execute)).toBe(3);
+      expect(runs.map((r) => r.name).sort()).toEqual(["Lembrete", "R1", "R2"]);
+      // The third is still due: the alarm is set for now, and it runs on time on that wake.
+      expect(world.alarm.only()?.at.getTime()).toBe(world.clock.now);
+      expect(await fire(world, execute)).toBe(1);
+      expect(runs.at(-1)).toEqual({ name: "R3", trigger: "schedule" });
+    });
+  });
+
+  it("a run left `running` by a restart never blocks a slot, even before the reconciliation", async () => {
+    await withChatWorld(async (world) => {
+      const a = await world.automations.create(reminder(), "app");
+      world.db.run(
+        `INSERT INTO zur_automation_runs (id, automation_id, automation_name, kind, trigger, status, started_at) VALUES ('00000000-0000-4000-8000-000000000002', ?, 'Remédio', 'reminder', 'manual', 'running', '2026-10-31T12:00:00.000Z')`,
+        a.id,
+      );
+      world.clock.now = Date.parse("2026-10-31T13:00:00Z");
+      const { runs, execute } = recorder();
+      expect(await fire(world, execute)).toBe(1);
+      expect(runs).toEqual([{ name: "Remédio", trigger: "schedule" }]);
+      // Nor a manual run.
+      expect((await world.automations.runNow(a.id, execute)).status).toBe("success");
     });
   });
 
@@ -407,10 +484,12 @@ describe("the history", () => {
     });
   });
 
-  it("keeps at most 2,000 runs: the oldest go first", async () => {
+  it("keeps 2,000 runs, trimmed in batches: up to 50 past it stay, one more trims back to 2,000, oldest first", async () => {
     await withChatWorld(async (world) => {
       const a = await world.automations.create(reminder(), "app");
-      for (let i = 0; i < AUTOMATION_LIMITS.runsKept; i++) {
+      const count = () => world.db.one<{ n: number }>(`SELECT count(*) AS n FROM zur_automation_runs`)?.n;
+      const limit = AUTOMATION_LIMITS.runsKept + AUTOMATION_LIMITS.runsPruneBatch;
+      for (let i = 0; i < limit - 1; i++) {
         world.db.run(
           `INSERT INTO zur_automation_runs (id, automation_id, automation_name, kind, trigger, status, started_at) VALUES (?, ?, 'Remédio', 'reminder', 'manual', 'success', ?)`,
           crypto.randomUUID(),
@@ -418,9 +497,36 @@ describe("the history", () => {
           new Date(Date.UTC(2026, 0, 1) + i * 1_000).toISOString(),
         );
       }
+      // n: the history may sit at 2,050.
       await world.automations.runNow(a.id, recorder().execute);
-      expect(world.db.one<{ n: number }>(`SELECT count(*) AS n FROM zur_automation_runs`)?.n).toBe(AUTOMATION_LIMITS.runsKept);
+      expect(count()).toBe(limit);
+      // n + 1: one delete trims it to 2,000.
+      await world.automations.runNow(a.id, recorder().execute);
+      expect(count()).toBe(AUTOMATION_LIMITS.runsKept);
       expect(world.db.one(`SELECT 1 AS found FROM zur_automation_runs WHERE started_at = ?`, new Date(Date.UTC(2026, 0, 1)).toISOString())).toBeNull();
+    });
+  });
+
+  it("trimming keeps today's AI runs, which the day's cap counts", async () => {
+    await withChatWorld(async (world) => {
+      const a = await world.automations.create(reminder(), "app");
+      const today = new Date(world.clock.now - 60_000).toISOString();
+      world.db.run(
+        `INSERT INTO zur_automation_runs (id, automation_id, automation_name, kind, trigger, status, ai, started_at) VALUES (?, ?, 'Rotina', 'agent_prompt', 'manual', 'success', 1, '2026-10-31T00:00:01.000Z')`,
+        crypto.randomUUID(),
+        a.id,
+      );
+      for (let i = 0; i < AUTOMATION_LIMITS.runsKept + AUTOMATION_LIMITS.runsPruneBatch; i++) {
+        world.db.run(
+          `INSERT INTO zur_automation_runs (id, automation_id, automation_name, kind, trigger, status, started_at) VALUES (?, ?, 'Remédio', 'reminder', 'manual', 'success', ?)`,
+          crypto.randomUUID(),
+          a.id,
+          today,
+        );
+      }
+      expect(world.automations.aiRunsToday()).toBe(1);
+      await world.automations.runNow(a.id, recorder().execute);
+      expect(world.automations.aiRunsToday()).toBe(1);
     });
   });
 });

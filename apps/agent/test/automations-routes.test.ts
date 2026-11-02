@@ -114,22 +114,26 @@ describe("the automation routes", () => {
     expect(big.details).toEqual({ fields: ["_body"] });
     expect((await refusal(await api("GET", "/automations/not-an-id"), 404)).code).toBe("NOT_FOUND");
     expect((await refusal(await api("GET", "/automations/runs?automation=1&automation=2"), 400)).code).toBe("VALIDATION_FAILED");
-    expect((await refusal(await api("POST", `/automations/${MISSING}/approve`), 404)).code).toBe("NOT_FOUND");
+    expect((await refusal(await api("POST", `/automations/${MISSING}/approve`, { updatedAt: "2026-01-01T00:00:00.000Z" }), 404)).code).toBe("NOT_FOUND");
   });
 
   it("a routine waiting for approval is approved once; the second time is a conflict", async () => {
-    const id = await runInDurableObject(owner(), async (agent: ZuriAgent) => {
+    const { id, updatedAt } = await runInDurableObject(owner(), async (agent: ZuriAgent) => {
       const routine = await agent.store.automations.create(
         { name: "Revisão", kind: "agent_prompt", message: "Resuma minha semana", schedule: { type: "weekly", days: [5], time: "17:00" } },
         "chat",
         { pendingApproval: true },
       );
-      return routine.id;
+      return { id: routine.id, updatedAt: routine.updatedAt };
     });
     expect((await refusal(await api("POST", `/automations/${id}/run`), 409)).code).toBe("CONFLICT");
-    const approved = await json<{ automation: Automation }>(await api("POST", `/automations/${id}/approve`), 200);
+    // The body says which version the owner saw: missing, unknown fields or another version are refused.
+    expect((await refusal(await api("POST", `/automations/${id}/approve`), 400)).code).toBe("VALIDATION_FAILED");
+    expect((await refusal(await api("POST", `/automations/${id}/approve`, { updatedAt, extra: 1 }), 400)).code).toBe("VALIDATION_FAILED");
+    expect((await refusal(await api("POST", `/automations/${id}/approve`, { updatedAt: "2026-01-01T00:00:00.000Z" }), 409)).code).toBe("TARGET_CHANGED");
+    const approved = await json<{ automation: Automation }>(await api("POST", `/automations/${id}/approve`, { updatedAt }), 200);
     expect(approved.automation.status).toBe("active");
-    expect((await refusal(await api("POST", `/automations/${id}/approve`), 409)).message).toBe("Esta rotina já foi aprovada ou recusada.");
+    expect((await refusal(await api("POST", `/automations/${id}/approve`, { updatedAt }), 409)).message).toBe("Esta rotina já foi aprovada ou recusada.");
     expect((await api("DELETE", `/automations/${id}`)).status).toBe(204);
   });
 

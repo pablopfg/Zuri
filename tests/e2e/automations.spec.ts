@@ -141,7 +141,7 @@ test("a routine Zuri proposes in the chat runs nothing until the owner approves 
 test("the palette opens the form, from another page or on the page itself", async ({ page }) => {
   await page.goto("/");
   await signIn(page);
-  await expect(page.getByRole("heading", { level: 1, name: "Olá!" })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: /^(Bom dia|Boa tarde|Boa noite)/ })).toBeVisible();
   for (const from of ["home", "automations"]) {
     await page.keyboard.press("Control+k");
     await page.getByRole("dialog", { name: "Buscar e ir para" }).getByRole("combobox").fill("nova automação");
