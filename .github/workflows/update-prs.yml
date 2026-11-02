@@ -7,6 +7,7 @@ name: Update PRs
 # main. A push made with GITHUB_TOKEN starts no pull_request run, so the script
 # dispatches ci.yml and codeql.yml on the branch: the required checks run on
 # the new commit, the same jobs as always. docs/agente/merge-de-prs.md.
+# When the run fails, report-failure opens a standard issue (docs/agente/issues.md).
 on:
   push:
     branches: [develop]
@@ -59,3 +60,28 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: node scripts/ordem-de-merge.ts --atualizar
+
+  # Nobody owns a failed scheduled or push run, so it opens (or updates) one
+  # standard issue instead (scripts/issue-de-falha.ts, docs/agente/issues.md).
+  report-failure:
+    needs: update
+    # A step stuck past timeout-minutes ends the job as cancelled: that is a failure here too.
+    if: always() && github.ref == 'refs/heads/develop' && (needs.update.result == 'failure' || needs.update.result == 'cancelled')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    # issues: create the issue, its labels and the repeat comment; actions: read the failed steps.
+    permissions:
+      issues: write
+      actions: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: develop
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+      - name: Open or update the failure issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/issue-de-falha.ts
