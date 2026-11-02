@@ -39,7 +39,8 @@ export type InternalKey =
   | "email_sent_window"
   | "recovery_link"
   | "recovery_requests"
-  | "recovery_issued";
+  | "recovery_issued"
+  | "alert_learning_at";
 
 export class InternalState {
   constructor(private readonly db: Database) {}

@@ -96,9 +96,11 @@ describe("SettingsRepository", () => {
         watchersEnabled: false,
         alertPerHour: 60,
         alertPerDay: 1,
+        alertLearning: false,
         alertRoutes: { security: ["push", "email"], digests: [] },
       });
-      expect(saved).toMatchObject({ digestEnabled: false, digestTime: "06:45", watchersEnabled: false, alertPerHour: 60, alertPerDay: 1 });
+      expect(saved).toMatchObject({ digestEnabled: false, digestTime: "06:45", watchersEnabled: false, alertPerHour: 60, alertPerDay: 1, alertLearning: false });
+      expect(settings.get().alertLearning).toBe(false);
       expect(settings.get().alertRoutes).toEqual({ security: ["push", "email"], digests: [] });
       // Saving the same routes again is a no-op, not a change.
       expect(() => settings.update({ alertRoutes: { security: ["push", "email"], digests: [] } })).not.toThrow();
@@ -110,6 +112,7 @@ describe("SettingsRepository", () => {
         { alertPerDay: 501 },
         { alertRoutes: { security: ["sms"] } },
         { alertRoutes: { nope: ["push"] } },
+        { alertLearning: "yes" },
       ]) {
         expect(() => settings.update(patch as never), JSON.stringify(patch)).toThrow(AppError);
       }

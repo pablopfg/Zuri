@@ -2,14 +2,14 @@
 
 A etapa 11 junta num lugar só tudo o que a Zuri tem a dizer ao dono: o sino da
 barra (com o número de avisos sem ler) abre a central de avisos. Ela chega em
-três partes:
+quatro partes:
 
 | Parte | O que entrega | Situação |
 | --- | --- | --- |
 | 11a | Central de avisos, insistência, alertas de acesso, resultados das automações, vigias, resumo do dia e a aba Diagnóstico | mesclada |
 | 11b | Notificação no aparelho (Web Push com VAPID) e canais por tipo de aviso | mesclada |
-| 11c | E-mail (`SEND_EMAIL`) e recuperação de senha por e-mail | este PR |
-| 11d | Prioridade que aprende e campo de prioridade nas automações | depois da 11c |
+| 11c | E-mail (`SEND_EMAIL`) e recuperação de senha por e-mail | mesclada |
+| 11d | Prioridade que aprende e campo de prioridade nas automações | este PR |
 
 ## Onde fica o código
 
@@ -19,11 +19,13 @@ três partes:
 - `apps/agent/src/email/`: o envio com a conta do dia (`sender.ts`) e o canal de e-mail (`channel.ts`); `apps/agent/src/auth/email-recovery.ts` guarda o link de senha nova.
 - `apps/agent/src/push/`: a cifra e a assinatura do Web Push (`webpush.ts`), os aparelhos (`devices.ts`), o canal (`channel.ts`) e o que a aba usa (`service.ts`).
 - `apps/agent/src/alerts/security.ts`: transforma os eventos de acesso marcados para alerta em avisos críticos.
-- `apps/agent/src/alerts/watchers.ts`: os vigias e o resumo do dia.
+- `apps/agent/src/alerts/watchers.ts`: os vigias, o resumo do dia e a revisão diária da prioridade que aprende.
+- `apps/agent/src/alerts/learning.ts`: `AlertLearning`, a prioridade que aprende (chave da origem, ajuste, revisão e desfazer).
 - `apps/agent/src/alerts/automations.ts`: o que cada execução de automação vira (aviso, aviso de sistema ou falha no Diagnóstico).
 - `apps/agent/src/diagnostics/service.ts`: o registro próprio de falhas.
 - `apps/agent/src/api/notices.ts`: as rotas `/api/notices*`, `/api/alerts` e `/api/diagnostics*`.
 - `apps/web/src/components/NotificationCenter.tsx` (sino, no pacote inicial) e `NoticesPanel.tsx` (painel, sob demanda); `pages/settings/AlertsTab.tsx` (com `PushCard.tsx` e `RoutesCard.tsx`) e `DiagnosticsTab.tsx`; `public/sw.js` mostra a notificação.
+- Migration 13: coluna `learn_key` em `zur_notices` (com índice), tabela `zur_alert_learning` e coluna `priority` em `zur_automations` (padrão `normal`).
 - Migration 12: `zur_push_devices`.
 - Migration 11: `zur_notices`, `zur_alert_keys`, `zur_alert_deliveries`, `zur_diagnostics` e os contadores `notices`, `security_notices`, `notices_unread` e `alert_deliveries`.
 
@@ -31,7 +33,7 @@ três partes:
 
 | Origem | Categoria | Prioridade | Observação |
 | --- | --- | --- | --- |
-| Resultado de lembrete, resumo das tarefas ou rotina | lembretes, resumos ou rotinas | normal | O texto de `notify_owner` vai junto no resultado |
+| Resultado de lembrete, resumo das tarefas ou rotina | lembretes, resumos ou rotinas | a da automação (padrão normal) | O texto de `notify_owner` vai junto no resultado |
 | Rotina pulada por falta de IA | sistema | normal | No máximo 1 por rotina a cada 20 h |
 | Tarefa vencendo na próxima hora | tarefas | normal | Uma vez por tarefa e prazo |
 | Tarefa vencendo nas próximas 24 h | tarefas | normal | Uma vez por tarefa e prazo |
@@ -43,6 +45,7 @@ três partes:
 | Mesma falha 5 vezes em 15 min ou 20 no dia | sistema | alta | Uma vez por dia por tipo de falha |
 | Falha nova nesta versão | sistema | normal | Uma vez por dia por tipo de falha |
 | Evento de acesso marcado para alerta | segurança | sempre crítica | Novo acesso, 2FA ou passkey mudando, senha trocada etc. |
+| A prioridade que aprende baixou ou subiu um tipo de aviso | sistema | baixa | Um por mudança; leva a Configurações › Avisos |
 
 Os vigias rodam a cada 15 minutos, no máximo 5 avisos de tarefa por rodada e 20
 em 24 horas. O resumo do dia sai uma vez por dia local, no horário escolhido
@@ -113,6 +116,36 @@ A aba mostra uma tabela com cada tipo de aviso (lembretes, resumos, rotinas,
 tarefas, sistema, segurança e eventos da agenda) e cada canal. O padrão manda
 tudo para o push e o Telegram; segurança vai sempre por todos e não muda. Os
 limites por canal (padrão 6 por hora e 30 por dia) ficam logo abaixo.
+
+## Prioridade que aprende
+
+Cada aviso guarda a sua origem (`learn_key`): a automação que o gerou
+(`automation:<id>`) ou, para os outros, o tipo do aviso (`watch.taskStalled`,
+`digest.daily`…). Lembretes, segurança, alertas críticos, a IA do dia esgotada,
+falha repetida e os próprios avisos de mudança nunca têm origem e nunca mudam.
+
+Uma vez por dia, na rodada dos vigias, a revisão olha os avisos de cada origem
+criados entre 14 dias e 24 horas atrás (o último dia fica de fora para o dono
+ter tempo de abrir). Com pelo menos 5 avisos:
+
+- 80% ou mais ignorados (nunca abertos, ou com "Parar de insistir") descem um
+  nível;
+- 80% ou mais abertos em até 15 minutos sobem um nível, no máximo até alta.
+
+Cada origem muda no máximo um nível por semana, e o deslocamento guardado fica
+entre −2 e +2 (`zur_alert_learning`, até 200 origens). O aviso pedido como
+crítico nunca muda. Cada mudança gera um aviso baixo ("Menos prioridade para…" ou
+"Mais prioridade para…").
+
+Em Configurações › Avisos, o cartão "Prioridades que a Zuri aprendeu" lista o
+que mudou, com "Desfazer" (`DELETE /api/alerts/learning/:key`, 204 ou 404 para
+chave inválida ou sem mudança). Desfazer volta à prioridade pedida pela origem e
+segura a revisão daquela origem por uma semana. A chave `alertLearning`
+(padrão ligada) desliga tudo: com ela desligada, os avisos chegam com a
+prioridade pedida, sem apagar o que foi aprendido.
+
+As automações ganharam o campo `priority` (baixa, normal ou alta; padrão
+normal), escolhido no formulário. Crítica fica só para segurança e sistema.
 
 ## Insistência e reconhecimento
 

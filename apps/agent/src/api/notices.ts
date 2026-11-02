@@ -1,4 +1,4 @@
-import { clientErrorSchema, diagnosticResolveSchema, noticeReadSchema, pushSubscribeSchema, RECORD_ID } from "@zuri/shared";
+import { clientErrorSchema, diagnosticResolveSchema, learningKeySchema, noticeReadSchema, pushSubscribeSchema, RECORD_ID } from "@zuri/shared";
 import type { Context, Hono } from "hono";
 import type { AlertService } from "../alerts/service.ts";
 import type { ClientInfo } from "../auth/client.ts";
@@ -52,6 +52,13 @@ export function registerNoticeRoutes(app: Hono<ApiEnv>, deps: () => NoticeDeps, 
   });
 
   app.get("/alerts", () => Response.json(deps().alerts.overview()));
+
+  // Undoes what the priority that learns changed for one source (step 11d).
+  app.delete("/alerts/learning/:key", (c) => {
+    const key = learningKeySchema.safeParse(c.req.param("key"));
+    if (!key.success || !deps().alerts.learning.reset(key.data)) throw new AppError("NOT_FOUND");
+    return new Response(null, { status: 204 });
+  });
 
   // Push (step 11b). A new device asks for the password typed recently: a stolen
   // session can't quietly add a device that would then read every notice.

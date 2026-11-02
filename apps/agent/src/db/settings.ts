@@ -35,6 +35,7 @@ const STORAGE_KEYS = {
   alertRoutes: "alert_routes",
   alertPerHour: "alert_per_hour",
   alertPerDay: "alert_per_day",
+  alertLearning: "alert_learning",
 } as const satisfies Record<keyof Settings, string>;
 
 type Field = keyof Settings;

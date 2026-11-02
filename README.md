@@ -24,7 +24,7 @@ de um Durable Object e conversa com você pelo navegador e, em breve, pelo Teleg
 </div>
 
 > [!NOTE]
-> **Em construção.** A Zuri sai em 28 etapas, uma por PR, a partir da [especificação](docs/especificacao.md). As etapas 0 a 9 estão na `develop`, inclusive a conversa com o agente. O [mapa das etapas](#️-mapa-das-etapas) mostra o que já existe e o que vem a seguir; o estado detalhado fica em [`progresso.md`](.claude/memoria/progresso.md).
+> **Em construção.** A Zuri sai em 28 etapas, uma por PR, a partir da [especificação](docs/especificacao.md). As etapas 0 a 11 estão na `develop`, da conversa com o agente às automações e à central de avisos. O [mapa das etapas](#️-mapa-das-etapas) mostra o que já existe e o que vem a seguir; o estado detalhado fica em [`progresso.md`](.claude/memoria/progresso.md).
 
 ## Sumário
 
@@ -168,12 +168,12 @@ O que está na `develop` hoje, etapa por etapa. "extra" marca melhorias feitas f
 | 🩺 | **Diagnóstico** | Em Configurações, as falhas dos últimos 30 dias por tipo (nunca o que você escreveu), com aviso quando uma falha se repete ou aparece numa versão nova, e um botão que abre o relato do problema no GitHub já preenchido. | 11 |
 | 📲 | **Notificação no aparelho** | Os avisos chegam ao celular ou ao computador com a Zuri fechada, em até 3 aparelhos, cifrados de ponta a ponta e discretos na tela bloqueada (o conteúdo fica no app). Você escolhe o que vai para cada canal, e um aparelho novo pede a senha e avisa nos outros. | 11 |
 | 📧 | **E-mail e "Esqueci minha senha"** | Avisos também por e-mail, com assunto discreto e no máximo 10 por dia (4 guardados para segurança). Na tela de entrada, um link de 30 minutos no seu e-mail cria uma senha nova, pedindo o código do autenticador quando a verificação em duas etapas está ligada. | 11 |
+| 🎯 | **Prioridade que aprende** | O tipo de aviso que você quase sempre deixa de lado desce um nível, e o que você abre logo sobe, no máximo um nível por semana e sempre com "Desfazer". Lembretes e segurança nunca mudam, e cada automação tem a sua prioridade. | 11 |
 
 ## 🔭 O que vem a seguir
 
 | | Funcionalidade | O que faz | Etapa |
 | :---: | --- | --- | :---: |
-| 🎯 | **Prioridade que aprende** | A Zuri percebe quais avisos você abre e ignora e ajusta a prioridade, e as automações ganham um campo de prioridade. | 11 |
 | 🤖 | **Bot do Telegram** | Painel de administração no bolso: consultas sem IA, conversa por texto e voz (arquivo acima do limite só com a sua confirmação), aprovações com passkey e modo de bloqueio. | 12–16 |
 | 🔌 | **Integrações** | Busca semântica, servidores MCP, Google Agenda, Google Contatos por etiqueta, acesso remoto para o n8n e monitor de sites, todos opcionais. | 17–22 |
 | 💾 | **Backup e instalação** | Backup e importação, guia de instalação só pelo navegador e auditoria final. | 23–25 |
@@ -257,7 +257,7 @@ O orçamento de cada cota está em [docs/arquitetura/orcamento-free-tier.md](doc
 | | 8 | Provedor de IA e medição de uso | ✅ |
 | | 9 | Chat com ferramentas | ✅ |
 | | 10 | Automações | ✅ |
-| | 11 | Central de avisos, push e e-mail | 🚧 |
+| | 11 | Central de avisos, push e e-mail | ✅ |
 | **C · Bot do Telegram** | 12 | Fundação do bot | ⬜ |
 | | 13 | Avisos no Telegram | ⬜ |
 | | 14 | Conversa e voz | ⬜ |

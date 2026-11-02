@@ -656,6 +656,32 @@ export const MIGRATIONS: readonly Migration[] = [
       `CREATE INDEX IF NOT EXISTS zur_push_devices_browser ON zur_push_devices (browser) WHERE browser IS NOT NULL`,
     ],
   },
+  {
+    version: 13,
+    name: "alert_learning",
+    statements: [
+      // The priority that learns (step 11d). Each notice keeps its source (the
+      // automation, or the kind of notice): the daily review reads how the
+      // owner answered that source's notices. Null for security and reminders,
+      // which never learn.
+      `ALTER TABLE zur_notices ADD COLUMN learn_key TEXT`,
+      // What the source asked for, before the shift: the review moves from asked plus shift,
+      // so a priority the owner changed later never leaves the shift out of step.
+      `ALTER TABLE zur_notices ADD COLUMN asked_priority TEXT`,
+      `CREATE INDEX IF NOT EXISTS zur_notices_learning ON zur_notices (learn_key, created_at) WHERE learn_key IS NOT NULL`,
+      // One row per source the review changed: levels away from what the source
+      // asks for (one a week at most) and the last notice's title for the
+      // settings list. In the backup: it is the owner's own preference, learned.
+      `CREATE TABLE IF NOT EXISTS zur_alert_learning (
+        key TEXT PRIMARY KEY,
+        shift INTEGER NOT NULL DEFAULT 0 CHECK (shift BETWEEN -2 AND 2),
+        label TEXT NOT NULL DEFAULT '',
+        changed_at TEXT NOT NULL
+      )`,
+      // The priority an automation asks for its notices (step 11d); the learning adds to it.
+      `ALTER TABLE zur_automations ADD COLUMN priority TEXT NOT NULL DEFAULT 'normal' CHECK (priority IN ('low', 'normal', 'high'))`,
+    ],
+  },
 ];
 
 export const LATEST_SCHEMA_VERSION = MIGRATIONS.at(-1)?.version ?? 0;

@@ -110,6 +110,45 @@ test("Settings > Avisos: the daily summary and the watchers are saved; the chann
   expect(reset.status()).toBe(200);
 });
 
+test("Settings > Avisos: the priorities Zuri learned are listed with a way back, and the learning can be turned off @mobile", async ({ page }) => {
+  // What was learned takes weeks of notices: the list comes from a stubbed overview, the undo goes through the stub too.
+  const key = "automation:11111111-2222-4333-8444-555555555555";
+  const undone: string[] = [];
+  let learned = [{ key, label: "Resumo das notícias", shift: -1, changedAt: "2026-10-30T12:00:00.000Z" }];
+  await page.route("**/api/alerts", async (route) => {
+    const res = await route.fetch();
+    await route.fulfill({ response: res, json: { ...(await res.json()), learned } });
+  });
+  await page.route("**/api/alerts/learning/*", async (route) => {
+    undone.push(new URL(route.request().url()).pathname);
+    learned = [];
+    await route.fulfill({ status: 204 });
+  });
+  await signedIn(page, "/configuracoes");
+  await expect(page.getByRole("heading", { level: 1, name: "Configurações" })).toBeVisible();
+  await openSettingsSection(page, "Avisos");
+  const card = page.getByRole("region", { name: "Prioridades que a Zuri aprendeu" });
+  const item = card.getByRole("list", { name: "Avisos com prioridade ajustada" }).getByRole("listitem");
+  await expect(item).toHaveCount(1);
+  await expect(item.getByText("Resumo das notícias")).toBeVisible();
+  await expect(item.getByText(/^Desceu um nível · /)).toBeVisible();
+  await expectAccessible(page, "prioridades aprendidas");
+  expect(await tooSmallControls(page), "every control of Settings > Avisos is a 44 px target").toEqual([]);
+  await item.getByRole("button", { name: "Desfazer o ajuste de Resumo das notícias" }).click();
+  await expect(toast(page, "Pronto, voltou à prioridade de antes. A Zuri não mexe nela por uma semana.")).toBeVisible();
+  expect(undone).toEqual([`/api/alerts/learning/${encodeURIComponent(key)}`]);
+  await expect(card.getByText(/^Nada mudou por enquanto\./)).toBeVisible();
+
+  const learning = card.getByRole("switch", { name: "Deixar a Zuri ajustar as prioridades" });
+  await expect(learning).toBeChecked();
+  await learning.click();
+  await expect(toast(page, "Avisos salvos.")).toBeVisible();
+  await page.reload();
+  await expect(page.getByRole("switch", { name: "Deixar a Zuri ajustar as prioridades" })).not.toBeChecked();
+  const reset = await page.request.patch("/api/settings", { headers: CSRF, data: { alertLearning: true } });
+  expect(reset.status()).toBe(200);
+});
+
 test("Settings > Diagnóstico shows a screen's failure by name only, and marks it resolved @mobile", async ({ page }) => {
   await signedIn(page, "/configuracoes");
   await expect(page.getByRole("heading", { level: 1, name: "Configurações" })).toBeVisible();
