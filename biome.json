@@ -24,6 +24,12 @@
       "preset": "recommended"
     }
   },
+  "overrides": [
+    {
+      "includes": ["apps/agent/src/**", "packages/shared/src/**", "!apps/agent/src/log.ts"],
+      "linter": { "rules": { "suspicious": { "noConsole": "error" } } }
+    }
+  ],
   "css": {
     "parser": {
       "tailwindDirectives": true

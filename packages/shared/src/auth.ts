@@ -78,6 +78,13 @@ export const loginRequestSchema = /* @__PURE__ */ z
   })
   .strict();
 
+/**
+ * The password typed right now, never a code: turning two-step sign-in on and
+ * adding a passkey ask for it every time (owner's decision of 31/10/2026), not
+ * the 15-minute window that a code from the app could also open.
+ */
+export const passwordProofSchema = /* @__PURE__ */ z.object({ password }).strict();
+
 /** The password again, or (with two-step sign-in on) a current code from the authenticator app. */
 export const confirmRequestSchema = /* @__PURE__ */ z.union([
   /* @__PURE__ */ z.object({ password }).strict(),
@@ -160,6 +167,10 @@ export const sessionStateSchema = /* @__PURE__ */ mini.strictObject({
   passwordChangeRequired: mini.boolean(),
   /** The password is already stored by the app: the owner should delete the OWNER_PASSWORD secret. */
   removePlainPasswordSecret: mini.boolean(),
+  /** Created at the first access and still without two-step sign-in: only turning it on works. */
+  secondStepRequired: mini.boolean(),
+  /** The owner exists and the SETUP_CODE secret is still set: the owner should delete it. */
+  removeSetupCodeSecret: mini.boolean(),
   /** Until when sensitive actions work without typing the password again. */
   recentAuthUntil: mini.nullable(isoInstant),
   deadlines: sessionDeadlinesSchema,
@@ -189,6 +200,10 @@ export const AUTH_EVENT_KINDS = [
   "recovery_code_used",
   "passkey_added",
   "passkey_removed",
+  "setup_failure",
+  "setup_locked",
+  "owner_created",
+  "access_recovered",
 ] as const;
 export type AuthEventKind = (typeof AUTH_EVENT_KINDS)[number];
 
@@ -198,8 +213,8 @@ export const AUTH_ACTIVITY_LIMIT = 50;
 /** The access log's filters, as the screen groups the kinds. */
 export const AUTH_ACTIVITY_GROUPS = {
   success: ["login_success"],
-  failure: ["login_failure", "confirm_failure", "password_change_failure", "mfa_failure"],
-  blocked: ["login_rate_limited", "login_attack"],
+  failure: ["login_failure", "confirm_failure", "password_change_failure", "mfa_failure", "setup_failure"],
+  blocked: ["login_rate_limited", "login_attack", "setup_locked"],
   robot: ["login_turnstile"],
   account: [
     "logout",
@@ -214,6 +229,8 @@ export const AUTH_ACTIVITY_GROUPS = {
     "recovery_code_used",
     "passkey_added",
     "passkey_removed",
+    "owner_created",
+    "access_recovered",
   ],
 } as const satisfies Record<string, readonly AuthEventKind[]>;
 export type AuthActivityGroup = keyof typeof AUTH_ACTIVITY_GROUPS;
@@ -275,6 +292,7 @@ export type AuthActivity = z.infer<typeof authActivitySchema>;
 
 export type LoginRequest = z.infer<typeof loginRequestSchema>;
 export type ConfirmRequest = z.infer<typeof confirmRequestSchema>;
+export type PasswordProof = z.infer<typeof passwordProofSchema>;
 export type ChangePasswordRequest = z.infer<typeof changePasswordRequestSchema>;
 export type SessionDeadlines = z.infer<typeof sessionDeadlinesSchema>;
 export type SessionState = z.infer<typeof sessionStateSchema>;

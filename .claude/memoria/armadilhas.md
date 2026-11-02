@@ -103,6 +103,9 @@ acrescente aqui cada armadilha nova que encontrar (sem dados pessoais).
 - Com `secrets.required` no `wrangler.jsonc`, o `wrangler dev` só carrega do
   `--env-file`/`.dev.vars` os segredos listados ali. Um segredo opcional (como
   `OWNER_PASSWORD_HASH`) vai por `--var NOME:valor` (veja `playwright.config.ts`).
+  Tirar um segredo de `secrets.required` faz ele sumir do servidor do e2e e do
+  Lighthouse sem erro nenhum, só o health em 503 até o tempo acabar: passe-o
+  por `--var` no mesmo PR (aconteceu com `OWNER_EMAIL` no primeiro acesso).
 - "Can't read from request stream after response has been sent" aparece no log
   do `wrangler dev` quando a API recusa um pedido com corpo antes de lê-lo
   (CSRF, sem sessão). Já existia antes da etapa 3, não afeta a resposta e

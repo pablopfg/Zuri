@@ -8,6 +8,8 @@ import {
   MFA_CHALLENGE_TTL_MS,
   MFA_COOKIE,
   SESSION_COOKIE,
+  DEV_SETUP_COOKIE,
+  SETUP_COOKIE,
 } from "@zuri/shared";
 import type { z } from "zod";
 import { AppError } from "../http/errors.ts";
@@ -22,6 +24,7 @@ const secure = (request: Request) => new URL(request.url).protocol === "https:";
 export const sessionCookieName = (request: Request) => (secure(request) ? SESSION_COOKIE : DEV_SESSION_COOKIE);
 const deviceCookieName = (request: Request) => (secure(request) ? DEVICE_COOKIE : DEV_DEVICE_COOKIE);
 const mfaCookieName = (request: Request) => (secure(request) ? MFA_COOKIE : DEV_MFA_COOKIE);
+const setupCookieName = (request: Request) => (secure(request) ? SETUP_COOKIE : DEV_SETUP_COOKIE);
 
 /** The value of one cookie, or null. Values this app sets are base64url, so no decoding is needed. */
 export function readCookie(request: Request, name: string): string | null {
@@ -37,6 +40,7 @@ export function readCookie(request: Request, name: string): string | null {
 export const readSessionCookie = (request: Request) => readCookie(request, sessionCookieName(request));
 export const readDeviceCookie = (request: Request) => readCookie(request, deviceCookieName(request));
 export const readMfaCookie = (request: Request) => readCookie(request, mfaCookieName(request));
+export const readSetupCookie = (request: Request) => readCookie(request, setupCookieName(request));
 
 function cookie(request: Request, name: string, value: string, maxAge: number | null): string {
   const attributes = [`${name}=${value}`, "Path=/", "HttpOnly", "SameSite=Strict"];
@@ -57,6 +61,11 @@ export function sessionCookie(request: Request, token: string | null): string {
  */
 export function mfaCookie(request: Request, token: string | null): string {
   return cookie(request, mfaCookieName(request), token ?? "", token === null ? 0 : MFA_CHALLENGE_TTL_MS / 1000);
+}
+
+/** The first-access form's cookie, for as long as its ticket lives; with null, the one that removes it. */
+export function setupCookie(request: Request, token: string | null, maxAgeSeconds = 0): string {
+  return cookie(request, setupCookieName(request), token ?? "", token === null ? 0 : Math.max(1, Math.floor(maxAgeSeconds)));
 }
 
 export function deviceCookie(request: Request, token: string): string {

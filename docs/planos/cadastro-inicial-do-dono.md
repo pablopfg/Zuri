@@ -4,6 +4,39 @@ Situação: **aprovado pelo Pablo em 31/10/2026** (opção E, como está). A
 decisão está em `.claude/memoria/decisoes.md` e na especificação (N13). A
 implementação segue os três PRs do passo a passo.
 
+## Ajustes feitos na implementação do servidor
+
+O que mudou em relação ao texto abaixo, depois do QA e da auditoria. Onde os
+dois divergem, vale esta lista e a seção de primeiro acesso de
+[seguranca.md](../seguranca.md#primeiro-acesso-e-recuperação-com-o-código-de-instalação).
+
+- `GET /api/setup` responde `{ setup }` e não grava nada. A hora do código
+  começa só quando alguém digita o código certo, nem na primeira visita nem num
+  chute errado, para um robô não gastar a hora do dono. Alertas do primeiro
+  acesso saem no máximo um a cada 6 horas, e um código repetitivo (bloco curto
+  repetido) é recusado na configuração.
+- `POST /api/setup/code` responde 200 `{ mode, expiresAt }` com o cookie. Depois
+  do cadastro, `/api/setup/owner` responde 409 `CONFLICT` (não 404), e o mesmo
+  código responde como código inválido.
+- Limites por rede, e não pelo código inteiro: 5 tentativas em 15 minutos
+  pausam a rede, 20 em 24 horas a bloqueiam pelo resto do dia. A cada 20 erros
+  somando todas as redes, um alerta. Assim, o palpite de um atacante não trava
+  o dono. A vaga é reservada antes de qualquer espera.
+- A impressão digital do código usa um sal aleatório guardado no banco, e não
+  o `SESSION_SECRET`: trocar o segredo não reabre um código gasto. Um código
+  gravado de novo guarda a hora da primeira vez.
+- O segundo passo obrigatório é o 2FA (aplicativo autenticador). A passkey
+  exige o 2FA ligado antes, então vem depois.
+- Eventos: `setup_failure`, `setup_locked`, `owner_created` e
+  `access_recovered`. Não há evento para o código aceito.
+- Sem tabela `zur_owner`: o e-mail fica numa chave interna, e o nome
+  (`ownerName`) entra no PR da tela.
+- Instalações antigas (`OWNER_EMAIL` nos segredos) contam como dono existente:
+  um `SETUP_CODE` lá abre só a recuperação, que confere o e-mail. Elas não
+  ganham a trava do 2FA.
+- O cookie `__Host-zuri_setup` precisa de `Path=/` (exigência do prefixo); ele
+  só tem efeito nas rotas `/api/setup/*`.
+
 ## O pedido
 
 Depois da instalação, o sistema abre uma tela de cadastro do administrador
@@ -142,9 +175,10 @@ cadastro.
 
 ### Dados (migration só de acréscimo)
 
-- Tabela nova `zur_owner` (uma linha só, `CHECK (id = 1)`): `email`,
-  `email_hmac` (para o login), `created_at`. O hash da senha continua onde está
-  (`auth_password_hash`).
+- Sem migration (ajuste feito na implementação): o e-mail fica na chave
+  interna `owner_email` de `zur_settings`, ao lado do hash da senha
+  (`auth_password_hash`). Nenhuma das duas sai do banco nem entra no backup, e
+  o login compara o e-mail por HMAC, como antes.
 - O nome não ganha coluna nova aqui: vai para o campo "Como prefere ser
   chamado" das configurações, criado pelo trabalho dos cumprimentos. O fuso e
   o idioma vão para as chaves que já existem.
@@ -198,7 +232,7 @@ Três PRs pequenos para `develop`, cada um com testes antes do código, QA e
 auditoria completa (a área é autenticação).
 
 1. **`feat(agent): cadastro inicial do dono com código de instalação`**
-   - Migration nova (`zur_owner`), máquina de estados, rotas `/api/setup*`,
+   - Máquina de estados, rotas `/api/setup*`,
      limitador e Turnstile, eventos novos, trava de rotas em
      `falta_segundo_passo`, e-mail vindo do banco no login, `SETUP_CODE` na
      configuração e no health check.

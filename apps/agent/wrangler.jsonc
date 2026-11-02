@@ -39,10 +39,11 @@
     "AGENT_NAME": "Zuri"
   },
   // Declared for type generation and local warnings; their values are Worker
-  // secrets, never in this file. The password is not here: either
-  // OWNER_PASSWORD_HASH or OWNER_PASSWORD at first, then the database (step 3).
+  // secrets, never in this file. The owner is not here: SETUP_CODE opens the
+  // first access, which stores the e-mail and password in the database
+  // (OWNER_EMAIL with OWNER_PASSWORD or OWNER_PASSWORD_HASH still work for older installations).
   "secrets": {
-    "required": ["SESSION_SECRET", "OWNER_EMAIL", "PASSWORD_PEPPER"]
+    "required": ["SESSION_SECRET", "PASSWORD_PEPPER"]
   },
   // Workers Logs only, without request or response bodies (the Worker never
   // logs them) and without query strings, which may carry one-time tokens.

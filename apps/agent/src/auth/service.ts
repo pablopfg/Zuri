@@ -1,6 +1,7 @@
 import {
   type ChangePasswordRequest,
   type ConfirmRequest,
+  type PasswordProof,
   hashPassword,
   hmacSha256Hex,
   isPasswordHash,
@@ -14,6 +15,9 @@ import {
   type PasskeyInfo,
   type PasskeyRegistration,
   PASSWORD_PROBLEM_MESSAGE,
+  type SetupCodeRequest,
+  type SetupOwnerRequest,
+  type SetupRecoverRequest,
   passwordProblem,
   randomToken,
   type SessionState,
@@ -32,6 +36,7 @@ import { LoginLimiter } from "./login-limiter.ts";
 import { type ChallengeRow, type MfaFactor, TwoStep } from "./mfa.ts";
 import { Passkeys, type RelyingParty } from "./passkeys.ts";
 import { type SessionRow, Sessions } from "./sessions.ts";
+import { type CodeState, SetupCode } from "./setup-code.ts";
 import type { Turnstile } from "./turnstile.ts";
 
 /** What a wrong second step says, by kind. */
@@ -44,7 +49,10 @@ const ATTACK_ALERT_INTERVAL_MS = 6 * 3600_000;
 export interface AuthSecrets {
   sessionSecret: string;
   pepper: string;
-  ownerEmail: string;
+  /** OWNER_EMAIL, the installation before the first-access screen; the e-mail typed there wins. */
+  ownerEmail?: string | undefined;
+  /** SETUP_CODE: opens the first access once, then only the recovery of the access. */
+  setupCode?: string | undefined;
   /** OWNER_PASSWORD_HASH, when set. */
   passwordHash?: string | undefined;
   /** OWNER_PASSWORD (20+ characters), the installation without an installer. */
@@ -133,6 +141,7 @@ export class AuthService {
   readonly events: AuthEvents;
   readonly twoStep: TwoStep;
   readonly passkeys: Passkeys;
+  readonly setupCode: SetupCode;
   readonly #clock: () => number;
   #synced: Promise<void> | undefined;
 
@@ -147,6 +156,13 @@ export class AuthService {
     this.events = new AuthEvents(deps.db, deps.state, this.#clock);
     this.twoStep = new TwoStep(deps.db, deps.state, { pepper: deps.secrets.pepper, sessionSecret: deps.secrets.sessionSecret }, this.#clock);
     this.passkeys = new Passkeys(deps.db, deps.state, this.#clock);
+    this.setupCode = new SetupCode(deps.state, deps.secrets, this.#clock);
+  }
+
+  /** The owner's e-mail: the one typed at the first access, else the OWNER_EMAIL secret, else none. */
+  private ownerEmail(): string {
+    const stored = this.deps.state.get<string>("owner_email");
+    return typeof stored === "string" && stored !== "" ? stored : (this.deps.secrets.ownerEmail ?? "");
   }
 
   get relyingParty(): RelyingParty {
@@ -247,16 +263,18 @@ export class AuthService {
 
   private async checkEmail(email: string): Promise<boolean> {
     const key = this.deps.secrets.sessionSecret;
+    const owner = this.ownerEmail();
     const [given, expected] = await Promise.all([
       hmacSha256Hex(key, `zuri:email:v1:${normalizeEmail(email)}`),
-      hmacSha256Hex(key, `zuri:email:v1:${normalizeEmail(this.deps.secrets.ownerEmail)}`),
+      hmacSha256Hex(key, `zuri:email:v1:${normalizeEmail(owner)}`),
     ]);
-    return timingSafeEqualText(given, expected);
+    // Both hashes always run; without an owner e-mail nothing matches.
+    return owner !== "" && timingSafeEqualText(given, expected);
   }
 
   /** What a new password must not lean on: the owner's e-mail and the agent's name. */
   private personalWords(): string[] {
-    return [this.deps.secrets.ownerEmail, this.deps.secrets.agentName ?? ""].filter(Boolean);
+    return [this.ownerEmail(), this.deps.secrets.agentName ?? ""].filter(Boolean);
   }
 
   private deviceId(token: string): Promise<string> {
@@ -582,6 +600,8 @@ export class AuthService {
       authenticated: true,
       passwordChangeRequired: this.passwordChangeRequired(),
       removePlainPasswordSecret: Boolean(this.deps.secrets.plainPassword) && source !== null && source.kind !== "plain",
+      secondStepRequired: this.secondStepRequired(),
+      removeSetupCodeSecret: this.setupCode.configured() && this.ownerExists(),
       recentAuthUntil: until === null ? null : new Date(until).toISOString(),
       deadlines: this.sessions.deadlines(row),
     };
@@ -611,15 +631,40 @@ export class AuthService {
       if (!this.twoStep.enabled()) throw new AppError("INVALID_CREDENTIALS", "auth.mfa.wrongCode");
       await this.checkCode(row, proof.totp, client, { recovery: false }, "confirm");
     } else {
-      const attempt = this.beginChecked(client, "confirm_failure");
-      if (!(await this.checkPassword(source, proof.password))) {
-        this.events.record("confirm_failure", client, { reason: "password", session: row.id.slice(0, 16) });
-        throw new AppError("INVALID_CREDENTIALS", "auth.password.wrong");
-      }
-      this.limiter.succeed(attempt);
+      await this.checkConfirmPassword(row, source, proof.password, client);
     }
     this.sessions.confirm(row.id);
     this.events.record("confirm_success", client, { session: row.id.slice(0, 16) });
+  }
+
+  /** The password again under the network's own tries; INVALID_CREDENTIALS when wrong, the session as it was. */
+  private async checkConfirmPassword(row: SessionRow, source: PasswordSource, password: string, client: ClientInfo): Promise<void> {
+    const attempt = this.beginChecked(client, "confirm_failure");
+    if (!(await this.checkPassword(source, password))) {
+      this.events.record("confirm_failure", client, { reason: "password", session: row.id.slice(0, 16) });
+      throw new AppError("INVALID_CREDENTIALS", "auth.password.wrong");
+    }
+    this.limiter.succeed(attempt);
+  }
+
+  /**
+   * The password typed right now, for the steps that add a way in (two-step
+   * sign-in, a passkey): a session stolen in its first 15 minutes, or a code
+   * from the app, must not be enough to plant the attacker's own factor. A
+   * right password also opens the 15-minute window, like `confirm`, so the
+   * rest of the same ceremony (the code, the browser's answer) goes through.
+   * Returns the session as it is now: another tab may have ended it meanwhile.
+   */
+  private async requirePasswordNow(row: SessionRow, proof: PasswordProof, client: ClientInfo, reason: "mfa_setup" | "passkey"): Promise<SessionRow> {
+    // Sync first: a reset from the panel must drop the old password before it is read.
+    await this.sync();
+    const source = this.requireConfigured();
+    await this.checkConfirmPassword(row, source, proof.password, client);
+    this.sessions.confirm(row.id);
+    const current = this.sessions.get(row.id);
+    if (!current) throw new AppError("UNAUTHORIZED");
+    this.events.record("confirm_success", client, { reason, session: row.id.slice(0, 16) });
+    return current;
   }
 
   /** Behind a live session: the network's own 3 tries apply, the distributed-guess locks don't. */
@@ -675,6 +720,173 @@ export class AuthService {
     return { token: next.token, session: next.row };
   }
 
+  // ---------- First access and recovery with the installation code ----------
+
+  /** An owner exists: created at the first access, or by the password secrets of an older installation. */
+  ownerExists(): boolean {
+    const email = this.deps.state.get<string>("owner_email");
+    // An older installation's OWNER_EMAIL is an owner too, even after a new pepper dropped its password.
+    return (typeof email === "string" && email !== "") || Boolean(this.deps.secrets.ownerEmail) || this.passwordSource() !== null;
+  }
+
+  /** Created at the first access and still without two-step sign-in: nothing else opens yet. */
+  secondStepRequired(): boolean {
+    return this.deps.state.get<boolean>("setup_second_step_required") === true && !this.twoStep.enabled();
+  }
+
+  /**
+   * Whether the first access is still to be done. Writes nothing: the code's
+   * hour starts only at the first try that passes the robot check, so a visitor
+   * or crawler opening the page can't run it down.
+   */
+  async setupStatus(): Promise<{ setup: boolean }> {
+    await this.sync();
+    return { setup: !this.ownerExists() };
+  }
+
+  /**
+   * The installation code, in this order: its own pause (5 wrong in 15 min),
+   * the robot check, then the keyed comparison. Every refusal says the same
+   * thing, whether the code is wrong, spent, expired or locked. A right one
+   * gives the form's ticket (cookie) and says which form comes next.
+   */
+  async setupCheckCode(input: SetupCodeRequest, client: ClientInfo): Promise<{ token: string; expiresAt: number; mode: "setup" | "recovery" }> {
+    await this.sync();
+    if (!this.turnstile && this.deps.turnstileMandatory) throw new AppError("NOT_CONFIGURED", "error.turnstileNotConfigured");
+    // Counted before anything is awaited: tries sent together can't all slip past the pause.
+    const reserved = this.reserveSetupTry(client);
+    await this.assertHuman(input.turnstileToken, client);
+    const right = await this.setupCode.matchesConfigured(input.code);
+    // The hour starts only with the right code: a wrong guess, even past the robot check, can't run it down.
+    const code = await this.setupCode.current({ start: right });
+    if (code?.problem) {
+      this.events.record("setup_failure", client, { reason: code.problem });
+      throw this.codeRejected();
+    }
+    if (!right || !code) {
+      if (!this.setupCode.configured()) this.events.record("setup_failure", client, { reason: "missing" });
+      else this.wrongSetupTry(code, client, "code");
+      throw this.codeRejected();
+    }
+    this.setupCode.release(client.network, reserved);
+    const ticket = await this.setupCode.issueTicket(code.record);
+    return { ...ticket, mode: this.ownerExists() ? "recovery" : "setup" };
+  }
+
+  /** This network's place for one try, or RATE_LIMITED with the wait. */
+  private reserveSetupTry(client: ClientInfo): number {
+    const reserved = this.setupCode.reserve(client.network);
+    if ("retryAfter" in reserved) {
+      this.recordRefusal("login_rate_limited", client, "setup");
+      throw new AppError("RATE_LIMITED", undefined, { retryAfter: reserved.retryAfter });
+    }
+    return reserved.at;
+  }
+
+  private codeRejected(): AppError {
+    return new AppError("INVALID_CREDENTIALS", "auth.setup.codeRejected", this.turnstile ? { turnstileSiteKey: this.turnstile.siteKey } : undefined);
+  }
+
+  /**
+   * A wrong code or e-mail: counted for the code once it is in use (every 20
+   * from anywhere are worth an alert) and, already, for the network. Alerts come
+   * at most every few hours, so a flood from many networks can't bury real ones.
+   */
+  private wrongSetupTry(code: CodeState | null, client: ClientInfo, reason: string): void {
+    const codeAlert = code ? this.setupCode.noteFailure(code.record) : false;
+    const blocked = this.setupCode.networkBlockedNow(client.network);
+    this.events.record(blocked ? "setup_locked" : "setup_failure", client, { reason, alert: (blocked || codeAlert) && this.setupAlertDue() });
+  }
+
+  private setupAlertDue(): boolean {
+    const now = this.#clock();
+    const last = this.deps.state.get<number>("setup_alerted_at");
+    if (typeof last === "number" && last <= now && now - last < ATTACK_ALERT_INTERVAL_MS) return false;
+    this.deps.state.set("setup_alerted_at", now);
+    return true;
+  }
+
+  /** The form's ticket must belong to the configured code, still usable. */
+  private async liveTicket(token: string | null): Promise<CodeState> {
+    const code = await this.setupCode.current({ start: false });
+    if (!code || code.problem !== null || !(await this.setupCode.validTicket(code.record, token))) {
+      throw new AppError("UNAUTHORIZED", "auth.setup.expired", { setup: "expired" });
+    }
+    return code;
+  }
+
+  /** The new password under the same rules as a change: the policy, then the breach check (no answer refuses). */
+  private async acceptablePassword(password: string, personal: string[]): Promise<string> {
+    const problem = passwordProblem(password, personal);
+    if (problem) throw new AppError("VALIDATION_FAILED", PASSWORD_PROBLEM_MESSAGE[problem], { fields: ["password"], problem });
+    const breached = await this.deps.breached(password);
+    if (breached === true) throw new AppError("VALIDATION_FAILED", "auth.password.breached", { fields: ["password"], problem: "breached" });
+    if (breached !== false) throw new AppError("SERVICE_UNAVAILABLE", "error.breachCheckUnavailable");
+    return hashPassword(password, this.deps.secrets.pepper);
+  }
+
+  /**
+   * Creates the owner, once. The code is spent in the same transaction that
+   * checks there is still no owner, so two forms sent together make one owner
+   * (the other gets CONFLICT). A session opens, and only turning on two-step
+   * sign-in works until it is on.
+   */
+  async setupOwner(token: string | null, input: SetupOwnerRequest, client: ClientInfo, cookies: SignInCookies): Promise<SignedIn> {
+    await this.sync();
+    if (this.ownerExists()) throw new AppError("CONFLICT", "auth.setup.done");
+    const code = await this.liveTicket(token);
+    const email = normalizeEmail(input.email);
+    const hash = await this.acceptablePassword(input.password, [email, this.deps.secrets.agentName ?? ""].filter(Boolean));
+    const created = this.deps.db.transaction(() => {
+      // Read again after the awaits: another form may have finished meanwhile.
+      if (this.ownerExists()) return false;
+      const fresh = this.setupCode.problemNow(code.record);
+      if (fresh !== null) return false;
+      this.setupCode.spend(code.record);
+      this.deps.state.set("owner_email", email);
+      this.deps.state.set("auth_password_hash", hash);
+      this.deps.state.set("setup_second_step_required", true);
+      this.deps.settings.update({ language: input.language, timeZone: input.timeZone });
+      this.events.record("owner_created", client, { alert: true });
+      return true;
+    });
+    if (!created) throw new AppError("CONFLICT", "auth.setup.done");
+    const device = await this.knownDevice(cookies.device);
+    const source = this.requireConfigured();
+    return this.openSession(client, cookies.session, device, () => sameSource(source, this.passwordSource()), false, false, "password");
+  }
+
+  /**
+   * A new code after the owner exists: the registered e-mail and a new password.
+   * The data stays, every session and pending sign-in ends, known browsers are
+   * forgotten, and two-step sign-in stays as it was (the next sign-in asks for it).
+   */
+  async setupRecover(token: string | null, input: SetupRecoverRequest, client: ClientInfo): Promise<void> {
+    await this.sync();
+    if (!this.ownerExists()) throw new AppError("CONFLICT");
+    const code = await this.liveTicket(token);
+    // A wrong e-mail is a try like a wrong code, under the same per-network limits.
+    const reserved = this.reserveSetupTry(client);
+    if (!(await this.checkEmail(input.email))) {
+      this.wrongSetupTry(code, client, "email");
+      throw new AppError("INVALID_CREDENTIALS", "auth.setup.notOwnerEmail");
+    }
+    this.setupCode.release(client.network, reserved);
+    const hash = await this.acceptablePassword(input.password, this.personalWords());
+    const recovered = this.deps.db.transaction(() => {
+      if (this.setupCode.problemNow(code.record) !== null) return false;
+      this.setupCode.spend(code.record);
+      this.deps.state.set("auth_password_hash", hash);
+      this.deps.state.delete("auth_password_change_required");
+      this.sessions.revokeAll();
+      this.twoStep.dropChallenges();
+      this.events.forgetDevices();
+      this.events.record("access_recovered", client, { alert: true });
+      return true;
+    });
+    if (!recovered) throw new AppError("UNAUTHORIZED", "auth.setup.expired", { setup: "expired" });
+  }
+
   // ---------- Managing the second step (signed in, password typed recently) ----------
 
   /**
@@ -699,8 +911,10 @@ export class AuthService {
   }
 
   /** A new secret to scan. CONFLICT while the second step is on: turn it off first to use another app. */
-  async mfaSetup(row: SessionRow): Promise<MfaSetup> {
-    this.requireRecentAuth(row);
+  async mfaSetup(row: SessionRow, proof: PasswordProof, client: ClientInfo): Promise<MfaSetup> {
+    // Already on is answered before the password: nothing to protect, no try spent.
+    if (this.twoStep.enabled()) throw new AppError("CONFLICT", "auth.mfa.alreadyOn");
+    await this.requirePasswordNow(row, proof, client, "mfa_setup");
     if (this.twoStep.enabled()) throw new AppError("CONFLICT", "auth.mfa.alreadyOn");
     return this.twoStep.beginSetup(this.deps.secrets.agentName?.trim() || "Zuri");
   }
@@ -718,6 +932,8 @@ export class AuthService {
     }
     this.limiter.succeed(attempt);
     this.afterMfaChange(row, client, "mfa_enabled");
+    // The first access asked for it: with it on, the rest of the app opens.
+    this.deps.state.delete("setup_second_step_required");
     return codes;
   }
 
@@ -769,18 +985,29 @@ export class AuthService {
     if (!this.twoStep.enabled()) throw new AppError("CONFLICT", "auth.passkey.needsMfa");
   }
 
-  async passkeyRegistrationOptions(row: SessionRow) {
-    this.requireRecentAuth(row);
+  private assertPasskeyRoom(): void {
     this.assertPasskeysAllowed();
     if (this.passkeys.count() >= MAX_PASSKEYS) throw new AppError("CONFLICT", "auth.passkey.limit");
+  }
+
+  /**
+   * The ceremony starts with the password typed right now; its challenge is
+   * kept for this session only, so the browser's answer (`addPasskey`) counts
+   * only from the session that typed it.
+   */
+  async passkeyRegistrationOptions(row: SessionRow, proof: PasswordProof, client: ClientInfo) {
+    // Refusals that need no password come first: no try spent on them.
+    this.assertPasskeyRoom();
+    const current = await this.requirePasswordNow(row, proof, client, "passkey");
+    this.assertPasskeyRoom();
     const name = this.deps.secrets.agentName?.trim() || "Zuri";
-    return this.passkeys.registrationOptions(this.relyingParty, { rpName: name, userName: name });
+    return this.passkeys.registrationOptions(this.relyingParty, { rpName: name, userName: name }, current.id);
   }
 
   async addPasskey(row: SessionRow, input: PasskeyRegistration, client: ClientInfo): Promise<PasskeyInfo> {
     this.requireRecentAuth(row);
     this.assertPasskeysAllowed();
-    const passkey = await this.passkeys.register(passkeyName(input.name), input.response, this.relyingParty, () => this.twoStep.enabled());
+    const passkey = await this.passkeys.register(passkeyName(input.name), input.response, this.relyingParty, row.id, () => this.twoStep.enabled());
     if (!passkey) throw new AppError("VALIDATION_FAILED", "auth.passkey.notAccepted", { fields: ["response"] });
     this.events.record("passkey_added", client, { session: row.id.slice(0, 16), alert: true });
     return passkey;

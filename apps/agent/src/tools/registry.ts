@@ -8,6 +8,7 @@ import type { Database } from "../db/database.ts";
 import { AppError } from "../http/errors.ts";
 import type { MemoryService } from "../memory/service.ts";
 import type { Productivity } from "../productivity/index.ts";
+import { log } from "../log.ts";
 
 export type ToolPermission = "read" | "write" | "destructive";
 
@@ -227,7 +228,7 @@ export class ToolExecutor {
       this.signatures.delete(signature);
       if (error instanceof ToolError) throw error;
       if (error instanceof AppError) throw new ToolError(forModel(error));
-      console.error(JSON.stringify({ message: "tool failed", tool: tool.name, error: error instanceof Error ? error.name : typeof error }));
+      log("error", "tool_failed", { tool: tool.name, error });
       throw new ToolError("The tool failed. Tell the owner; do not retry.");
     }
   }

@@ -134,8 +134,9 @@ Tudo roda num **único Worker** que serve a interface e a API, com **um único D
 | `WORKFLOW` | Workflows | sim | Monitor de sites |
 | `SEND_EMAIL` | send\_email | não | Alertas e recuperação por e-mail (Email Routing) |
 | `SESSION_SECRET` | segredo | sim | Assinatura de sessões e derivação de HMACs (inclusive o segredo do webhook do Telegram) |
-| `OWNER_PASSWORD_HASH` | segredo | sim | Senha do dono (PBKDF2 com pepper) |
-| `OWNER_EMAIL` | segredo | sim | Login e recuperação |
+| `SETUP_CODE` | segredo | até o primeiro acesso | Código de instalação (32+ caracteres aleatórios, 1 h, uso único); um código novo depois só recupera o acesso (N13) |
+| `OWNER_PASSWORD_HASH` | segredo | não (instalações antigas) | Senha do dono (PBKDF2 com pepper); o primeiro acesso grava a senha no banco |
+| `OWNER_EMAIL` | segredo | só com `OWNER_PASSWORD` ou `OWNER_PASSWORD_HASH` | Login das instalações antigas; o primeiro acesso grava o e-mail no banco |
 | `PASSWORD_PEPPER` | segredo | sim | Pepper do hash de senha |
 | `TELEGRAM_BOT_TOKEN` | segredo | não | Bot do administrador |
 | `TELEGRAM_ADMIN_ID` | segredo | não | Id numérico da conta do dono no Telegram, trava extra além do vínculo por código |
@@ -186,7 +187,7 @@ O banco é o SQLite do Durable Object, com tabelas prefixadas com `zur_` e uma t
 4. **Rotinas de IA só por proposta.** O agente não agenda nada que rode sem o dono olhando; execuções agendadas têm só ferramentas de leitura e `notify_owner`. Frequência mínima de 1 hora e no máximo 50 automações ativas.
 5. **Toda chamada de modelo é contada antes de ser feita**, com limites diários de pedidos, execuções agendadas, embeddings, áudio e US$.
 6. **Links fora do app são desarmados.** No Telegram e no e-mail, `http` vira `hxxp`, pontos de host viram `[.]`; só os botões do próprio sistema são clicáveis.
-7. **Passo extra para o sensível.** Trocar senha, ligar modelo pago, mudar nome do agente, mexer em tokens, Telegram e backups pede senha digitada nos últimos 15 minutos (ou TOTP), registra atividade e gera alerta fora da banda.
+7. **Passo extra para o sensível.** Trocar senha, ligar modelo pago, mudar nome do agente, mexer em tokens, Telegram e backups pede senha digitada nos últimos 15 minutos (ou TOTP), registra atividade e gera alerta fora da banda. Ligar o 2FA e adicionar uma passkey pedem a senha digitada **naquele momento**, sem valer a janela de 15 minutos nem o TOTP (decisão do Pablo, 31/10/2026).
 8. **Backup é entrada não confiável.** Importar nunca liga automação, MCP, modelo pago, nome do agente nem instruções; tem limite de 10 MB e de registros por tipo e é desfeito inteiro se passar de um limite.
 9. **Limites de armazenamento por tipo** e teto total de 900 MB para o banco, abaixo do limite de 1 GB por Durable Object com SQLite no plano Free (FAQ de limites da Cloudflare; o agente confere o valor vigente antes da etapa 2). Aviso em 80% e recusa de escrita com STORAGE\_LIMIT\_REACHED em 100%, mesmo com token de escrita vazado.
 10. **Nada sensível em log.** Nunca registrar senha, código, e-mail digitado errado, token, conteúdo de áudio ou texto completo de aviso.
@@ -203,6 +204,10 @@ Todas as rotas ficam sob `/api`, recebem e devolvem JSON validado por Zod (`pack
 | Etapa | Método e rota | Credencial | Corpo | Respostas |
 | --- | --- | --- | --- | --- |
 | 1 | GET `/api/health` | nenhuma | — | 200 `{ok:true}`; 503 `NOT_CONFIGURED` sem segredos obrigatórios |
+| N13 | GET `/api/setup` | CSRF | — | 200 `{setup}` (primeiro acesso ainda por fazer); não grava nada |
+| N13 | POST `/api/setup/code` | CSRF + Turnstile em toda tentativa | `{code, turnstileToken?}` | 200 `{mode: "setup"\|"recovery", expiresAt}` + cookie `__Host-zuri_setup` (15 min); 401 `INVALID_CREDENTIALS`; 429 `RATE_LIMITED` (por rede: 5 em 15 min, 20 em 24 h); 400 `TURNSTILE_REQUIRED`; 503 |
+| N13 | POST `/api/setup/owner` | CSRF + cookie do primeiro acesso | `{email, password, language, timeZone}` | 201 sessão (`secondStepRequired: true`); 400 `VALIDATION_FAILED`; 401 `UNAUTHORIZED` com `details.setup: "expired"`; 409 `CONFLICT` (dono já existe); 503 (HIBP sem resposta) |
+| N13 | POST `/api/setup/recover` | CSRF + cookie do primeiro acesso | `{email, password}` | 204 (todas as sessões terminam); 401 `INVALID_CREDENTIALS`; 401 `UNAUTHORIZED`; 409 `CONFLICT` (sem dono) |
 | 3 | POST `/api/auth/login` | CSRF + Turnstile em toda tentativa | `{email, password, turnstileToken?}` | 200 sessão; 200 `{mfaRequired:true}`; 401 `INVALID_CREDENTIALS`; 429 `RATE_LIMITED` + `Retry-After`; 400 `TURNSTILE_REQUIRED`; 503 `SERVICE_UNAVAILABLE` (Turnstile sem resposta) |
 | 3 | GET `/api/auth/login-options` (respondido pelo Worker, sem o Durable Object) | CSRF | — | 200 `{turnstileSiteKey}`; `null` só no local sem chaves |
 | 3 | GET `/api/auth/activity?days=1\|7\|30\|90&group=success\|failure\|blocked\|robot\|account&ip=<começo>&before=<cursor>` | sessão + CSRF | — | 200 `{events, nextCursor}` (50 por página, IP, país, ASN, navegador); 400 `VALIDATION_FAILED` |
@@ -210,8 +215,8 @@ Todas as rotas ficam sob `/api`, recebem e devolvem JSON validado por Zod (`pack
 | 3 | POST `/api/auth/confirm` (senha recente) | sessão + CSRF | `{password}` ou `{totp}` | 204; 401 |
 | 3 | POST `/api/auth/password` | sessão + CSRF + senha atual | `{currentPassword, newPassword}` | 200 sessão nova; 400 `VALIDATION_FAILED`; 401 `INVALID_CREDENTIALS`; 503 `SERVICE_UNAVAILABLE` (HIBP sem resposta) |
 | 4 | POST `/api/auth/mfa`, POST `/api/auth/mfa/passkey/options`, POST `/api/auth/mfa/passkey` | CSRF + cookie MFA (`__Host-zuri_mfa`, 5 min) | `{code}` / — / `{response}` | 200 sessão; 401 `INVALID_CREDENTIALS` com `details.attemptsLeft`; 401 `UNAUTHORIZED` com `details.mfa: "expired"` (cookie apagado); 429 `RATE_LIMITED`; 404 sem passkey deste host |
-| 4 | GET `/api/auth/mfa`; POST `/api/auth/mfa/{setup,enable,disable,recovery-codes}` | sessão + CSRF + senha recente (menos o GET) | — / `{code}` | 200 `{enabled, enabledAt, recoveryCodesLeft}`; 200 `{secret, otpauthUri, expiresAt}`; 200 `{recoveryCodes}`; 204; 409 `CONFLICT` |
-| 4 | GET `/api/auth/passkeys`; POST `/api/auth/passkeys/options`, POST `/api/auth/passkeys`; PATCH e DELETE `/api/auth/passkeys/:id` | sessão + CSRF + senha recente (menos o GET) | — / `{name, response}` / `{name}` | 200 `{passkeys}` com `usableHere`; 201 `{passkey}`; 204; 404; 409 `CONFLICT` |
+| 4 | GET `/api/auth/mfa`; POST `/api/auth/mfa/{setup,enable,disable,recovery-codes}` | sessão + CSRF + senha recente (menos o GET); `setup` pede a senha digitada agora | — / `{password}` (setup) / `{code}` | 200 `{enabled, enabledAt, recoveryCodesLeft}`; 200 `{secret, otpauthUri, expiresAt}`; 200 `{recoveryCodes}`; 204; 409 `CONFLICT` |
+| 4 | GET `/api/auth/passkeys`; POST `/api/auth/passkeys/options`, POST `/api/auth/passkeys`; PATCH e DELETE `/api/auth/passkeys/:id` | sessão + CSRF + senha recente (menos o GET); `options` pede a senha digitada agora, e só a mesma sessão conclui | — / `{password}` (options) / `{name, response}` / `{name}` | 200 `{passkeys}` com `usableHere`; 201 `{passkey}`; 204; 400 `VALIDATION_FAILED`; 401 `INVALID_CREDENTIALS` (senha errada); 404; 409 `CONFLICT`; 429 `RATE_LIMITED` |
 | 8 | GET `/api/usage` | sessão + CSRF | — | 200 uso de hoje contra os limites, por modelo, e os últimos 7 dias (`usageReportSchema`) |
 | 9 | POST `/api/chat` (SSE), POST `/api/chat/cancel`, POST `/api/actions/:id/approve`, POST `/api/actions/:id/cancel` | sessão + CSRF | `{conversationId?, message}` | eventos SSE `text`, `tool`, `approval`, `done`, `error` |
 | 11 | POST `/api/auth/recover/request`, POST `/api/auth/recover/confirm` | nenhuma + limitador | `{email}` / `{token, password, totp?}` | 202 sempre no pedido; 204; 410 `RECOVERY_EXPIRED` |
@@ -365,7 +370,7 @@ O agente executor pode começar a fase A sem nenhuma destas respostas; cada linh
 | N10 | Trava de leitura do bot (destravar por passkey ou e-mail depois de um período sem uso) | Ligada, 12 h | Etapa 15 |
 | N11 | TELEGRAM\_ADMIN\_ID obrigatório para comandos de segurança e aprovações | Sim | Etapa 12 |
 | N12 | Teto do banco | 900 MB (confirmar o limite vigente do plano Free) | Etapa 2 |
-| N13 | Cadastro inicial do dono por uma tela de primeiro acesso | Decidido pelo Pablo em 31/10/2026: código de instalação como segredo, uso único, 1 h de validade, 2FA ou passkey obrigatórios (`docs/planos/cadastro-inicial-do-dono.md`) | Trabalho paralelo, antes da etapa 24 |
+| N13 | Cadastro inicial do dono por uma tela de primeiro acesso | Decidido pelo Pablo em 31/10/2026: código de instalação como segredo, uso único, 1 h de validade, 2FA obrigatório antes de abrir o resto (a passkey exige o 2FA, então vem depois) (`docs/planos/cadastro-inicial-do-dono.md`) | Trabalho paralelo, antes da etapa 24 |
 
 ## Etapas de implementação
 

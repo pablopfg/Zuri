@@ -35,7 +35,7 @@ async function session(h: Harness, network = NET) {
 /** Turns the second step on. Returns the secret, the recovery codes and the owner's session. */
 async function turnOn(h: Harness) {
   const { token, row, deviceToken } = await session(h, OWN);
-  const setup = await h.service.mfaSetup(row);
+  const setup = await h.service.mfaSetup(row, { password: TEST_PASSWORD }, client(OWN));
   const codes = await h.service.mfaEnable(row, await totpCode(setup.secret, totpStep(h.clock.now())), client(OWN));
   // The step just used never counts again: the tests move on to a fresh one.
   h.clock.advance(30_000);
@@ -70,7 +70,7 @@ describe("turning two-step sign-in on", () => {
   it("shows a secret, turns on with a code from it and hands back 10 recovery codes once", async () => {
     await withAuth("mfa-enable", async (h) => {
       const { row } = await session(h);
-      const setup = await h.service.mfaSetup(row);
+      const setup = await h.service.mfaSetup(row, { password: TEST_PASSWORD }, client(NET));
       expect(setup.secret).toMatch(/^[A-Z2-7]{32}$/);
       expect(setup.otpauthUri).toContain("issuer=Zuri");
       expect(setup.otpauthUri).not.toContain("exemplo.com.br");
@@ -92,7 +92,7 @@ describe("turning two-step sign-in on", () => {
   it("refuses a wrong code, a setup past its 10 minutes, and a second setup while on", async () => {
     await withAuth("mfa-enable-refusals", async (h) => {
       const { row } = await session(h);
-      const setup = await h.service.mfaSetup(row);
+      const setup = await h.service.mfaSetup(row, { password: TEST_PASSWORD }, client(NET));
       expect(await outcome(h.service.mfaEnable(row, await wrongCode(h, setup.secret), client(NET)))).toBe("VALIDATION_FAILED");
 
       h.clock.advance(MFA_SETUP_TTL_MS);
@@ -100,20 +100,82 @@ describe("turning two-step sign-in on", () => {
       const fresh = await live(h.auth, (await session(h)).token);
       expect(await outcome(h.service.mfaEnable(fresh, await code(h, setup.secret), client(NET)))).toBe("VALIDATION_FAILED");
 
-      const again = await h.service.mfaSetup(fresh);
+      const again = await h.service.mfaSetup(fresh, { password: TEST_PASSWORD }, client(NET));
       await h.service.mfaEnable(fresh, await code(h, again.secret), client(NET));
-      expect(await outcome(h.service.mfaSetup(fresh))).toBe("CONFLICT");
+      expect(await outcome(h.service.mfaSetup(fresh, { password: TEST_PASSWORD }, client(NET)))).toBe("CONFLICT");
     });
   });
 
-  it("needs the password typed in the last 15 minutes", async () => {
+  it("enable and disable still need the password typed in the last 15 minutes", async () => {
     await withAuth("mfa-recent", async (h) => {
       const { token } = await session(h);
       await stayActive(h, token, 15 * MINUTE);
       const row = await live(h.auth, token);
-      expect(await outcome(h.service.mfaSetup(row))).toBe("RECENT_AUTH_REQUIRED");
       expect(await outcome(h.service.mfaEnable(row, "123456", client(NET)))).toBe("RECENT_AUTH_REQUIRED");
       expect(await outcome(h.service.mfaDisable(row, "123456", client(NET)))).toBe("RECENT_AUTH_REQUIRED");
+    });
+  });
+
+  it("starting asks for the password typed right now, even seconds after the sign-in", async () => {
+    await withAuth("mfa-setup-password", async (h) => {
+      const { row } = await session(h);
+      // The window from the sign-in is open, and still a wrong password stops it.
+      expect(h.auth.state(row).recentAuthUntil).not.toBeNull();
+      expect(await failure(h.service.mfaSetup(row, { password: "errada errada errada" }, client(NET)))).toMatchObject({
+        code: "INVALID_CREDENTIALS",
+        messageKey: "auth.password.wrong",
+      });
+      expect(h.db.one(`SELECT COUNT(*) AS n FROM zur_mfa_secrets`)).toEqual({ n: 0 });
+      expect(h.events().at(-1)).toMatchObject({ kind: "confirm_failure", reason: "password" });
+
+      const setup = await h.service.mfaSetup(row, { password: TEST_PASSWORD }, client(NET));
+      expect(h.events().at(-1)).toMatchObject({ kind: "confirm_success", reason: "mfa_setup" });
+      await h.service.mfaEnable(row, await code(h, setup.secret), client(NET));
+      expect(h.service.twoStep.enabled()).toBe(true);
+    });
+  });
+
+  it("a right password after the window closed opens it again, so the code goes through", async () => {
+    await withAuth("mfa-setup-reopens", async (h) => {
+      const { token } = await session(h);
+      await stayActive(h, token, 15 * MINUTE);
+      const row = await live(h.auth, token);
+      expect(h.auth.state(row).recentAuthUntil).toBeNull();
+      const setup = await h.service.mfaSetup(row, { password: TEST_PASSWORD }, client(NET));
+      const after = await live(h.auth, token);
+      expect(h.auth.state(after).recentAuthUntil).toBe(new Date(h.clock.now() + 15 * MINUTE).toISOString());
+      await h.service.mfaEnable(after, await code(h, setup.secret), client(NET));
+      expect(h.service.twoStep.enabled()).toBe(true);
+    });
+  });
+
+  it("shares the network's 3 tries with the sign-in, also when sent all at once", async () => {
+    await withAuth("mfa-setup-limit", async (h) => {
+      const { row } = await session(h);
+      const tries = await Promise.all(Array.from({ length: 5 }, () => outcome(h.service.mfaSetup(row, { password: "errada errada errada" }, client(NET)))));
+      expect(tries.filter((t) => t === "INVALID_CREDENTIALS")).toHaveLength(3);
+      expect(tries.filter((t) => t === "RATE_LIMITED")).toHaveLength(2);
+      // The right password waits too: the limit is the network's, not the guess's.
+      expect(await outcome(h.service.mfaSetup(row, { password: TEST_PASSWORD }, client(NET)))).toBe("RATE_LIMITED");
+      expect(h.db.one(`SELECT COUNT(*) AS n FROM zur_mfa_secrets`)).toEqual({ n: 0 });
+    });
+  });
+
+  it("while on, says so before the password: no try is spent", async () => {
+    await withAuth("mfa-setup-on", async (h) => {
+      const { row } = await turnOn(h);
+      for (let i = 0; i < 4; i++) expect(await outcome(h.service.mfaSetup(row, { password: "errada errada errada" }, client(OWN)))).toBe("CONFLICT");
+      expect(h.events().filter((e) => e.kind === "confirm_failure")).toHaveLength(0);
+    });
+  });
+
+  it("a session ended while the password was being checked gets nothing", async () => {
+    await withAuth("mfa-setup-ended", async (h) => {
+      const { row } = await session(h);
+      const pending = h.service.mfaSetup(row, { password: TEST_PASSWORD }, client(NET));
+      h.db.run(`DELETE FROM zur_sessions WHERE id = ?`, row.id);
+      expect(await outcome(pending)).toBe("UNAUTHORIZED");
+      expect(h.db.one(`SELECT COUNT(*) AS n FROM zur_mfa_secrets`)).toEqual({ n: 0 });
     });
   });
 

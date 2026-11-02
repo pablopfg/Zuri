@@ -42,6 +42,13 @@ para o início (`apps/web/src/lib/next.ts`).
 - **Senha recente.** Quando a API responde `RECENT_AUTH_REQUIRED`, um diálogo
   pede a senha (ou o código do aplicativo, com a verificação ligada) e repete a
   ação uma vez.
+- **Senha digitada agora.** Ligar a verificação em duas etapas e criar uma
+  passkey abrem antes o diálogo "confirme que é você" (`PasswordNowDialog`),
+  que só aceita a senha. Campo vazio é marcado sem pedido ao servidor; senha
+  errada mostra a mensagem no campo, esvazia e devolve o foco; Esc ou Cancelar
+  fecham sem começar nada.
+- **401.** Só `UNAUTHORIZED` encerra a sessão na interface. Um
+  `INVALID_CREDENTIALS` (senha ou código errado num diálogo) fica no diálogo.
 - **Troca de senha obrigatória.** Com `passwordChangeRequired`, a única tela é
   a de troca de senha, igual ao que o servidor permite.
 
