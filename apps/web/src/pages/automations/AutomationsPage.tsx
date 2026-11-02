@@ -2,8 +2,10 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AUTOMATION_KINDS,
   AUTOMATION_LIMITS,
+  AUTOMATION_PRIORITIES,
   type Automation,
   type AutomationKind,
+  type AutomationPriority,
   type AutomationRun,
   ptBRAutomations,
   type Settings,
@@ -20,7 +22,7 @@ import { SETTINGS_KEY } from "../../hooks/session.tsx";
 import { api, errorMessage } from "../../lib/api.ts";
 import { automationAnchor, describeSchedule, draftOf, emptyDraft, type ScheduleDraft, scheduleOf } from "../../lib/automations.ts";
 import { addMessages, useI18n } from "../../lib/i18n.tsx";
-import { DAY_SHORT, FREQUENCY_LABEL, KIND_HINT, KIND_LABEL, MESSAGE_LABEL, NAME_PLACEHOLDER, PROBLEM_LABEL, RUN_STATUS_LABEL, STATUS_LABEL, TRIGGER_LABEL } from "./labels.ts";
+import { DAY_SHORT, FREQUENCY_LABEL, KIND_HINT, KIND_LABEL, MESSAGE_LABEL, NAME_PLACEHOLDER, PRIORITY_HINT, PRIORITY_LABEL, PROBLEM_LABEL, RUN_STATUS_LABEL, STATUS_LABEL, TRIGGER_LABEL } from "./labels.ts";
 
 // This screen's pt-BR texts travel with its code, not in the first bundle (rule P11).
 addMessages(ptBRAutomations);
@@ -390,6 +392,7 @@ function AutomationForm({ editing, onClose }: { editing: Editing; onClose: () =>
   const [name, setName] = useState(current?.name ?? "");
   const [message, setMessage] = useState(current?.message ?? "");
   const [sentinel, setSentinel] = useState(current?.sentinel ?? false);
+  const [priority, setPriority] = useState<AutomationPriority>(current?.priority ?? "normal");
   const [draft, setDraft] = useState<ScheduleDraft>(() => (current ? draftOf(current.schedule, timeZone, new Date()) : emptyDraft(timeZone, new Date())));
   const [error, setError] = useState<unknown>(null);
   const [saving, setSaving] = useState(false);
@@ -405,7 +408,7 @@ function AutomationForm({ editing, onClose }: { editing: Editing; onClose: () =>
     setSaving(true);
     setError(null);
     try {
-      const fields = { name: name.trim(), message: message.trim(), schedule, ...(kind === "agent_prompt" ? { sentinel } : {}) };
+      const fields = { name: name.trim(), message: message.trim(), schedule, priority, ...(kind === "agent_prompt" ? { sentinel } : {}) };
       if (current) {
         // A finished one-time reminder given a new moment starts again.
         await api(`/automations/${current.id}`, { method: "PATCH", body: { ...fields, ...(current.status === "completed" ? { paused: false } : {}) } });
@@ -491,6 +494,13 @@ function AutomationForm({ editing, onClose }: { editing: Editing; onClose: () =>
             <TextField label={t("web.automations.form.time")} type="time" value={draft.time} required onChange={(e) => set({ time: e.target.value })} />
           )}
         </div>
+        <SelectField label={t("web.automations.form.priority")} hint={t(PRIORITY_HINT[priority])} value={priority} onChange={(e) => setPriority(e.target.value as AutomationPriority)}>
+          {AUTOMATION_PRIORITIES.map((p) => (
+            <option key={p} value={p}>
+              {t(PRIORITY_LABEL[p])}
+            </option>
+          ))}
+        </SelectField>
         {kind === "agent_prompt" && (
           <>
             <Checkbox label={t("web.automations.form.quiet")} hint={t("web.automations.form.quietHint")} checked={sentinel} onChange={setSentinel} />
