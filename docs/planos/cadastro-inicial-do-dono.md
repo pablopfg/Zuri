@@ -189,7 +189,7 @@ onde gravar o código.
 | --- | --- | --- | --- |
 | `GET /api/setup` | pública, sem dado sensível | — | 200 `{ needed: boolean }` |
 | `POST /api/setup/code` | Origin + Turnstile + limitador | `{ code, turnstileToken }` | 204 com cookie de cadastro; 401 `INVALID_CREDENTIALS`; 429 `RATE_LIMITED`; 404 depois do cadastro |
-| `POST /api/setup/owner` | Origin + cookie de cadastro | `{ name, email, password, locale, timeZone }` | 201 com cookie de sessão; 400 `VALIDATION_FAILED`; 409 `CONFLICT`; 404 depois do cadastro |
+| `POST /api/setup/owner` | Origin + cookie de cadastro | `{ email, password, language, timeZone, ownerName? }` | 201 com cookie de sessão; 400 `VALIDATION_FAILED`; 409 `CONFLICT`; 404 depois do cadastro |
 
 Todos os corpos com schema Zod em `packages/shared/src/setup.ts`. O 2FA e a
 passkey usam as rotas que já existem (`/api/auth/mfa/*`,

@@ -359,10 +359,9 @@ export function FirstAccessPage({ go }: { go: (path: string) => void }) {
                 <TextField
                   ref={nameRef}
                   label={t("web.setup.ownerName")}
-                  hint={t("web.setup.ownerNameHint")}
+                  hint={t("web.setup.ownerNameHint", { max: OWNER_NAME_MAX })}
                   autoComplete="nickname"
                   spellCheck={false}
-                  maxLength={OWNER_NAME_MAX * 2}
                   icon={<UserRound aria-hidden />}
                   error={nameInvalid}
                   value={ownerName}

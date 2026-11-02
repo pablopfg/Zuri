@@ -272,9 +272,13 @@ export class AuthService {
     return owner !== "" && timingSafeEqualText(given, expected);
   }
 
-  /** What a new password must not lean on: the owner's e-mail and the agent's name. */
-  private personalWords(): string[] {
-    return [this.ownerEmail(), this.deps.secrets.agentName ?? ""].filter(Boolean);
+  /**
+   * What a new password must not lean on: the owner's e-mail and name and the agent's name.
+   * The sign-in's check of the current password leaves the name out: naming yourself in
+   * the settings must not force a password change on the next sign-in.
+   */
+  private personalWords(withOwnerName = true): string[] {
+    return [this.ownerEmail(), withOwnerName ? this.deps.settings.get().ownerName : "", this.deps.secrets.agentName ?? ""].filter(Boolean);
   }
 
   private deviceId(token: string): Promise<string> {
@@ -561,7 +565,7 @@ export class AuthService {
    * fails the current rules too. Until then only the password change works.
    */
   private weakPassword(source: PasswordSource, password: string): boolean {
-    return source.kind === "plain" || passwordProblem(password, this.personalWords()) !== null;
+    return source.kind === "plain" || passwordProblem(password, this.personalWords(false)) !== null;
   }
 
   passwordChangeRequired(): boolean {

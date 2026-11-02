@@ -103,6 +103,17 @@ describe("first access over HTTP", () => {
     }
   });
 
+  it("a password leaning on the name typed with it is predictable; without the name it goes", async () => {
+    const leaning = { ...OWNER, password: "Gabriela#Kp7q2Wz!" };
+    await withAuth("setup-routes-name-password", async (h) => {
+      const ticket = value(setCookie(await send(h, "/api/setup/code", { body: { code: CODE } }), "__Host-zuri_setup"));
+      const refused = await send(h, "/api/setup/owner", { body: { ...leaning, ownerName: "Gabriela" }, cookie: ticket });
+      expect(refused.status).toBe(400);
+      expect(apiErrorSchema.parse(await refused.json()).details).toEqual({ fields: ["password"], problem: "predictable" });
+      expect((await send(h, "/api/setup/owner", { body: leaning, cookie: ticket })).status).toBe(201);
+    }, fresh);
+  });
+
   it("refuses without the CSRF header or from another origin", async () => {
     await withAuth("setup-routes-csrf", async (h) => {
       const noHeader = await send(h, "/api/setup/code", { body: { code: CODE }, headers: { "x-zuri-request": "0" } });
