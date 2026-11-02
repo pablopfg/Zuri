@@ -85,6 +85,16 @@ test("creates the owner: password rules from the server, then only the second st
   await enterCode(page);
   await page.getByLabel("E-mail").fill(EMAIL);
 
+  // The name is optional, but a name a model could read as a tag never leaves the page.
+  const name = page.getByLabel("Seu nome");
+  await name.fill("<Ana>");
+  await page.getByRole("button", { name: "Criar minha conta" }).click();
+  await expect(name).toHaveAttribute("aria-invalid", "true");
+  await expect(name).toHaveAccessibleDescription(/Use só texto, até 40 caracteres/);
+  await expect(name).toBeFocused();
+  await name.fill("  Ana   Maria ");
+  await expect(name).not.toHaveAttribute("aria-invalid");
+
   // Two different passwords never leave the page.
   await page.getByLabel("Senha", { exact: true }).fill(PASSWORD);
   await page.getByLabel("Repita a senha").fill(`${PASSWORD}x`);
@@ -118,7 +128,7 @@ test("creates the owner: password rules from the server, then only the second st
   await expect(page.getByRole("heading", { level: 1, name: "Proteja a sua conta" })).toBeVisible();
   expect((await page.request.get("/api/tasks", { headers: CSRF })).status()).toBe(403);
   const settings = await (await page.request.get("/api/settings", { headers: CSRF })).json();
-  expect(settings).toMatchObject({ language: "pt-BR", timeZone: "America/Sao_Paulo" });
+  expect(settings).toMatchObject({ language: "pt-BR", timeZone: "America/Sao_Paulo", ownerName: "Ana Maria" });
 
   // Closing the tab changes nothing: the next sign-in lands here again.
   await page.getByRole("button", { name: "Sair" }).click();
@@ -149,6 +159,9 @@ test("creates the owner: password rules from the server, then only the second st
   // The rest opens, with the reminder to delete the installation code.
   await expect(page.getByRole("heading", { level: 1, name: "Proteja a sua conta" })).toHaveCount(0);
   await expect(page.getByText(/apague o segredo SETUP_CODE/)).toBeVisible();
+  // The greeting already calls the owner by the name typed in the first access.
+  await page.goto("/");
+  await expect(page.getByRole("heading", { level: 1, name: /^(Bom dia|Boa tarde|Boa noite), Ana Maria/ })).toBeVisible();
   expect((await page.request.get("/api/tasks", { headers: CSRF })).status()).toBe(200);
 });
 

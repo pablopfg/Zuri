@@ -87,6 +87,22 @@ describe("first access over HTTP", () => {
     }, fresh);
   });
 
+  it("keeps the name typed in the first access, tidied, and goes without one when left out or blank", async () => {
+    await withAuth("setup-routes-name", async (h) => {
+      const ticket = value(setCookie(await send(h, "/api/setup/code", { body: { code: CODE } }), "__Host-zuri_setup"));
+      const created = await send(h, "/api/setup/owner", { body: { ...OWNER, ownerName: "  Ana \n  Maria\u0301 " }, cookie: ticket });
+      expect(created.status).toBe(201);
+      expect(h.settings.get()).toMatchObject({ ownerName: "Ana Mariá", language: "pt-BR", timeZone: "America/Recife" });
+    }, fresh);
+    for (const [label, body] of [["absent", OWNER], ["blank", { ...OWNER, ownerName: "   " }]] as const) {
+      await withAuth(`setup-routes-no-name-${label}`, async (h) => {
+        const ticket = value(setCookie(await send(h, "/api/setup/code", { body: { code: CODE } }), "__Host-zuri_setup"));
+        expect((await send(h, "/api/setup/owner", { body, cookie: ticket })).status).toBe(201);
+        expect(h.settings.get().ownerName).toBe("");
+      }, fresh);
+    }
+  });
+
   it("refuses without the CSRF header or from another origin", async () => {
     await withAuth("setup-routes-csrf", async (h) => {
       const noHeader = await send(h, "/api/setup/code", { body: { code: CODE }, headers: { "x-zuri-request": "0" } });
@@ -113,9 +129,15 @@ describe("first access over HTTP", () => {
         { ...OWNER, language: "fr" },
         { ...OWNER, timeZone: "Marte/Olympus" },
         { ...OWNER, name: "<script>" },
+        { ...OWNER, ownerName: "<script>" },
+        { ...OWNER, ownerName: "a".repeat(41) },
+        { ...OWNER, ownerName: "Ana\u202Eairam" },
+        { ...OWNER, ownerName: "..." },
+        { ...OWNER, ownerName: 7 },
       ]) {
         const response = await send(h, "/api/setup/owner", { body: bad, cookie: ticket });
         expect(response.status).toBe(400);
+        if ("ownerName" in bad) expect(apiErrorSchema.parse(await response.json()).details).toEqual({ fields: ["ownerName"] });
       }
       // The ticket survives a refused form: the owner fixes the field and sends again.
       expect((await send(h, "/api/setup/owner", { body: OWNER, cookie: ticket })).status).toBe(201);

@@ -9,6 +9,10 @@ o [SemVer](https://semver.org/lang/pt-BR/). Cada PR escreve a sua entrada em
 
 ### Adicionado
 
+- O primeiro acesso pergunta como você quer ser chamado. O campo "Seu nome" é
+  opcional, segue as regras de Configurações > Conta e já aparece no
+  cumprimento da tela inicial.
+
 - Planejado para o bot do Telegram (etapa 14): quando um áudio passar do
   limite de 5 min e 5 MB, a Zuri avisa, diz quanto deve gastar da cota do dia
   e pergunta se processa mesmo assim, em vez de recusar. Acima do que dá para

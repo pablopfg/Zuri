@@ -836,7 +836,8 @@ export class AuthService {
     if (this.ownerExists()) throw new AppError("CONFLICT", "auth.setup.done");
     const code = await this.liveTicket(token);
     const email = normalizeEmail(input.email);
-    const hash = await this.acceptablePassword(input.password, [email, this.deps.secrets.agentName ?? ""].filter(Boolean));
+    const ownerName = input.ownerName ?? "";
+    const hash = await this.acceptablePassword(input.password, [email, ownerName, this.deps.secrets.agentName ?? ""].filter(Boolean));
     const created = this.deps.db.transaction(() => {
       // Read again after the awaits: another form may have finished meanwhile.
       if (this.ownerExists()) return false;
@@ -846,7 +847,7 @@ export class AuthService {
       this.deps.state.set("owner_email", email);
       this.deps.state.set("auth_password_hash", hash);
       this.deps.state.set("setup_second_step_required", true);
-      this.deps.settings.update({ language: input.language, timeZone: input.timeZone });
+      this.deps.settings.update({ language: input.language, timeZone: input.timeZone, ...(ownerName ? { ownerName } : {}) });
       this.events.record("owner_created", client, { alert: true });
       return true;
     });
