@@ -40,6 +40,9 @@ export function SessionGuard({ session }: { session: SessionState }) {
       if (active) noteReported();
       try {
         const state = sessionStateSchema.parse(await api<unknown>("/auth/heartbeat", { method: "POST", body: { active } }));
+        // A beat sent before this tab locked or signed out must not reopen it:
+        // after a lock only the session check does, and after a sign-out nothing.
+        if (!qc.getQueryData(SESSION_KEY)) return;
         qc.setQueryData(SESSION_KEY, state);
       } catch {
         // A 401 signs out through the API client; a network error waits for the next beat.

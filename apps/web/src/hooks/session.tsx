@@ -1,19 +1,42 @@
 import { type QueryClient, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type SessionState, type Settings, sessionStateSchema } from "@zuri/shared";
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useState } from "react";
-import { broadcast, type EndReason, onSessionMessage } from "../lib/activity.ts";
+import { adoptReported, broadcast, type EndReason, onSessionMessage } from "../lib/activity.ts";
 import { ApiError, api, onPasswordChangeRequired, onUnauthorized } from "../lib/api.ts";
+import { toLocal } from "../lib/deadlines.ts";
 import { useI18n } from "../lib/i18n.tsx";
 
 export const SESSION_KEY = ["session"] as const;
 export const SETTINGS_KEY = ["settings"] as const;
 
+/**
+ * A session state the server has just sent, after this tab locked itself on its
+ * own count. The last use the server heard of (here or in another tab) becomes
+ * where this tab's own count starts: otherwise the tab would lock again on every
+ * "still open" answer. Only then: the own count exists for when the two clocks
+ * disagree, and an ordinary answer must not reset it.
+ */
+export function adoptSessionNews(state: SessionState, receivedAt = Date.now()): SessionState {
+  const local = toLocal(state.deadlines, receivedAt);
+  adoptReported(local.idleAt - local.idleMs, receivedAt);
+  return state;
+}
+
+/** This tab locked itself and asked the server whether the session is still open. */
+let checkingAfterLock = false;
+
 /** The session, or null when this browser is signed out (the server answered 401). */
 async function fetchSession(): Promise<SessionState | null> {
   try {
-    return sessionStateSchema.parse(await api<unknown>("/auth/session"));
+    const state = sessionStateSchema.parse(await api<unknown>("/auth/session"));
+    if (checkingAfterLock) adoptSessionNews(state);
+    checkingAfterLock = false;
+    return state;
   } catch (error) {
-    if (error instanceof ApiError && error.status === 401) return null;
+    if (error instanceof ApiError && error.status === 401) {
+      checkingAfterLock = false;
+      return null;
+    }
     throw error;
   }
 }
@@ -112,6 +135,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const lock = useCallback(
     (reason: EndReason) => {
       endHere(reason);
+      checkingAfterLock = true;
       void qc.invalidateQueries({ queryKey: SESSION_KEY });
     },
     [endHere, qc],

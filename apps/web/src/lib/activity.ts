@@ -82,6 +82,16 @@ export function noteReported(now = Date.now()): void {
   }
 }
 
+/**
+ * The server's own answer says it heard of use at `at` (by this browser's clock).
+ * This tab's own count then starts there: without it, a tab whose count ran out
+ * while it slept would lock again on every answer that the session is still open.
+ * Never moves back and never into the future; not shared, as each tab asks for itself.
+ */
+export function adoptReported(at: number, now = Date.now()): void {
+  if (Number.isFinite(at)) lastReported = Math.max(lastReported, Math.min(at, now));
+}
+
 export function lastReportedAt(): number {
   return lastReported;
 }

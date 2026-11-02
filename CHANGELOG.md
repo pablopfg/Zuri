@@ -12,6 +12,12 @@ versão.
 
 ### Adicionado
 
+- Plano para a troca automática de provedor de IA e para proteger os dados
+  enviados aos modelos, em `docs/planos/troca-de-provedores-e-protecao-de-dados.md`.
+  A troca fica no próprio Zuri, com um disjuntor por provedor, em vez do AI
+  Gateway. O plano também lista dez medidas de proteção, entre elas um teste
+  com valores canário e a pseudonimização antes de qualquer provedor externo.
+  Os prompts das etapas 17, 21 e 25 passaram a citar o plano.
 - Avaliação de AI Gateway, Hyperdrive e Vectorize em
   `docs/planos/ai-gateway-hyperdrive-vectorize.md`, com os limites do plano
   Free conferidos em 02/11/2026. Nenhum dos três entra agora: o Hyperdrive e o
@@ -265,6 +271,14 @@ versão.
   erro não tratado.
 - Errar a senha ou o código num diálogo de confirmação não encerra mais a
   sessão: a mensagem aparece no diálogo e você tenta de novo.
+- Uma aba que voltava do segundo plano depois de passar do prazo de
+  inatividade pela própria contagem ficava presa num vaivém entre a tela de
+  entrar e a página, com dezenas de pedidos por segundo ao servidor, mesmo
+  com a sessão ainda aberta (usada em outra aba). Agora, quando a aba trava e
+  o servidor responde que a sessão segue aberta, a contagem dela recomeça da
+  última atividade que o servidor conhece e a aba volta para onde estava.
+  Um sinal de presença que chega depois de a aba travar ou sair também não
+  reabre mais a tela.
 - A busca de tarefas e a busca literal de notas não achavam "Água" ao digitar
   "água" (o SQLite só ignora maiúsculas de A a Z). Agora as maiúsculas
   acentuadas também são ignoradas, nos dois sentidos.
