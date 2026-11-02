@@ -23,6 +23,12 @@ updates:
       prefix: chore
       prefix-development: chore
       include: scope
+    ignore:
+      # react-router 8.5 adds 0.8 kB gzip to the initial JS and crosses the
+      # 139 kB budget (rule P11) for fixes we do not use (RSC, framework mode).
+      # Drop this once the budget has room; raising it needs the owner's OK.
+      - dependency-name: react-router
+        versions: ["8.5.x"]
     groups:
       dev-dependencies:
         dependency-type: development
