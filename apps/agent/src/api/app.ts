@@ -265,15 +265,26 @@ export function createApi(deps: ApiDeps) {
   });
 
   // The bell's count rides on the session check and the heartbeat: no polling of its own (rule P11).
-  app.get("/auth/session", (c) => Response.json({ ...deps.auth().state(c.get("session")), ...unread(deps) }));
+  app.get("/auth/session", async (c) => {
+    const state = deps.auth().state(c.get("session"));
+    // Opening the app from a browser that gets push keeps its device (removed after 7 days without access).
+    const notices = deps.notices?.();
+    const browser = notices ? await notices.auth.browserId(readDeviceCookie(c.req.raw)) : null;
+    if (notices && browser) notices.push.seen(browser);
+    return Response.json({ ...state, ...unread(deps) });
+  });
 
   app.post("/auth/heartbeat", async (c) => {
     const { active } = await readJson(c.req.raw, heartbeatRequestSchema, 1024);
     return Response.json({ ...deps.auth().heartbeat(c.get("session"), active), ...unread(deps) });
   });
 
-  app.post("/auth/logout", (c) => {
-    deps.auth().logout(c.get("session"), client(c));
+  app.post("/auth/logout", async (c) => {
+    const auth = deps.auth();
+    // Only the owner's own "Sair" (?manual=1) drops this browser's push device;
+    // the interface signing out by itself after idle time keeps it (7-day rule).
+    const manual = c.req.query("manual") === "1";
+    auth.logout(c.get("session"), client(c), manual ? await auth.browserId(readDeviceCookie(c.req.raw)) : null);
     const response = new Response(null, { status: 204 });
     response.headers.append("set-cookie", sessionCookie(c.req.raw, null));
     // What this browser cached of the app goes too. Not "cookies": that would
@@ -381,7 +392,7 @@ export function createApi(deps: ApiDeps) {
   registerChatRoutes(app, deps.chat);
   registerAutomationRoutes(app, deps.automations);
   const notices = deps.notices;
-  if (notices) registerNoticeRoutes(app, () => notices());
+  if (notices) registerNoticeRoutes(app, () => notices(), client);
 
   // Step 8: what the AI used today and the last 7 days. Read only: the limits change through /settings.
   app.get("/usage", () => Response.json(deps.aiUsage()));
