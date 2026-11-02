@@ -126,6 +126,12 @@ base `develop` (menos rascunho, branch de fork e PR com o rótulo
    comentário "A CI deste commit está parada esperando aprovação" avisa, e a
    rodada seguinte (no máximo 15 minutos depois) tenta aprovar de novo. Se
    continuar parado, aprove na mão: Actions, a execução, "Approve and run".
+   Quem não pode aprovar (uma thread, por exemplo) tem outra saída: pôr o
+   rótulo `sem-atualizacao-automatica` na PR para o bot parar de enviar
+   commits nela e trazer a `develop` com o próprio push (`git merge
+   origin/develop` ou `node scripts/atualizar-prs.ts --local`). Push de
+   pessoa ou de thread roda a CI sem precisar de aprovação. Tire o rótulo
+   depois do merge, se a PR continuar aberta.
 
 O workflow só resolve conflito de acréscimo em arquivo de lista. Conflito em
 código (duas PRs mudando as mesmas linhas de `prompt.ts`, por exemplo) não
