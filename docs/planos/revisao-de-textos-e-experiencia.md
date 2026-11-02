@@ -32,7 +32,7 @@ Entra tudo o que o dono lê:
 | Interface web | `packages/shared/i18n/pt-BR*.ts` e `en.ts`, componentes em `apps/web/src` |
 | Mensagens do servidor (erros, avisos, resumos, e-mails) | `pt-BR-server.ts`, `pt-BR-alerts.ts`, `pt-BR-notices.ts` e o que vier |
 | Bot do Telegram | textos do bot no catálogo (etapas 12 a 16) |
-| Notificação push | só "Zuri: você tem um novo aviso" (pedido do Pablo para a etapa 11b, 02/11; não muda) |
+| Notificação push | sempre discreta, sem título nem texto do aviso (escolha do Pablo na etapa 11b, 02/11); a revisão pode mexer na frase, nunca no que ela revela |
 | Fala da Zuri | prompt de personalidade (`apps/agent/src/agent/prompt.ts`) e frases do Início |
 | PWA | `manifest`, título das páginas, tela "Conferindo a sua sessão" |
 
