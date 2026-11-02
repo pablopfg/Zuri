@@ -86,3 +86,4 @@ Fatos e decisões já tomados pelo Pablo. O agente não pergunta de novo nada da
 - Prioridade que aprende: baixa e sobe, no máximo até alta, ligada por padrão (02/11/2026, etapa 11d).
 - Destravar o bot do Telegram gera um aviso de segurança só, sem insistir, e o registro em Acessos (02/11/2026, etapa 15a).
 - Teto do JS inicial sobe de 139 kB para 139,1 kB, para caber a rota da página /aprovar do bot (02/11/2026, etapa 15a).
+- O README se atualiza sozinho (mapa e contagens de etapas, selos da `develop`) por uma PR automática com auto-merge, e branches de PRs mescladas são apagadas pelo workflow `Branches` (02/11/2026).

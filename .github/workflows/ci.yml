@@ -1,21 +1,26 @@
 name: CI
 
-# Runs only on pull requests and never sees a secret: develop and main change
-# only through pull requests (rulesets in .github/rulesets/), so a push run
-# would repeat what the pull request already tested. Each job name is a check
-# required by the rulesets. A push by update-prs.yml (GITHUB_TOKEN) starts this
+# Runs on pull requests and on each push to develop, and never sees a secret.
+# develop changes only through pull requests (rulesets in .github/rulesets/);
+# the push run exists for the README badge (?branch=develop), which reads only
+# runs on develop itself, and so develop's own state is always on record.
+# Each job name is a check required by the rulesets. A push by update-prs.yml (GITHUB_TOKEN) starts this
 # run held for approval, and that workflow approves it: the rulesets count only
 # the checks of pull_request runs, never of a workflow_dispatch run.
 on:
   pull_request:
+  push:
+    branches: [develop]
 
 permissions:
   contents: read
 
-# A new commit on the same pull request cancels the run still going.
+# A new commit on the same pull request cancels the run still going. On develop
+# the running one always finishes (GitHub keeps only the newest waiting run),
+# so the badge reads a finished run, not one cut short.
 concurrency:
   group: ci-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   typecheck:

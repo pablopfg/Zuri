@@ -2,8 +2,12 @@ name: CodeQL
 
 # Advanced setup: keep GitHub's CodeQL "default setup" off, or this workflow fails.
 # A push by update-prs.yml starts the pull_request run held for approval; that workflow approves it.
+# The push to develop updates the code scanning results of the default branch
+# (a pull request analysis never closes an alert there) and the README badge.
 on:
   pull_request:
+  push:
+    branches: [develop]
   schedule:
     - cron: "17 9 * * 1"
 
@@ -12,7 +16,7 @@ permissions:
 
 concurrency:
   group: codeql-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   analyze:
