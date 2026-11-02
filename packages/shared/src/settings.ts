@@ -5,7 +5,7 @@ import { z } from "zod";
 import { DEFAULT_LOCALE, LOCALES } from "../i18n/index.ts";
 import { AI_LIMIT_RANGES, CHAT_MODEL_IDS, DEFAULT_CHAT_MODEL, DEFAULT_FALLBACK_MODEL, FALLBACK_MODEL_IDS } from "./ai-limits.ts";
 
-import { ALERT_LIMITS, alertRoutesSchema, DEFAULT_ALERT_ROUTES, DEFAULT_DIGEST_TIME } from "./alerts.ts";
+import { ALERT_LIMITS, alertFullTextSchema, alertRoutesSchema, DEFAULT_ALERT_ROUTES, DEFAULT_DIGEST_TIME } from "./alerts.ts";
 import { DEFAULT_TIME_ZONE, isTimeZone } from "./time-zone.ts";
 
 export { DEFAULT_TIME_ZONE, isTimeZone };
@@ -84,6 +84,8 @@ export const settingsSchema = /* @__PURE__ */ z
     alertPerDay: range(ALERT_LIMITS.perDay),
     /** Step 11d: the priority that learns from what the owner opens and ignores. */
     alertLearning: z.boolean(),
+    /** Step 13: the categories whose text Telegram shows in full; the rest arrive discreet (title only). */
+    alertFullText: alertFullTextSchema,
   })
   .strict();
 
@@ -121,4 +123,5 @@ export const DEFAULT_SETTINGS: Settings = /* @__PURE__ */ Object.freeze({
   alertPerHour: ALERT_LIMITS.perHour.default,
   alertPerDay: ALERT_LIMITS.perDay.default,
   alertLearning: true,
+  alertFullText: [],
 });

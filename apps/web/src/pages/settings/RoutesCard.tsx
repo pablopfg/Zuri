@@ -24,15 +24,18 @@ export function RoutesCard({ settings }: { settings: Settings }) {
   const toast = useToast();
   const save = useSettingsMutation();
   const [routes, setRoutes] = useState(() => routesOf(settings));
+  const [fullText, setFullText] = useState<AlertCategory[]>(() => [...settings.alertFullText]);
   const [perHour, setPerHour] = useState(String(settings.alertPerHour));
   const [perDay, setPerDay] = useState(String(settings.alertPerDay));
   useEffect(() => {
     setRoutes(routesOf(settings));
+    setFullText([...settings.alertFullText]);
     setPerHour(String(settings.alertPerHour));
     setPerDay(String(settings.alertPerDay));
   }, [settings]);
 
-  const changed = !same(routes, routesOf(settings)) || Number(perHour) !== settings.alertPerHour || Number(perDay) !== settings.alertPerDay;
+  const fullChanged = fullText.length !== settings.alertFullText.length || fullText.some((c) => !settings.alertFullText.includes(c));
+  const changed = fullChanged || !same(routes, routesOf(settings)) || Number(perHour) !== settings.alertPerHour || Number(perDay) !== settings.alertPerDay;
 
   const toggle = (category: AlertCategory, channel: AlertChannelName, on: boolean) =>
     setRoutes((current) => ({ ...current, [category]: on ? [...current[category], channel] : current[category].filter((c) => c !== channel) }));
@@ -41,7 +44,8 @@ export function RoutesCard({ settings }: { settings: Settings }) {
     event.preventDefault();
     const alertRoutes: AlertRoutes = {};
     for (const category of ALERT_CATEGORIES) if (category !== "security") alertRoutes[category] = ALERT_CHANNELS.filter((c) => routes[category].includes(c));
-    save.mutate({ alertRoutes, alertPerHour: Number(perHour), alertPerDay: Number(perDay) }, { onSuccess: () => toast(t("web.alerts.saved")) });
+    const alertFullText = ALERT_CATEGORIES.filter((c) => fullText.includes(c));
+    save.mutate({ alertRoutes, alertFullText, alertPerHour: Number(perHour), alertPerDay: Number(perDay) }, { onSuccess: () => toast(t("web.alerts.saved")) });
   };
 
   return (
@@ -62,6 +66,10 @@ export function RoutesCard({ settings }: { settings: Settings }) {
                     <span className="sr-only">{t(CHANNEL[channel])}</span>
                   </th>
                 ))}
+                <th scope="col" className="px-1 py-2 text-center font-medium sm:px-2">
+                  <span aria-hidden>{t("web.alerts.routes.short.fullText")}</span>
+                  <span className="sr-only">{t("web.alerts.routes.fullText")}</span>
+                </th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
@@ -75,31 +83,28 @@ export function RoutesCard({ settings }: { settings: Settings }) {
                     </th>
                     {ALERT_CHANNELS.map((channel) => (
                       <td key={channel} className="px-1 py-1 text-center sm:px-2">
-                        <span className="relative inline-flex h-11 w-11 items-center justify-center">
-                          <input
-                            type="checkbox"
-                            className="peer absolute inset-0 h-11 w-11 cursor-pointer appearance-none rounded-lg focus-visible:outline-none disabled:cursor-not-allowed"
-                            checked={locked || routes[category].includes(channel)}
-                            disabled={locked}
-                            aria-label={t("web.alerts.routes.toggle", { category: t(CATEGORY[category]), channel: t(CHANNEL[channel]) })}
-                            onChange={(e) => toggle(category, channel, e.target.checked)}
-                          />
-                          {/* The 44 px input stays invisible on top; this is only its picture. */}
-                          <span
-                            aria-hidden
-                            className="pointer-events-none flex h-5 w-5 items-center justify-center rounded-md border-2 border-border-strong bg-surface text-accent-fg transition-colors peer-checked:border-accent peer-checked:bg-accent peer-focus-visible:ring-2 peer-focus-visible:ring-accent peer-focus-visible:ring-offset-2 peer-disabled:opacity-60 [&>svg]:opacity-0 peer-checked:[&>svg]:opacity-100"
-                          >
-                            <Check className="h-3.5 w-3.5" strokeWidth={3} />
-                          </span>
-                        </span>
+                        <Box
+                          checked={locked || routes[category].includes(channel)}
+                          disabled={locked}
+                          label={t("web.alerts.routes.toggle", { category: t(CATEGORY[category]), channel: t(CHANNEL[channel]) })}
+                          onChange={(on) => toggle(category, channel, on)}
+                        />
                       </td>
                     ))}
+                    <td className="px-1 py-1 text-center sm:px-2">
+                      <Box
+                        checked={fullText.includes(category)}
+                        label={t("web.alerts.routes.fullTextToggle", { category: t(CATEGORY[category]) })}
+                        onChange={(on) => setFullText((current) => (on ? [...current, category] : current.filter((c) => c !== category)))}
+                      />
+                    </td>
                   </tr>
                 );
               })}
             </tbody>
           </table>
         </div>
+        <p className="text-xs text-fg-muted">{t("web.alerts.routes.fullTextHint")}</p>
         <div className="grid gap-4 sm:grid-cols-2">
           <TextField
             label={t("web.alerts.routes.perHour")}
@@ -134,6 +139,28 @@ export function RoutesCard({ settings }: { settings: Settings }) {
         </Button>
       </form>
     </Card>
+  );
+}
+
+/** A 44 px checkbox drawn as a small box (the input stays invisible on top). */
+function Box({ checked, disabled = false, label, onChange }: { checked: boolean; disabled?: boolean; label: string; onChange: (on: boolean) => void }) {
+  return (
+    <span className="relative inline-flex h-11 w-11 items-center justify-center">
+      <input
+        type="checkbox"
+        className="peer absolute inset-0 h-11 w-11 cursor-pointer appearance-none rounded-lg focus-visible:outline-none disabled:cursor-not-allowed"
+        checked={checked}
+        disabled={disabled}
+        aria-label={label}
+        onChange={(e) => onChange(e.target.checked)}
+      />
+      <span
+        aria-hidden
+        className="pointer-events-none flex h-5 w-5 items-center justify-center rounded-md border-2 border-border-strong bg-surface text-accent-fg transition-colors peer-checked:border-accent peer-checked:bg-accent peer-focus-visible:ring-2 peer-focus-visible:ring-accent peer-focus-visible:ring-offset-2 peer-disabled:opacity-60 [&>svg]:opacity-0 peer-checked:[&>svg]:opacity-100"
+      >
+        <Check className="h-3.5 w-3.5" strokeWidth={3} />
+      </span>
+    </span>
   );
 }
 

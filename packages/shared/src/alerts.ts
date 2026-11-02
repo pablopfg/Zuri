@@ -64,6 +64,7 @@ export const SECURITY_ALERT_EVENTS = [
   "push_removed",
   "telegram_linked",
   "telegram_unlinked",
+  "telegram_group_linked",
   "setup_failure",
   "setup_locked",
   "owner_created",
@@ -207,6 +208,17 @@ export const alertRoutesSchema = /* @__PURE__ */ (() =>
       .transform((list) => [...new Set(list)]),
   ))();
 export type AlertRoutes = Partial<Record<AlertCategory, AlertChannelName[]>>;
+
+/**
+ * The categories Telegram shows in full (step 13). Everything else arrives
+ * discreet: title, category and priority, the text only in the app. Pure like
+ * the routes' schema, for the same reason.
+ */
+export const alertFullTextSchema = /* @__PURE__ */ (() =>
+  z
+    .array(z.enum(ALERT_CATEGORIES))
+    .max(ALERT_CATEGORIES.length)
+    .transform((list) => [...new Set(list)]))();
 
 // ---------- Delivery history ----------
 

@@ -34,7 +34,20 @@ export const TELEGRAM_LIMITS = {
   auditDays: 90,
   /** How long the card trusts the last getWebhookInfo answer. */
   webhookInfoTtlMs: 5 * 60_000,
+  /** Step 13: a notice's buttons work this long (spec, "Botões e callback_data"). */
+  callbackTtlMs: 24 * 3_600_000,
+  /** The group's code, like the account's: this long, one at a time. */
+  groupCodeTtlMs: 10 * 60_000,
+  /** A notice's title and text as Telegram gets them, in characters (the message stays under messageMax). */
+  alertTitleMax: 200,
+  alertBodyMax: 3_500,
+  /** The group's name as the card shows it. */
+  groupTitleMax: 128,
 } as const;
+
+/** What a notice's buttons do; the button carries only "v1:<action>:<opaque id>". */
+export const TELEGRAM_NOTICE_ACTIONS = ["done", "snooze", "mute"] as const;
+export type TelegramNoticeAction = (typeof TELEGRAM_NOTICE_ACTIONS)[number];
 
 /** The update kinds the webhook asks for; any other kind is dropped even if it arrives. */
 export const TELEGRAM_ALLOWED_UPDATES = ["message", "callback_query", "my_chat_member"] as const;
@@ -86,6 +99,25 @@ export interface TelegramStatus {
   /** Conversation with the agent through the bot (step 14). */
   conversation: boolean;
   readLockHours: number;
+  /** The notices' group (step 13), or null while notices go to the private chat. */
+  group: TelegramGroup | null;
+  /** A group code waits for the bot to be added (its expiry), or null. */
+  groupCodeExpiresAt: string | null;
+}
+
+/** The optional group that receives the notices (N9). */
+export interface TelegramGroup {
+  /** The group's name as Telegram sent it (third-party text: escape it). */
+  title: string;
+  /** The group has topics and the bot may create them: one topic per category. */
+  topics: boolean;
+  linkedAt: string;
+}
+
+/** POST /api/telegram/group: the link that adds the bot to a group with a one-time code. */
+export interface TelegramGroupCode {
+  link: string;
+  expiresAt: string;
 }
 
 /**

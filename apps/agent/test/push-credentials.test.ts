@@ -89,8 +89,12 @@ describe("push devices and a password change", () => {
         `SELECT d.channel AS channel, d.status AS status FROM zur_alert_deliveries d JOIN zur_notices n ON n.id = d.notice_id WHERE n.params LIKE '%password_changed%'`,
       );
     });
-    // E-mail isn't set up in the tests: it says so, and the push still gets the alert.
-    expect(deliveries).toEqual([{ channel: "push", status: "sent" }, { channel: "email", status: "skipped" }]);
+    // E-mail isn't set up and no Telegram account is linked in the tests: each says so, and the push still gets the alert.
+    expect(deliveries).toEqual([
+      { channel: "push", status: "sent" },
+      { channel: "telegram", status: "skipped" },
+      { channel: "email", status: "skipped" },
+    ]);
     pushed.length = 0;
     // Retired: hidden from the list, out of the three, gone at the next prune after the grace.
     const [row] = await rows();

@@ -27,9 +27,16 @@ etapas ficam detalhadas; as mais antigas viram uma linha na tabela.
 | 9 | mesclada (31/10/2026) | #28 | Conversa em SSE, 20 ferramentas com permissão e limite, aprovações e planos, voz, injeção de prompt testada |
 | 10 | mesclada (02/11/2026) | #46 | Automações: lembretes, resumo das tarefas e rotinas com IA, alarme único, recuperação após reinício, aprovação das rotinas do chat |
 | 11 | mesclada (02/11/2026) | #55, #56, #63, #64 | Central de avisos, Diagnóstico, notificação no aparelho, e-mail e recuperação de senha, prioridade que aprende |
-| 12 | em revisão | #70 | Fundação do bot do Telegram: cliente da Bot API, webhook com travas, vínculo por código confirmado no app, cartão em Configurações › Avisos |
+| 12 | mesclada (02/11/2026) | #70 | Fundação do bot do Telegram: cliente da Bot API, webhook com travas, vínculo por código confirmado no app, cartão em Configurações › Avisos |
+| 13 | em revisão | #73 | Avisos no Telegram: canal da central, discreto com "Texto completo", botões Feito/Adiar/Silenciar/Abrir, grupo opcional com tópicos |
 
 ## Últimas etapas (detalhe)
+
+### Etapa 13 · Avisos no Telegram
+- Entregou: `apps/agent/src/telegram/{channel,callbacks}.ts` (canal `TelegramChannel`, botões `v1:<ação>:<id>`), grupo em `TelegramLinks` (`group`, `saveGroup`, `moveGroup`, `setTopics`), toques e grupo em `TelegramService` (`groupCode`, `unlinkGroup`), `AlertService.respondOutOfBand` e `snoozed_until` (volta como cópia em `escalate`), rotas `POST/DELETE /api/telegram/group`, configuração `alertFullText`, evento `telegram_group_linked` (origem `bot` em `alerts/security.ts`). Tela: seção do grupo no `TelegramCard`, coluna "Texto completo" no `RoutesCard`. Plano: `docs/planos/etapa-13-avisos-telegram.md`.
+- Migrations: versão 15 (`zur_telegram_callbacks`, `zur_notices.snoozed_until`).
+- Decisões técnicas: texto puro com `disarmLinks`; segurança e 3ª tentativa sempre no chat privado; Feito em todo aviso, Adiar/Silenciar só em alta e crítica; alerta de segurança com origem `bot` sai sem botões e o bot recusa; código do grupo em `zur_settings` (`telegram_group_code`, HMAC com propósito próprio).
+- Para a 16: reconhecimento no app, com senha recente, dos alertas causados pelo bot (hoje eles insistem e viram "não confirmado"). Para a 15: `/avisos` pode reaproveitar `formatNotice`. Sem fila por chat ainda (limite por canal segura o volume).
 
 ### Etapa 12 · Fundação do bot
 - Entregou: `packages/shared/src/telegram.ts` (limites, estados do cartão, schema do PATCH), `apps/agent/src/telegram/{client,links,service}.ts`, `apps/agent/src/api/telegram.ts` (webhook antes do CSRF + `GET/PATCH/DELETE /api/telegram`, `POST /api/telegram/{connect,confirm,test}`), portão do webhook em `src/index.ts` (403 sem cabeçalho, 413 acima de 64 KB), `TelegramCard` na aba Avisos, eventos `telegram_linked`/`telegram_unlinked` (alerta). Docs: `docs/telegram.md`, `docs/configuracao-cloudflare.md`, `docs/seguranca.md`. Plano: `docs/planos/etapa-12-telegram-base.md`.
@@ -39,9 +46,6 @@ etapas ficam detalhadas; as mais antigas viram uma linha na tabela.
 
 ### Etapa 11 · Prioridade que aprende (parte 11d)
 - Entregou: `apps/agent/src/alerts/learning.ts`, avisos `alerts.lowered`/`alerts.raised`, `DELETE /api/alerts/learning/:key`, configuração `alertLearning`, campo `priority` nas automações. Migration 13. Pendência de produto: "Marcar tudo como lido" conta como aberto.
-
-### Etapa 11 · E-mail e recuperação de senha (parte 11c)
-- Entregou: `apps/agent/src/email/{sender,channel}.ts`, `apps/agent/src/auth/email-recovery.ts`, página `/recuperar-senha`. Binding `SEND_EMAIL` com `destination_address` fica para o deploy da etapa 24; `ALERT_EMAIL_FROM` é segredo.
 
 ### Notas que continuam valendo
 - Um alarme só (P8): use `AutomationService.rearm()`/`otherDue`, nunca outro alarme. O runner aceita `context: "scheduled"` (só leitura, sem dono presente). Toda IA por `agent.ai()`.
@@ -79,6 +83,6 @@ etapas ficam detalhadas; as mais antigas viram uma linha na tabela.
 
 ## Próxima etapa
 
-- Número e nome: 12 · Telegram (base), depois que a 11d mesclar
-- Dependências mescladas: 11a (#55), 11b (#56) e 11c (#63); 11d em revisão
-- Precisa de algo do Pablo antes: não
+- Número e nome: 14 · Conversa e voz, depois que a 13 mesclar
+- Dependências mescladas: 9 (#28), 12 (#70); 13 em revisão
+- Precisa de algo do Pablo antes: não (o bot no @BotFather só é preciso no deploy)
