@@ -2,6 +2,7 @@
 import "./zod-config.ts";
 
 import { z } from "zod";
+import { passkeyAssertionSchema } from "./passkeys.ts";
 
 /**
  * The owner's Telegram bot (steps 12 to 16). The bot obeys one Telegram account,
@@ -28,8 +29,24 @@ export const TELEGRAM_LIMITS = {
   testsPerHour: 3,
   /** Messages to the agent per hour from the bot (spec, "Bot do Telegram"); past it, one reply and then silence. */
   chatPerHour: 30,
+  /** Commands per hour from the bot (step 15); past it, one reply and then silence until the hour turns. */
+  commandsPerHour: 60,
   /** The read lock (step 15): hours without use before content asks to be unlocked. */
   readLockHours: { min: 1, max: 72, default: 12 },
+  /** An unlock (passkey or e-mailed code) opens reading this long. */
+  unlockMs: 12 * 3_600_000,
+  /** A confirmation challenge (the /aprovar page's token, the e-mailed code) lives this long. */
+  confirmTtlMs: 5 * 60_000,
+  /** Wrong confirmations (a refused passkey, a wrong code) in this window lock confirming through the bot. */
+  confirmFailuresMax: 5,
+  confirmFailuresWindowMs: 15 * 60_000,
+  confirmLockMs: 60 * 60_000,
+  /** The e-mailed code: its digits, the wait between sends and the sends per hour. */
+  emailCodeDigits: 6,
+  emailResendMs: 60_000,
+  emailSendsPerHour: 3,
+  /** Confirmation e-mails a day, apart from the notices' 10 (spec, "Cota de e-mail"). */
+  confirmEmailsPerDay: 10,
   /** Telegram's limit for one message's text. */
   messageMax: 4096,
   /** What the audit log keeps (metadata only). */
@@ -167,3 +184,39 @@ export const telegramUpdateSchema = /* @__PURE__ */ (() =>
     .strict()
     .refine((value) => value.conversation !== undefined || value.readLockHours !== undefined))();
 export type TelegramUpdate = z.infer<typeof telegramUpdateSchema>;
+
+/** Where the bot's confirmation page lives; the token travels in its fragment, never to a server log. */
+export const APPROVE_PATH = "/aprovar";
+
+/** What a confirmation from the bot is for. Step 16 adds "approval". */
+export const TELEGRAM_CONFIRM_PURPOSES = ["unlock"] as const;
+export type TelegramConfirmPurpose = (typeof TELEGRAM_CONFIRM_PURPOSES)[number];
+
+/** Why the page can't go on with a token: unknown, already used (right or wrong) or past its 5 minutes. */
+export const APPROVE_TOKEN_PROBLEMS = ["invalid", "used", "expired"] as const;
+export type ApproveTokenProblem = (typeof APPROVE_TOKEN_PROBLEMS)[number];
+
+/** The page's token: 32 random bytes, base64url. */
+const approveToken = /* @__PURE__ */ z.string().regex(/^[A-Za-z0-9_-]{43}$/);
+
+/** POST /api/approvals/telegram/options. */
+export const approveOptionsSchema = /* @__PURE__ */ z.object({ token: approveToken }).strict();
+export type ApproveOptionsRequest = z.infer<typeof approveOptionsSchema>;
+
+/** POST /api/approvals/telegram/verify: the token and what navigator.credentials.get answered. */
+export const approveVerifySchema = /* @__PURE__ */ z.object({ token: approveToken, credential: passkeyAssertionSchema.shape.response }).strict();
+export type ApproveVerifyRequest = z.infer<typeof approveVerifySchema>;
+
+/** What the page gets before asking for the passkey (the options are WebAuthn's own JSON). */
+export interface ApproveOptions {
+  purpose: TelegramConfirmPurpose;
+  options: unknown;
+  expiresAt: string;
+}
+
+/** A confirmation that went through. */
+export interface ApproveResult {
+  purpose: TelegramConfirmPurpose;
+  /** Until when reading through the bot is open (purpose "unlock"). */
+  unlockedUntil: string;
+}

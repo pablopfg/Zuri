@@ -97,6 +97,7 @@ describe("the migration list", () => {
       14: "090919da832586473e230fa78cb31715d432200ed144fc94a57b83b73e4543b5",
       15: "862c580be5d38907e9632922016c755a65b6ec6a60ed17dc381e4681dd82edbb",
       16: "0670271af26f7129e724c31b2de44737396c3c420aee68a96b2585662489e53d",
+      17: "fd290cc5de35dccf4d948273b968436628891a5c4bcdaa43aa16917db22466a2",
     };
     for (const m of MIGRATIONS) {
       const digest = createHash("sha256").update(statementText(m).replace(/\r\n/g, "\n")).digest("hex");
@@ -112,7 +113,7 @@ describe("migrate", () => {
       expect(zurObjects(db)).toEqual([]);
 
       expect(migrate(db)).toBe(LATEST_SCHEMA_VERSION);
-      expect(schemaVersion(db)).toBe(16);
+      expect(schemaVersion(db)).toBe(17);
       // FTS5 keeps shadow tables of its own (zur_notes_fts_data and others): only ours are listed.
       expect(zurObjects(db).filter((name) => !/^table:zur_(notes|memories)_fts_/.test(name))).toEqual([
         "table:zur_activity",
@@ -228,6 +229,9 @@ describe("migrate", () => {
         "index:zur_tasks_open_due",
         "index:zur_tasks_project",
         "index:zur_tasks_status_due",
+        "table:zur_telegram_approvals",
+        "index:zur_telegram_approvals_status",
+        "index:zur_telegram_approvals_token",
         "table:zur_telegram_audit",
         "index:zur_telegram_audit_at",
         "table:zur_telegram_callbacks",
@@ -446,12 +450,27 @@ describe("migrate", () => {
     });
   });
 
+  it("upgrades a database at version 16 to 17: the bot's confirmations, the owner's data kept", async () => {
+    await withEmptyDatabase("from-16", (db) => {
+      expect(migrate(db, MIGRATIONS.slice(0, 16))).toBe(16);
+      db.run(`INSERT INTO zur_telegram_links (id, kind, user_id, chat_id, status) VALUES ('l1', 'private', 1, 1, 'active')`);
+      expect(migrate(db)).toBe(17);
+      expect(db.one(`SELECT status FROM zur_telegram_links WHERE id = 'l1'`)).toEqual({ status: "active" });
+      db.run(`INSERT INTO zur_telegram_approvals (id, purpose, status, created_at, expires_at, page_token_hmac) VALUES ('a1', 'unlock', 'open', 'x', 'y', 'h1')`);
+      expect(db.one(`SELECT email_sends, attempts, reply_message_id FROM zur_telegram_approvals WHERE id = 'a1'`)).toEqual({ email_sends: 0, attempts: 0, reply_message_id: null });
+      // One row per page token, and only the contract's purposes and states.
+      expect(() => db.run(`INSERT INTO zur_telegram_approvals (id, purpose, status, created_at, expires_at, page_token_hmac) VALUES ('a2', 'unlock', 'open', 'x', 'y', 'h1')`)).toThrow();
+      expect(() => db.run(`INSERT INTO zur_telegram_approvals (id, purpose, status, created_at, expires_at) VALUES ('a3', 'login', 'open', 'x', 'y')`)).toThrow();
+      expect(() => db.run(`INSERT INTO zur_telegram_approvals (id, purpose, status, created_at, expires_at) VALUES ('a4', 'unlock', 'used', 'x', 'y')`)).toThrow();
+    });
+  });
+
   it("upgrades a database at version 15 to 16: pending audio files and quoted text, the owner's messages kept", async () => {
     await withEmptyDatabase("from-15", (db) => {
       expect(migrate(db, MIGRATIONS.slice(0, 15))).toBe(15);
       db.run(`INSERT INTO zur_conversations (id, title, created_at, updated_at) VALUES ('c1', 'Oi', 'x', 'x')`);
       db.run(`INSERT INTO zur_messages (id, conversation_id, role, content, created_at) VALUES ('m1', 'c1', 'user', 'Oi, Zuri', 'x')`);
-      expect(migrate(db)).toBe(16);
+      expect(migrate(db, MIGRATIONS.slice(0, 16))).toBe(16);
       expect(db.one(`SELECT content, quoted FROM zur_messages WHERE id = 'm1'`)).toEqual({ content: "Oi, Zuri", quoted: null });
       db.run(`INSERT INTO zur_telegram_pending_files (id, chat_id, file_id, kind, created_at, expires_at) VALUES ('p1', 1, 'f', 'voice', 'x', 'y')`);
       expect(db.one(`SELECT used_at, size_bytes FROM zur_telegram_pending_files WHERE id = 'p1'`)).toEqual({ used_at: null, size_bytes: null });

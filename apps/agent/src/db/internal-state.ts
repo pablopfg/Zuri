@@ -55,7 +55,17 @@ export type InternalKey =
   | "telegram_group_code"
   // Step 14: the app conversation the bot's chat writes to.
   | "telegram_conversation"
-  | "bot_read_lock_hours";
+  | "bot_read_lock_hours"
+  // Step 15: reading through the bot open until (ISO), the commands of this hour, the confirmations'
+  // wrong tries (ms, comma separated), confirming locked until (ISO), the last "too many wrong tries"
+  // alert (ms), the codes e-mailed this hour (ms) and the confirmation e-mails of the last 24 hours.
+  | "bot_unlocked_until"
+  | "telegram_command_window"
+  | "telegram_confirm_failures"
+  | "telegram_confirm_locked_until"
+  | "telegram_confirm_alerted_at"
+  | "telegram_confirm_email_sends"
+  | "email_confirm_window";
 
 export class InternalState {
   constructor(private readonly db: Database) {}

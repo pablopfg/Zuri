@@ -65,6 +65,8 @@ export const SECURITY_ALERT_EVENTS = [
   "telegram_linked",
   "telegram_unlinked",
   "telegram_group_linked",
+  "telegram_unlocked",
+  "telegram_confirm_locked",
   "setup_failure",
   "setup_locked",
   "owner_created",

@@ -24,7 +24,7 @@ de um Durable Object e conversa com você pelo navegador e, em breve, pelo Teleg
 </div>
 
 > [!NOTE]
-> **Em construção.** A Zuri sai em 28 etapas, uma por PR, a partir da [especificação](docs/especificacao.md). As etapas 0 a 14 estão na `develop`, da conversa com o agente às automações, à central de avisos e ao bot do Telegram, que já manda avisos e conversa por texto e voz. O [mapa das etapas](#️-mapa-das-etapas) mostra o que já existe e o que vem a seguir; o estado detalhado fica em [`progresso.md`](.claude/memoria/progresso.md).
+> **Em construção.** A Zuri sai em 28 etapas, uma por PR, a partir da [especificação](docs/especificacao.md). As etapas 0 a 15a estão na `develop`, da conversa com o agente às automações, à central de avisos e ao bot do Telegram, que já manda avisos, conversa por texto e voz e trava a leitura depois de horas sem uso. O [mapa das etapas](#️-mapa-das-etapas) mostra o que já existe e o que vem a seguir; o estado detalhado fica em [`progresso.md`](.claude/memoria/progresso.md).
 
 ## Sumário
 
@@ -171,13 +171,14 @@ O que está na `develop` hoje, etapa por etapa. "extra" marca melhorias feitas f
 | 🤖 | **Bot do Telegram conectado** | Em Configurações > Avisos, um código de uso único liga a sua conta do Telegram ao bot, e o vínculo só vale depois de você confirmar a conta no app com a senha. O bot só atende essa conta, só no chat privado, ignora mensagens repetidas e sai de grupos; quem não é você não recebe resposta nem deixa nada gravado. | 12 |
 | 🔔 | **Avisos no Telegram** | Os avisos chegam no chat com o bot, ou num grupo opcional com um tópico por tipo, discretos por padrão (o texto só com "Texto completo" ligado), sem links clicáveis no meio e com som só nos importantes. Os botões Feito, Adiar 1 h e Silenciar resolvem o aviso ali mesmo, e só a sua conta consegue tocar neles. Alertas de segurança vão sempre ao chat privado. | 13 |
 | 💬 | **Conversa e voz no Telegram** | Com a conversa ligada no cartão do Telegram, você escreve ou manda um áudio para o bot e a Zuri responde como no app, com as mesmas memórias e ferramentas; a conversa aparece na sua lista. Áudio de até 5 min e 5 MB é transcrito na hora; acima disso a Zuri pergunta antes, com o custo, e nada é baixado sem o seu toque. Texto encaminhado ou citado vale como dado, nunca como ordem. | 14 |
+| 🔐 | **Trava de leitura do bot** | Depois de 12 horas sem usar o bot (você escolhe de 1 a 72), a Zuri para de ler o que chega pelo Telegram até você mandar `/destravar` e confirmar com a passkey, numa página do app, ou com um código de 6 dígitos enviado ao seu e-mail. A leitura fica liberada por 12 horas, e cada destravamento aparece em Acessos. `/nova_conversa` começa outra conversa. | 15a |
 | 🎯 | **Prioridade que aprende** | O tipo de aviso que você quase sempre deixa de lado desce um nível, e o que você abre logo sobe, no máximo um nível por semana e sempre com "Desfazer". Lembretes e segurança nunca mudam, e cada automação tem a sua prioridade. | 11 |
 
 ## 🔭 O que vem a seguir
 
 | | Funcionalidade | O que faz | Etapa |
 | :---: | --- | --- | :---: |
-| 🤖 | **Bot do Telegram** | Painel de administração no bolso: consultas sem IA, aprovações com passkey e modo de bloqueio. | 15–16 |
+| 🤖 | **Bot do Telegram** | Painel de administração no bolso: consultas sem IA, aprovações com passkey e modo de bloqueio. | 15b–16 |
 | 🔌 | **Integrações** | Busca semântica, servidores MCP, Google Agenda, Google Contatos por etiqueta, acesso remoto para o n8n e monitor de sites, todos opcionais. | 17–22 |
 | 💾 | **Backup e instalação** | Backup e importação, guia de instalação só pelo navegador e auditoria final. | 23–25 |
 
@@ -264,7 +265,8 @@ O orçamento de cada cota está em [docs/arquitetura/orcamento-free-tier.md](doc
 | **C · Bot do Telegram** | 12 | Fundação do bot | ✅ |
 | | 13 | Avisos no Telegram | ✅ |
 | | 14 | Conversa e voz | ✅ |
-| | 15 | Comandos administrativos | ⬜ |
+| | 15a | Trava de leitura e `/destravar` | ✅ |
+| | 15b | Comandos administrativos | ⬜ |
 | | 16 | Aprovações seguras e modo de bloqueio | ⬜ |
 | **D · Integrações** | 17 | Busca semântica | ⬜ |
 | | 18 | Servidores MCP remotos | ⬜ |

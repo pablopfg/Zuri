@@ -29,9 +29,16 @@ etapas ficam detalhadas; as mais antigas viram uma linha na tabela.
 | 11 | mesclada (02/11/2026) | #55, #56, #63, #64 | Central de avisos, Diagnóstico, notificação no aparelho, e-mail e recuperação de senha, prioridade que aprende |
 | 12 | mesclada (02/11/2026) | #70 | Fundação do bot do Telegram: cliente da Bot API, webhook com travas, vínculo por código confirmado no app, cartão em Configurações › Avisos |
 | 13 | mesclada (02/11/2026) | #73 | Avisos no Telegram: canal da central, discreto com "Texto completo", botões Feito/Adiar/Silenciar/Abrir, grupo opcional com tópicos |
-| 14 | em revisão | — | Conversa e voz no Telegram: conversa do app pelo bot, HTML em blocos, voz até 5 min/5 MB, pergunta antes de baixar arquivo grande, terceiros como `<data>` |
+| 14 | mesclada (02/11/2026) | #75 | Conversa e voz no Telegram: conversa do app pelo bot, HTML em blocos, voz até 5 min/5 MB, pergunta antes de baixar arquivo grande, terceiros como `<data>` |
+| 15a | em revisão | — | Trava de leitura do bot com `/destravar` (passkey na página `/aprovar` ou código por e-mail), `/nova_conversa`, 60 comandos/hora |
 
 ## Últimas etapas (detalhe)
+
+### Etapa 15a · Destravar o bot do Telegram
+- Entregou: `apps/agent/src/telegram/{read-lock,confirmations}.ts` (`ReadLock`; `TelegramConfirmations`: link de uso único, código por e-mail, 5 erros/15 min travam 1 h), rotas `POST /api/approvals/telegram/{options,verify}` (`api/approvals.ts`, sem sessão, CSRF + limitador do login), página `/aprovar` (`pages/ApprovePage.tsx`, textos em `pt-BR-approve.ts`), cota `confirmations` no `EmailSender` (10/dia), eventos `telegram_unlocked` (aviso sem insistir, `insist: false`) e `telegram_confirm_locked`, menu v2 (`/ajuda`, `/destravar`, `/nova_conversa`), hook `afterUpdate` que manda os alertas de segurança logo depois de cada atualização. Plano: `docs/planos/etapa-15a-destravamento-telegram.md`.
+- Migrations: versão 17 (`zur_telegram_approvals`, com `reply_message_id` a mais que o contrato).
+- Decisões técnicas: a etapa 15 virou 15a e 15b; a trava provisória (conversa desligada) saiu; só uso com a leitura liberada renova o prazo; token no fragmento e só HMAC no banco; código só vale como resposta (`force_reply`) e a mensagem é apagada; chaves novas em `zur_settings` (`bot_unlocked_until`, `telegram_command_window`, `telegram_confirm_*`, `email_confirm_window`).
+- Para a 15b: comandos de consulta (`/hoje`, `/tarefas`, `/nova`, `/feito`, `/lembrar`, `/nota`, `/buscar`, `/memoria`, `/rotinas`, `/avisos`, `/uso`, `/status`), fotos e documentos (N4) e `/backup`; todo comando de leitura passa por `#lock.locked()`; somar ao `MENU` sobe `TELEGRAM_MENU_VERSION` (hoje 2); o limite de 60/h já vale. Para a 16: `TelegramConfirmations` aceita outros propósitos (`TELEGRAM_CONFIRM_PURPOSES`), a página `/aprovar` já trata o resultado por propósito; trocar **Abrir no app** por Aprovar.
 
 ### Etapa 14 · Conversa e voz no Telegram
 - Entregou: `apps/agent/src/telegram/{conversation,format}.ts` (`TelegramConversation`: turno, "digitando…", voz, pergunta de arquivo grande; Markdown → HTML do Telegram e divisão em 4.096), `TelegramClient.download`, `MeteredAI.reserveAudio` (reserva antes do download), `UsageMeter.room`, `TurnInput.source/quoted`, `ToolContext.source` (memória com `origin: telegram`). Tela: interruptor "Conversar com a Zuri por aqui" no `TelegramCard`, `components/Switch.tsx`, marca "pelo Telegram" e caixa de texto citado na conversa. Plano: `docs/planos/etapa-14-conversa-telegram.md`.
@@ -44,12 +51,6 @@ etapas ficam detalhadas; as mais antigas viram uma linha na tabela.
 - Migrations: versão 15 (`zur_telegram_callbacks`, `zur_notices.snoozed_until`).
 - Decisões técnicas: texto puro com `disarmLinks`; segurança e 3ª tentativa sempre no chat privado; Feito em todo aviso, Adiar/Silenciar só em alta e crítica; alerta de segurança com origem `bot` sai sem botões e o bot recusa; código do grupo em `zur_settings` (`telegram_group_code`, HMAC com propósito próprio).
 - Para a 16: reconhecimento no app, com senha recente, dos alertas causados pelo bot (hoje eles insistem e viram "não confirmado"). Para a 15: `/avisos` pode reaproveitar `formatNotice`. Sem fila por chat ainda (limite por canal segura o volume).
-
-### Etapa 12 · Fundação do bot
-- Entregou: `packages/shared/src/telegram.ts` (limites, estados do cartão, schema do PATCH), `apps/agent/src/telegram/{client,links,service}.ts`, `apps/agent/src/api/telegram.ts` (webhook antes do CSRF + `GET/PATCH/DELETE /api/telegram`, `POST /api/telegram/{connect,confirm,test}`), portão do webhook em `src/index.ts` (403 sem cabeçalho, 413 acima de 64 KB), `TelegramCard` na aba Avisos, eventos `telegram_linked`/`telegram_unlinked` (alerta). Docs: `docs/telegram.md`, `docs/configuracao-cloudflare.md`, `docs/seguranca.md`. Plano: `docs/planos/etapa-12-telegram-base.md`.
-- Migrations: versão 14 (`zur_telegram_links` com `display_name` a mais que o contrato, `zur_telegram_link_codes`, `zur_telegram_audit`). As tabelas de callbacks, aprovações, arquivos pendentes e listas nascem nas etapas 13 a 16.
-- Decisões técnicas: segredo do webhook = HMAC **hex** do `SESSION_SECRET` (antes base64url); o `update_id` só é gravado quando a atualização vai ser tratada (conta estranha não grava nada); fila serial no objeto com `keepAliveWhile`; códigos errados em memória, 10 em 10 min apagam o código e gravam `telegram_code_invalidated`; `getWebhookInfo` em cache de 5 min; menu com versão `TELEGRAM_MENU_VERSION:idioma`, reenviado no `onStart`; só `/ajuda` no menu por enquanto; mensagens em texto puro sem prévia de link.
-- Para a 13: canal `AlertChannel` do Telegram usa `TelegramService.client()` e o `chatId` do vínculo ativo; somar comandos ao `MENU` sobe `TELEGRAM_MENU_VERSION`. Para a 15: `bot_read_lock_hours` e `last_used_at` já existem; limite de 60 comandos/30 mensagens por hora ainda não. Para a 14: `conversation_enabled` já é gravado pelo PATCH.
 
 ### Notas que continuam valendo
 - Um alarme só (P8): use `AutomationService.rearm()`/`otherDue`, nunca outro alarme. O runner aceita `context: "scheduled"` (só leitura, sem dono presente). Toda IA por `agent.ai()`.
@@ -87,6 +88,6 @@ etapas ficam detalhadas; as mais antigas viram uma linha na tabela.
 
 ## Próxima etapa
 
-- Número e nome: 14 · Conversa e voz, depois que a 13 mesclar
-- Dependências mescladas: 9 (#28), 12 (#70); 13 em revisão
+- Número e nome: 15b · Comandos administrativos, depois que a 15a mesclar
+- Dependências mescladas: 6, 7, 10, 11, 12 (#70), 14 (#75); 15a em revisão
 - Precisa de algo do Pablo antes: não (o bot no @BotFather só é preciso no deploy)

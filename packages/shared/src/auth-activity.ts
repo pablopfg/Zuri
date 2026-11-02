@@ -39,6 +39,8 @@ export const AUTH_EVENT_KINDS = [
   "telegram_linked",
   "telegram_unlinked",
   "telegram_group_linked",
+  "telegram_unlocked",
+  "telegram_confirm_locked",
   "setup_failure",
   "setup_locked",
   "owner_created",

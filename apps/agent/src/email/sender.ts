@@ -1,4 +1,4 @@
-import { EMAIL_LIMITS, type Locale, t } from "@zuri/shared";
+import { EMAIL_LIMITS, type Locale, t, TELEGRAM_LIMITS } from "@zuri/shared";
 import type { InternalState } from "../db/internal-state.ts";
 import { log } from "../log.ts";
 
@@ -33,10 +33,19 @@ function plain(text: string, max: number): string {
 }
 
 /**
+ * Which day's count an e-mail takes a place in: the notices' (10, the last 4
+ * kept for security) or the bot's confirmation codes' own 10 (spec, "Cota de
+ * e-mail"), so a burst of codes never eats the security alerts' places.
+ */
+export type EmailQuota = "notices" | "confirmations";
+
+const WINDOW_KEY: Record<EmailQuota, "email_sent_window" | "email_confirm_window"> = { notices: "email_sent_window", confirmations: "email_confirm_window" };
+
+/**
  * Sends e-mail to the owner through the SEND_EMAIL binding, and keeps the
  * day's count: 10 in any 24 hours, the last 4 only for security alerts and
- * recovery links (spec, "Constantes padrão"). Text only: no HTML to escape,
- * nothing to track.
+ * recovery links (spec, "Constantes padrão"), and the bot's confirmation codes
+ * apart. Text only: no HTML to escape, nothing to track.
  */
 export class EmailSender {
   constructor(private readonly deps: EmailSenderDeps) {}
@@ -50,36 +59,38 @@ export class EmailSender {
     return this.deps.binding() !== null && Boolean(this.deps.from()) && Boolean(this.deps.to());
   }
 
-  private window(nowMs: number): number[] {
-    const stored = this.deps.state.get<string>("email_sent_window");
+  private window(nowMs: number, quota: EmailQuota): number[] {
+    const stored = this.deps.state.get<string>(WINDOW_KEY[quota]);
     return (typeof stored === "string" ? stored.split(",").map(Number) : []).filter((at) => Number.isFinite(at) && at > nowMs - DAY_MS);
   }
 
   /** Takes a place in the day's count, or says there is none. Written before the send, so two at once can't both pass. */
-  private reserve(security: boolean): number | null {
+  private reserve(security: boolean, quota: EmailQuota): number | null {
     const nowMs = this.now();
-    const sent = this.window(nowMs);
-    const cap = security ? EMAIL_LIMITS.perDay : EMAIL_LIMITS.perDay - EMAIL_LIMITS.securityReserve;
+    const sent = this.window(nowMs, quota);
+    const cap =
+      quota === "confirmations" ? TELEGRAM_LIMITS.confirmEmailsPerDay : security ? EMAIL_LIMITS.perDay : EMAIL_LIMITS.perDay - EMAIL_LIMITS.securityReserve;
     if (sent.length >= cap) return null;
-    this.deps.state.set("email_sent_window", [...sent, nowMs].join(","));
+    this.deps.state.set(WINDOW_KEY[quota], [...sent, nowMs].join(","));
     return nowMs;
   }
 
   /** A send that failed gives its place back. */
-  private release(at: number): void {
-    const sent = this.window(this.now());
+  private release(at: number, quota: EmailQuota): void {
+    const sent = this.window(this.now(), quota);
     const i = sent.indexOf(at);
     if (i >= 0) sent.splice(i, 1);
-    this.deps.state.set("email_sent_window", sent.join(","));
+    this.deps.state.set(WINDOW_KEY[quota], sent.join(","));
   }
 
   /** The body gets the footer every e-mail carries. */
-  async send(input: { subject: string; text: string; security: boolean }): Promise<EmailOutcome> {
+  async send(input: { subject: string; text: string; security: boolean; quota?: EmailQuota }): Promise<EmailOutcome> {
     const binding = this.deps.binding();
     const from = this.deps.from();
     const to = this.deps.to();
     if (!binding || !from || !to) return "not_configured";
-    const at = this.reserve(input.security);
+    const quota = input.quota ?? "notices";
+    const at = this.reserve(input.security, quota);
     if (at === null) return "limit";
     const footer = t(this.deps.locale(), "notice.email.footer");
     try {
@@ -92,7 +103,7 @@ export class EmailSender {
       });
       return "sent";
     } catch (error) {
-      this.release(at);
+      this.release(at, quota);
       log("error", "email_failed", { error });
       return "error";
     }

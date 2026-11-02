@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { RECOVERY_PATH as SERVER_RECOVERY_PATH } from "@zuri/shared";
-import { loginPath, RECOVERY_PATH, safeNext } from "../src/lib/next.ts";
+import { APPROVE_PATH as SERVER_APPROVE_PATH, RECOVERY_PATH as SERVER_RECOVERY_PATH } from "@zuri/shared";
+import { APPROVE_PATH, loginPath, RECOVERY_PATH, safeNext } from "../src/lib/next.ts";
+
+describe("APPROVE_PATH", () => {
+  it("is the path the bot puts in its button", () => {
+    expect(APPROVE_PATH).toBe(SERVER_APPROVE_PATH);
+  });
+});
 
 describe("RECOVERY_PATH", () => {
   it("is the path the server puts in the e-mail's link", () => {

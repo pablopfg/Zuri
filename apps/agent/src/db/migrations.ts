@@ -776,6 +776,39 @@ export const MIGRATIONS: readonly Migration[] = [
       `ALTER TABLE zur_messages ADD COLUMN quoted TEXT`,
     ],
   },
+  {
+    version: 17,
+    name: "telegram_approvals",
+    statements: [
+      // A confirmation asked through the bot (step 15 unlocks reading; step 16
+      // approves proposals). Confirmed outside Telegram: a passkey on the
+      // /aprovar page (its token kept only as an HMAC) or a 6-digit code sent
+      // by e-mail (kept only as an HMAC). The WebAuthn challenge lives here and
+      // is spent on the first answer. reply_message_id is the bot's force_reply
+      // message the code must answer, beyond the contract's columns. Never in
+      // the backup: a row lives minutes.
+      `CREATE TABLE IF NOT EXISTS zur_telegram_approvals (
+        id TEXT PRIMARY KEY,
+        purpose TEXT CHECK (purpose IN ('approval', 'unlock')),
+        pending_action_id TEXT,
+        target_hash TEXT,
+        message_id INTEGER,
+        method TEXT CHECK (method IN ('passkey', 'email')),
+        page_token_hmac TEXT,
+        webauthn_challenge BLOB,
+        email_code_hash TEXT,
+        email_sends INTEGER NOT NULL DEFAULT 0,
+        last_email_at TEXT,
+        attempts INTEGER NOT NULL DEFAULT 0,
+        status TEXT CHECK (status IN ('open', 'confirmed', 'failed', 'expired')),
+        created_at TEXT NOT NULL,
+        expires_at TEXT NOT NULL,
+        reply_message_id INTEGER
+      )`,
+      `CREATE UNIQUE INDEX IF NOT EXISTS zur_telegram_approvals_token ON zur_telegram_approvals (page_token_hmac) WHERE page_token_hmac IS NOT NULL`,
+      `CREATE INDEX IF NOT EXISTS zur_telegram_approvals_status ON zur_telegram_approvals (status, created_at)`,
+    ],
+  },
 ];
 
 export const LATEST_SCHEMA_VERSION = MIGRATIONS.at(-1)?.version ?? 0;

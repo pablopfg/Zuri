@@ -786,11 +786,36 @@ Etapa 12, fundação. O bot obedece a uma conta só, no chat privado
   mensagem, vale o do `getFile`, e acima de 5 MB o bot pergunta antes. O custo
   reservado é o maior entre a duração declarada e a estimada pelos bytes (128
   kbit/s), para um áudio longo declarado como curto não passar da cota.
-- **Trava provisória da conversa.** Até a etapa 15 trazer o destravamento por
-  passkey ou e-mail, a conversa pelo bot se desliga sozinha depois do tempo da
-  trava de leitura sem uso (12 h por padrão) e só volta pelo app, com sessão.
-  O limite de 30 mensagens por hora já vale. Arquivo de áudio (não a nota de
-  voz) e mensagem de bot inline entram como dado de terceiros.
+- **Trava de leitura (etapa 15a).** Depois do tempo da trava sem uso (12 h
+  por padrão), conversa, `/nova_conversa` e o botão de arquivo grande pedem
+  `/destravar`. Só uso com a leitura liberada renova o prazo: mensagem
+  enviada travada não conta, e ligar a conversa no app não destrava. Data
+  quebrada no banco conta como travada.
+- **`/destravar` por passkey.** O bot cria uma linha em
+  `zur_telegram_approvals` e manda um botão de URL para
+  `/aprovar#<token>`. O token tem 32 bytes aleatórios, vale 5 minutos e uma
+  vez, e fica guardado só como HMAC do `SESSION_SECRET` com propósito próprio.
+  Ele vai no fragmento, que nunca chega a log de servidor, e a página tira o
+  fragmento da barra de endereço antes de qualquer pedido. As rotas
+  `POST /api/approvals/telegram/options` (1 KB) e `/verify` (32 KB) não pedem
+  sessão, mas passam pelo CSRF e pelo mesmo limitador do login. O desafio
+  WebAuthn é tirado da linha num `UPDATE` condicional (repetir a mesma
+  asserção falha) e a verificação exige `userVerification: required`. Abrir
+  outro `/destravar` invalida o link anterior.
+- **`/destravar` por e-mail.** Código de 6 dígitos uniforme, guardado como
+  HMAC, válido 5 minutos e só como resposta à pergunta do bot (`force_reply`);
+  a mensagem com o código é apagada, e um número solto de 6 dígitos também,
+  enquanto há código recente. Reenvio depois de 60 s, até 3 por hora; os
+  e-mails de confirmação têm cota própria de 10 por dia, que não gasta a dos
+  avisos. O rodapé dos e-mails avisa que códigos só servem no bot.
+- **Erros.** 5 confirmações erradas (passkey recusada ou código errado) em 15
+  minutos travam as confirmações pelo bot por 1 hora (423 na página) e geram o
+  alerta `telegram_confirm_locked`, no máximo 1 por dia. Cada destravamento gera
+  `telegram_unlocked` em Acessos e um aviso de segurança que não insiste. Os dois
+  têm origem `bot`: só o app os reconhece.
+- **Limites.** 60 comandos por hora e 30 mensagens por hora para a Zuri. Arquivo
+  de áudio (não a nota de voz) e mensagem de bot inline entram como dado de
+  terceiros.
 
 ## Logs da Cloudflare
 

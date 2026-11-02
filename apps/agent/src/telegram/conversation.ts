@@ -516,6 +516,11 @@ export class TelegramConversation {
     }
   }
 
+  /** /nova_conversa: the next message starts another app conversation; the one before stays in the app. */
+  startNew(): void {
+    this.deps.state.delete(CONVERSATION_KEY);
+  }
+
   /** The bot's conversation: the one in use, or a new one (the first time, or after it was deleted in the app). */
   #conversationId(conversations: ConversationRepository, text: string): string | null {
     const stored = this.deps.state.get<unknown>(CONVERSATION_KEY);

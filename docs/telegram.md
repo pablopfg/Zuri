@@ -10,8 +10,9 @@ diz o que já existe e como usar.
 | :---: | --- | --- |
 | 12 | Fundação: cliente da Bot API, webhook, vínculo da conta, cartão em Configurações › Avisos | pronta |
 | 13 | Avisos no Telegram com botões, grupo de avisos opcional | pronta |
-| 14 | Conversa por texto e voz | a fazer |
-| 15 | Comandos de consulta e ação rápida, trava de leitura | a fazer |
+| 14 | Conversa por texto e voz | pronta |
+| 15a | Trava de leitura com `/destravar` (passkey ou código por e-mail), `/nova_conversa` | pronta |
+| 15b | Comandos de consulta e ação rápida | a fazer |
 | 16 | Aprovações com passkey ou e-mail e modo de bloqueio | a fazer |
 
 ## Criar o bot
@@ -138,10 +139,10 @@ Telegram". Se você apagar essa conversa no app, a próxima mensagem abre outra.
   texto de terceiros, e a conversa nunca ganha o título a partir dele.
 - Até 30 mensagens por hora para a Zuri. Na 31ª o bot avisa uma vez e ignora
   o resto até a hora virar.
-- Depois de 12 horas sem usar o bot (o tempo da trava de leitura, de 1 a 72 h),
-  a conversa se desliga sozinha e o bot avisa. Para voltar, ligue de novo no
-  app. É uma trava provisória: na etapa 15 ela vira o destravamento por
-  passkey ou código por e-mail.
+- Depois do tempo da trava de leitura sem usar o bot (12 horas por padrão,
+  de 1 a 72 h em Configurações › Avisos), o bot trava a leitura e pede
+  `/destravar`. Veja [Trava de leitura](#trava-de-leitura).
+- `/nova_conversa` começa outra conversa. A anterior continua no app.
 - Se a resposta for longa demais para o limite de chamadas de um despertar, a
   última mensagem avisa e mostra **Abrir no app**, onde está o resto.
 
@@ -178,11 +179,45 @@ que o remetente declara não basta para o custo: depois do download a Zuri
 estima a duração pelos bytes (128 kbit/s, que nunca passa da real) e reserva o
 maior dos dois; a duração que o Whisper devolve acerta a conta no fim.
 
+## Trava de leitura
+
+Quem pega o seu celular desbloqueado não deve conseguir ler a sua vida pelo
+bot. Por isso, depois do tempo da trava sem usar o bot, a conversa,
+`/nova_conversa` e o botão de arquivo grande respondem "A leitura pelo bot
+está travada" até você destravar. Avisos continuam chegando normalmente.
+Mensagem enviada com a leitura travada não conta como uso, então insistir não
+destrava nada.
+
+Mande `/destravar`. O bot oferece dois caminhos:
+
+- **Confirmar com passkey**: abre a página `/aprovar` do app, que pede a
+  passkey deste endereço com digital, rosto ou PIN. Não precisa estar logado.
+  Se a digital não aparecer dentro do Telegram, abra o link no navegador do
+  celular.
+- **Receber código por e-mail**: manda um código de 6 dígitos para o e-mail do
+  dono. Responda à pergunta do bot com o código. A mensagem com o código é
+  apagada na hora.
+
+Confirmado, a leitura fica liberada por 12 horas e o bot diz até que horas.
+Cada destravamento aparece em Acessos e gera um aviso de segurança, uma vez.
+
+| Regra | Valor |
+| --- | --- |
+| Validade do link e do código | 5 minutos, uso único |
+| Reenvio do código | depois de 1 minuto, até 3 por hora |
+| E-mails de confirmação | 10 por dia, numa cota separada da dos avisos |
+| Confirmações erradas | 5 em 15 minutos travam as confirmações pelo bot por 1 hora, com alerta de segurança (1 por dia) |
+| Comandos | 60 por hora |
+
+O botão de passkey só aparece se houver passkey cadastrada; o de e-mail, só
+se o envio de e-mail estiver configurado. Sem nenhum dos dois, o bot explica
+como cadastrar uma passkey no app.
+
 ## O que o bot responde hoje
 
 Além dos avisos e da conversa, o bot confirma o vínculo, manda a mensagem de
-teste e responde a `/ajuda`. Fotos e documentos recebem "por enquanto eu
-entendo só texto e áudio"; comandos de consulta chegam na etapa 15. Algumas
+teste e responde a `/ajuda`, `/destravar` e `/nova_conversa`. Fotos e documentos recebem "por enquanto eu
+entendo só texto e áudio"; comandos de consulta chegam na etapa 15b. Algumas
 ações nunca serão feitas pelo bot (trocar senha ou e-mail, desligar o 2FA,
 desvincular o próprio Telegram, entre outras): para essas o bot sempre manda
 abrir o app.

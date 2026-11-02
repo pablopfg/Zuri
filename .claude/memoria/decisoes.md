@@ -83,3 +83,4 @@ Fatos e decisões já tomados pelo Pablo. O agente não pergunta de novo nada da
 - Recursos que podem gerar custo só com OK explícito.
 - Lixeira: apagar de vez e esvaziar pedem só a confirmação na tela, sem senha digitada de novo (31/10/2026, etapa 6).
 - Prioridade que aprende: baixa e sobe, no máximo até alta, ligada por padrão (02/11/2026, etapa 11d).
+- Destravar o bot do Telegram gera um aviso de segurança só, sem insistir, e o registro em Acessos (02/11/2026, etapa 15a).

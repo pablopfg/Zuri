@@ -503,6 +503,7 @@ O comportamento completo está na seção "Bot do Telegram do administrador"; aq
 - Comandos sem IA: `/hoje`, `/tarefas`, `/nova`, `/feito`, `/lembrar`, `/nota`, `/buscar`, `/memoria`, `/rotinas`, `/avisos`, `/uso`, `/status`, `/ajuda`, `/nova_conversa`. Menu registrado por `setMyCommands` em pt-BR.
 - Fotos e documentos: comportamento da seção do bot (a legenda vira nota com a linha do anexo; sem legenda, o bot pede uma); anexos só são guardados com R2 aprovado (N4). Inclui também a trava de leitura, /destravar e /backup.
 - Aceite: cada comando com teste; comandos não gastam pedido de IA.
+- Dividida em duas PRs (02/11/2026, plano `docs/planos/etapa-15a-destravamento-telegram.md`): **15a** entrega a trava de leitura (N10), `/destravar` por passkey (página `/aprovar`) ou código por e-mail, `/nova_conversa` e o limite de 60 comandos por hora; **15b** entrega os comandos de consulta e ação rápida, fotos e documentos e `/backup`.
 
 **Etapa 16 · Aprovações seguras e modo de bloqueio** (`feat(telegram): aprova ações com 2FA e adiciona o modo de bloqueio`)
 

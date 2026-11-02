@@ -1,4 +1,4 @@
-import { disarmLinks, EMAIL_LIMITS, type Notice } from "@zuri/shared";
+import { disarmLinks, EMAIL_LIMITS, type Notice, TELEGRAM_LIMITS } from "@zuri/shared";
 import { describe, expect, it } from "vitest";
 import { InternalState } from "../src/db/internal-state.ts";
 import { EmailChannel } from "../src/email/channel.ts";
@@ -115,6 +115,20 @@ describe("the e-mail sender", () => {
     });
   });
 
+  it("counts the bot's confirmation codes apart: their own 10 a day, never the notices' places", async () => {
+    await withEmail(async (w) => {
+      const code = () => w.sender.send({ subject: "Código", text: "123456", security: true, quota: "confirmations" });
+      for (let i = 0; i < TELEGRAM_LIMITS.confirmEmailsPerDay; i++) expect(await code()).toBe("sent");
+      expect(await code()).toBe("limit");
+      // The notices still have all of theirs.
+      for (let i = 0; i < EMAIL_LIMITS.perDay; i++) expect(await w.sender.send({ subject: "Aviso", text: "x", security: true })).toBe("sent");
+      expect(await w.sender.send({ subject: "Aviso", text: "x", security: true })).toBe("limit");
+      // A day later the codes' window slid too.
+      w.world.clock.now += 24 * 3_600_000;
+      expect(await code()).toBe("sent");
+    });
+  });
+
   it("sends plain text to the owner, with the footer, without control characters, cut to size", async () => {
     await withEmail(async (w) => {
       await w.sender.send({ subject: `Assunto\r\nBcc: outro@exemplo.com.br${"x".repeat(200)}`, text: `linha 1\nlinha 2\u0007${"y".repeat(3000)}`, security: false });
@@ -124,7 +138,7 @@ describe("the e-mail sender", () => {
       expect(mail?.subject).not.toMatch(/[\r\n]/);
       expect([...(mail?.subject ?? "")]).toHaveLength(EMAIL_LIMITS.subjectMax);
       expect(mail?.text.startsWith("linha 1\nlinha 2y")).toBe(true);
-      expect(mail?.text.endsWith("--\nA Zuri nunca pede a sua senha por e-mail.")).toBe(true);
+      expect(mail?.text.endsWith("--\nA Zuri nunca pede a sua senha. Códigos de confirmação só servem no bot do Telegram, e só se foi você quem pediu.")).toBe(true);
       expect(mail).not.toHaveProperty("html");
     });
   });
