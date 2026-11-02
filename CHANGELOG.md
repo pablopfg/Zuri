@@ -9,6 +9,12 @@ o [SemVer](https://semver.org/lang/pt-BR/). Cada PR escreve a sua entrada em
 
 ### Adicionado
 
+- Avaliação de AI Gateway, Hyperdrive e Vectorize em
+  `docs/planos/ai-gateway-hyperdrive-vectorize.md`, com os limites do plano
+  Free conferidos em 02/11/2026. Nenhum dos três entra agora: o Hyperdrive e o
+  Vectorize ficam de fora, e o AI Gateway volta a ser avaliado só se os
+  modelos pagos forem aprovados. A etapa 17 ganhou regras para a busca por
+  significado caber nas cotas.
 - Cumprimento no Início: bom dia, boa tarde ou boa noite pelo horário do seu
   fuso (o das configurações, não o do aparelho), com o seu nome e uma frase
   curta que muda a cada dia. A frase troca sozinha quando o período vira,

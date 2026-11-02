@@ -213,7 +213,8 @@ Execute a etapa 16 da especificação ("Aprovações seguras e modo de bloqueio"
 ```text
 Execute a etapa 17 da especificação ("Busca semântica"). É opcional e fica desligada por padrão.
 
-- Confirme com o plugin cloudflare o modelo de embeddings e o custo em Neurons. Vetores no SQLite do Durable Object; nada de Vectorize (seria recurso novo).
+- Confirme com o plugin cloudflare o modelo de embeddings e o custo em Neurons. Vetores no SQLite do Durable Object; nada de Vectorize (a cota gratuita não comporta os limites do Zuri; veja docs/planos/ai-gateway-hyperdrive-vectorize.md).
+- Siga "O que a etapa 17 leva daqui" desse documento: vetores empacotados em blocos por linha para a busca não ler uma linha por vetor, teste de int8 contra float32, reindexação em lotes de 50 espalhada por dias dentro do teto diário, comparação feita no objeto. Meça linhas lidas e escritas no teste de orçamento.
 - Testes: desligada, o comportamento é idêntico ao de antes; a busca híbrida acha "carro" na memória "automóvel" com o mock; o teto diário é respeitado.
 - Fluxo completo de etapa, PR para develop, link e resultado dos testes.
 ```
@@ -257,7 +258,7 @@ Execute a etapa 20 da especificação ("Acesso remoto e eventos").
 ```text
 Não execute a etapa 21 sem a minha aprovação explícita nesta conversa. Ela gera cobrança.
 
-Primeiro me mande, em até 10 linhas: o que a etapa faz, quanto pode custar por dia com o teto padrão de US$ 2, quais segredos eu teria de criar e a sua recomendação (fazer agora, depois ou nunca). Só implemente se eu responder "aprovado". Nesse caso, siga a etapa 21 da especificação com ⚠️ no PR e no changelog.
+Primeiro me mande, em até 10 linhas: o que a etapa faz, quanto pode custar por dia com o teto padrão de US$ 2, quais segredos eu teria de criar e a sua recomendação (fazer agora, depois ou nunca). Diga também se vale passar os modelos pagos pelo AI Gateway, conforme docs/planos/ai-gateway-hyperdrive-vectorize.md (registro de conteúdo desligado, sem Guardrails, Unified Billing ou Logpush). Só implemente se eu responder "aprovado". Nesse caso, siga a etapa 21 da especificação com ⚠️ no PR e no changelog.
 ```
 
 ### Etapa 22 · Workflows (monitor de sites)
