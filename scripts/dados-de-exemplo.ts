@@ -91,6 +91,9 @@ export async function seed(page: Page, base: string): Promise<{ conversationId: 
   };
   const proposed = await chat(`call propose_ai_routine ${JSON.stringify(routine)}`);
   await page.request.delete(`${base}/api/conversations/${proposed}`, { headers: CSRF });
+  // A broken screen for the Diagnóstico tab (step 11): only a name and a path, as the interface sends.
+  const failed = await page.request.post(`${base}/api/diagnostics/client`, { headers: CSRF, data: { name: "TypeError", route: "/notas/id" } });
+  if (!failed.ok()) throw new Error(`/api/diagnostics/client: ${failed.status()}`);
   const renamed = await page.request.patch(`${base}/api/conversations/${conversationId}`, { headers: CSRF, data: { title: "Organizar a mudança" } });
   if (!renamed.ok()) throw new Error(`rename: ${renamed.status()}`);
   return { conversationId };
