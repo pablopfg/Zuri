@@ -35,7 +35,14 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version-file: .nvmrc
-      - run: node scripts/ordem-de-merge.ts
+      # Only the pull request that adds the check finds no script on develop.
+      # Once it lands, the repository tests import the script, so it cannot go away quietly.
+      - run: |
+          if [ ! -f scripts/ordem-de-merge.ts ]; then
+            echo "develop ainda não tem scripts/ordem-de-merge.ts: nada a conferir"
+            exit 0
+          fi
+          node scripts/ordem-de-merge.ts
         env:
           GH_TOKEN: ${{ github.token }}
           # Dispatched runs have no pull request: the branch finds it.

@@ -268,7 +268,7 @@ describe("merge-order workflow", () => {
     const checkout = job?.steps?.find((s) => s.uses?.startsWith("actions/checkout@"));
     expect(checkout?.with?.ref).toBe("develop");
     const step = job?.steps?.find((s) => s.run?.includes("scripts/ordem-de-merge.ts"));
-    expect(step?.run).toBe("node scripts/ordem-de-merge.ts");
+    expect(step?.run?.trim().split("\n").at(-1)).toBe("node scripts/ordem-de-merge.ts");
     expect(step?.env?.PR_NUMBER).toMatch(/^\$\{\{ github\.event\.pull_request\.number \}\}$/);
     expect(step?.env?.HEAD_REF).toMatch(/^\$\{\{ github\.head_ref \|\| github\.ref_name \}\}$/);
   });
