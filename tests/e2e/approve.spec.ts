@@ -114,7 +114,7 @@ test("closing the passkey prompt keeps the same request, and the next tap goes t
   expect(options).toBe(1);
 });
 
-test("says why it can't go on: used, expired, too many tries, refused, no passkey here", async ({ page }) => {
+test("says why it can't go on: used, expired, too many tries, lockdown, refused, no passkey here", async ({ page }) => {
   await passkeyPrompt(page);
   const cases: { answer: (route: Route) => Promise<void>; verify?: (route: Route) => Promise<void>; title: string; body: string | RegExp }[] = [
     { answer: (r) => refusal(r, 410, "APPROVAL_EXPIRED", "x", { approval: "used" }), title: "Este link não serve mais", body: "Este link já foi usado." },
@@ -123,6 +123,12 @@ test("says why it can't go on: used, expired, too many tries, refused, no passke
       answer: (r) => refusal(r, 423, "APPROVALS_LOCKED", "x", { retryAfter: 3600 }),
       title: "Muitas tentativas erradas",
       body: /^Por segurança, a confirmação pelo bot volta às \d{2}:\d{2}\.$/,
+    },
+    {
+      // Step 16b: during a lockdown the bot approves and unlocks nothing.
+      answer: (r) => refusal(r, 423, "APPROVALS_LOCKED", "x", { approval: "lockdown" }),
+      title: "Modo de bloqueio ligado",
+      body: "Durante o bloqueio, nada é aprovado nem destravado pelo bot. Para sair, entre no app.",
     },
     { answer: (r) => refusal(r, 404, "NOT_FOUND", "x"), title: "Nenhuma passkey deste endereço", body: /^As passkeys valem só no endereço/ },
     {

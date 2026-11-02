@@ -291,6 +291,12 @@ describe("linking the owner's account", () => {
         { command: "nova_conversa", description: "Começar uma conversa nova" },
         { command: "aprovar", description: "Propostas esperando aprovação" },
         { command: "destravar", description: "Liberar a leitura por 12 h" },
+        { command: "acessos", description: "Últimos acessos ao app" },
+        { command: "sessoes", description: "Sessões abertas no app" },
+        { command: "encerrar_sessoes", description: "Encerrar todas as sessões do app" },
+        { command: "tokens", description: "Tokens de acesso remoto" },
+        { command: "pausar_rotinas", description: "Pausar as rotinas com IA" },
+        { command: "bloquear", description: "Modo de bloqueio de emergência" },
         { command: "ajuda", description: "O que eu faço por aqui" },
       ],
     });

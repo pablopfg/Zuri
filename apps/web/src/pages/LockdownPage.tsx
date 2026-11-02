@@ -2,6 +2,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { type LockdownExit, lockdownStatusSchema, ptBRSetup } from "@zuri/shared";
 import { ShieldAlert, Unlink } from "lucide-react";
 import { type FormEvent, useState } from "react";
+import { ConfirmDialog } from "../components/ConfirmDialog.tsx";
 import { Logo } from "../components/Logo.tsx";
 import { Button, Card, ErrorNotice, Notice, Spinner, TextField, useDocumentTitle } from "../components/ui.tsx";
 import { SESSION_KEY, useSession } from "../hooks/session.tsx";
@@ -132,6 +133,8 @@ export function LockdownPage() {
           </Button>
         </div>
       </div>
+      {/* Leaving and "Não fui eu" ask for the password typed recently; the shell's dialog isn't here. */}
+      <ConfirmDialog />
     </main>
   );
 }
