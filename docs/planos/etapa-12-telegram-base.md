@@ -45,7 +45,7 @@ uma Bot API simulada e nenhum teste chama o Telegram.
 - `POST /api/telegram/connect` (senha recente): registra webhook e menu quando preciso e devolve código, link `t.me/<bot>?start=<código>` e validade.
 - `POST /api/telegram/confirm` (senha recente): vínculo pendente vira ativo.
 - `DELETE /api/telegram` (senha recente): desvincula.
-- `PATCH /api/telegram` `{conversation, readLockHours}`: guarda as preferências que a 14 e a 15 usam.
+- `PATCH /api/telegram` `{conversation, readLockHours}` (senha recente, pela regra de segurança 7): guarda as preferências que a 14 e a 15 usam.
 - `POST /api/telegram/test`: mensagem de teste, 3 por hora.
 
 ## 6. Dados

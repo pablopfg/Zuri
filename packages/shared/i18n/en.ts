@@ -1302,4 +1302,5 @@ export const en: Messages = {
   "web.alerts.telegram.bot": "Bot: @{bot}",
   "web.activity.kind.telegram_linked": "Telegram connected",
   "web.activity.kind.telegram_unlinked": "Telegram unlinked",
+  "web.alerts.telegram.reconnected": "Bot registered again. The account is still connected.",
 };

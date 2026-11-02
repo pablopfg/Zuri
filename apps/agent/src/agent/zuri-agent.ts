@@ -444,7 +444,8 @@ export class ZuriAgent extends Agent<WorkerEnv> {
         state,
         events: auth.events,
         token: () => telegramToken(env.TELEGRAM_BOT_TOKEN),
-        adminId: () => telegramAdminId(env.TELEGRAM_ADMIN_ID),
+        // Set but malformed fails closed: -1 matches no account, so a typo never turns the lock off quietly.
+        adminId: () => (env.TELEGRAM_ADMIN_ID?.trim() ? (telegramAdminId(env.TELEGRAM_ADMIN_ID) ?? -1) : null),
         sessionSecret: () => env.SESSION_SECRET,
         origin: () => this.publicUrl().origin,
         locale: () => this.locale(),

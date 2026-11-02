@@ -41,7 +41,7 @@ export function registerTelegramWebhook(app: Hono<ApiEnv>, deps: () => TelegramD
 
 /**
  * Settings > Notices, the Telegram card, after the session check. Connecting,
- * confirming the account and unlinking ask for the password typed recently:
+ * confirming the account, unlinking and changing its settings ask for the password typed recently:
  * whoever took a session can't hand the bot to another account.
  */
 export function registerTelegramRoutes(app: Hono<ApiEnv>, deps: () => TelegramDeps, client: (c: Context<ApiEnv>) => ClientInfo): void {
@@ -49,7 +49,10 @@ export function registerTelegramRoutes(app: Hono<ApiEnv>, deps: () => TelegramDe
 
   app.patch("/telegram", async (c) => {
     const patch = await readJson(c.req.raw, telegramUpdateSchema, 1024);
-    return Response.json(deps().telegram.update(patch));
+    const { telegram, auth } = deps();
+    // A longer read lock or the conversation on weakens the bot: the password typed recently too (security rule 7).
+    auth.requireRecentAuth(c.get("session"));
+    return Response.json(telegram.update(patch));
   });
 
   app.delete("/telegram", async (c) => {

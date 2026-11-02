@@ -173,4 +173,5 @@ export const ptBRAlerts = {
   "web.alerts.telegram.deliveryError": "O Telegram avisou que não conseguiu entregar mensagens ({date}): {message}. Toque em Reconectar para tentar de novo.",
   "web.alerts.telegram.deliveryMissing": "O bot não está recebendo mensagens neste endereço. Toque em Reconectar.",
   "web.alerts.telegram.bot": "Bot: @{bot}",
+  "web.alerts.telegram.reconnected": "Bot registrado de novo. A conta continua conectada.",
 } as const;

@@ -88,11 +88,15 @@ export interface TelegramStatus {
   readLockHours: number;
 }
 
-/** What Connect answers: the code, once, and the link that opens the bot with it. */
+/**
+ * What Connect answers: the code, once, and the link that opens the bot with
+ * it. With an account already active, Reconnect only registers the bot again:
+ * no code (another account would be ignored anyway), so all three are null.
+ */
 export interface TelegramConnect {
-  code: string;
-  link: string;
-  expiresAt: string;
+  code: string | null;
+  link: string | null;
+  expiresAt: string | null;
 }
 
 export const telegramUpdateSchema = /* @__PURE__ */ (() =>

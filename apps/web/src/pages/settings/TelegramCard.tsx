@@ -41,8 +41,9 @@ function TelegramBody({ status }: { status: TelegramStatus }) {
   const connect = useMutation({
     mutationFn: () => api<TelegramConnect>("/telegram/connect", { method: "POST" }),
     onSuccess: async (result) => {
-      setCode(result);
+      setCode(result.code ? result : null);
       await refresh();
+      if (!result.code) toast(t("web.alerts.telegram.reconnected"));
     },
   });
   const confirm = useMutation({
@@ -70,7 +71,7 @@ function TelegramBody({ status }: { status: TelegramStatus }) {
   if (status.state === "not_configured") return <p className="text-sm text-fg-muted">{t("web.alerts.telegram.notConfigured")}</p>;
 
   const failure = connect.error ?? confirm.error ?? test.error ?? (askUnlink ? null : unlink.error);
-  const shownCode = code && status.state === "waiting_start" ? code : null;
+  const shownCode = code?.code && code.link && code.expiresAt && status.state === "waiting_start" ? { ...code, code: code.code, link: code.link, expiresAt: code.expiresAt } : null;
   const connectLabel = status.state === "linked" || status.state === "suspended" ? "web.alerts.telegram.reconnect" : status.state === "waiting_start" ? "web.alerts.telegram.newCode" : "web.alerts.telegram.connect";
 
   return (
@@ -163,7 +164,7 @@ function TelegramBody({ status }: { status: TelegramStatus }) {
   );
 }
 
-function CodeBox({ connect }: { connect: TelegramConnect }) {
+function CodeBox({ connect }: { connect: TelegramConnect & { code: string; link: string; expiresAt: string } }) {
   const { t, dateTime } = useI18n();
   const toast = useToast();
   const copy = async () => {

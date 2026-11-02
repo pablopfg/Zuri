@@ -1,11 +1,12 @@
 import { AGENT_INSTANCE_NAME, LIST_LIMIT_DEFAULT } from "@zuri/shared";
 import { runInDurableObject } from "cloudflare:test";
-import { beforeAll, describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it, vi } from "vitest";
 import type { ZuriAgent } from "../src/agent/zuri-agent.ts";
 import { ProviderChain } from "../src/ai/chain.ts";
 import { MeteredAI } from "../src/ai/metered.ts";
 import { MockAIProvider } from "../src/ai/mock.ts";
 import { MockTranscriber } from "../src/ai/transcription.ts";
+import { telegramWebhookSecret } from "../src/gates/telegram.ts";
 import { CSRF, call, HUMAN_TOKEN, ORIGIN, TEST_EMAIL, TEST_PASSWORD, testEnv } from "./helpers.ts";
 
 // What each route costs in the units the Free plan bills: rows read and rows
@@ -143,6 +144,27 @@ describe("the Free plan budget of each route", () => {
     // The session row, plus one counter row for the bell (step 11): never a count of the notices.
     expect(beat.read).toBeLessThanOrEqual(3);
     expect(beat.written).toBeLessThanOrEqual(2);
+  });
+
+  it("Telegram's webhook: an update from a stranger reads a handful of rows and writes none (step 12)", async () => {
+    const usage = () => runInDurableObject(owner(), (agent: ZuriAgent) => ({ ...agent.store.db.usage }));
+    const real = globalThis.fetch;
+    const spy = vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) =>
+      String(input instanceof Request ? input.url : input).startsWith("https://api.telegram.org/") ? Response.json({ ok: true, result: true }) : real(input, init),
+    );
+    const before = await usage();
+    const res = await call(`${ORIGIN}/api/telegram/webhook`, {
+      method: "POST",
+      headers: { "content-type": "application/json", "x-telegram-bot-api-secret-token": await telegramWebhookSecret(testEnv.SESSION_SECRET) },
+      body: JSON.stringify({ update_id: 91, message: { message_id: 1, from: { id: 424242 }, chat: { id: 424242, type: "private" }, text: "/start ABCDEFGH" } }),
+    });
+    await runInDurableObject(owner(), (agent: ZuriAgent) => agent.store.telegram.settled());
+    const after = await usage();
+    spy.mockRestore();
+    expect(res.status).toBe(200);
+    // The seen ids, the link and the code (plus what any request after the first one reads): never a scan.
+    expect(after.rowsRead - before.rowsRead).toBeLessThanOrEqual(12);
+    expect(after.rowsWritten - before.rowsWritten).toBe(0);
   });
 
   it("reads at most two rows for the session check that opens every signed-in request", async () => {

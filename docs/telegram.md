@@ -60,6 +60,14 @@ comandos e conversa chegam nas etapas 13 a 15. Algumas ações nunca serão
 feitas pelo bot (trocar senha ou e-mail, desligar o 2FA, desvincular o
 próprio Telegram, entre outras): para essas o bot sempre manda abrir o app.
 
+## Quando algo falha por dentro
+
+O webhook responde 200 a toda atualização aceita, e o trabalho roda depois, na
+fila do Durable Object. Só quando o próprio objeto responde com erro (por
+exemplo, o banco fora do ar) o Worker devolve 500, para o Telegram entregar a
+atualização de novo mais tarde; como o número da atualização só é guardado
+quando ela é tratada, a repetição não faz nada duas vezes.
+
 ## Limites e custo
 
 A Bot API é gratuita. Cada atualização é uma requisição ao Worker e uma ao

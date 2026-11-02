@@ -123,8 +123,10 @@ const eventCount = (kind: string) => inOwner((agent) => agent.store.db.one<{ n: 
 let nextId = 10_000;
 const id = () => ++nextId;
 
-async function connect(): Promise<TelegramConnect> {
-  return json<TelegramConnect>(await api("POST", "/telegram/connect"), 200);
+/** Connect; a code is expected unless an account is already active (then all three are null). */
+async function connect(): Promise<{ code: string; link: string; expiresAt: string }> {
+  const result = await json<TelegramConnect>(await api("POST", "/telegram/connect"), 200);
+  return { code: result.code ?? "", link: result.link ?? "", expiresAt: result.expiresAt ?? "" };
 }
 
 async function linkOwner(): Promise<void> {
@@ -181,6 +183,18 @@ describe("the webhook's gates", () => {
     expect(off.status).toBe(404);
   });
 
+  it("drops a body that isn't UTF-8 with a 200, and asks Telegram to retry only when the object itself fails", async () => {
+    const before = await snapshot();
+    const res = await call(WEBHOOK, { method: "POST", headers: { "x-telegram-bot-api-secret-token": secret }, body: new Uint8Array([0x7b, 0xff, 0xfe, 0x7d]) });
+    expect(res.status).toBe(200);
+    await inOwner((agent) => agent.store.telegram.settled());
+    expect(await snapshot()).toBe(before);
+    const failing = { getByName: () => ({ fetch: async () => new Response("boom", { status: 500 }) }) };
+    expect((await call(WEBHOOK, { method: "POST", headers: { "x-telegram-bot-api-secret-token": secret }, body: ownerText }, { AGENT: failing })).status).toBe(500);
+    const refusing = { getByName: () => ({ fetch: async () => new Response(null, { status: 404 }) }) };
+    expect((await call(WEBHOOK, { method: "POST", headers: { "x-telegram-bot-api-secret-token": secret }, body: ownerText }, { AGENT: refusing })).status).toBe(200);
+  });
+
   it("drops malformed updates with a 200 and writes nothing", async () => {
     const before = await snapshot();
     for (const body of ["", "not json", "[]", "null", "{}", `{"update_id":"1"}`, `{"update_id":-1}`, `{"update_id":1.5}`, `{"update_id":7,"message":{"from":{"id":"x"}}}`]) {
@@ -213,12 +227,13 @@ describe("the webhook's gates", () => {
 
   it("ignores edited messages and other kinds, even the owner's", async () => {
     await linkOwner();
-    const { code } = await connect();
-    botCalls.length = 0;
-    await deliver(update(editedMessage, id(), code));
+    const before = await snapshot();
+    await deliver(update(editedMessage, id(), "ABCDEFGH"));
     await deliver(JSON.stringify({ update_id: id(), inline_query: { id: "1", from: { id: OWNER_ID }, query: "x", offset: "" } }));
     await deliver(JSON.stringify({ update_id: id(), business_message: { message_id: 1, from: { id: OWNER_ID }, chat: { id: OWNER_ID, type: "private" }, text: "/ajuda" } }));
     expect(botCalls).toEqual([]);
+    // Not even the update_id is kept.
+    expect(await snapshot()).toBe(before);
   });
 
   it("handles a repeated update_id once", async () => {
@@ -345,6 +360,32 @@ describe("linking the owner's account", () => {
     expect((await json<TelegramStatus>(await api("GET", "/telegram"), 200)).state).toBe("waiting_confirm");
   });
 
+  it("wrong codes older than ten minutes no longer count", async () => {
+    const { code } = await connect();
+    const start = Date.now();
+    const clock = vi.spyOn(Date, "now").mockReturnValue(start);
+    try {
+      for (let i = 0; i < TELEGRAM_LIMITS.wrongCodesMax - 1; i++) await deliver(update(startCode, id(), `ERRADO${i}A`));
+      clock.mockReturnValue(start + TELEGRAM_LIMITS.wrongCodesWindowMs + 1);
+      await deliver(update(startCode, id(), "ERRADOXA"));
+    } finally {
+      clock.mockRestore();
+    }
+    expect((await json<TelegramStatus>(await api("GET", "/telegram"), 200)).state).toBe("waiting_start");
+    await deliver(update(startCode, id(), code));
+    expect((await json<TelegramStatus>(await api("GET", "/telegram"), 200)).state).toBe("waiting_confirm");
+  });
+
+  it("Reconnect with an account already active registers the bot again and issues no code", async () => {
+    await linkOwner();
+    const again = await json<TelegramConnect>(await api("POST", "/telegram/connect"), 200);
+    expect(again).toEqual({ code: null, link: null, expiresAt: null });
+    expect(sent("setWebhook")).toHaveLength(1);
+    const codes = await inOwner((agent) => agent.store.db.all(`SELECT code_hash FROM zur_telegram_link_codes`));
+    expect(codes).toEqual([]);
+    expect((await json<TelegramStatus>(await api("GET", "/telegram"), 200)).state).toBe("linked");
+  });
+
   it("an expired code no longer links", async () => {
     const { code } = await connect();
     await inOwner((agent) => agent.store.db.run(`UPDATE zur_telegram_link_codes SET expires_at = ?`, new Date(Date.now() - 1).toISOString()));
@@ -352,14 +393,16 @@ describe("linking the owner's account", () => {
     expect((await json<TelegramStatus>(await api("GET", "/telegram"), 200)).state).toBe("ready");
   });
 
-  it("Connect, Confirm and Unlink ask for the password typed recently; a stale session can't", async () => {
+  it("Connect, Confirm, Unlink and the settings ask for the password typed recently; a stale session can't", async () => {
     await inOwner((agent) => agent.store.db.run(`UPDATE zur_sessions SET confirmed_at = ?`, Date.now() - 16 * 60_000));
     for (const [method, path] of [
       ["POST", "/telegram/connect"],
       ["POST", "/telegram/confirm"],
       ["DELETE", "/telegram"],
+      ["PATCH", "/telegram"],
     ] as const) {
-      expect(apiErrorSchema.parse(await json(await api(method, path), 403)).code, path).toBe("RECENT_AUTH_REQUIRED");
+      const body = method === "PATCH" ? { readLockHours: 72 } : undefined;
+      expect(apiErrorSchema.parse(await json(await api(method, path, body), 403)).code, path).toBe("RECENT_AUTH_REQUIRED");
     }
     expect(botCalls).toEqual([]);
     expect((await api("POST", "/auth/confirm", { password: TEST_PASSWORD })).status).toBe(204);
@@ -498,5 +541,18 @@ describe("without TELEGRAM_ADMIN_ID", () => {
       await expect(service(agent, OWNER_ID).confirm({ ip: IP } as never, "s".repeat(32))).rejects.toMatchObject({ code: "FORBIDDEN" });
       expect((await open.status()).state).toBe("waiting_confirm");
     });
+  });
+
+  it("a malformed id (read as -1) fails closed: no account is heard, not even with the right code", async () => {
+    await inOwner((agent) => agent.store.db.run(`DELETE FROM zur_telegram_links`));
+    const { code } = await connect();
+    botCalls.length = 0;
+    await inOwner(async (agent) => {
+      const closed = service(agent, -1);
+      await closed.enqueue(update(startCode, id(), code));
+      await closed.enqueue(update(stranger, id(), code));
+      expect((await closed.status()).state).toBe("waiting_start");
+    });
+    expect(botCalls.filter((c) => c.method === "sendMessage")).toEqual([]);
   });
 });

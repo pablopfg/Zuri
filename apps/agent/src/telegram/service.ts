@@ -268,6 +268,8 @@ export class TelegramService {
     } catch (error) {
       throw unavailable(error);
     }
+    this.#webhookInfo = null;
+    if (this.deps.links.private()?.status === "active") return { code: null, link: null, expiresAt: null };
     const code = randomCode();
     const expiresAt = new Date(Date.now() + TELEGRAM_LIMITS.codeTtlMs).toISOString();
     this.deps.links.issueCode(await this.#codeHash(code), expiresAt);
