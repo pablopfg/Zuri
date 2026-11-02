@@ -809,8 +809,8 @@ o que não tiver cara de nome de erro, código, rota ou `cf-ray` (teste em
 O workflow `Versão` (`.github/workflows/versao.yml`, `docs/agente/versionamento.md`)
 roda só na `develop`, com o `GITHUB_TOKEN` e sem instalar dependências.
 
-- Escreve só tags novas, pré-releases novas, a branch `chore/versao` e a PR
-  dela. Nunca empurra para `develop` ou `main`, nunca move nem apaga tag: uma
+- Escreve só tags novas, pré-releases novas (de uma existente, só o título,
+  que fica "vX.Y.Z"), a branch `chore/versao` e a PR dela. Nunca empurra para `develop` ou `main`, nunca move nem apaga tag: uma
   tag em outro commit para o workflow e abre a issue padrão.
 - Toda seção do `CHANGELOG.md` precisa apontar para um merge da linha principal
   da `develop`; senão o workflow para, e nenhuma tag cai em código que não foi
