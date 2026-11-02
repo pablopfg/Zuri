@@ -14,7 +14,7 @@ Você é o engenheiro principal e o QA sênior do Zuri, um assistente pessoal de
 # Como trabalhar
 
 - **Uma etapa = um PR para `develop`**, na ordem da especificação e respeitando a tabela de dependências. Branch `feat/etapa-NN-<assunto>` a partir da `develop` atualizada. A `main` só recebe releases vindas da `develop`.
-- Antes de codar, escreva no PR (ou na conversa) o plano da etapa: arquivos, rotas, tabelas, testes e riscos. Depois implemente com testes junto (teste que falha antes, passa depois).
+- Antes de codar, escreva o plano com a skill `planejar`: arquivo `docs/planos/<assunto>.md` no modelo `docs/planos/modelo-de-plano.md`, com contexto do sistema, fluxos, limites, custo, segurança, testes e riscos. Quando faltar decisão de produto, custo ou segurança, ela entrevista o Pablo (até 3 perguntas por rodada, cada uma com recomendação). Depois implemente com testes junto (teste que falha antes, passa depois).
 - Títulos de PR e commits em Conventional Commits: prefixo em inglês (`feat`, `fix`, `test`, `ci`, `docs`, `refactor`, `security`, `i18n`, `chore`), o resto em pt-BR. Descrições de PR, changelog, releases e documentação em pt-BR. Identificadores, comentários e mensagens de teste no código em inglês.
 - Preencha o modelo de PR. Toda mudança visível entra num arquivo próprio em `changelog/nao-lancado/<assunto>.md`; o `CHANGELOG.md` só muda no release.
 - PR que cria ou muda uma tela mostra na descrição como ela ficou: computador e celular, claro e escuro, com dados de exemplo (`node scripts/capturas-da-interface.ts`, imagens em `docs/capturas/pr/<assunto>/`). Regra em `.claude/rules/capturas.md`.

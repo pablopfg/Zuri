@@ -5,6 +5,7 @@
 - Regras por área em `.claude/rules/`: carregam sozinhas quando você abre um arquivo do caminho correspondente. Releia a regra antes de mudar a área.
 - Skills do projeto (`.claude/skills/`):
   - `/iniciar-etapa`: lê a etapa na especificação, confere dependências e monta o plano.
+  - `/planejar`: plano detalhado no modelo `docs/planos/modelo-de-plano.md`, com entrevista ao Pablo quando faltar decisão dele. Toda etapa e todo ajuste grande começam por ele.
   - `/verificar`: typecheck, lint e testes, com resumo das falhas.
   - `/revisao-qa`: revisão de QA sênior com matriz de rastreabilidade.
   - `/auditoria-seguranca`: auditoria independente obrigatória ao fim de cada ajuste.
