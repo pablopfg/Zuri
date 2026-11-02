@@ -30,8 +30,9 @@ dois divergem, vale esta lista e a seção de primeiro acesso de
 - Eventos: `setup_failure`, `setup_locked`, `owner_created` e
   `access_recovered`. Não há evento para o código aceito.
 - Sem tabela `zur_owner`: o e-mail fica numa chave interna. O nome
-  (`ownerName`) entra no formulário quando o campo dos cumprimentos (PR #34)
-  chegar à `develop`; até lá o cadastro pede e-mail, senha, idioma e fuso.
+  (`ownerName`, opcional) vai para o mesmo campo dos cumprimentos (PR #34), com
+  as mesmas regras de Configurações > Conta, e também entra na lista de partes
+  previsíveis da senha.
 - Instalações antigas (`OWNER_EMAIL` nos segredos) contam como dono existente:
   um `SETUP_CODE` lá abre só a recuperação, que confere o e-mail. Elas não
   ganham a trava do 2FA.
@@ -48,6 +49,10 @@ dois divergem, vale esta lista e a seção de primeiro acesso de
 - A senha recusada pelo servidor aparece no próprio campo, e só ela esvazia os
   dois campos; e-mail errado, rede fora ou pausa mantêm a senha digitada. O
   formulário também conta a pausa no botão.
+- "Seu nome" é o primeiro campo de "Seus dados", opcional. A tela confere as
+  mesmas regras do servidor antes de enviar; se o servidor recusar mesmo
+  assim, o erro aparece no campo e as senhas ficam. A recuperação não tem esse
+  campo: ela só troca a senha.
 - A lista de três passos aparece também na tela do segundo passo, com
   "Segurança" como passo atual. Essa tela fica até "Já guardei", mesmo que a
   sessão seja conferida de novo enquanto os códigos estão abertos.
@@ -184,7 +189,7 @@ onde gravar o código.
 | --- | --- | --- | --- |
 | `GET /api/setup` | pública, sem dado sensível | — | 200 `{ needed: boolean }` |
 | `POST /api/setup/code` | Origin + Turnstile + limitador | `{ code, turnstileToken }` | 204 com cookie de cadastro; 401 `INVALID_CREDENTIALS`; 429 `RATE_LIMITED`; 404 depois do cadastro |
-| `POST /api/setup/owner` | Origin + cookie de cadastro | `{ name, email, password, locale, timeZone }` | 201 com cookie de sessão; 400 `VALIDATION_FAILED`; 409 `CONFLICT`; 404 depois do cadastro |
+| `POST /api/setup/owner` | Origin + cookie de cadastro | `{ email, password, language, timeZone, ownerName? }` | 201 com cookie de sessão; 400 `VALIDATION_FAILED`; 409 `CONFLICT`; 404 depois do cadastro |
 
 Todos os corpos com schema Zod em `packages/shared/src/setup.ts`. O 2FA e a
 passkey usam as rotas que já existem (`/api/auth/mfa/*`,
@@ -197,8 +202,8 @@ cadastro.
   interna `owner_email` de `zur_settings`, ao lado do hash da senha
   (`auth_password_hash`). Nenhuma das duas sai do banco nem entra no backup, e
   o login compara o e-mail por HMAC, como antes.
-- O nome não ganha coluna nova aqui: vai para o campo "Como prefere ser
-  chamado" das configurações, criado pelo trabalho dos cumprimentos. O fuso e
+- O nome não ganha coluna nova aqui: vai para o campo "Seu nome" das
+  configurações, criado pelo trabalho dos cumprimentos. O fuso e
   o idioma vão para as chaves que já existem.
 - Chaves novas no estado interno: `setup_state`, `setup_code_seen`
   (impressão digital e primeira vez visto), `setup_code_spent`.
