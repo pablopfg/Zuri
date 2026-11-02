@@ -473,6 +473,12 @@ export class TelegramService {
       for (const out of outs) await this.#send(link.chatId, { text: out.text });
       return;
     }
+    // A code typed here is never checked during a lockdown, but it still leaves the chat (as outside one).
+    if (isCodeShaped(own) && message.message_id !== undefined) {
+      await this.client()
+        .deleteMessage(link.chatId, message.message_id)
+        .catch(() => undefined);
+    }
     this.deps.links.audit("lockdown", command ?? "message", "refused");
     await this.#say(link.chatId, command === "bloquear" ? "telegram.seg.bloquear.jaLigado" : "telegram.bloqueio.ativo");
   }
@@ -1002,6 +1008,12 @@ export class TelegramService {
           this.#remember(updateId);
           // Topics turned on after the group was linked: the next notices use them.
           if (chat.is_forum === true && !group.forum) this.deps.links.setTopics(chat.id, { forum: true });
+          // During a lockdown the group's buttons act on nothing either (step 16b): only the app does.
+          if (this.deps.security?.lockdownActive()) {
+            this.deps.links.audit("lockdown", "callback", "refused");
+            await this.#answer(incoming.callbackId, "telegram.bloqueio.ativoCurto");
+            return;
+          }
           await this.#onNoticeButton(incoming);
         } else if (incoming.callbackId) {
           await this.client()

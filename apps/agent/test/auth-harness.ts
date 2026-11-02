@@ -110,6 +110,8 @@ export interface HarnessOptions {
   clock?: FakeClock;
   /** The recovery e-mail (step 11c); left out, the service has none. */
   recoveryMail?: AuthDeps["recoveryMail"];
+  /** The remote tokens a lockdown suspends (step 16b; the tokens arrive in step 20). */
+  remoteTokens?: AuthDeps["remoteTokens"];
 }
 
 const baseSecrets = (): AuthSecrets => ({
@@ -149,6 +151,7 @@ export function withAuth<T>(name: string, fn: (h: Harness) => Promise<T> | T, op
         },
         relyingParty: options.relyingParty ?? TEST_RP,
         recoveryMail: options.recoveryMail ?? null,
+        ...(options.remoteTokens ? { remoteTokens: options.remoteTokens } : {}),
       });
     const events = () => db.all<ReturnType<Harness["events"]>[number]>(`SELECT * FROM zur_auth_events ORDER BY id`);
     const service = build();

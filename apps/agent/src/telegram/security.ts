@@ -2,7 +2,7 @@ import { type AuthActivityEvent, describeUserAgent, type Locale, type MessageKey
 import type { AuthService } from "../auth/service.ts";
 import type { AutomationService } from "../automations/service.ts";
 import { log } from "../log.ts";
-import type { CommandButtons } from "./callbacks.ts";
+import { type CommandButtons, questionId } from "./callbacks.ts";
 import { disarm } from "./channel.ts";
 import { type Button, type Out, type TapOutcome, withoutButton } from "./commands.ts";
 
@@ -147,11 +147,13 @@ export class TelegramSecurity {
   }
 
   #ask(text: string, action: Exclude<SecurityAction, "sec_cancel" | "session_end">, button: MessageKey): Out {
+    // Both buttons point to the same question: whichever is tapped first uses up the other.
+    const question = questionId();
     return {
       text,
       keyboard: [
-        [{ text: this.#t(button), callback_data: this.deps.buttons.create(action, "confirm", CONFIRM_TTL_MS) }],
-        [{ text: this.#t("telegram.seg.cancelar"), callback_data: this.deps.buttons.create("sec_cancel", action, CONFIRM_TTL_MS) }],
+        [{ text: this.#t(button), callback_data: this.deps.buttons.create(action, question, CONFIRM_TTL_MS) }],
+        [{ text: this.#t("telegram.seg.cancelar"), callback_data: this.deps.buttons.create("sec_cancel", question, CONFIRM_TTL_MS) }],
       ],
     };
   }
@@ -171,6 +173,7 @@ export class TelegramSecurity {
       return { answer: this.#t(key), ...(found.status === "unknown" ? {} : { keyboard: without }) };
     }
     const targetId = found.targetId;
+    if (found.action !== "session_end") this.deps.buttons.retire(targetId);
     try {
       switch (found.action) {
         case "sec_cancel":

@@ -3,7 +3,6 @@ import { runInDurableObject } from "cloudflare:test";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ZuriAgent } from "../src/agent/zuri-agent.ts";
 import type { AIProvider } from "../src/ai/provider.ts";
-import { automationExecutor } from "../src/automations/executor.ts";
 import { InternalState } from "../src/db/internal-state.ts";
 import { telegramWebhookSecret } from "../src/gates/telegram.ts";
 import { maskAddress } from "../src/telegram/security.ts";
@@ -292,19 +291,29 @@ describe("/sessoes and /encerrar_sessoes", () => {
     expect(aiCalls).toBe(0);
   });
 
-  it("Cancelar does nothing, and a confirmation acts once", async () => {
+  it("Cancelar does nothing and uses up the question's Confirmar; a confirmation acts once and uses up its Cancelar", async () => {
     await linkOwner();
     await command("/encerrar_sessoes");
     const rows = lastKeyboard();
     await press("Cancelar");
     expect(answers()).toEqual(["Cancelado"]);
     expect(await sessions()).toBe(1);
-    // The Encerrar todas of the same message, tapped twice: one ending, then "already used".
-    const confirm = rows[0]?.[0]?.callback_data ?? "";
+    // The same question's Encerrar todas, tapped after Cancelar: nothing ends.
     botCalls.length = 0;
-    await tap(confirm, rows);
-    await tap(confirm, rows);
-    expect(answers().at(-1)).toBe("Isso já foi feito.");
+    await tap(rows[0]?.[0]?.callback_data ?? "", rows);
+    expect(answers()).toEqual(["Isso já foi feito."]);
+    expect(await sessions()).toBe(1);
+    expect(await events("telegram_sessions_ended")).toEqual([]);
+
+    // A new question: Encerrar todas twice, then its Cancelar.
+    await command("/encerrar_sessoes");
+    const again = lastKeyboard();
+    const confirm = again[0]?.[0]?.callback_data ?? "";
+    botCalls.length = 0;
+    await tap(confirm, again);
+    await tap(confirm, again);
+    await tap(again[1]?.[0]?.callback_data ?? "", again);
+    expect(answers().slice(-2)).toEqual(["Isso já foi feito.", "Isso já foi feito."]);
     expect((await events("telegram_sessions_ended")).length).toBe(1);
   });
 });
@@ -402,23 +411,14 @@ describe("/bloquear and the lockdown", () => {
     // The alert went to e-mail and push too (every channel), not only to the bot.
     const channels = await inOwner((agent) => agent.store.db.all<{ channel: string }>(`SELECT DISTINCT channel FROM zur_alert_deliveries WHERE notice_id = ?`, notices[0]?.id ?? ""));
     expect(channels.map((c) => c.channel).sort()).toEqual(["email", "push", "telegram"]);
-    // A routine with AI is skipped while it lasts; a reminder still runs.
+    // A routine with AI is skipped while it lasts; a reminder still runs (the object's own executor).
     const run = await inOwner(async (agent) => {
-      const execute = automationExecutor({
-        automations: agent.store.automations,
-        productivity: agent.store.productivity,
-        settings: () => agent.store.settings.get(),
-        locale: () => "pt-BR",
-        runner: () => {
-          throw new Error("never");
-        },
-        lockdown: () => agent.store.auth.lockdown.active(),
-      });
-      const routine = { kind: "agent_prompt", name: "R", message: "m", sentinel: false } as Parameters<typeof execute>[0];
-      const reminder = { kind: "reminder", name: "Água", message: "Beber" } as Parameters<typeof execute>[0];
-      return [await execute(routine, { id: "run-1" } as Parameters<typeof execute>[1]), await execute(reminder, { id: "run-2" } as Parameters<typeof execute>[1])];
+      const execute = agent["executor"]();
+      const routine = await agent.store.automations.create({ name: "R", kind: "agent_prompt", message: "m", schedule: { type: "daily", time: "07:00" } }, "app");
+      const reminder = await agent.store.automations.create({ name: "Água", kind: "reminder", message: "Beber", schedule: { type: "daily", time: "08:00" } }, "app");
+      return [await agent.store.automations.runNow(routine.id, execute), await agent.store.automations.runNow(reminder.id, execute)];
     });
-    expect(run[0]).toEqual({ status: "skipped", result: null, problem: "lockdown" });
+    expect(run[0]).toMatchObject({ status: "skipped", problem: "lockdown" });
     expect(run[1]?.status).toBe("success");
   });
 
@@ -431,10 +431,13 @@ describe("/bloquear and the lockdown", () => {
     expect(await command("/status")).toContain("Zuri");
     expect(await command("/ajuda")).toContain("Em caso de emergência");
     const notices = await command("/avisos");
-    // The texts stay hidden, as with reading locked.
+    // The list answers, with the texts hidden as with reading locked.
+    expect(notices.startsWith("Últimos avisos")).toBe(true);
     expect(notices).not.toContain("Modo de bloqueio ligado pelo Telegram");
     for (const value of ["/hoje", "/aprovar", "/destravar", "/encerrar_sessoes", "/acessos", "oi, Zuri", "123456"]) {
       expect(await command(value), value).toBe(REFUSED);
+      // A code typed during the lockdown is not checked, but still leaves the chat.
+      expect(sent("deleteMessage").length, value).toBe(value === "123456" ? 1 : 0);
     }
     expect(await command("/bloquear")).toBe("O modo de bloqueio já está ligado. Para sair, entre no app.");
     // Aprovar under an old card, or any other button: refused.
@@ -570,7 +573,7 @@ describe("the bot's security alerts", () => {
     const stale = await api("POST", `/notices/${alert?.id}/acknowledge`, undefined, fresh);
     expect(stale.status).toBe(403);
     expect(((await stale.json()) as { code: string }).code).toBe("RECENT_AUTH_REQUIRED");
-    expect((await json<{ password?: string }>(await api("POST", "/auth/confirm", { password: TEST_PASSWORD }, fresh), 204).catch(() => ({})))).toBeDefined();
+    expect((await api("POST", "/auth/confirm", { password: TEST_PASSWORD }, fresh)).status).toBe(204);
     const done = await json<Notice>(await api("POST", `/notices/${alert?.id}/acknowledge`, undefined, fresh), 200);
     expect(done).toMatchObject({ escalation: "acknowledged", ackInApp: true });
     expect(done.readAt).not.toBeNull();
@@ -606,5 +609,50 @@ describe("a lockdown with a password to change", () => {
     } finally {
       await inOwner((agent) => agent.store.db.run(`DELETE FROM zur_settings WHERE key = 'auth_password_change_required'`));
     }
+  });
+});
+
+describe("the notices' group during a lockdown", () => {
+  it("its buttons act on nothing: the notice stays as it was", async () => {
+    await linkOwner();
+    const GROUP = -1001112229999;
+    const { link } = await json<{ link: string }>(await api("POST", "/telegram/group"), 200);
+    const code = new URL(link).searchParams.get("startgroup") ?? "";
+    const groupChat = { id: GROUP, type: "supergroup", title: "Avisos da casa" };
+    await deliver({
+      my_chat_member: {
+        chat: groupChat,
+        from,
+        date: 1793612400,
+        old_chat_member: { user: { id: 123456789, is_bot: true, first_name: "Zuri" }, status: "left" },
+        new_chat_member: { user: { id: 123456789, is_bot: true, first_name: "Zuri" }, status: "member" },
+      },
+    });
+    await deliver({ message: { message_id: 5, date: 1793612400, from, chat: groupChat, text: `/start@zuri_teste_bot ${code}` } });
+    botCalls.length = 0;
+    const notice = await inOwner(async (agent) => {
+      const raised = agent.store.alerts.raise({ kind: "automation.result", category: "routines", priority: "high", params: { name: "Rotina" }, body: "Resumo", source: null });
+      await agent.store.alerts.settled();
+      return raised;
+    });
+    const toGroup = sent().find((c) => c.body.chat_id === GROUP);
+    const done = keyboard(toGroup)
+      .flat()
+      .find((b) => b.callback_data?.startsWith("v1:done:"))?.callback_data;
+    expect(done, JSON.stringify(toGroup?.body)).toBeDefined();
+    await inOwner((agent) => agent.store.auth.lockdown.mark("grupo"));
+    botCalls.length = 0;
+    await deliver({
+      callback_query: {
+        id: `cb${id()}`,
+        from,
+        message: { message_id: 90, date: 1793612400, chat: groupChat, text: "Aviso" },
+        chat_instance: "-1",
+        data: done,
+      },
+    });
+    expect(answers()).toEqual(["Modo de bloqueio ligado. Resolva pelo app."]);
+    const row = await inOwner((agent) => agent.store.db.one<{ read_at: string | null; escalation: string | null }>(`SELECT read_at, escalation FROM zur_notices WHERE id = ?`, notice?.id ?? ""));
+    expect(row?.read_at).toBeNull();
   });
 });

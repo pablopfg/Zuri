@@ -157,6 +157,16 @@ export class CommandButtons {
     if (rowsWritten === 0) return { status: "used" };
     return { status: "ok", action: row.action as CommandAction, targetId: row.target_id };
   }
+
+  /** Uses up every button that points to this target: a question's Confirmar and Cancelar act once between them. */
+  retire(targetId: string): void {
+    this.db.run(`UPDATE zur_telegram_callbacks SET used_at = ? WHERE target_type = 'command' AND target_id = ? AND used_at IS NULL`, new Date(this.clock()).toISOString(), targetId);
+  }
+}
+
+/** A target shared by the buttons of one question (step 16b), as opaque as a button's id. */
+export function questionId(): string {
+  return randomId();
 }
 
 /** 12 random bytes in base64url: 16 characters, nothing to guess. */

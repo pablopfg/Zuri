@@ -54,7 +54,8 @@ describe("the lockdown's first hour", () => {
       expect(error).toMatchObject({ code: "LOCKDOWN_ACTIVE" });
       expect(await outcome(h.service.passkeyOptions(mfa.token, client(NET), noCookies))).toBe("LOCKDOWN_ACTIVE");
       expect(await outcome(h.service.completePasskey(mfa.token, {} as never, client(NET), noCookies))).toBe("LOCKDOWN_ACTIVE");
-      // The same challenge still takes the recovery code: nothing above counted as a wrong answer.
+      // Nothing above counted as a wrong answer: not on the challenge, not on the network.
+      expect(h.db.one<{ attempts: number }>(`SELECT attempts FROM zur_mfa_challenges`)?.attempts ?? 0).toBe(0);
       const signed = await h.service.completeMfa(mfa.token, codes[0] ?? "", client(NET), noCookies);
       expect(await h.auth.validate(signed.token, true)).not.toBeNull();
       expect(h.service.lockdown.active()).toBe(false);
@@ -150,5 +151,41 @@ describe("SEC-16b-B4: a session opened in the first hour", () => {
       expect(h.service.lockdown.active()).toBe(true);
       expect(await outcome(h.service.exitLockdown(row, { recoveryCode: codes[3] ?? "" }, client(NET)))).toBe("ok");
     });
+  });
+});
+
+describe("the remote tokens' hook", () => {
+  it("suspends them once on entering, and brings them back once on leaving, by the screen or by a recovery code", async () => {
+    const calls = { suspend: 0, resume: 0 };
+    const remoteTokens = { suspendAll: () => ++calls.suspend, resumeAll: () => ++calls.resume, active: () => 0 };
+    await withAuth(
+      "lockdown-tokens",
+      async (h) => {
+        const { secret, codes } = await turnOn(h);
+        h.service.enterLockdown(LINK);
+        h.service.enterLockdown(LINK);
+        expect(calls).toEqual({ suspend: 1, resume: 0 });
+        // Out through the sign-in with a recovery code.
+        const mfa = await challenge(h);
+        await h.service.completeMfa(mfa.token, codes[4] ?? "", client(NET), noCookies);
+        expect(calls).toEqual({ suspend: 1, resume: 1 });
+
+        // Out through the screen, with the app's code, once the first hour is over (and not a millisecond before).
+        h.clock.advance(LOCKDOWN_RELOCK_MS);
+        h.service.enterLockdown("link-3");
+        expect(calls.suspend).toBe(2);
+        h.clock.advance(LOCKDOWN_STRICT_MS - 1);
+        const second = await challenge(h);
+        expect(await outcome(h.service.completeMfa(second.token, await code(h, secret), client(NET), noCookies))).toBe("LOCKDOWN_ACTIVE");
+        h.clock.advance(1);
+        const signed = await h.service.completeMfa(second.token, await code(h, secret), client(NET), noCookies);
+        const row = await live(h.auth, signed.token);
+        h.clock.advance(30_000);
+        expect(await outcome(h.service.exitLockdown(row, { totp: await code(h, secret) }, client(NET)))).toBe("ok");
+        expect(h.service.lockdown.active()).toBe(false);
+        expect(calls).toEqual({ suspend: 2, resume: 2 });
+      },
+      { remoteTokens },
+    );
   });
 });

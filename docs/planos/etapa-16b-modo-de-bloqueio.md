@@ -157,7 +157,12 @@ Auditoria completa (`cloudflare-security-audit:security-audit`, etapa 16), `audi
 - Rotinas com IA ficam puladas durante o bloqueio, sem mudar de estado, e voltam sozinhas ao sair; `/pausar_rotinas` é que pausa de fato.
 - Sem 2FA, sair do bloqueio pede só a senha recente (passkey só existe com a 2FA ligada).
 - Senha recente é a janela de 15 min que já existe (senha ou código do app).
-- Toques nos avisos do Telegram durante o bloqueio respondem "bloqueio ligado" sem agir.
+- Toques nos avisos do Telegram durante o bloqueio, no chat privado e no grupo, respondem "bloqueio ligado" sem agir; um código digitado no bloqueio é apagado sem ser conferido.
+- Confirmar e Cancelar de uma pergunta apontam para o mesmo alvo: o primeiro toque gasta os dois.
+- O bloqueio vem antes da troca de senha obrigatória e da configuração do segundo passo: elas aparecem depois da saída.
+- Na primeira hora, sair pela tela também só aceita código de recuperação (uma sessão aberta numa corrida com `/bloquear` não sai com o código do app).
+- `/bloquear` interrompe os turnos de conversa em andamento; o rebloqueio suspende o vínculo na mesma transação.
+- `/bloquear` conta nos 60 comandos por hora, como todo o resto (risco aceito: estourar o limite de propósito exige a conta do Telegram, e o app continua tendo as mesmas ações).
 - Os alertas dos três comandos insistem como os outros alertas de segurança causados pelo bot.
 
 ## 14. Entrevista com o Pablo
