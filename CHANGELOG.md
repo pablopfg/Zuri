@@ -43,9 +43,19 @@ versão.
   certo e é gasto no cadastro. Cada tentativa passa pela verificação contra
   robôs, e os limites valem por rede: 5 erros em 15 minutos pausam e 20 em 24
   horas bloqueiam aquela rede pelo resto do dia. Logo depois do cadastro, a
-  verificação em duas etapas é obrigatória antes de qualquer outra tela. Um código novo, depois, só recupera o acesso
+  verificação em duas etapas é obrigatória antes de qualquer outra tela. Um
+  código novo, depois, só recupera o acesso
   (`POST /api/setup/recover`), mantendo os dados e o 2FA. Os quatro eventos
-  novos aparecem em Acessos. A tela vem no próximo PR.
+  novos aparecem em Acessos.
+- Tela de primeiro acesso em `/primeiro-acesso`, em três passos: o código de
+  instalação, os seus dados (e-mail, senha repetida, idioma e fuso já
+  preenchidos pelo navegador) e a verificação em duas etapas, que abre antes
+  de qualquer outra tela. Numa instalação nova, a tela de entrar leva direto
+  para ela. Depois do cadastro, a mesma tela serve para recuperar o acesso com
+  um código novo e o e-mail cadastrado. O Início lembra de apagar o segredo
+  `SETUP_CODE` enquanto ele continuar gravado. Os códigos de recuperação ficam
+  na tela até você confirmar que os guardou, mesmo se você trocar de app no
+  meio.
 
 - Paleta de comandos com Ctrl/⌘ K, ou pelo botão Buscar na barra lateral e no
   topo do celular. Ela leva a qualquer página ou seção das configurações, cria
@@ -194,6 +204,14 @@ versão.
 
 - A agente agora é "a Zuri": textos da interface, mensagens do servidor,
   README, manifesto do app e banner passam a tratá-la no feminino.
+- A tela de trocar a senha obrigatória e os avisos de segredo para apagar
+  passaram a carregar só quando aparecem, e o logotipo deixou de depender do
+  módulo de componentes. Com a tela de primeiro acesso, o JavaScript inicial
+  fica em 138,8 kB, dentro do teto de 139 kB.
+- O aviso de login fechado por falta da verificação contra robôs não cita mais
+  o nome do serviço nem um arquivo do repositório: ele aponta para o guia de
+  instalação. Os avisos de apagar segredos ganharam um pedaço próprio do
+  catálogo, que não vem com as telas públicas.
 - Os logs do servidor têm agora um formato único (`level`, `event`, `code`,
   `route`, `requestId`, `error`, `secrets`), com o `cf-ray` da requisição para
   achar o erro no painel da Cloudflare. Tudo passa por um só módulo, que

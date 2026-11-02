@@ -1,6 +1,8 @@
 /** Where the app opens after sign-in when no safe destination was asked for. */
 export const HOME_PATH = "/";
 export const LOGIN_PATH = "/entrar";
+/** The first access (and the recovery with a new installation code). */
+export const FIRST_ACCESS_PATH = "/primeiro-acesso";
 
 /**
  * The page to open after signing in, from the `?next=` of the sign-in screen.

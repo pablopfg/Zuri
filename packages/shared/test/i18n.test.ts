@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import * as i18n from "../i18n/index.ts";
-import { catalogs, createTranslator, DEFAULT_LOCALE, isLocale, LOCALES, loadCatalog, ptBR, ptBRCore, t } from "../i18n/index.ts";
+import { catalogs, createTranslator, DEFAULT_LOCALE, isLocale, LOCALES, loadCatalog, ptBR, ptBRCore, ptBRSetup, t } from "../i18n/index.ts";
 
 const placeholders = (text: string) => [...text.matchAll(/\{(\w+)\}/g)].map((m) => m[1]).sort();
 
@@ -73,8 +73,20 @@ describe("isLocale", () => {
     const parts = exported.map((part) => Object.keys(part));
     // No key in two parts: one of them would silently win.
     expect(parts.flat().length).toBe(new Set(parts.flat()).size);
-    const lazy = /^(web\.(memory|tasks|notes|trash|projects|accessLog|activity|ai|chat|mfa|passkeys|sessions|unit|security|palette|greeting)\.|error\.ai|ai\.|auth\.mfa\.|auth\.password\.)/;
+    const lazy = /^(web\.(memory|tasks|notes|trash|projects|accessLog|activity|ai|chat|mfa|passkeys|sessions|unit|security|palette|greeting|setup|secondStep|passwordRequired)\.|web\.password\.(current|new|repeat|rules|mismatch|submit|changed)$|web\.shell\.remove|error\.ai|ai\.|auth\.mfa\.|auth\.password\.)/;
     expect(Object.keys(ptBRCore).filter((key) => lazy.test(key))).toEqual([]);
+  });
+
+  it("the public first-access texts never name where or on what the app runs (decision of 31/10/2026)", () => {
+    // The whole part ships with the public screen; the server's refusals (error.*, auth.*) show on it and on the sign-in.
+    const keys = [...Object.keys(ptBRSetup), ...Object.keys(ptBR).filter((key) => key.startsWith("error.") || key.startsWith("auth."))];
+    expect(keys.length).toBeGreaterThan(60);
+    for (const locale of LOCALES) {
+      for (const key of keys) {
+        const text = catalogs[locale][key as keyof typeof ptBR].toLowerCase();
+        for (const name of ["cloudflare", "worker", "turnstile", "wrangler", "durable", "setup_code", "secret"]) expect(text, `${locale} ${key}`).not.toContain(name);
+      }
+    }
   });
 
   it("speaks of the agent in the feminine: \"a Zuri\", never \"o Zuri\" (Pablo, 31/10/2026)", () => {
