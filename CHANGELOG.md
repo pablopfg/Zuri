@@ -12,15 +12,6 @@ versão.
 
 ### Adicionado
 
-- Modelo reserva em Configurações › IA. Quando o modelo de conversa está
-  ocupado, fora do ar ou demora mais de 20 segundos para começar, outro
-  modelo grátis responde no lugar, e a resposta mostra "Respondida pelo
-  modelo reserva". Ele usa o mesmo teto de Neurons do dia e não entra em
-  ação no seu limite diário, quando você aperta Parar, depois que a resposta
-  começou ou depois que uma ferramenta rodou. Vem ligado com o Qwen3 30B A3B;
-  dá para trocar ou desligar. Um modelo que falha seguido fica de lado por um
-  tempo e volta a ser testado na próxima mensagem, sem chamadas extras.
-
 - Automações (etapa 10), em uma tela nova com lembretes, o resumo das tarefas e
   as rotinas da Zuri. Cada uma pode rodar uma vez, todo dia, em dias da semana,
   num dia do mês ou a cada algumas horas (no mínimo 1), sempre no seu fuso.
@@ -334,15 +325,6 @@ versão.
 
 ### Segurança
 
-- O prompt da Zuri agora é montado só por um contrato: cada parte diz de onde
-  vem e se é instrução ou conteúdo guardado, e conteúdo fora dos blocos de
-  dados derruba a resposta em vez de chegar ao modelo. Há uma lista fechada
-  do que nunca vai para a IA (e-mail, senha, segredos, sessões, Acessos,
-  códigos do 2FA, ids do Telegram, credenciais de MCP). Um teste novo grava
-  valores marcados em todos esses lugares e confere que nenhum aparece no que
-  a IA recebe. Se um segredo do servidor escapasse mesmo assim, ele seria
-  trocado por "[removido]" antes de sair.
-
 - Ligar a verificação em duas etapas e adicionar uma passkey agora pedem a sua
   senha na hora, mesmo logo depois de entrar. Um código do aplicativo não
   serve no lugar dela. A senha errada conta no mesmo limite do login (3 erros
@@ -434,10 +416,6 @@ versão.
   (`docs/seguranca.md`).
 
 ### Atualização
-
-- Migration 10 acrescenta a coluna `fallback` em `zur_messages`, para marcar
-  a resposta do modelo reserva. As mensagens antigas ficam sem a marca. A
-  configuração nova "Modelo reserva" começa no Qwen3 30B A3B.
 
 - Migration 9 cria `zur_automations` e `zur_automation_runs`, com os
   contadores de automações e de execuções. Nada muda nos dados que já existem
