@@ -33,6 +33,8 @@ interface Parts {
 }
 
 const DEFAULT_HOUR = 9;
+/** The longest date phrase read: "sexta-feira da semana que vem às 9h da noite" has 10 words. */
+const MAX_PHRASE_WORDS = 12;
 const MAX_DAYS = 366;
 const WEEKDAYS: Record<string, number> = { domingo: 0, segunda: 1, terca: 2, quarta: 3, quinta: 4, sexta: 5, sabado: 6 };
 /** Words that may sit between or before the date's parts ("na sexta às 9h", "para amanhã"). */
@@ -238,7 +240,7 @@ function resolve(parts: Parts, ref: Date, timeZone: string): When | null {
 /** The whole text as a date ("amanhã 9h"); null when it is not one. */
 export function parseWhen(text: string, ref: Date, timeZone: string): When | null {
   const words = text.trim().split(/\s+/).map(fold).filter(Boolean);
-  if (words.length === 0) return null;
+  if (words.length === 0 || words.length > MAX_PHRASE_WORDS) return null;
   const parts = phrase(words);
   return parts ? resolve(parts, ref, timeZone) : null;
 }
@@ -256,14 +258,15 @@ export function extractWhen(text: string, ref: Date, timeZone: string, where: "s
     const parts = phrase(words.slice(from, to));
     return parts ? resolve(parts, ref, timeZone) : null;
   };
+  // A date phrase is a few words ("sexta da semana que vem às 9h"): only the ends are tried, so a long text costs no more.
   if (where !== "start") {
-    for (let from = 0; from < tokens.length; from += 1) {
+    for (let from = Math.max(0, tokens.length - MAX_PHRASE_WORDS); from < tokens.length; from += 1) {
       const when = tryRange(from, tokens.length);
       if (when) return { when, rest: text.slice(0, tokens[from]?.start ?? 0).trim() };
     }
   }
   if (where !== "end") {
-    for (let to = tokens.length; to > 0; to -= 1) {
+    for (let to = Math.min(tokens.length, MAX_PHRASE_WORDS); to > 0; to -= 1) {
       const when = tryRange(0, to);
       if (when) return { when, rest: text.slice(tokens[to - 1]?.end ?? 0).trim() };
     }

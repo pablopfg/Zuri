@@ -1406,6 +1406,7 @@ export const en: Messages = {
   "telegram.date.passado": "That date already passed. Send it again with another day or time.",
   "telegram.date.periodo": "What time? Send it again with the time, for example: amanhã 15h.",
   "telegram.attachment.semLegenda": "Send a caption and I'll save it as a note.",
+  "telegram.attachment.encaminhado": "I don't save a forwarded message's caption as a note. To keep it, send the photo or document with a caption of your own.",
   "telegram.attachment.linha": "Attachment received through Telegram: {tipo}, {tamanho} (not kept)",
   "telegram.attachment.foto": "photo",
   "telegram.attachment.documento": "document",

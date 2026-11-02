@@ -110,6 +110,7 @@ describe("the bot's date grammar", () => {
       "às",
       "amanhã às",
       "semana que vem semana que vem",
+      `${"a ".repeat(12)}amanhã`,
     ]) {
       expect(parseWhen(text, REF, ZONE), text).toBeNull();
     }

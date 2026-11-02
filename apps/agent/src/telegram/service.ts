@@ -320,6 +320,13 @@ export class TelegramService {
         return null;
       }
       if (isCommandData(incoming.callbackData) && this.deps.commands) {
+        // The commands' buttons count in the hour's 60 too: tapping an old button can't make the bot write without end.
+        const rate = this.#rate("telegram_command_window", TELEGRAM_LIMITS.commandsPerHour);
+        if (rate !== "ok") {
+          this.deps.links.audit("callback", "any", "rate_limited");
+          await this.#answer(incoming.callbackId, rate === "first" ? "telegram.cmd.rate" : undefined);
+          return null;
+        }
         await this.#onCommandButton(link, incoming, locked);
         return null;
       }
@@ -359,7 +366,7 @@ export class TelegramService {
       }
       if (command !== null) await this.#command(link, command, own, locked);
       else if (fixing) await this.#fix(link, message.replyToId ?? 0, own, locked);
-      else if (message.attachment) await this.#attachment(link, message.attachment, message.caption ?? "", locked);
+      else if (message.attachment) await this.#attachment(link, message.attachment, message.caption ?? "", locked, message.forwarded === true);
       return null;
     }
     const kind = message.audio?.kind ?? (message.other ? "other" : "text");
@@ -454,11 +461,17 @@ export class TelegramService {
   }
 
   /** A photo or a document: its caption becomes a note (N4: the file is never kept); it writes, so it needs reading unlocked. */
-  async #attachment(link: PrivateLink, file: Attachment, caption: string, locked: boolean): Promise<void> {
+  async #attachment(link: PrivateLink, file: Attachment, caption: string, locked: boolean, forwarded: boolean): Promise<void> {
     const commands = this.deps.commands;
     if (!commands) {
       this.deps.links.audit("message", "other", "unsupported");
       await this.#say(link.chatId, "telegram.chat.unsupported");
+      return;
+    }
+    // A forwarded caption is someone else's text: never saved as the owner's note.
+    if (forwarded) {
+      this.deps.links.audit("message", file.kind, "forwarded");
+      await this.#say(link.chatId, "telegram.attachment.encaminhado");
       return;
     }
     if (locked) {

@@ -309,6 +309,7 @@ export const ptBRServer = {
   "telegram.date.passado": "Essa data já passou. Mande de novo com outro dia ou hora.",
   "telegram.date.periodo": "Que horas? Mande de novo com a hora, por exemplo: amanhã 15h.",
   "telegram.attachment.semLegenda": "Envie uma legenda para eu guardar como nota.",
+  "telegram.attachment.encaminhado": "Não guardo como nota a legenda de uma mensagem encaminhada. Se quiser guardar, envie a foto ou o documento com uma legenda sua.",
   "telegram.attachment.linha": "Anexo recebido pelo Telegram: {tipo}, {tamanho} (não guardado)",
   "telegram.attachment.foto": "foto",
   "telegram.attachment.documento": "documento",
