@@ -135,3 +135,20 @@ describe("relock", () => {
     });
   });
 });
+
+describe("SEC-16b-B4: a session opened in the first hour", () => {
+  it("can't leave with the app's code, only with a recovery code", async () => {
+    await withAuth("lockdown-race", async (h) => {
+      const { secret, codes } = await turnOn(h);
+      const mfa = await challenge(h);
+      const { token } = await h.service.completeMfa(mfa.token, await code(h, secret), client(NET), noCookies);
+      h.clock.advance(30_000);
+      // As if the sign-in had raced /bloquear: the session exists and the first hour is on.
+      h.service.lockdown.mark(LINK);
+      const row = await live(h.auth, token);
+      expect(await outcome(h.service.exitLockdown(row, { totp: await code(h, secret) }, client(NET)))).toBe("LOCKDOWN_ACTIVE");
+      expect(h.service.lockdown.active()).toBe(true);
+      expect(await outcome(h.service.exitLockdown(row, { recoveryCode: codes[3] ?? "" }, client(NET)))).toBe("ok");
+    });
+  });
+});

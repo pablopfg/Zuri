@@ -316,11 +316,16 @@ export function createApi(deps: ApiDeps) {
     // HEAD is a GET without the body, and the router answers it with the GET route.
     const method = c.req.method === "HEAD" ? "GET" : c.req.method;
     const route = `${method} ${c.req.path.replace(/\/+$/, "")}`;
-    if (auth.passwordChangeRequired() && !WHILE_PASSWORD_CHANGE.has(route)) throw new AppError("PASSWORD_CHANGE_REQUIRED");
-    if (auth.secondStepRequired() && !WHILE_SECOND_STEP_SETUP.has(route)) {
-      throw new AppError("FORBIDDEN", "auth.setup.secondStepRequired", { secondStepRequired: true });
+    // A lockdown comes first (step 16b): its short list is all there is until the owner leaves it, so a
+    // password to change or a second step to set up never hides "Sair do bloqueio"; they follow after.
+    if (auth.lockdown.active()) {
+      if (!WHILE_LOCKDOWN.has(route)) throw new AppError("LOCKDOWN_ACTIVE", "auth.lockdown.active");
+    } else {
+      if (auth.passwordChangeRequired() && !WHILE_PASSWORD_CHANGE.has(route)) throw new AppError("PASSWORD_CHANGE_REQUIRED");
+      if (auth.secondStepRequired() && !WHILE_SECOND_STEP_SETUP.has(route)) {
+        throw new AppError("FORBIDDEN", "auth.setup.secondStepRequired", { secondStepRequired: true });
+      }
     }
-    if (!WHILE_LOCKDOWN.has(route) && auth.lockdown.active()) throw new AppError("LOCKDOWN_ACTIVE", "auth.lockdown.active");
     c.set("session", session);
     await next();
   });

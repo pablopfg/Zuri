@@ -695,10 +695,12 @@ export class AuthService {
    * tokens are suspended (not revoked); the alert goes on every channel. The
    * routines with AI stop by themselves while it is on (the executor asks).
    */
-  enterLockdown(linkId: string): LockdownEntered {
+  enterLockdown(linkId: string, onRelock: () => void = () => undefined): LockdownEntered {
     return this.deps.db.transaction(() => {
       const entered = this.lockdown.mark(linkId);
       if (entered.status !== "entered") return entered;
+      // A relock suspends the bot's link in the same transaction: never a relock with the link still on.
+      if (entered.relock) onRelock();
       this.sessions.revokeAll();
       (this.deps.remoteTokens ?? NO_REMOTE_TOKENS).suspendAll();
       this.events.record("telegram_lockdown", null, { reason: entered.relock ? "relock" : "", alert: true });
@@ -715,6 +717,8 @@ export class AuthService {
     this.requireRecentAuth(row);
     if (!this.lockdown.active()) throw new AppError("CONFLICT", "auth.lockdown.none");
     if (this.twoStep.enabled()) {
+      // The first hour takes only a recovery code, here too: a session opened in a race with /bloquear can't leave with the app's code.
+      if ("totp" in proof && this.lockdown.strict()) throw new AppError("LOCKDOWN_ACTIVE", "auth.lockdown.strict");
       if ("totp" in proof) await this.checkCode(row, proof.totp, client, { recovery: false }, "lockdown");
       else if ("recoveryCode" in proof) await this.checkCode(row, proof.recoveryCode, client, { recovery: true, totp: false }, "lockdown");
       else throw new AppError("VALIDATION_FAILED", "auth.lockdown.codeRequired", { fields: ["totp"] });

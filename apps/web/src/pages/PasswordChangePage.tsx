@@ -14,7 +14,7 @@ import { LockdownPage } from "./LockdownPage.tsx";
 export function PasswordChangePage() {
   const { session } = useSession();
   // A lockdown (step 16b) comes through here too, so the first load carries one lazy screen, not two.
-  return session?.passwordChangeRequired ? <PasswordChange /> : <LockdownPage />;
+  return session?.lockdown ? <LockdownPage /> : <PasswordChange />;
 }
 
 function PasswordChange() {

@@ -633,7 +633,8 @@ export class TelegramService {
   /**
    * Confirmar, Cancelar or Encerrar under a security command (step 16b): they
    * only reduce access, so they work with reading locked. A relock (a second
-   * /bloquear within 24 hours of leaving) suspends this link too.
+   * /bloquear within 24 hours of leaving) suspends this link too, in the
+   * lockdown's own transaction.
    */
   async #onSecurityButton(link: PrivateLink, incoming: Incoming, security: TelegramSecurity): Promise<void> {
     const data = incoming.callbackData ?? "";
@@ -643,7 +644,10 @@ export class TelegramService {
       await this.#answer(incoming.callbackId, "telegram.seg.needsAdminShort");
       return;
     }
-    const outcome = await security.tap(data, link.id, incoming.callbackKeyboard);
+    let suspended = false;
+    const outcome = await security.tap(data, link.id, incoming.callbackKeyboard, () => {
+      suspended = this.deps.links.suspend();
+    });
     this.deps.links.audit("callback", action, outcome.relock ? "relock" : outcome.out ? "done" : "ok");
     const client = this.client();
     if (incoming.callbackId) await client.answerCallbackQuery(incoming.callbackId, outcome.answer).catch(() => undefined);
@@ -651,7 +655,7 @@ export class TelegramService {
       await client.editMessageReplyMarkup(incoming.chat.id, incoming.callbackMessageId, { inline_keyboard: outcome.keyboard }).catch(() => null);
     }
     if (outcome.out) await this.#send(link.chatId, outcome.out);
-    if (outcome.relock && this.deps.links.suspend()) this.deps.links.audit("lockdown", "relock", "suspended");
+    if (suspended) this.deps.links.audit("lockdown", "relock", "suspended");
   }
 
   /** The right date after Corrigir; it writes, so it needs reading unlocked. */

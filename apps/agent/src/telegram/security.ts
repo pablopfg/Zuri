@@ -30,9 +30,11 @@ export interface SecurityDeps {
   buttons: CommandButtons;
   locale(): Locale;
   timeZone(): string;
+  /** Stops every turn running now (chat in the app or in the bot): a lockdown doesn't wait for them. */
+  abortRuns(): void;
 }
 
-/** What a tap on one of these buttons did; `relock` asks the service to suspend the link. */
+/** What a tap on one of these buttons did; `relock`: the link was suspended with it. */
 export interface SecurityTap extends TapOutcome {
   relock?: boolean;
 }
@@ -161,7 +163,7 @@ export class TelegramSecurity {
    * it acts once. Works with reading locked. `linkId` is the bot's link: a
    * relock suspends it. `keyboard` is the message's buttons.
    */
-  async tap(data: string, linkId: string, keyboard: Button[][] | null): Promise<SecurityTap> {
+  async tap(data: string, linkId: string, keyboard: Button[][] | null, suspendLink: () => void = () => undefined): Promise<SecurityTap> {
     const found = this.deps.buttons.take(data);
     const without = keyboard ? withoutButton(keyboard, data) : undefined;
     if (found.status !== "ok" || !isSecurityAction(found.action)) {
@@ -186,8 +188,9 @@ export class TelegramSecurity {
           return { keyboard: [], out: { text: paused > 0 ? this.#t("telegram.seg.pausar.feito", { n: paused }) : this.#t("telegram.seg.pausar.vazio") } };
         }
         case "lockdown": {
-          const entered = this.deps.auth.enterLockdown(linkId);
+          const entered = this.deps.auth.enterLockdown(linkId, suspendLink);
           if (entered.status === "already") return { keyboard: [], out: { text: this.#t("telegram.seg.bloquear.jaLigado") } };
+          this.deps.abortRuns();
           const text = [this.#t("telegram.seg.bloquear.feito")];
           if (entered.relock) text.push(this.#t("telegram.seg.bloquear.suspenso"));
           return { keyboard: [], out: { text: text.join("\n\n") }, relock: entered.relock };
@@ -230,7 +233,8 @@ export class TelegramSecurity {
 /** The address without its end: "189.40.x.x", "2001:db8:…". Enough to tell networks apart, never the whole IP (spec). */
 export function maskAddress(ip: string): string {
   if (!ip) return "";
-  const v4 = /^(\d{1,3})\.(\d{1,3})\.\d{1,3}\.\d{1,3}$/.exec(ip);
+  // An IPv4 address, alone or at the end of an IPv6 one (::ffff:a.b.c.d, ::a.b.c.d, 64:ff9b::a.b.c.d): only its first half.
+  const v4 = /(?:^|:)(\d{1,3})\.(\d{1,3})\.\d{1,3}\.\d{1,3}$/.exec(ip);
   if (v4) return `${v4[1]}.${v4[2]}.x.x`;
   if (ip.includes(":")) {
     const groups = ip.split(":").filter(Boolean).slice(0, 2);

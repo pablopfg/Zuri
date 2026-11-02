@@ -4,6 +4,7 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vite
 import type { ZuriAgent } from "../src/agent/zuri-agent.ts";
 import type { AIProvider } from "../src/ai/provider.ts";
 import { automationExecutor } from "../src/automations/executor.ts";
+import { InternalState } from "../src/db/internal-state.ts";
 import { telegramWebhookSecret } from "../src/gates/telegram.ts";
 import { maskAddress } from "../src/telegram/security.ts";
 import startCode from "./fixtures/telegram/start-code.json?raw";
@@ -231,6 +232,10 @@ describe("/acessos and /tokens", () => {
     expect(maskAddress("2001:db8:85a3::8a2e:370:7334")).toBe("2001:db8:…");
     expect(maskAddress("")).toBe("");
     expect(maskAddress("algo")).toBe("");
+    // SEC-16b-B1: an IPv4 address inside an IPv6 one is masked as IPv4, never shown whole.
+    expect(maskAddress("::ffff:203.0.113.77")).toBe("203.0.x.x");
+    expect(maskAddress("::203.0.113.77")).toBe("203.0.x.x");
+    expect(maskAddress("64:ff9b::203.0.113.77")).toBe("203.0.x.x");
   });
 
   it("/acessos, /sessoes and /tokens ask to unlock after the bot sat unused; /tokens shows the empty state", async () => {
@@ -378,12 +383,17 @@ describe("/bloquear and the lockdown", () => {
   it("works with the AI down and reading locked: sessions end, routines with AI wait, the alert goes out", async () => {
     await linkOwner();
     await idle(13 * HOUR);
+    // SEC-16b-B3: a turn running when the lockdown starts is stopped, not left to finish.
+    const running = new AbortController();
+    await inOwner((agent) => agent.activeRuns.set("turno-em-andamento", running));
     const ask = await command("/bloquear");
     expect(ask).toContain("Ligar o modo de bloqueio?");
     expect(lastKeyboard().map((row) => row[0]?.text)).toEqual(["Bloquear agora", "Cancelar"]);
     expect(await lockdownOn()).toBe(false);
     await press("Bloquear agora");
     expect(texts().some((t) => t.startsWith("Modo de bloqueio ligado."))).toBe(true);
+    expect(running.signal.aborted).toBe(true);
+    await inOwner((agent) => agent.activeRuns.delete("turno-em-andamento"));
     expect(await lockdownOn()).toBe(true);
     expect(await sessions()).toBe(0);
     expect(aiCalls).toBe(0);
@@ -577,5 +587,24 @@ describe("the bot's security alerts", () => {
     expect(web?.origin).toBe("web");
     const res = await api("POST", `/notices/${web?.id}/acknowledge`);
     expect(res.status).toBe(409);
+  });
+});
+
+describe("a lockdown with a password to change", () => {
+  it("SEC-16b-B2: the lockdown's routes come first, and the password change follows once out", async () => {
+    await inOwner((agent) => {
+      agent.store.auth.lockdown.mark("outro");
+      new InternalState(agent.store.db).set("auth_password_change_required", true);
+    });
+    try {
+      expect((await api("GET", "/lockdown")).status).toBe(200);
+      expect((await api("POST", "/auth/password", { current: TEST_PASSWORD, next: "x" })).status).toBe(423);
+      expect((await api("POST", "/lockdown/exit", {})).status).toBe(204);
+      const after = await api("GET", "/tasks");
+      expect(after.status).toBe(403);
+      expect(((await after.json()) as { code: string }).code).toBe("PASSWORD_CHANGE_REQUIRED");
+    } finally {
+      await inOwner((agent) => agent.store.db.run(`DELETE FROM zur_settings WHERE key = 'auth_password_change_required'`));
+    }
   });
 });

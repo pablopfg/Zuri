@@ -556,6 +556,9 @@ export class ZuriAgent extends Agent<WorkerEnv> {
         buttons: commandButtons,
         locale: () => this.locale(),
         timeZone: () => settings.field("timeZone"),
+        abortRuns: () => {
+          for (const run of this.activeRuns.values()) run.abort();
+        },
       });
       const telegram = new TelegramService({
         links: telegramLinks,
