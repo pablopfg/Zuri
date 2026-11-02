@@ -16,6 +16,7 @@ export {
   ptBRAi,
   ptBRAutomations,
   ptBRMarkdown,
+  ptBRAlerts,
   ptBRChat,
   ptBRCore,
   ptBRMemory,
@@ -115,3 +116,4 @@ export * from "./ai.ts";
 export * from "./chat.ts";
 export * from "./automations.ts";
 export * from "./schedule.ts";
+export * from "./alerts.ts";

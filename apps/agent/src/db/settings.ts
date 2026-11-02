@@ -29,6 +29,12 @@ const STORAGE_KEYS = {
   aiMaxContextTokens: "ai_max_context_tokens",
   aiScheduledRunsPerDay: "ai_scheduled_runs_per_day",
   ownerName: "owner_name",
+  digestEnabled: "digest_enabled",
+  digestTime: "digest_time",
+  watchersEnabled: "watchers_enabled",
+  alertRoutes: "alert_routes",
+  alertPerHour: "alert_per_hour",
+  alertPerDay: "alert_per_day",
 } as const satisfies Record<keyof Settings, string>;
 
 type Field = keyof Settings;
@@ -86,7 +92,8 @@ export class SettingsRepository {
       throw new AppError("VALIDATION_FAILED", undefined, { fields });
     }
     const current = this.get();
-    const changed = FIELDS.filter((field) => parsed.data[field] !== undefined && parsed.data[field] !== current[field]);
+    // By value: the channel routes are an object, equal when their JSON is.
+    const changed = FIELDS.filter((field) => parsed.data[field] !== undefined && JSON.stringify(parsed.data[field]) !== JSON.stringify(current[field]));
     if (changed.length === 0) return current;
     this.db.transaction(() => {
       const at = now();

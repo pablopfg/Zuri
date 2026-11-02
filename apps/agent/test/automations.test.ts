@@ -693,3 +693,38 @@ describe("running each kind", () => {
     });
   });
 });
+
+describe("the shared alarm (step 11)", () => {
+  it("sits at the earlier of the next run and the other work's due time, and tells each finished run", async () => {
+    await withChatWorld(async (world) => {
+      let other: string | null = "2026-10-31T12:15:00.000Z";
+      const finished: string[] = [];
+      const alarm = new FakeAlarm();
+      const service = new AutomationService(world.db, world.productivity.storage, new InternalState(world.db), {
+        timeZone: () => TIME_ZONE,
+        alarm,
+        clock: () => world.clock.now,
+        otherDue: () => other,
+        finished: (automation, outcome) => {
+          finished.push(`${automation.name}:${outcome.status}`);
+          throw new Error("a notice failure never undoes the run");
+        },
+      });
+      await service.rearm();
+      // No automation yet: the other work alone sets the alarm.
+      expect(alarm.only()?.at.toISOString()).toBe(other);
+      await service.create(reminder(), "app");
+      expect(alarm.only()?.at.toISOString()).toBe(other);
+      // The other work moves past the next run (10:00 local = 13:00 UTC): the run wins.
+      other = "2026-10-31T14:00:00.000Z";
+      await service.rearm();
+      expect(alarm.only()?.at.toISOString()).toBe("2026-10-31T13:00:00.000Z");
+      other = null;
+      world.clock.now = Date.parse("2026-10-31T13:00:00Z");
+      const { execute } = recorder();
+      await service.wake(null, execute);
+      expect(finished).toEqual(["Remédio:success"]);
+      expect(runRows(world).map((r) => r.status)).toEqual(["success"]);
+    });
+  });
+});

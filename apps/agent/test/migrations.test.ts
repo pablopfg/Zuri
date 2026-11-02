@@ -91,6 +91,7 @@ describe("the migration list", () => {
       8: "2c9dc9a7347e9929d8e8e517201b749352f14e8dfc44cf1d306bdfa16b4f49fd",
       9: "bc70a4e518b48d148475ac3881abb565015f4f21b69c26c36a28054c47429c91",
       10: "e1033d98cc925094806c0b7829568e64c0a3cbdeef9df30fba265f4879b5102d",
+      11: "fa7a411f3603944c4ac983fea3d0958275f683c89795325df12f71b77dd49a4d",
     };
     for (const m of MIGRATIONS) {
       const digest = createHash("sha256").update(statementText(m).replace(/\r\n/g, "\n")).digest("hex");
@@ -106,11 +107,16 @@ describe("migrate", () => {
       expect(zurObjects(db)).toEqual([]);
 
       expect(migrate(db)).toBe(LATEST_SCHEMA_VERSION);
-      expect(schemaVersion(db)).toBe(10);
+      expect(schemaVersion(db)).toBe(11);
       // FTS5 keeps shadow tables of its own (zur_notes_fts_data and others): only ours are listed.
       expect(zurObjects(db).filter((name) => !/^table:zur_(notes|memories)_fts_/.test(name))).toEqual([
         "table:zur_activity",
         "index:zur_activity_at",
+        "table:zur_alert_deliveries",
+        "index:zur_alert_deliveries_at",
+        "index:zur_alert_deliveries_channel",
+        "table:zur_alert_keys",
+        "index:zur_alert_keys_until",
         "table:zur_auth_events",
         "index:zur_auth_events_alert",
         "index:zur_auth_events_at",
@@ -127,6 +133,8 @@ describe("migrate", () => {
         "table:zur_conversations",
         "index:zur_conversations_updated",
         "table:zur_counts",
+        "trigger:zur_counts_alert_deliveries_delete",
+        "trigger:zur_counts_alert_deliveries_insert",
         "trigger:zur_counts_automation_runs_delete",
         "trigger:zur_counts_automation_runs_insert",
         "trigger:zur_counts_automations_delete",
@@ -142,13 +150,21 @@ describe("migrate", () => {
         "trigger:zur_counts_messages_insert",
         "trigger:zur_counts_notes_delete",
         "trigger:zur_counts_notes_insert",
+        "trigger:zur_counts_notices_delete",
+        "trigger:zur_counts_notices_insert",
         "trigger:zur_counts_projects_delete",
         "trigger:zur_counts_projects_insert",
         "trigger:zur_counts_tasks_delete",
         "trigger:zur_counts_tasks_insert",
         "trigger:zur_counts_trash_delete",
         "trigger:zur_counts_trash_insert",
+        "trigger:zur_counts_unread_delete",
+        "trigger:zur_counts_unread_insert",
+        "trigger:zur_counts_unread_read",
+        "trigger:zur_counts_unread_unread",
         "table:zur_devices",
+        "table:zur_diagnostics",
+        "index:zur_diagnostics_last",
         "table:zur_login_attempts",
         "index:zur_login_attempts_at",
         "index:zur_login_attempts_network",
@@ -178,6 +194,11 @@ describe("migrate", () => {
         "trigger:zur_notes_fts_update",
         "index:zur_notes_project",
         "index:zur_notes_updated",
+        "table:zur_notices",
+        "index:zur_notices_category",
+        "index:zur_notices_created",
+        "index:zur_notices_escalating",
+        "index:zur_notices_unread",
         "table:zur_passkeys",
         "table:zur_pending_actions",
         "index:zur_pending_actions_conversation",
@@ -301,11 +322,55 @@ describe("migrate", () => {
       expect(migrate(db, MIGRATIONS.slice(0, 9))).toBe(9);
       db.run(`INSERT INTO zur_conversations (id, title, created_at, updated_at) VALUES ('c1', 'Oi', 'x', 'x')`);
       db.run(`INSERT INTO zur_messages (id, conversation_id, role, content, created_at) VALUES ('m1', 'c1', 'assistant', 'Olá', 'x')`);
-      expect(migrate(db)).toBe(10);
+      expect(migrate(db, MIGRATIONS.slice(0, 10))).toBe(10);
       expect(db.one(`SELECT content, fallback FROM zur_messages WHERE id = 'm1'`)).toEqual({ content: "Olá", fallback: 0 });
       db.run(`INSERT INTO zur_messages (id, conversation_id, role, content, fallback, created_at) VALUES ('m2', 'c1', 'assistant', 'Oi', 1, 'x')`);
       // Only 0 or 1: a hand-edited row can't put anything else there.
       expect(() => db.run(`INSERT INTO zur_messages (id, conversation_id, role, content, fallback, created_at) VALUES ('m3', 'c1', 'assistant', 'Oi', 2, 'x')`)).toThrow();
+    });
+  });
+
+  it("upgrades a database at version 10 to 11: notices, deliveries and diagnostics, with their checks and counters, the owner's data kept", async () => {
+    await withEmptyDatabase("from-10", (db) => {
+      expect(migrate(db, MIGRATIONS.slice(0, 10))).toBe(10);
+      db.run(`INSERT INTO zur_auth_events (at, last_at, kind, alert_pending) VALUES (1, 1, 'password_changed', 1)`);
+      expect(migrate(db)).toBe(11);
+      // The alerts recorded before step 11 wait to be told.
+      expect(db.one(`SELECT alert_pending FROM zur_auth_events`)).toEqual({ alert_pending: 1 });
+      const count = (kind: string) => db.one<{ n: number }>(`SELECT n FROM zur_counts WHERE kind = ?`, kind)?.n;
+      expect(["notices", "security_notices", "notices_unread", "alert_deliveries"].map(count)).toEqual([0, 0, 0, 0]);
+      const notice = (id: string, category = "system", priority = "normal") =>
+        db.run(`INSERT INTO zur_notices (id, kind, category, priority, created_at) VALUES (?, 'watch.health', ?, ?, 'x')`, id, category, priority);
+      notice("n1");
+      notice("n2", "security", "critical");
+      notice("n3");
+      expect(["notices", "security_notices", "notices_unread"].map(count)).toEqual([2, 1, 3]);
+      db.run(`UPDATE zur_notices SET read_at = 'y' WHERE id IN ('n1', 'n2')`);
+      // Reading twice counts once; marking unread again counts back.
+      db.run(`UPDATE zur_notices SET read_at = 'z' WHERE id = 'n1'`);
+      expect(count("notices_unread")).toBe(1);
+      db.run(`UPDATE zur_notices SET read_at = NULL WHERE id = 'n1'`);
+      expect(count("notices_unread")).toBe(2);
+      db.run(`DELETE FROM zur_notices WHERE id IN ('n1', 'n2')`);
+      expect(["notices", "security_notices", "notices_unread"].map(count)).toEqual([1, 0, 1]);
+      // Values outside the lists are refused by the tables themselves.
+      expect(() => notice("n4", "marketing")).toThrow();
+      expect(() => notice("n5", "system", "urgent")).toThrow();
+      expect(() => db.run(`UPDATE zur_notices SET escalation = 'forever' WHERE id = 'n3'`)).toThrow();
+      db.run(
+        `INSERT INTO zur_alert_deliveries (at, notice_id, kind, category, channel, priority, attempt, status) VALUES ('x', 'n3', 'watch.health', 'system', 'push', 'normal', 1, 'sent')`,
+      );
+      expect(count("alert_deliveries")).toBe(1);
+      expect(() =>
+        db.run(`INSERT INTO zur_alert_deliveries (at, notice_id, kind, category, channel, priority, attempt, status) VALUES ('x', 'n3', 'k', 'system', 'push', 'normal', 1, 'lost')`),
+      ).toThrow();
+      db.run(
+        `INSERT INTO zur_diagnostics (id, fingerprint, source, code, error_name, day, window_start, first_at, last_at) VALUES ('d1', 'f', 'api', 'X', 'E', 'd', 'w', 'a', 'b')`,
+      );
+      // One row per kind of failure.
+      expect(() =>
+        db.run(`INSERT INTO zur_diagnostics (id, fingerprint, source, code, error_name, day, window_start, first_at, last_at) VALUES ('d2', 'f', 'api', 'X', 'E', 'd', 'w', 'a', 'b')`),
+      ).toThrow();
     });
   });
 

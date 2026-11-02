@@ -20,7 +20,11 @@ export type CountKind =
   | "memories_uncertain"
   | "memories_historical"
   | "memory_reviews"
-  | "automation_runs";
+  | "automation_runs"
+  | "notices"
+  | "security_notices"
+  | "notices_unread"
+  | "alert_deliveries";
 
 /**
  * The limits per kind and the database ceiling (rule 9). They only ever refuse

@@ -12,6 +12,7 @@
  *   `entrar` is the sign-in screen, shot before signing in. Without pairs the
  *   script shoots the sign-in screen and home.
  * - `name=/path>Region name`: the same, with that region (role region) scrolled to the top first.
+ * - `painel-de-avisos=/`: the notice center, opened from the bell on that page.
  * - `--exemplos`: fills the empty database with the sample data of
  *   dados-de-exemplo.ts first, so lists are not empty.
  */
@@ -93,6 +94,10 @@ for (const [device, options] of [
     for (const screen of signedIn) {
       await page.goto(BASE + screen.path);
       await page.getByRole("heading", { level: 1 }).first().waitFor();
+      if (screen.name === "painel-de-avisos") {
+        await page.getByRole("button", { name: /^Abrir avisos/ }).first().click();
+        await page.getByRole("dialog", { name: "Avisos" }).getByRole("list").or(page.getByRole("dialog", { name: "Avisos" }).getByText("Nenhum aviso")).first().waitFor();
+      }
       if (screen.region) {
         const region = page.getByRole("region", { name: screen.region });
         await region.waitFor();

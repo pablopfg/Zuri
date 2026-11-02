@@ -5,6 +5,7 @@ import { z } from "zod";
 import { DEFAULT_LOCALE, LOCALES } from "../i18n/index.ts";
 import { AI_LIMIT_RANGES, CHAT_MODEL_IDS, DEFAULT_CHAT_MODEL, DEFAULT_FALLBACK_MODEL, FALLBACK_MODEL_IDS } from "./ai-limits.ts";
 
+import { ALERT_LIMITS, alertRoutesSchema, DEFAULT_ALERT_ROUTES, DEFAULT_DIGEST_TIME } from "./alerts.ts";
 import { DEFAULT_TIME_ZONE, isTimeZone } from "./time-zone.ts";
 
 export { DEFAULT_TIME_ZONE, isTimeZone };
@@ -73,6 +74,14 @@ export const settingsSchema = /* @__PURE__ */ z
     aiScheduledRunsPerDay: range(AI_LIMIT_RANGES.aiScheduledRunsPerDay),
     /** How the owner likes to be called; "" until they say. */
     ownerName: ownerNameSchema,
+    /** Step 11: the daily digest (on, at a wall-clock time in the owner's zone) and the watchers. */
+    digestEnabled: z.boolean(),
+    digestTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
+    watchersEnabled: z.boolean(),
+    /** Step 11: which channels each category uses (security always uses all) and each channel's limits. */
+    alertRoutes: alertRoutesSchema,
+    alertPerHour: range(ALERT_LIMITS.perHour),
+    alertPerDay: range(ALERT_LIMITS.perDay),
   })
   .strict();
 
@@ -103,4 +112,10 @@ export const DEFAULT_SETTINGS: Settings = /* @__PURE__ */ Object.freeze({
   aiMaxContextTokens: AI_LIMIT_RANGES.aiMaxContextTokens.default,
   aiScheduledRunsPerDay: AI_LIMIT_RANGES.aiScheduledRunsPerDay.default,
   ownerName: "",
+  digestEnabled: true,
+  digestTime: DEFAULT_DIGEST_TIME,
+  watchersEnabled: true,
+  alertRoutes: { ...DEFAULT_ALERT_ROUTES } as Settings["alertRoutes"],
+  alertPerHour: ALERT_LIMITS.perHour.default,
+  alertPerDay: ALERT_LIMITS.perDay.default,
 });

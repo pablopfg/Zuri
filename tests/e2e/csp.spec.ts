@@ -35,6 +35,8 @@ test("no page breaks the Content Security Policy @mobile", async ({ page }) => {
     ["/configuracoes/seguranca", "Configurações"],
     ["/configuracoes/ia", "Configurações"],
     ["/configuracoes/dados", "Configurações"],
+    ["/configuracoes/avisos", "Configurações"],
+    ["/configuracoes/diagnostico", "Configurações"],
   ] as const) {
     await page.goto(path);
     await expect(page.getByRole("heading", { level: 1, name: heading })).toBeVisible();

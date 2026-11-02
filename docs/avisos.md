@@ -1,0 +1,123 @@
+# Avisos e Diagnóstico
+
+A etapa 11 junta num lugar só tudo o que a Zuri tem a dizer ao dono: o sino da
+barra (com o número de avisos sem ler) abre a central de avisos. Ela chega em
+três partes:
+
+| Parte | O que entrega | Situação |
+| --- | --- | --- |
+| 11a | Central de avisos, insistência, alertas de acesso, resultados das automações, vigias, resumo do dia e a aba Diagnóstico | este PR |
+| 11b | Notificação no aparelho (Web Push com VAPID), e-mail (`SEND_EMAIL`), recuperação de senha por e-mail, canais por categoria | próxima |
+| 11c | Prioridade que aprende e campo de prioridade nas automações | depois da 11b |
+
+## Onde fica o código
+
+- `packages/shared/src/alerts.ts`: prioridades, categorias, canais, tipos de aviso, limites (`ALERT_LIMITS`, `ESCALATION`, `WATCH`, `DIAGNOSTIC_LIMITS`) e schemas das rotas.
+- `apps/agent/src/alerts/service.ts`: `AlertService` cria, lista, marca como lido, silencia e apaga avisos; entrega aos canais; faz a insistência.
+- `apps/agent/src/alerts/channels.ts`: a interface `AlertChannel` que push, Telegram e e-mail vão implementar (11b e 13).
+- `apps/agent/src/alerts/security.ts`: transforma os eventos de acesso marcados para alerta em avisos críticos.
+- `apps/agent/src/alerts/watchers.ts`: os vigias e o resumo do dia.
+- `apps/agent/src/alerts/automations.ts`: o que cada execução de automação vira (aviso, aviso de sistema ou falha no Diagnóstico).
+- `apps/agent/src/diagnostics/service.ts`: o registro próprio de falhas.
+- `apps/agent/src/api/notices.ts`: as rotas `/api/notices*`, `/api/alerts` e `/api/diagnostics*`.
+- `apps/web/src/components/NotificationCenter.tsx` (sino, no pacote inicial) e `NoticesPanel.tsx` (painel, sob demanda); `pages/settings/AlertsTab.tsx` e `DiagnosticsTab.tsx`.
+- Migration 11: `zur_notices`, `zur_alert_keys`, `zur_alert_deliveries`, `zur_diagnostics` e os contadores `notices`, `security_notices`, `notices_unread` e `alert_deliveries`.
+
+## O que vira aviso
+
+| Origem | Categoria | Prioridade | Observação |
+| --- | --- | --- | --- |
+| Resultado de lembrete, resumo das tarefas ou rotina | lembretes, resumos ou rotinas | normal | O texto de `notify_owner` vai junto no resultado |
+| Rotina pulada por falta de IA | sistema | normal | No máximo 1 por rotina a cada 20 h |
+| Tarefa vencendo na próxima hora | tarefas | normal | Uma vez por tarefa e prazo |
+| Tarefa vencendo nas próximas 24 h | tarefas | normal | Uma vez por tarefa e prazo |
+| Tarefa atrasada | tarefas | alta no primeiro dia, depois normal | Uma vez por dia local, só depois do horário do resumo, até 7 dias |
+| Tarefa "em andamento" parada há 7 dias | tarefas | normal | Uma vez a cada 7 dias |
+| Rotina com as duas últimas execuções em erro | sistema | normal | Uma vez por dia |
+| IA do dia em 80% / 100% | sistema | normal / alta | Uma vez por dia UTC |
+| Segredo obrigatório faltando (saúde) | sistema | crítica | Uma vez por dia, mesmo com os vigias desligados |
+| Mesma falha 5 vezes em 15 min ou 20 no dia | sistema | alta | Uma vez por dia por tipo de falha |
+| Falha nova nesta versão | sistema | normal | Uma vez por dia por tipo de falha |
+| Evento de acesso marcado para alerta | segurança | sempre crítica | Novo acesso, 2FA ou passkey mudando, senha trocada etc. |
+
+Os vigias rodam a cada 15 minutos, no máximo 5 avisos de tarefa por rodada e 20
+em 24 horas. O resumo do dia sai uma vez por dia local, no horário escolhido
+(padrão 07:30), até 3 horas depois dele; traz até 10 itens por grupo
+(atrasadas, de hoje, automações do dia) e quantos avisos quietos chegaram.
+
+Título e texto são escritos pelo servidor no idioma do dono. O texto que vem de
+automação é guardado como dado e mostrado como texto puro; o link de um aviso só
+pode apontar para uma das páginas da lista `NOTICE_LINKS`.
+
+## Insistência e reconhecimento
+
+- Aviso alto ou crítico entregue a um canal fora do app (a partir da 11b) é
+  mandado de novo em +15 min e +60 min. Sem resposta em 75 min, fica "sem
+  resposta". No máximo 20 avisos insistindo ao mesmo tempo, e duas tentativas
+  nunca saem com menos de 15 min entre elas.
+- Abrir ou marcar como lido no app para a insistência. "Parar de insistir"
+  silencia sem marcar como lido.
+- Alerta de segurança não silencia, e marcar como lido no app não o reconhece
+  (reconhecimento cruzado da especificação): ele para quando é respondido em
+  outro canal. Apagar um alerta de segurança pede a senha digitada há pouco.
+- Cada canal tem limite por hora (padrão 6, de 1 a 60) e por dia (padrão 30,
+  de 1 a 500); prioridade baixa não sai do app. Alerta crítico ignora as rotas.
+
+## Limites e retenção
+
+- 500 avisos guardados (alertas de segurança à parte, 200). Quando passa de 50
+  acima do teto, os mais antigos saem até voltar ao teto; um aviso que ainda
+  insiste nunca sai.
+- Histórico de envios: 90 dias e no máximo 2.000 linhas; a aba mostra os 100
+  mais recentes.
+- Chave de deduplicação: 6 h por padrão, numa tabela própria, apagada quando
+  vence.
+- O contador do sino é uma linha de `zur_counts` mantida por gatilhos: a
+  checagem de sessão e o heartbeat leem uma linha a mais, nunca um `count(*)`.
+
+## Um alarme só
+
+Os vigias e as tentativas de insistência usam o mesmo alarme das automações
+(regra P8). `AutomationService.rearm()` marca o alarme no horário mais cedo entre
+a próxima automação e o `otherDue` (próxima rodada dos vigias ou próxima
+tentativa). Ao despertar, `runAutomations` limpa envios presos, transforma
+eventos de acesso em avisos, faz as tentativas devidas, roda os vigias e só então
+as automações. Cada passo tem o próprio `try`; se um deles falhar e deixar
+trabalho vencido, o alarme volta só depois de 1 minuto, nunca na hora, para que
+um passo quebrado não gaste a cota do dia. A primeira rodada dos vigias acontece 15 min depois do primeiro
+uso do banco, para que a primeira requisição não escreva nada em segundo plano.
+
+## Diagnóstico
+
+A aba Configurações › Diagnóstico mostra o estado (tudo funcionando, falha
+recente ou falha se repetindo) e cada tipo de falha dos últimos 30 dias.
+
+- Um tipo de falha é origem + rota + código + nome do erro; o id é um FNV-1a de
+  64 bits desse texto. Mil erros iguais custam uma linha.
+- Guardamos só nomes e códigos: nunca mensagem, pilha, corpo ou valor. Código,
+  nome, rota, referência (`cf-ray`) e versão passam por expressões estritas
+  antes de gravar; o que não passa vira `UNKNOWN`, `Error` ou vazio.
+- No máximo 200 tipos; o visto há mais tempo sai primeiro.
+- Origens: servidor (erro inesperado ou serviço fora do ar na API), IA (falha do
+  runner), automações (execução com erro) e tela.
+- A tela manda só o nome do erro e o caminho da página (ids trocados por `id`)
+  quando uma página quebra, uma vez por tipo a cada carregamento, até 20 por
+  hora no servidor. A rota recusa qualquer outro campo.
+- "Marcar como resolvida" zera a contagem do dia; a próxima falha reabre.
+- O "dia" das contagens (hoje, 20 no dia) é o dia UTC, o mesmo do teto de IA:
+  em São Paulo ele vira às 21:00.
+- A mesma falha repetida em menos de 5 s é somada na memória e gravada junto
+  com a seguinte (ou na próxima rodada do alarme, ou ao abrir a aba): uma
+  enxurrada custa uma escrita a cada poucos segundos por tipo.
+- O servidor guarda só a página da tela que falhou (as páginas do app e as abas
+  de Configurações); qualquer outro trecho do caminho vira `id`, e uma página
+  desconhecida vira `/outra`.
+- A versão vem do binding `CF_VERSION_METADATA` (grátis). Numa VPS
+  (`docs/planos/migracao-vps.md`), ele é trocado por uma variável com o commit
+  publicado; sem ele, "falha nova nesta versão" só vale para tipos nunca vistos.
+
+## Logs
+
+Erros dos canais, das rodadas e do próprio Diagnóstico saem pelo módulo único de
+log (`alert_delivery_failed`, `alert_tick_failed`, `diagnostics_failed`), só com
+nomes e códigos. Gravar uma falha nunca lança erro.

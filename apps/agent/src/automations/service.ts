@@ -107,6 +107,13 @@ export class AutomationService {
       timeZone: () => string;
       alarm: AlarmClock;
       clock?: () => number;
+      /**
+       * Other work that shares the one alarm (step 11: the tries of insisting
+       * notices and the watchers): its earliest due time, or null.
+       */
+      otherDue?: () => string | null;
+      /** A run finished: its result goes to the notice center (step 11). Never throws back here. */
+      finished?: (automation: Automation, outcome: RunOutcome) => void;
     },
   ) {}
 
@@ -341,14 +348,18 @@ export class AutomationService {
   // ---------- The alarm ----------
 
   /**
-   * Keeps the one alarm at the earliest next run. Nothing is written when it is
+   * Keeps the one alarm at the earliest due time (a next run, or the other work
+   * that shares it). Nothing is written when it is
    * already there; `verify` also asks the SDK whether it still exists (after a
    * restart), so a lost alarm is set again and a live one is never doubled.
    */
   async rearm(options: { verify?: boolean } = {}): Promise<void> {
-    const due = this.db.one<{ next_run: string }>(
+    const own = this.db.one<{ next_run: string }>(
       `SELECT next_run FROM zur_automations WHERE status = 'active' AND next_run IS NOT NULL ORDER BY next_run LIMIT 1`,
     )?.next_run;
+    const other = this.deps.otherDue?.() ?? undefined;
+    // ISO strings in UTC sort as times; the earliest of the two wins.
+    const due = [own, other].filter((at): at is string => Boolean(at)).sort()[0];
     const stored = this.storedAlarm();
     if (due && stored && stored.at === due && (!options.verify || (await this.deps.alarm.exists(stored.id)))) return;
     if (!due && !stored) return;
@@ -558,6 +569,12 @@ export class AutomationService {
       if (outcome.status === "error") recordActivity(this.db, "automation.failed", { kind: automation.kind, problem: outcome.problem ?? "failed" });
       this.pruneRuns();
     });
+    // After the transaction: the notice center writes in its own.
+    try {
+      this.deps.finished?.(automation, { ...outcome, result });
+    } catch (error) {
+      log("error", "automation_failed", { kind: automation.kind, error });
+    }
   }
 
   /** Marks a run as counting toward the daily AI cap before the model is called, so two runs can't both take the last place. */

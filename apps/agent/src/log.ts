@@ -31,6 +31,9 @@ export const LOG_EVENTS = [
   "automation_reconcile_failed",
   "ai_fallback",
   "prompt_secret_removed",
+  "alert_delivery_failed",
+  "alert_tick_failed",
+  "diagnostics_failed",
 ] as const;
 export type LogEvent = (typeof LOG_EVENTS)[number];
 
@@ -77,9 +80,9 @@ const METHOD = /^[A-Z]{3,7}$/;
  * every route registered under `src/api/` is in this list.
  */
 export const ROUTE_WORDS: ReadonlySet<string> = new Set([
-  "api", "activity", "actions", "ai", "approve", "auth", "automations", "cancel", "chat", "code", "confirm", "conversations", "correct", "disable",
-  "empty", "enable", "health", "heartbeat", "history", "login", "login-options", "logout", "memories", "mfa",
-  "notes", "options", "owner", "passkey", "passkeys", "password", "plans", "projects", "recover", "recovery-codes", "restore", "reviews", "run", "runs",
+  "api", "activity", "actions", "ai", "alerts", "approve", "auth", "automations", "cancel", "chat", "client", "code", "confirm", "conversations", "correct", "diagnostics", "disable",
+  "empty", "enable", "health", "heartbeat", "history", "login", "login-options", "logout", "memories", "mfa", "mute",
+  "notes", "notices", "read", "resolve", "options", "owner", "passkey", "passkeys", "password", "plans", "projects", "recover", "recovery-codes", "restore", "reviews", "run", "runs",
   "session", "settings", "setup", "status", "tasks", "telegram", "transcribe", "trash", "usage", "webhook",
 ]);
 const MAX_SEGMENTS = 8;
@@ -117,6 +120,17 @@ export function log(level: LogLevel, event: LogEvent, fields: LogFields = {}): v
 function errorName(error: unknown): string {
   if (error instanceof Error) return ERROR_NAME.test(error.name) ? error.name : "Error";
   return typeof error;
+}
+
+/** The route as the logs write it (`METHOD /path`, ids as `:id`): the Diagnóstico tab shows the same label. */
+export function routeLabel(request: Request | { method: string; path: string }): string | undefined {
+  return routeOf(request);
+}
+
+/** The request's cf-ray, when it has the expected shape. */
+export function rayOf(request: Request): string | undefined {
+  const ray = request.headers.get("cf-ray");
+  return ray && RAY.test(ray) ? ray : undefined;
 }
 
 function routeOf(request: Request | { method: string; path: string }): string | undefined {

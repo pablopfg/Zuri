@@ -594,6 +594,28 @@ Cloudflare (o plano Free inclui uma) para `/api/auth/*`, que barra a enxurrada
 na borda, antes de contar como requisição do Worker. O guia de instalação
 (`docs/instalacao-cloudflare.md`, etapa 24) traz o passo a passo.
 
+## Avisos e Diagnóstico
+
+Detalhes em [avisos.md](avisos.md).
+
+- Alerta de segurança (novo acesso, 2FA ou passkey mudando, senha trocada e os
+  outros eventos de acesso marcados para alerta) é sempre crítico, não pode ser
+  silenciado e não para ao ser marcado como lido no app: isso é o reconhecimento
+  cruzado da especificação, para que quem tomou a sessão não apague o rastro com
+  um clique. Apagar um deles pede a senha digitada há pouco.
+- O texto dos avisos é escrito pelo servidor a partir do tipo e de parâmetros;
+  o resultado de uma automação é guardado e mostrado como texto puro, nunca como
+  HTML ou Markdown. O link de um aviso só pode ser uma página da lista fixa
+  `NOTICE_LINKS`; qualquer outro vira aviso sem link.
+- As rotas pedem sessão e o cabeçalho CSRF, validam corpo e cursor com Zod
+  estrito e respondem só com o nome do campo errado.
+- O Diagnóstico guarda origem, rota com ids trocados, código, nome do erro,
+  `cf-ray` e versão, cada um passando por expressão estrita. Nunca mensagem,
+  pilha, corpo, IP ou texto do dono. A tela só pode mandar nome e caminho, no
+  máximo 20 por hora; 200 tipos e 30 dias no máximo.
+- Contadores, deduplicação e limites por canal impedem que uma falha em laço
+  vire uma enxurrada de avisos ou de escritas no banco.
+
 ## Logs da Cloudflare
 
 Os logs do Worker (`observability` no `wrangler.jsonc`) guardam cada

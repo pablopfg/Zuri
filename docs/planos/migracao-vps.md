@@ -83,6 +83,7 @@ trocam; o resto do código (rotas, serviços, ferramentas, interface) não muda.
 | Voz | `apps/agent/src/ai/transcription.ts` | `binding.run` do Whisper | B5 |
 | IP e cidade | `apps/agent/src/auth/client.ts` | `cf-connecting-ip`, `request.cf` repassado no cabeçalho `x-zuri-client-geo` | B6 |
 | Id de requisição | `apps/agent/src/log.ts`, `http/errors.ts` | `cf-ray` | B6 |
+| Versão publicada (Diagnóstico) | `apps/agent/src/agent/zuri-agent.ts` (etapa 11) | binding `CF_VERSION_METADATA` (`id`) | variável com o commit publicado; sem ela, "falha nova nesta versão" vale só para tipos nunca vistos |
 | Robô no login | `apps/agent/src/auth/turnstile.ts` | siteverify da Cloudflare por HTTPS | nenhuma (ou B6, se sair de vez) |
 | Cloudflare Access | `apps/agent/src/gates/access.ts` | JWT do Access | fica desligado |
 | Tipos | `worker-configuration.d.ts`, `env.ts` | `Env` gerado pelo `wrangler types` | B1 |

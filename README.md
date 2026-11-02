@@ -164,12 +164,14 @@ O que está na `develop` hoje, etapa por etapa. "extra" marca melhorias feitas f
 | 🛟 | **Modelo reserva** | Se o modelo de conversa estiver ocupado ou fora do ar, outro modelo grátis responde no lugar, com a marca "Respondida pelo modelo reserva". Nada sensível (e-mail, senha, sessões, Acessos) chega à IA, conferido por teste. | extra |
 | 💬 | **Conversa com ferramentas** | Respostas em tempo real, num tom simpático e natural, chamando você pelo nome. A Zuri cria e organiza tarefas, notas e memórias; o que apaga ou reescreve vira um cartão para você aprovar, e planos de tarefas só viram tarefas depois da sua confirmação. Sabe a data e a hora no seu fuso, entende "amanhã" e "sexta que vem" e responde sempre no idioma das Configurações. Também aceita voz. | 9 |
 | ⏰ | **Automações** | Lembretes, o resumo das tarefas e rotinas da Zuri, por dia, semana, mês ou a cada algumas horas, sempre no seu fuso. A rotina que a Zuri sugere na conversa só roda depois que você aprova, e um reinício nunca faz nada rodar duas vezes. | 10 |
+| 🔔 | **Central de avisos** | Um sino com contador junta os resultados das automações, o resumo do dia, prazos chegando, tarefas paradas, rotinas falhando, o uso da IA perto do limite e os alertas de segurança. Alerta de segurança não pode ser silenciado e só sai com a senha. | 11 |
+| 🩺 | **Diagnóstico** | Em Configurações, as falhas dos últimos 30 dias por tipo (nunca o que você escreveu), com aviso quando uma falha se repete ou aparece numa versão nova. | 11 |
 
 ## 🔭 O que vem a seguir
 
 | | Funcionalidade | O que faz | Etapa |
 | :---: | --- | --- | :---: |
-| 🔔 | **Central de avisos** | Os resultados das automações e os alertas num só lugar, com push, e-mail e prioridade. | 11 |
+| 📲 | **Push e e-mail** | Os avisos também no aparelho e por e-mail, com canais por categoria, recuperação de senha por e-mail e prioridade que aprende. | 11 |
 | 🤖 | **Bot do Telegram** | Painel de administração no bolso: consultas sem IA, conversa por texto e voz (arquivo acima do limite só com a sua confirmação), aprovações com passkey e modo de bloqueio. | 12–16 |
 | 🔌 | **Integrações** | Busca semântica, servidores MCP, Google Agenda, acesso remoto para o n8n e monitor de sites, todos opcionais. | 17–22 |
 | 💾 | **Backup e instalação** | Backup e importação, guia de instalação só pelo navegador e auditoria final. | 23–25 |
@@ -253,7 +255,7 @@ O orçamento de cada cota está em [docs/arquitetura/orcamento-free-tier.md](doc
 | | 8 | Provedor de IA e medição de uso | ✅ |
 | | 9 | Chat com ferramentas | ✅ |
 | | 10 | Automações | ✅ |
-| | 11 | Central de avisos, push e e-mail | ⬜ |
+| | 11 | Central de avisos, push e e-mail | 🚧 |
 | **C · Bot do Telegram** | 12 | Fundação do bot | ⬜ |
 | | 13 | Avisos no Telegram | ⬜ |
 | | 14 | Conversa e voz | ⬜ |
@@ -328,6 +330,7 @@ scripts/        Lint de i18n, ícones, tamanho do pacote e capturas do README
 | [Interface](docs/interface.md) | Telas, acessibilidade e a identidade visual Sinal |
 | [Produtividade](docs/produtividade.md) | Tarefas, notas, projetos e lixeira |
 | [Memória](docs/memoria.md) | Estados, histórico e revisão de conflitos |
+| [Avisos e Diagnóstico](docs/avisos.md) | Central de avisos, insistência, resumo do dia, vigias e registro de falhas |
 | [Configurar a Cloudflare](docs/configuracao-cloudflare.md) | Segredos, Turnstile, primeiro acesso e recuperação |
 | [Configurar o GitHub](docs/configuracao-github.md) | Rulesets e proteção das branches |
 

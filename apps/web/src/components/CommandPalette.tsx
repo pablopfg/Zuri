@@ -1,6 +1,7 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { type Memory, type NoteSummary, ptBRPalette, type Task } from "@zuri/shared";
 import {
+  Activity,
   Bell,
   Bot,
   Brain,
@@ -102,6 +103,7 @@ export function CommandPalette({ onClose, navigate }: { onClose: () => void; nav
       section("avisos", "web.settings.tab.notifications", Bell),
       section("integracoes", "web.settings.tab.integrations", Plug),
       section("dados", "web.settings.tab.data", Database),
+      section("diagnostico", "web.settings.tab.diagnostics", Activity),
       { id: "new-task", group: t("web.palette.groupCreate"), label: t("web.palette.newTask"), icon: ListPlus, to: "/tarefas", state: { newTask: true } },
       {
         id: "new-automation",

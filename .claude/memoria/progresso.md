@@ -25,9 +25,17 @@ etapas ficam detalhadas; as mais antigas viram uma linha na tabela.
 | 7 | mesclada (31/10/2026) | #21 | Memória com estados atual/incerta/passada, substituição sem ciclos, fila de revisão, recordação em `<data>` |
 | 8 | mesclada (31/10/2026) | #25 | Provedor Workers AI e IA simulada, medição por passo, teto de 9.000 Neurons/dia, aba IA |
 | 9 | mesclada (31/10/2026) | #28 | Conversa em SSE, 20 ferramentas com permissão e limite, aprovações e planos, voz, injeção de prompt testada |
-| 10 | em revisão (02/11/2026) | PR #46 | Automações: lembretes, resumo das tarefas e rotinas com IA, alarme único, recuperação após reinício, aprovação das rotinas do chat |
+| 10 | mesclada (02/11/2026) | #46 | Automações: lembretes, resumo das tarefas e rotinas com IA, alarme único, recuperação após reinício, aprovação das rotinas do chat |
+| 11 | em andamento (11a em revisão) | — | Central de avisos, insistência, vigias, resumo do dia e Diagnóstico (11a); push e e-mail (11b); prioridade que aprende (11c) |
 
 ## Últimas etapas (detalhe)
+
+### Etapa 11 · Central de avisos (parte 11a)
+- Entregou: `packages/shared/src/alerts.ts`, `apps/agent/src/alerts/{service,channels,security,watchers,automations}.ts`, `apps/agent/src/diagnostics/service.ts`, rotas `/api/notices*`, `/api/alerts`, `/api/diagnostics*`, contador `unreadNotices` na sessão e no heartbeat, sino + `NoticesPanel` sob demanda, abas Avisos e Diagnóstico, binding `CF_VERSION_METADATA`. Doc: `docs/avisos.md`.
+- Migrations: versão 11 (`zur_notices`, `zur_alert_keys`, `zur_alert_deliveries`, `zur_diagnostics`, contadores `notices`, `security_notices`, `notices_unread`, `alert_deliveries`).
+- Decisões técnicas: etapa dividida em 11a/11b/11c (anunciado ao Pablo); o alarme das automações cobre vigias e insistência por `otherDue`; primeira rodada dos vigias 15 min após o primeiro uso; sessão e heartbeat leem 3 linhas (uma do contador).
+- Falta (11b): canais push (VAPID/ECE) e e-mail (`SEND_EMAIL`, 10/dia, 4 reservados), recuperação de senha por e-mail, rotas por categoria na aba Avisos. 11c: prioridade que aprende e campo de prioridade nas automações. Depois de 11a/b/c, pedir a etapa 12.
+- Riscos: JS inicial em 139,0 kB com teto 139; tudo de push na 11b precisa ficar sob demanda.
 
 ### Etapa 10 · Automações
 - Entregou: `packages/shared/src/{schedule,automations}.ts` (agendas sem Zod para a prévia da tela; schemas e limites), `apps/agent/src/automations/{service,executor}.ts`, `scheduled()` no runner, ferramentas `create_reminder`, `create_automation`, `list_automations`, `propose_ai_routine`, `cancel_automation` (destrutiva) e `notify_owner` (só em rotina), rotas `/api/automations*`, tela `/automacoes` (`pages/automations/`, `lib/automations.ts`), configuração `aiScheduledRunsPerDay` (padrão 6, até 48). Doc: `docs/automacoes.md`.
@@ -44,13 +52,6 @@ etapas ficam detalhadas; as mais antigas viram uma linha na tabela.
 - Ficou para depois: origem `telegram` das mensagens (etapa 14); sem atualização ao vivo entre duas abas abertas na mesma conversa.
 - SEC-09-07 (pedido do Pablo): memória que a assistente guarda tem `author = 'agent'`, marca "Anotada pela assistente" e `saved_by="assistant"` no prompt; vira do dono quando ele edita ou repete. O Telegram (etapa 14) passa `origin: telegram` e `author: agent` em `remember`.
 - Atenção para a próxima: a etapa 10 chama o runner com `context: "scheduled"` e sem dono presente (nada destrutivo, nenhum plano); toda IA continua por `agent.ai()`. O mock entende `call <ferramenta> {json}`.
-
-### Etapa 8 · Provedor de IA e medição de uso
-- Entregou: `packages/shared/src/{ai,ai-limits,time-zone}.ts` (modelos, preços datados de 31/10/2026, `usageReportSchema`), `apps/agent/src/ai/` (`provider`, `workers-ai`, `workers-ai-usage`, `mock`, `usage`, `metered`, `index`), `GET /api/usage`, aba `/configuracoes/ia` (`AiTab.tsx`, `hooks/usage.ts`), binding `AI` no `wrangler.jsonc`. Doc: `docs/ia.md`.
-- Migrations: versão 7 (`zur_usage_daily`, `zur_model_usage_daily`, só contadores, 90 dias).
-- Decisões técnicas: todo uso de IA passa por `MeteredAI` (reserva o máximo antes, acerta por passo com os tokens da Cloudflare, devolve o que não começou); dias UTC; `maxRetries: 0`; prazo de 120 s por vez; ao fim da vez o medidor fecha e nenhuma chamada nova começa; `enable_thinking: false` só em GLM e Qwen3; IA simulada quando `PUBLIC_URL` é loopback, e `wrangler dev --local` em dev e e2e.
-- Ficou para depois: janela de contexto por modelo (Llama 3.3 70B tem 24 mil tokens); limitar o tamanho do resultado de ferramenta; transcrição e embeddings usam `reserveAudio`/`stepNeurons` quando chegarem (etapas da voz e da busca).
-- Atenção para a próxima: a etapa 9 chama `agent.ai()` (sempre `MeteredAI`, nunca o provedor cru), passa `signal` do botão Parar e trata `AI_LIMIT_REACHED` e `SERVICE_UNAVAILABLE` (`error.ai*`) no SSE. Senha recente para trocar modelo só na etapa 21 (`aiModel` em `SESSION_FIELDS`).
 
 <!-- Modelo, até 10 linhas por etapa:
 ### Etapa NN · <nome>
@@ -84,6 +85,6 @@ etapas ficam detalhadas; as mais antigas viram uma linha na tabela.
 
 ## Próxima etapa
 
-- Número e nome: 10 · Automações
-- Dependências mescladas: depende da etapa 9 (este PR)
+- Número e nome: 11b · Push e e-mail (mesma etapa 11); depois 11c e então a 12 · Telegram (base)
+- Dependências mescladas: 11a (este PR)
 - Precisa de algo do Pablo antes: não

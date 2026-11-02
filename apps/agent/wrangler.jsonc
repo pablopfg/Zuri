@@ -32,6 +32,9 @@
   // remote resources" warning, and would make `wrangler dev` without --local spend
   // the account's Neurons. With --local (npm run dev, e2e) the binding is off.
   "ai": { "binding": "AI" },
+  // The deployed version's id (free, no resource in the account): the Diagnóstico tab tells a failure
+  // that is new in this version (step 11). On a VPS it would be the release tag passed as a variable.
+  "version_metadata": { "binding": "CF_VERSION_METADATA" },
   "durable_objects": {
     "bindings": [{ "name": "AGENT", "class_name": "ZuriAgent" }]
   },

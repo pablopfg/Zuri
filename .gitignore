@@ -17,3 +17,4 @@ playwright-report/
 # Local agent preferences (the project ones live in .claude/settings.json).
 .claude/settings.local.json
 CLAUDE.local.md
+.vitest/
