@@ -304,6 +304,55 @@ describe("/sessoes and /encerrar_sessoes", () => {
   });
 });
 
+describe("empty states and stale buttons", () => {
+  it("say so instead of acting: nothing open, nothing to pause, a session already gone, a button past its 10 minutes", async () => {
+    await linkOwner();
+    expect(await command("/pausar_rotinas")).toBe("Nenhuma rotina com IA ativa.");
+    const routine = await inOwner((agent) =>
+      agent.store.automations.create({ name: "Notícias", kind: "agent_prompt", message: "Resuma", schedule: { type: "daily", time: "07:00" } }, "app"),
+    );
+    await command("/pausar_rotinas");
+    const pause = lastKeyboard();
+    await command("/sessoes");
+    const list = lastKeyboard();
+    await command("/encerrar_sessoes");
+    const endAll = lastKeyboard();
+    await command("/encerrar_sessoes");
+    const endAllAgain = lastKeyboard();
+
+    await tap(endAll[0]?.[0]?.callback_data ?? "", endAll);
+    expect(await sessions()).toBe(0);
+    // A second "Encerrar todas", from another message: nothing left.
+    botCalls.length = 0;
+    await tap(endAllAgain[0]?.[0]?.callback_data ?? "", endAllAgain);
+    expect(texts()).toContain("Nenhuma sessão aberta no app.");
+    // Encerrar on a session the other button already ended.
+    botCalls.length = 0;
+    await tap(list[0]?.[0]?.callback_data ?? "", list);
+    expect(answers()).toEqual(["Essa sessão já tinha terminado."]);
+    expect(await command("/sessoes")).toBe("Nenhuma sessão aberta no app.");
+    expect(await command("/encerrar_sessoes")).toBe("Nenhuma sessão aberta no app.");
+    // Only one alert for the ending that ended something.
+    expect((await events("telegram_sessions_ended")).map((e) => e.reason)).toEqual(["all"]);
+
+    // The routine went away before Pausar todas: nothing paused, no alert.
+    await inOwner((agent) => agent.store.automations.delete(routine.id));
+    botCalls.length = 0;
+    await tap(pause[0]?.[0]?.callback_data ?? "", pause);
+    expect(texts()).toContain("Nenhuma rotina com IA ativa.");
+    expect(await events("telegram_routines_paused")).toEqual([]);
+
+    // A Bloquear agora past its 10 minutes does nothing.
+    await command("/bloquear");
+    const lock = lastKeyboard();
+    await inOwner((agent) => agent.store.db.run(`UPDATE zur_telegram_callbacks SET expires_at = ? WHERE target_type = 'command'`, new Date(Date.now() - 1000).toISOString()));
+    botCalls.length = 0;
+    await tap(lock[0]?.[0]?.callback_data ?? "", lock);
+    expect(answers()).toEqual(["Esse botão venceu. Peça a lista de novo."]);
+    expect(await lockdownOn()).toBe(false);
+  });
+});
+
 describe("/pausar_rotinas", () => {
   it("works with reading locked and pauses only the routines with AI", async () => {
     await linkOwner();

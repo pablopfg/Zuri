@@ -1,12 +1,11 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { type LockdownExit, lockdownStatusSchema, ptBRSetup } from "@zuri/shared";
 import { ShieldAlert, Unlink } from "lucide-react";
-import { type FormEvent, useState } from "react";
-import { ConfirmDialog } from "../components/ConfirmDialog.tsx";
+import { type FormEvent, useEffect, useRef, useState } from "react";
 import { Logo } from "../components/Logo.tsx";
-import { Button, Card, ErrorNotice, Notice, Spinner, TextField, useDocumentTitle } from "../components/ui.tsx";
+import { Button, Card, Dialog, ErrorNotice, Notice, PasswordField, Spinner, TextField, useDocumentTitle } from "../components/ui.tsx";
 import { SESSION_KEY, useSession } from "../hooks/session.tsx";
-import { api } from "../lib/api.ts";
+import { api, errorMessage, onRecentAuthRequired } from "../lib/api.ts";
 import { addMessages, useI18n } from "../lib/i18n.tsx";
 
 // The screen's texts live with the other screens that lock the app (rule P11).
@@ -133,9 +132,79 @@ export function LockdownPage() {
           </Button>
         </div>
       </div>
-      {/* Leaving and "Não fui eu" ask for the password typed recently; the shell's dialog isn't here. */}
-      <ConfirmDialog />
+      <PasswordAgain />
     </main>
+  );
+}
+
+/**
+ * Leaving and "Não fui eu" need the password typed in the last 15 minutes.
+ * The shell's ConfirmDialog isn't on this screen (importing it here splits the
+ * first load's chunks), so this asks for the password alone; the API client
+ * repeats the action once confirmed.
+ */
+function PasswordAgain() {
+  const { t } = useI18n();
+  const [open, setOpen] = useState(false);
+  const [value, setValue] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [pending, setPending] = useState(false);
+  const resolver = useRef<((ok: boolean) => void) | null>(null);
+
+  useEffect(
+    () =>
+      onRecentAuthRequired(
+        () =>
+          new Promise<boolean>((resolve) => {
+            resolver.current?.(false);
+            resolver.current = resolve;
+            setValue("");
+            setError(null);
+            setOpen(true);
+          }),
+      ),
+    [],
+  );
+
+  const finish = (ok: boolean) => {
+    setOpen(false);
+    setValue("");
+    const resolve = resolver.current;
+    resolver.current = null;
+    resolve?.(ok);
+  };
+
+  const submit = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!value || pending) return;
+    setPending(true);
+    setError(null);
+    try {
+      await api("/auth/confirm", { method: "POST", body: { password: value } });
+      finish(true);
+    } catch (caught) {
+      setError(errorMessage(caught));
+      setValue("");
+    } finally {
+      setPending(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onClose={() => finish(false)} title={t("web.confirm.title")}>
+      <form onSubmit={submit} className="space-y-4" noValidate>
+        <p className="text-sm leading-6 text-fg-muted">{t("web.confirm.body")}</p>
+        <PasswordField label={t("web.login.password")} autoComplete="current-password" autoFocus value={value} onChange={(e) => setValue(e.target.value)} error={error} />
+        <div className="flex justify-end gap-2">
+          <Button variant="ghost" onClick={() => finish(false)}>
+            {t("web.cancel")}
+          </Button>
+          <Button type="submit" loading={pending} disabled={!value}>
+            {t("web.confirm.submit")}
+          </Button>
+        </div>
+      </form>
+    </Dialog>
   );
 }
 
