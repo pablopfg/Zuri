@@ -1,4 +1,4 @@
-import type { DiagnosticEntry, DiagnosticSource } from "@zuri/shared";
+import { APP_VERSION, type DiagnosticEntry, type DiagnosticSource } from "@zuri/shared";
 
 /**
  * "Relatar no GitHub" in Settings > Diagnóstico (docs/agente/issues.md, the
@@ -8,7 +8,9 @@ import type { DiagnosticEntry, DiagnosticSource } from "@zuri/shared";
  *
  * Only what the diagnostics record already keeps goes in the link, and less
  * of it: source, code, error name, route with ids swapped, counts, dates to
- * the minute in UTC, the cf-ray without its data center and the record's id.
+ * the minute in UTC, the cf-ray without its data center, the record's id and
+ * the version of the system (the newest section of CHANGELOG.md: the build of
+ * a tag's own commit still shows the previous one, see docs/agente/versionamento.md).
  * Never anything the owner wrote, and not the deployment's version id (an id
  * of the owner's account that matches no commit). GitHub fills only text
  * fields from the link, so "Onde aconteceu" is left for the owner. The text is
@@ -44,6 +46,7 @@ export function issueReportUrl(entry: DiagnosticEntry): string {
       entry.route ? `Rota: ${entry.route}` : null,
       `Primeira vez: ${minute(entry.firstAt)}`,
       `Última vez: ${minute(entry.lastAt)}`,
+      `Versão da Zuri: ${APP_VERSION}`,
     ]
       .filter(Boolean)
       .join("\n"),

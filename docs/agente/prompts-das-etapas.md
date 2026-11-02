@@ -388,7 +388,7 @@ Quero mudar <o quê>. Antes de codar, me diga o impacto na especificação, nas 
 
 **Release para a main**
 ```text
-Prepare a release: confira se a develop está verde, monte o changelog da versão em pt-BR, abra o PR develop → main e me passe o que conferir depois do deploy.
+Prepare a release: confira se a develop está verde e se o CHANGELOG.md está em dia (nenhuma PR chore(release) aberta), diga qual versão vai para a main (a primeira é a 1.0.0, docs/agente/versionamento.md), abra o PR develop → main e me passe o que conferir depois do deploy.
 ```
 
 **Retomar depois de uma pausa**

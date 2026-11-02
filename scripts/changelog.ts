@@ -1,20 +1,32 @@
 // The changelog of each pull request is a file of its own in
 // changelog/nao-lancado/ (one per branch), so two pull requests never edit the
-// same lines of CHANGELOG.md. The release joins them into "## Não lançado".
+// same lines of CHANGELOG.md. When the pull request is merged into develop,
+// scripts/versao.ts turns its file into a version section of CHANGELOG.md
+// (docs/agente/versionamento.md).
 //
-//   node scripts/changelog.ts            checks the fragments and prints the joined section
-//   node scripts/changelog.ts --gravar   writes the joined section into CHANGELOG.md and removes the fragments (release only)
-import { readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+//   node scripts/changelog.ts   checks the fragments and prints how each one bumps the version
+import { execFileSync } from "node:child_process";
+import { lstatSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 export const FRAGMENT_DIR = "changelog/nao-lancado";
-export const UNRELEASED = "## Não lançado";
 /** The groups of the changelog, in the order they appear (AGENTS.md). */
 export const GROUPS = ["Adicionado", "Alterado", "Corrigido", "Segurança", "Atualização"] as const;
 export type Group = (typeof GROUPS)[number];
 export type Groups = Map<Group, string[]>;
 
 const FRAGMENT_NAME = /^[a-z0-9][a-z0-9-]*\.md$/;
+
+/** How a merge moves the version: an etapa (or sub-etapa) bumps the minor, anything else the patch. */
+export type Bump = "minor" | "patch";
+/** Optional first line of a fragment; without it the merge bumps the patch. */
+export const BUMP_MARKER = /^<!-- versao: (minor|patch) -->$/;
+
+/** The bump a fragment asks for: its marker line, or "patch" when it has none. */
+export function fragmentBump(text: string): Bump {
+  const first = text.split("\n", 1)[0]?.trim() ?? "";
+  return (BUMP_MARKER.exec(first)?.[1] as Bump | undefined) ?? "patch";
+}
 
 /** Splits a list of Markdown bullets into entries (a bullet plus its continuation lines). */
 function entries(lines: string[]): string[] {
@@ -39,7 +51,10 @@ export function parseGroups(text: string): { groups: Groups; problems: string[] 
     if (list.length === 0) problems.push(`"### ${current}" has no "- " entry, or text before the first one`);
     groups.set(current, [...(groups.get(current) ?? []), ...list]);
   };
-  for (const line of text.split("\n")) {
+  const all = text.split("\n");
+  // The version marker may only be the very first line.
+  if (BUMP_MARKER.test(all[0]?.trim() ?? "")) all.shift();
+  for (const line of all) {
     const heading = /^#{1,6} (.*)$/.exec(line);
     if (!heading) {
       if (!current && line.trim()) problems.push(`text outside a "### Group" heading: ${line.slice(0, 60)}`);
@@ -85,7 +100,8 @@ export function readFragments(root: string): Fragment[] {
   return readdirSync(dir)
     .filter((name) => name !== ".gitkeep")
     .sort()
-    .map((name) => ({ name, text: readFileSync(join(dir, name), "utf8") }));
+    // Only regular files: a symlink could point at anything on the machine.
+    .map((name) => ({ name, text: lstatSync(join(dir, name)).isFile() ? readFileSync(join(dir, name), "utf8") : "" }));
 }
 
 export function fragmentProblems(fragments: Fragment[]): string[] {
@@ -95,41 +111,22 @@ export function fragmentProblems(fragments: Fragment[]): string[] {
   });
 }
 
-/** CHANGELOG.md with the fragments joined into "## Não lançado": newest fragments first, then what was already there. */
-export function consolidate(changelog: string, fragments: Fragment[]): string {
-  const start = changelog.indexOf(`\n${UNRELEASED}\n`);
-  if (start < 0) throw new Error(`CHANGELOG.md has no "${UNRELEASED}" section`);
-  const bodyStart = start + UNRELEASED.length + 2;
-  const next = changelog.indexOf("\n## ", bodyStart);
-  const bodyEnd = next < 0 ? changelog.length : next + 1;
-  const current = parseGroups(changelog.slice(bodyStart, bodyEnd).trim());
-  // Text outside the groups (a note, a "### Removido") would be dropped: stop instead of losing it.
-  if (current.problems.some((problem) => problem !== "no entry")) {
-    throw new Error(`"${UNRELEASED}" in CHANGELOG.md: ${current.problems.join("; ")}`);
-  }
-  const fromFragments = fragments.map((fragment) => parseGroups(fragment.text).groups);
-  const merged = mergeGroups(mergeGroups(new Map(), ...fromFragments), current.groups);
-  const body = merged.size > 0 ? `\n${renderGroups(merged)}` : "\n";
-  return `${changelog.slice(0, bodyStart)}${body}${next < 0 ? "" : "\n"}${changelog.slice(bodyEnd)}`;
+/** An etapa branch (feat/etapa-NN-…) must ship a fragment marked minor, or its merge would only bump the patch. */
+export function branchProblems(branch: string, fragments: Fragment[]): string[] {
+  if (!branch.startsWith("feat/etapa-")) return [];
+  return fragments.some((f) => fragmentBump(f.text) === "minor")
+    ? []
+    : [`${branch} concludes an etapa: start its file in ${FRAGMENT_DIR}/ with "<!-- versao: minor -->"`];
 }
 
+// In CI (npm run lint) GITHUB_HEAD_REF names the pull request's branch; locally, the current branch.
 if (import.meta.main) {
-  const root = join(import.meta.dirname, "..");
-  const fragments = readFragments(root);
-  const problems = fragmentProblems(fragments);
+  const fragments = readFragments(join(import.meta.dirname, ".."));
+  const branch = process.env.GITHUB_HEAD_REF || execFileSync("git", ["branch", "--show-current"], { encoding: "utf8" }).trim();
+  const problems = [...fragmentProblems(fragments), ...branchProblems(branch, fragments)];
   if (problems.length > 0) {
     for (const problem of problems) console.error(problem);
     process.exit(1);
   }
-  const path = join(root, "CHANGELOG.md");
-  const result = consolidate(readFileSync(path, "utf8"), fragments);
-  if (process.argv.includes("--gravar")) {
-    writeFileSync(path, result);
-    for (const { name } of fragments) rmSync(join(root, FRAGMENT_DIR, name));
-    console.log(`changelog: ${fragments.length} fragment(s) moved into "${UNRELEASED}"`);
-  } else {
-    const from = result.indexOf(UNRELEASED);
-    const to = result.indexOf("\n## ", from + 1);
-    console.log(result.slice(from, to < 0 ? undefined : to));
-  }
+  for (const { name, text } of fragments) console.log(`${FRAGMENT_DIR}/${name}: ${fragmentBump(text)}`);
 }

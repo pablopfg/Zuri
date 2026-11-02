@@ -1,0 +1,77 @@
+name: Versão
+
+# Each merge into develop is a version (docs/agente/versionamento.md). This
+# workflow gives it the tag vX.Y.Z and a GitHub pre-release on the merge
+# commit, and keeps one pull request "chore(release): …" open that writes the
+# section into CHANGELOG.md from the file in changelog/nao-lancado/
+# (scripts/publicar-versao.ts). It never pushes to develop or main, never
+# deploys and never touches main. Nothing here costs: GITHUB_TOKEN only.
+# When the run fails, report-failure opens a standard issue (docs/agente/issues.md).
+on:
+  push:
+    branches: [develop]
+  # A merge made by GITHUB_TOKEN (the release pull request itself) starts no
+  # push run: the hourly run catches anything left behind.
+  schedule:
+    - cron: "17 * * * *"
+  workflow_dispatch:
+
+permissions: {}
+
+# One run at a time; GitHub keeps only the newest waiting run, which is enough: every run rebuilds everything from develop.
+concurrency:
+  group: versao
+  cancel-in-progress: false
+
+jobs:
+  version:
+    # A dispatch from another branch would run that branch's copy with write access.
+    if: github.ref == 'refs/heads/develop'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # contents: tags, releases and the chore/versao branch; pull-requests: the
+    # release pull request and its auto-merge; actions: approve the pull_request
+    # runs its own push started (scripts/atualizar-prs.ts, approveHeldRuns).
+    permissions:
+      contents: write
+      pull-requests: write
+      actions: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: develop
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+      - name: Tag, release and changelog
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git config core.hooksPath /dev/null
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          node scripts/publicar-versao.ts
+
+  report-failure:
+    needs: version
+    if: always() && github.ref == 'refs/heads/develop' && (needs.version.result == 'failure' || needs.version.result == 'cancelled')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    # issues: create the issue, its labels and the repeat comment; actions: read the failed steps.
+    permissions:
+      issues: write
+      actions: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: develop
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+      - name: Open or update the failure issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/issue-de-falha.ts

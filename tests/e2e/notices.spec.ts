@@ -158,6 +158,8 @@ test("Settings > Diagnóstico shows a screen's failure by name only, and marks i
   expect(sent.status()).toBe(204);
   await openSettingsSection(page, "Diagnóstico");
   await expect(page.getByRole("heading", { name: /Tudo funcionando|Teve falha recente|Uma falha está se repetindo/ })).toBeVisible();
+  // The version of the system, from CHANGELOG.md through packages/shared/src/version.ts.
+  await expect(page.getByText(/^Versão da Zuri: \d+\.\d+\.\d+/)).toBeVisible();
   const entry = page.getByRole("list", { name: "Falhas registradas" }).getByRole("listitem").filter({ hasText: name });
   await expect(entry.getByText("CLIENT_ERROR")).toBeVisible();
   await expect(entry.getByText(/^Tela/)).toBeVisible();

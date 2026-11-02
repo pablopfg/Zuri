@@ -129,7 +129,7 @@ export function resolveAdditiveConflicts(text: string): Resolution {
 
 export type Run = (cmd: string, args: string[], options?: { cwd?: string; env?: NodeJS.ProcessEnv }) => string;
 
-const run: Run = (cmd, args, options = {}) =>
+export const run: Run = (cmd, args, options = {}) =>
   execFileSync(cmd, args, {
     cwd: options.cwd,
     env: options.env ?? process.env,
@@ -138,7 +138,7 @@ const run: Run = (cmd, args, options = {}) =>
     maxBuffer: 64 * 1024 * 1024,
   });
 
-const tryRun = (fn: () => string): { ok: true; out: string } | { ok: false; out: string } => {
+export const tryRun = (fn: () => string): { ok: true; out: string } | { ok: false; out: string } => {
   try {
     return { ok: true, out: fn() };
   } catch (error) {
@@ -332,7 +332,7 @@ export interface Approval {
   missing: string[];
 }
 
-const sleepMs = (ms: number) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+export const sleepMs = (ms: number) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
 
 /**
  * A push made with GITHUB_TOKEN starts the pull_request runs held as
@@ -364,7 +364,7 @@ export function approveHeldRuns(
 }
 
 /** Git config for one authenticated command, through the environment so the token never shows in argv. */
-function authEnv(token: string): NodeJS.ProcessEnv {
+export function authEnv(token: string): NodeJS.ProcessEnv {
   const basic = Buffer.from(`x-access-token:${token}`).toString("base64");
   return {
     ...process.env,

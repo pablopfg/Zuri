@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { type DiagnosticEntry, type DiagnosticsStatus, ptBRAlerts } from "@zuri/shared";
+import { APP_VERSION, type DiagnosticEntry, type DiagnosticsStatus, ptBRAlerts } from "@zuri/shared";
 import { CircleAlert, CircleCheck, ExternalLink, TriangleAlert } from "lucide-react";
 import { Button, buttonClass, Card, cn, ErrorNotice, Spinner } from "../../components/ui.tsx";
 import { useToast } from "../../components/Toaster.tsx";
@@ -49,7 +49,11 @@ function StatusCard({ status, release }: { status: DiagnosticsStatus; release: s
         </h3>
         <p>{t(body)}</p>
         <p className="text-fg-muted">{t("web.diagnostics.privacy")}</p>
-        {release && <p className="text-xs text-fg-muted">{t("web.diagnostics.release", { release: release.slice(0, 8) })}</p>}
+        {/* The version of the build (CHANGELOG.md); the deployment code tells two deploys of the same version apart. */}
+        <p className="text-xs text-fg-muted">
+          {t("web.diagnostics.version", { version: APP_VERSION })}
+          {release && <> · {t("web.diagnostics.release", { release: release.slice(0, 8) })}</>}
+        </p>
       </div>
     </section>
   );

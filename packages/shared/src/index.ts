@@ -121,3 +121,4 @@ export * from "./alerts.ts";
 export * from "./push.ts";
 export * from "./telegram.ts";
 export * from "./email.ts";
+export { APP_VERSION } from "./version.ts";
