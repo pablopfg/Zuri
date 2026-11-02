@@ -1,7 +1,7 @@
 import { TELEGRAM_LIMITS } from "@zuri/shared";
 import { describe, expect, it } from "vitest";
 import { toBase64 } from "../src/telegram/conversation.ts";
-import { answerBlocks, markdownToHtml, plainHtml, splitHtml } from "../src/telegram/format.ts";
+import { answerBlocks, markdownToHtml, plainHtml, splitHtml, textOf } from "../src/telegram/format.ts";
 
 // Step 14: the agent's answer as Telegram's HTML, escaped, disarmed and in blocks of 4,096.
 
@@ -87,7 +87,7 @@ describe("splitHtml", () => {
       expect(wholeEntities(block)).toBe(true);
     }
     // Nothing is lost: the text without the tags added at the cuts is the same.
-    const text = (value: string) => value.replace(/<[^>]+>/g, "").replace(/\n/g, "");
+    const text = (value: string) => textOf(value).replace(/\n/g, "");
     expect(text(blocks.join(""))).toBe(text(html));
   });
 
@@ -97,11 +97,17 @@ describe("splitHtml", () => {
       expect(block.length).toBeLessThanOrEqual(20);
       expect(balanced(block)).toBe(true);
     }
-    expect(blocks.join("").replace(/<[^>]+>/g, "")).toBe("um dois tres quatro");
+    expect(textOf(blocks.join(""))).toBe("um dois tres quatro");
   });
 
   it("drops blocks with nothing to read", () => {
     expect(answerBlocks("\n\n\n")).toEqual([]);
+  });
+});
+
+describe("textOf", () => {
+  it("drops our tags and reads the entities back, as plain text", () => {
+    expect(textOf("<b>a &lt;script&gt; &amp; &quot;b&quot; &#65;</b>")).toBe('a <script> & "b" A');
   });
 });
 

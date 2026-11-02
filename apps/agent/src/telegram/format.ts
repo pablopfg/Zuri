@@ -82,6 +82,22 @@ function atoms(html: string): Atom[] {
   return out;
 }
 
+const ENTITIES: Record<string, string> = { "&amp;": "&", "&lt;": "<", "&gt;": ">", "&quot;": '"' };
+
+/**
+ * The text of our HTML, tags dropped and entities read back: what a person
+ * sees. Made from the same atoms as the split (never a regex over tags), so
+ * it is only ever used as plain text, never parsed as HTML again.
+ */
+export function textOf(html: string): string {
+  let out = "";
+  for (const atom of atoms(html)) {
+    if (atom.kind !== "text") continue;
+    out += ENTITIES[atom.raw] ?? (atom.raw.startsWith("&#") ? String.fromCodePoint(Number(atom.raw.slice(2, -1))) : atom.raw);
+  }
+  return out;
+}
+
 const closing = (stack: readonly string[]) =>
   stack
     .slice()
@@ -125,7 +141,7 @@ export function splitHtml(html: string, max: number = TELEGRAM_LIMITS.messageMax
       current = breakAt.stack;
     }
     const block = `${prefix}${body}${closing(current)}`;
-    if (block.replace(/<[^>]+>/g, "").trim()) blocks.push(block.replace(/\n+$/, "").replace(/^\n+/, ""));
+    if (textOf(block).trim()) blocks.push(block.replace(/\n+$/, "").replace(/^\n+/, ""));
     stack = current;
   }
   return blocks;

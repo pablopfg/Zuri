@@ -9,7 +9,7 @@ import type { InternalState } from "../db/internal-state.ts";
 import { AppError } from "../http/errors.ts";
 import { log } from "../log.ts";
 import { TelegramApiError, TelegramBudgetError, type TelegramClient, TelegramFileTooLargeError } from "./client.ts";
-import { answerBlocks, plainHtml, splitHtml } from "./format.ts";
+import { answerBlocks, plainHtml, splitHtml, textOf } from "./format.ts";
 import type { TelegramLinks } from "./links.ts";
 
 /** A voice note or an audio file, as the update describes it (nothing downloaded yet). */
@@ -573,7 +573,7 @@ export class TelegramConversation {
     } catch (error) {
       if (options.html && error instanceof TelegramApiError && error.status === 400 && /parse entities/i.test(error.description)) {
         try {
-          await client.sendMessage(chatId, unHtml(text), options.extra ?? {});
+          await client.sendMessage(chatId, textOf(text), options.extra ?? {});
           return true;
         } catch (again) {
           log("warn", "telegram_send_failed", { error: again, ...kindOf(again) });
@@ -611,11 +611,6 @@ export class TelegramConversation {
 }
 
 const isDeadline = (signal: AbortSignal) => signal.aborted && signal.reason instanceof DOMException && signal.reason.name === "TimeoutError";
-
-/** HTML of ours back to plain text, for a block Telegram refused to parse. */
-function unHtml(html: string): string {
-  return html.replace(/<[^>]+>/g, "").replaceAll("&lt;", "<").replaceAll("&gt;", ">").replaceAll("&amp;", "&");
-}
 
 /** Bytes to base64 in slices: a 20 MB file never builds one huge argument list. */
 export function toBase64(bytes: Uint8Array): string {
