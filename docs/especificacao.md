@@ -336,7 +336,8 @@ Aceito: "hoje", "amanhã", "depois de amanhã", dias da semana com ou sem "-feir
 | 19b | 10, 11 e 19 (usa a conexão Google da 19); a 22 pode ler os contatos se vier depois |
 | 23 | 15 |
 | 24 | pode começar após a 5 e é atualizada a cada etapa que cria variável ou segredo |
-| 25 | todas |
+| 25 | todas, inclusive a 26 |
+| 26 | todas as outras (0 a 24, a 19b e as que entrarem no cronograma), menos a 25 |
 
 ### Critérios de aceite adicionais
 
@@ -350,6 +351,7 @@ Aceito: "hoje", "amanhã", "depois de amanhã", dias da semana com ou sem "-feir
 | 20 | Token `read` recebe 403 em toda rota de escrita; nenhum token alcança as rotas proibidas (teste que percorre todas) |
 | 23 | Backup malicioso (automação ligada, MCP, 11 MB, 10.001 memórias) é recusado inteiro |
 | 24 | O deploy falha com `workers_dev` ou `preview_urls` ligados e domínio próprio |
+| 26 | O lint de microcopy passa sem exceção sem comentário; nenhum diálogo, painel ou toast tem "Fechar" em texto (X no canto, e2e por componente) |
 
 ### Telas e estados
 
@@ -382,7 +384,7 @@ O agente executor pode começar a fase A sem nenhuma destas respostas; cada linh
 
 ## Etapas de implementação
 
-São 26 etapas em 5 fases, cada uma um PR para `develop`. As fases A e B entregam um assistente utilizável pela web; a fase C entrega o bot do administrador; as fases D e E completam a paridade com o Talorys e a operação. As etapas de uma mesma fase marcadas como *independente* podem rodar em paralelo.
+São 28 etapas (0 a 26, mais a 19b) em 5 fases, cada uma um PR para `develop`. As fases A e B entregam um assistente utilizável pela web; a fase C entrega o bot do administrador; as fases D e E completam a paridade com o Talorys e a operação. As etapas de uma mesma fase marcadas como *independente* podem rodar em paralelo.
 
 ### Fase A — Fundação
 
@@ -530,6 +532,8 @@ O comportamento completo está na seção "Bot do Telegram do administrador"; aq
 **Etapa 23 · Backup, importação e retenção** (`feat: adiciona backup, importação e limites de armazenamento`) — exportação JSON versionada, importação com as regras de entrada não confiável, limites por tipo, lixeira e limpeza automática. Backup automático diário (decisão de 02/11/2026): completo, compactado e cifrado com a chave pública do dono, enviado ao binding opcional `BACKUP_BUCKET` (R2 ⚠, faixa grátis) em partes quando grande, guardando as 7 cópias mais novas e apagando as mais antigas; sem o binding, o backup automático fica desligado e a tela diz isso. Uma vez por mês, a cópia cifrada vai como documento só para o chat de `TELEGRAM_ADMIN_ID`, até o limite de envio do bot; acima disso, só o aviso. O bot avisa quando o último backup baixado tem mais de 30 dias e responde `/backup` com o link para a tela. Restaurar abre o arquivo no navegador com a chave privada, que nunca vai ao servidor nem ao R2.
 
 **Etapa 24 · Deploy e guia de instalação** (`ci: adiciona o deploy pelo GitHub Actions`) — workflow de deploy em push para `main`, ambiente `production` só para `main`, token e conta da Cloudflare como segredos do ambiente, conferência via API de que `workers.dev` e previews estão desligados com domínio próprio, `npm audit` bloqueando `high`. `docs/instalacao-cloudflare.md` com o passo a passo só pelo navegador, incluindo criar o bot no @BotFather e a regra de Bypass do Access para o webhook. Release por tag com changelog em pt-BR. `docs/solucao-de-problemas.md` explica como achar no Workers Logs a linha de um erro pelo código que a aba Diagnóstico mostra.
+
+**Etapa 26 · Revisão de textos e experiência** (`feat: padroniza os textos e a experiência da interface`) — roda depois da 24 e antes da 25, com todas as telas prontas (pedido do Pablo, 02/11/2026). Inventário de todo texto visível (interface, servidor, bot), lint de microcopy na CI com o glossário, reescrita sem marcas de texto de IA, componentes padronizados (diálogos, painéis e toasts fecham por um X no canto superior direito; confirmação repete o verbo e foca Cancelar; menu de ações ⋯) e a reorganização de UI/UX que o inventário apontar, com inspiração no ChatGPT, no Gemini e no Claude. Plano, glossário e critérios de aceite em `docs/planos/revisao-de-textos-e-experiencia.md`; regras que já valem para texto novo em `.claude/rules/textos-da-interface.md`.
 
 **Etapa 25 · Auditoria final e testes de ponta a ponta** (`test: cobre o sistema de ponta a ponta e fecha a auditoria`) — auditoria completa com as duas skills, e2e de todas as telas e um teste do webhook do Telegram com atualizações reais gravadas (sem token real), relatório de achados no PR.
 
