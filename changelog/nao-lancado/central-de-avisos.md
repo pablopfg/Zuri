@@ -19,3 +19,11 @@
 
 - Um teste de interface media o botão "Fechar" com 43,99994 px e falhava às
   vezes; a medida agora aceita a diferença de arredondamento do navegador.
+
+### Atualização
+
+- A migration 11 cria as tabelas dos avisos, dos envios e do Diagnóstico e roda
+  sozinha na primeira requisição depois do deploy. Os alertas de acesso
+  guardados desde a etapa 3 viram avisos nessa hora.
+- O `wrangler.jsonc` ganhou o binding grátis `CF_VERSION_METADATA` (a versão
+  publicada, para o Diagnóstico). Não há segredo novo nem nada para configurar.
