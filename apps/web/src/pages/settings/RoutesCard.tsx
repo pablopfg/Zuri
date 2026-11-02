@@ -48,7 +48,7 @@ export function RoutesCard({ settings }: { settings: Settings }) {
     <Card title={t("web.alerts.routes.title")} description={t("web.alerts.routes.description")}>
       <form onSubmit={submit} className="space-y-5">
         <div className="-mx-1 overflow-x-auto px-1">
-          <table className="w-full min-w-[28rem] text-sm">
+          <table className="w-full text-sm">
             <caption className="sr-only">{t("web.alerts.routes.title")}</caption>
             <thead>
               <tr className="text-left text-fg-muted">
@@ -56,8 +56,10 @@ export function RoutesCard({ settings }: { settings: Settings }) {
                   {t("web.alerts.routes.category")}
                 </th>
                 {ALERT_CHANNELS.map((channel) => (
-                  <th key={channel} scope="col" className="px-2 py-2 text-center font-medium">
-                    {t(CHANNEL[channel])}
+                  <th key={channel} scope="col" className="px-1 py-2 text-center font-medium sm:px-2">
+                    {/* Short names keep the three columns on a phone; the boxes' labels carry the full one. */}
+                    <span aria-hidden>{t(SHORT[channel])}</span>
+                    <span className="sr-only">{t(CHANNEL[channel])}</span>
                   </th>
                 ))}
               </tr>
@@ -72,7 +74,7 @@ export function RoutesCard({ settings }: { settings: Settings }) {
                       {locked && <span className="block text-xs font-normal text-fg-muted">{t("web.alerts.routes.securityAlways")}</span>}
                     </th>
                     {ALERT_CHANNELS.map((channel) => (
-                      <td key={channel} className="px-2 py-1 text-center">
+                      <td key={channel} className="px-1 py-1 text-center sm:px-2">
                         <span className="relative inline-flex h-11 w-11 items-center justify-center">
                           <input
                             type="checkbox"
@@ -137,6 +139,7 @@ export function RoutesCard({ settings }: { settings: Settings }) {
 
 // One literal key per value, so the i18n lint sees each one.
 const CHANNEL = { push: "web.alerts.channel.push", telegram: "web.alerts.channel.telegram", email: "web.alerts.channel.email" } as const;
+const SHORT = { push: "web.alerts.routes.short.push", telegram: "web.alerts.routes.short.telegram", email: "web.alerts.routes.short.email" } as const;
 const CATEGORY = {
   reminders: "web.alerts.routes.reminders",
   digests: "web.alerts.routes.digests",
