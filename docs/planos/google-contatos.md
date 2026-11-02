@@ -1,8 +1,9 @@
 # Google Contatos na Zuri: plano da sincronização
 
 Situação: estudo e plano para a etapa 19b. Nada aqui foi implementado.
-Escrito em 02/11/2026, a pedido do Pablo. As perguntas da seção 2 ainda
-esperam resposta; onde não houver resposta, vale a recomendação.
+Escrito em 02/11/2026, a pedido do Pablo. O Pablo escolheu "só leitura"
+(02/11/2026). As outras perguntas da seção 2 ainda esperam resposta; onde não
+houver resposta, vale a recomendação.
 
 ## 1. Resumo
 
@@ -35,7 +36,7 @@ uma tela. Sem dependência nova.
 
 | # | Pergunta | Recomendação, que vale até a resposta |
 | --- | --- | --- |
-| 1 | Só leitura ou duas vias? | Só leitura na 19b. Escrita (criar contato, pôr ou tirar etiqueta) fica para uma 19c opcional, sempre como proposta aprovada. |
+| 1 | Só leitura ou duas vias? | **Respondida (Pablo, 02/11/2026): só leitura.** A Zuri nunca altera os contatos no Google, nem numa etapa futura sem novo pedido dele. |
 | 2 | Quais campos? | Nome, apelido, telefones, e-mails, aniversário, datas especiais, empresa e cargo, etiquetas, observações e campos personalizados. Sem foto, endereço e redes sociais (seção 5). |
 | 3 | Quantos contatos, mais ou menos, nas etiquetas que você quer? | Teto de 5.000 contatos sincronizados. Acima disso a sincronização para e pede para escolher menos etiquetas. |
 | 4 | O contato que sai da etiqueta some da Zuri na hora? | Sim, na sincronização seguinte. O original continua no Google; a Zuri só apaga a cópia (seção 9). |
@@ -356,9 +357,9 @@ A sincronização é código comum: `fetch` para o Google, SQL e o alarme que j�
 existe. Numa VPS (docs/planos/migracao-vps.md) ela roda igual, trocando só o
 disparo do alarme. Nenhum binding novo.
 
-## 12. Duas vias (futuro, etapa 19c opcional)
+## 12. Duas vias (descartada por ora)
 
-Se o Pablo quiser, depois: escopo `contacts`, ferramentas `create_contact` e
+O Pablo escolheu só leitura. Fica registrado como seria, caso ele peça um dia: escopo `contacts`, ferramentas `create_contact` e
 `update_contact_labels` como `write` que **viram proposta** (alterar a agenda
 de contatos do dono é sério, e um erro se espalha para o celular dele). Envio
 um por um, em sequência, como o Google recomenda. A cópia local continua só
