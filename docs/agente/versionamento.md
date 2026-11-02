@@ -58,7 +58,7 @@ cada um.
 PR sem mudança visível (CI, docs internas, dependências) pode ficar sem arquivo
 (rótulo `sem-changelog`): a versão sai do mesmo jeito, com a linha "Sem mudança
 visível: <título da PR>". Por isso o título da PR importa: ele vira o título da
-versão e da pré-release.
+versão no `CHANGELOG.md` e nas notas da pré-release.
 
 Nunca edite o `CHANGELOG.md` nem o `version.ts` à mão. "## [Não lançado]" fica
 sempre vazio; o teste do repositório falha se alguém escrever ali.
@@ -74,8 +74,10 @@ sempre vazio; o teste do repositório falha se alguém escrever ali.
 3. Cada versão sem tag ganha a tag `vX.Y.Z` no commit do merge (por `git push`:
    a API de releases recusa ao `GITHUB_TOKEN` criar tag num commit cujos
    workflows diferem dos da `develop`) e uma
-   **pré-release** no GitHub, com o título "vX.Y.Z · <título da PR>" e as notas
-   da seção. Pré-release nunca vira "Latest" e não publica nada: não é deploy.
+   **pré-release** no GitHub, com o título só "vX.Y.Z" (pedido do Pablo) e as
+   notas da seção, que começam pela linha do merge com o título da PR.
+   Pré-release antiga com outro título tem o título trocado para "vX.Y.Z"
+   no run seguinte; tag e notas não mudam. Pré-release nunca vira "Latest" e não publica nada: não é deploy.
 4. A branch `chore/versao` é refeita a partir da `develop` com as seções novas
    no `CHANGELOG.md`, os arquivos de `changelog/nao-lancado/` apagados e o
    `version.ts` novo. Uma única PR `chore(release): versão X` fica aberta com
@@ -105,8 +107,8 @@ versão para a pré-release e de "Não lançado" para a comparação com a `deve
 
 - O workflow só roda na `develop`, com `GITHUB_TOKEN` (sem custo, sem segredo
   novo) e permissões de escrever tags, releases, a própria branch e a própria
-  PR. Nunca empurra para `develop` ou `main`, nunca apaga tag e nunca edita uma
-  pré-release que já existe.
+  PR. Nunca empurra para `develop` ou `main` e nunca apaga tag; de uma
+  pré-release que já existe, só acerta o título para "vX.Y.Z".
 - Versão com tag fica congelada: se um fragmento for corrigido depois (por
   exemplo, o marcador `minor` esquecido), o número e as notas daquele merge
   não mudam, e os merges seguintes contam a partir dele.

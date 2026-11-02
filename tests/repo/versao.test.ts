@@ -214,10 +214,12 @@ describe("parseChangelog", () => {
 });
 
 describe("release notes", () => {
-  it("names the release by version and title, and links the full history", () => {
-    expect(releaseName(version())).toBe("v0.1.0 · Envia avisos (etapa 13)");
+  it("names the release by the version alone and keeps the title in the notes", () => {
+    expect(releaseName(version())).toBe("v0.1.0");
+    expect(releaseName(version({ version: "0.18.1", title: "fala com @alguem" }))).toBe("v0.18.1");
     const notes = releaseNotes(version());
     expect(notes).toMatch(/^Mesclada às 09:20 \(UTC-3\)/);
+    expect(notes).toContain("Envia avisos (etapa 13)");
     expect(notes).toContain("### Adicionado\n\n- Avisos.");
     expect(notes).toContain("blob/develop/CHANGELOG.md");
   });
@@ -243,7 +245,7 @@ describe("noMentions", () => {
   it("keeps @names from notifying anyone, except inside code", () => {
     expect(noMentions("crie o bot no @BotFather e veja `@userinfobot`")).toBe("crie o bot no @\u200bBotFather e veja `@userinfobot`");
     expect(noMentions("e-mail dono@exemplo.com.br")).toBe("e-mail dono@\u200bexemplo.com.br");
-    expect(releaseName(version({ title: "fala com @alguem" }))).toBe("v0.1.0 · fala com @\u200balguem");
+    expect(releaseNotes(version({ title: "fala com @alguem" }))).toContain("fala com @\u200balguem");
     expect(releaseNotes(version({ body: "### Adicionado\n\n- Avisa @time." }))).toContain("- Avisa @\u200btime.");
   });
 });
@@ -253,16 +255,26 @@ describe("releaseWork", () => {
   const b = version({ version: "0.1.1", commit: sha("b") });
 
   it("creates what is missing, oldest first, and leaves existing releases alone", () => {
-    const work = releaseWork([a, b], new Map([["v0.1.0", sha("a")]]), new Set(["v0.1.0"]));
-    expect(work).toEqual({ create: [b], conflicts: [] });
+    const work = releaseWork([a, b], new Map([["v0.1.0", sha("a")]]), new Map([["v0.1.0", "v0.1.0"]]));
+    expect(work).toEqual({ create: [b], rename: [], conflicts: [] });
+  });
+
+  it("renames releases whose title is more than the version, and nothing else", () => {
+    const releases = new Map([
+      ["v0.1.0", "v0.1.0 · Envia avisos (etapa 13)"],
+      ["v0.1.1", "v0.1.1"],
+    ]);
+    const work = releaseWork([a, b], new Map([["v0.1.0", sha("a")], ["v0.1.1", sha("b")]]), releases);
+    expect(work).toEqual({ create: [], rename: ["v0.1.0"], conflicts: [] });
   });
 
   it("creates the release over a tag that already sits on the right commit", () => {
-    expect(releaseWork([a], new Map([["v0.1.0", sha("a")]]), new Set()).create).toEqual([a]);
+    expect(releaseWork([a], new Map([["v0.1.0", sha("a")]]), new Map()).create).toEqual([a]);
   });
 
   it("stops on a tag that points somewhere else instead of moving it", () => {
-    const work = releaseWork([a], new Map([["v0.1.0", sha("f")]]), new Set());
+    const work = releaseWork([a], new Map([["v0.1.0", sha("f")]]), new Map([["v0.1.0", "v0.1.0 · outro"]]));
+    expect(work.rename).toEqual([]);
     expect(work.create).toEqual([]);
     expect(work.conflicts[0]).toMatch(/v0\.1\.0 points to fffffff/);
   });
