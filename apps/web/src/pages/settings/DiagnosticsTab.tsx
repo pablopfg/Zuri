@@ -1,10 +1,11 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { type DiagnosticEntry, type DiagnosticsStatus, ptBRAlerts } from "@zuri/shared";
-import { CircleAlert, CircleCheck, TriangleAlert } from "lucide-react";
-import { Button, Card, cn, ErrorNotice, Spinner } from "../../components/ui.tsx";
+import { CircleAlert, CircleCheck, ExternalLink, TriangleAlert } from "lucide-react";
+import { Button, buttonClass, Card, cn, ErrorNotice, Spinner } from "../../components/ui.tsx";
 import { useToast } from "../../components/Toaster.tsx";
 import { DIAGNOSTICS_KEY, useDiagnostics } from "../../hooks/notices.ts";
 import { api, errorMessage } from "../../lib/api.ts";
+import { issueReportUrl } from "../../lib/issue-report.ts";
 import { addMessages, useI18n } from "../../lib/i18n.tsx";
 
 // This tab's pt-BR texts arrive with it (rule P11).
@@ -30,6 +31,7 @@ export function DiagnosticsTab() {
             ))}
           </ul>
         )}
+        {entries.some((entry) => !entry.resolvedAt) && <p className="mt-3 text-xs leading-5 text-fg-muted">{t("web.diagnostics.reportHint")}</p>}
       </Card>
     </>
   );
@@ -80,9 +82,22 @@ function Entry({ entry }: { entry: DiagnosticEntry }) {
         {entry.resolvedAt && <p className="text-xs font-semibold text-fg-muted">{t("web.diagnostics.resolved", { when: dateTime(new Date(entry.resolvedAt)) })}</p>}
       </div>
       {!entry.resolvedAt && (
-        <Button variant="secondary" className="shrink-0" loading={resolve.isPending} onClick={() => resolve.mutate()}>
-          {t("web.diagnostics.resolve")}
-        </Button>
+        <div className="flex shrink-0 flex-wrap gap-2">
+          {/* Opens GitHub's form filled in; the owner reads it there and decides whether to send it (docs/agente/issues.md). */}
+          <a
+            href={issueReportUrl(entry)}
+            target="_blank"
+            rel="noopener noreferrer"
+            className={buttonClass("secondary")}
+          >
+            {t("web.diagnostics.report")}
+            <ExternalLink className="h-4 w-4" aria-hidden />
+            <span className="sr-only">{t("web.diagnostics.reportNewTab")}</span>
+          </a>
+          <Button variant="secondary" loading={resolve.isPending} onClick={() => resolve.mutate()}>
+            {t("web.diagnostics.resolve")}
+          </Button>
+        </div>
       )}
     </li>
   );
