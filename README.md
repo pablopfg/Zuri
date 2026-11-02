@@ -70,7 +70,7 @@ As capturas abaixo acompanham o tema do seu GitHub (claro ou escuro) e saem da `
     <td width="50%" valign="top">
       <picture>
         <source media="(prefers-color-scheme: dark)" srcset="docs/capturas/inicio-computador-escuro.png">
-        <img src="docs/capturas/inicio-computador-claro.png" alt="Início da Zuri no computador: cumprimento pelo horário com o nome do dono, barra lateral com Início, Conversa, Tarefas, Notas, Memória e Acessos, e cartões de Segurança e Sessão">
+        <img src="docs/capturas/inicio-computador-claro.png" alt="Início da Zuri no computador: cumprimento pelo horário com o nome do dono, barra lateral com Início, Conversa, Tarefas, Notas, Memória, Automações e Acessos, e cartões de Segurança e Sessão">
       </picture>
       <p align="center"><b>Início</b>: cumprimento pelo horário, segurança da conta e sessão num relance</p>
     </td>
@@ -151,7 +151,7 @@ O que está na `develop` hoje, etapa por etapa. "extra" marca melhorias feitas f
 | 🛡️ | **Portões de segurança** | Um Worker só, que serve a interface e a API. Toda requisição passa por host permitido, HTTPS, Cloudflare Access opcional, cabeçalhos de segurança e autenticação. | 1 |
 | 🌐 | **Idiomas e fuso** | pt-BR por padrão e inglês, datas no padrão brasileiro e fuso `America/Sao_Paulo`. Os erros da API saem no idioma do dono. | 2 |
 | 🔑 | **Login e sessões** | Senha forte, sessão que termina por inatividade, proteção contra força bruta e Cloudflare Turnstile em toda tentativa de entrar. | 3 |
-| 🗝️ | **Primeiro acesso seguro** | O dono se cadastra uma vez só, com um código de instalação gravado como segredo (vale 1 hora; erros pausam e bloqueiam só a rede de quem tenta), e liga o 2FA antes de tudo, numa tela de três passos. Um código novo só recupera o acesso, na mesma tela. | extra |
+| 🗝️ | **Primeiro acesso seguro** | O dono se cadastra uma vez só (e já diz como quer ser chamado), com um código de instalação gravado como segredo (vale 1 hora; erros pausam e bloqueiam só a rede de quem tenta), e liga o 2FA antes de tudo, numa tela de três passos. Um código novo só recupera o acesso, na mesma tela. | extra |
 | 📱 | **2FA e passkeys** | Aplicativo autenticador (TOTP), 10 códigos de recuperação e passkeys no segundo passo. Ligar o 2FA e criar uma passkey pedem a senha na hora. Alerta a cada 3 códigos errados seguidos; com 30 erros em 24 h, o segundo passo fica suspenso para redes desconhecidas. | 4 |
 | 🧭 | **Interface web (PWA)** | Barra lateral recolhível, navegação inferior no celular, tema claro, escuro ou do sistema, instalável no celular e no computador. | 5 |
 | 👋 | **Cumprimento no Início** | Bom dia, boa tarde ou boa noite pelo seu fuso, com o seu nome (Configurações > Conta) e uma frase curta da Zuri que muda a cada dia. | extra |
@@ -162,12 +162,13 @@ O que está na `develop` hoje, etapa por etapa. "extra" marca melhorias feitas f
 | 🧠 | **Memória** | Fatos que você guarda, edita e apaga. O que muda vira histórico (atual, incerto ou passado), e conflitos vão para uma fila de revisão. | 7 |
 | 📊 | **IA com medição** | Workers AI com contador por chamada e um teto único de 9.000 Neurons por dia, com aviso claro ao chegar nele. | 8 |
 | 💬 | **Conversa com ferramentas** | Respostas em tempo real, num tom simpático e natural, chamando você pelo nome. A Zuri cria e organiza tarefas, notas e memórias; o que apaga ou reescreve vira um cartão para você aprovar, e planos de tarefas só viram tarefas depois da sua confirmação. Também aceita voz. | 9 |
+| ⏰ | **Automações** | Lembretes, o resumo das tarefas e rotinas da Zuri, por dia, semana, mês ou a cada algumas horas, sempre no seu fuso. A rotina que a Zuri sugere na conversa só roda depois que você aprova, e um reinício nunca faz nada rodar duas vezes. | 10 |
 
 ## 🔭 O que vem a seguir
 
 | | Funcionalidade | O que faz | Etapa |
 | :---: | --- | --- | :---: |
-| ⏰ | **Automações e avisos** | Lembretes, resumos e rotinas de IA; central de avisos com push, e-mail e prioridade. | 10–11 |
+| 🔔 | **Central de avisos** | Os resultados das automações e os alertas num só lugar, com push, e-mail e prioridade. | 11 |
 | 🤖 | **Bot do Telegram** | Painel de administração no bolso: consultas sem IA, conversa por texto e voz (arquivo acima do limite só com a sua confirmação), aprovações com passkey e modo de bloqueio. | 12–16 |
 | 🔌 | **Integrações** | Busca semântica, servidores MCP, Google Agenda, acesso remoto para o n8n e monitor de sites, todos opcionais. | 17–22 |
 | 💾 | **Backup e instalação** | Backup e importação, guia de instalação só pelo navegador e auditoria final. | 23–25 |
@@ -250,7 +251,7 @@ O orçamento de cada cota está em [docs/arquitetura/orcamento-free-tier.md](doc
 | | 7 | Memória e histórico | ✅ |
 | | 8 | Provedor de IA e medição de uso | ✅ |
 | | 9 | Chat com ferramentas | ✅ |
-| | 10 | Automações | ⬜ |
+| | 10 | Automações | ✅ |
 | | 11 | Central de avisos, push e e-mail | ⬜ |
 | **C · Bot do Telegram** | 12 | Fundação do bot | ⬜ |
 | | 13 | Avisos no Telegram | ⬜ |
@@ -289,7 +290,7 @@ Antes do primeiro `npm run dev`, crie o `apps/agent/.dev.vars` com valores locai
 | `npm run test:e2e` | Testes de interface com Playwright |
 | `npm run build` | Build da interface e do Worker |
 
-A instalação na sua conta Cloudflare será feita só pelo navegador (fork, segredos e GitHub Actions). O guia chega na etapa 24; até lá, [docs/configuracao-cloudflare.md](docs/configuracao-cloudflare.md) lista os segredos já usados, como as chaves do Turnstile.
+A instalação na sua conta Cloudflare será feita só pelo navegador (fork, segredos e GitHub Actions); o deploy automático chega na etapa 24. Os segredos, a verificação contra robôs, o primeiro acesso com o código de instalação e a recuperação do acesso já estão em [docs/configuracao-cloudflare.md](docs/configuracao-cloudflare.md).
 
 ## 🧪 Qualidade
 
@@ -326,7 +327,7 @@ scripts/        Lint de i18n, ícones, tamanho do pacote e capturas do README
 | [Interface](docs/interface.md) | Telas, acessibilidade e a identidade visual Sinal |
 | [Produtividade](docs/produtividade.md) | Tarefas, notas, projetos e lixeira |
 | [Memória](docs/memoria.md) | Estados, histórico e revisão de conflitos |
-| [Configurar a Cloudflare](docs/configuracao-cloudflare.md) | Segredos e Turnstile |
+| [Configurar a Cloudflare](docs/configuracao-cloudflare.md) | Segredos, Turnstile, primeiro acesso e recuperação |
 | [Configurar o GitHub](docs/configuracao-github.md) | Rulesets e proteção das branches |
 
 ## 🤝 Como contribuir

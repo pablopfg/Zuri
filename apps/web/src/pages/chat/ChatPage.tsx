@@ -11,7 +11,7 @@ import {
   type TaskPlan,
   type ToolActivity,
 } from "@zuri/shared";
-import { Check, CircleAlert, History, LoaderCircle, Mic, Pencil, Plus, SendHorizontal, Sparkles, Square, Trash2, X } from "lucide-react";
+import { Check, CircleAlert, Clock, History, LoaderCircle, Mic, Pencil, Plus, SendHorizontal, Sparkles, Square, Trash2, X } from "lucide-react";
 import { type FormEvent, type KeyboardEvent, useCallback, useEffect, useId, useRef, useState } from "react";
 import { Link, NavLink, useNavigate, useParams } from "react-router";
 import { Markdown } from "../../components/Markdown.tsx";
@@ -590,7 +590,7 @@ function AssistantBody({
   streaming?: boolean;
 }) {
   const { t } = useI18n();
-  const cards = tools.filter((tool) => tool.actionId || tool.planId);
+  const cards = tools.filter((tool) => tool.actionId || tool.planId || tool.automationId);
   return (
     <div className="flex items-start gap-3">
       <span className="mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent-soft text-accent-text" aria-hidden>
@@ -629,6 +629,16 @@ function AssistantBody({
             <div key={`card-${tool.id}`}>
               {action && <ApprovalCard action={action} onChange={onAction} />}
               {plan && <PlanCard plan={plan} onChange={onPlan} />}
+              {tool.automationId && (
+                <Link
+                  // The anchor of lib/automations.ts, written out so the chat needs nothing from that screen.
+                  to={`/automacoes#automacao-${tool.automationId}`}
+                  className="inline-flex min-h-11 items-center gap-2 rounded-xl border border-border bg-surface px-4 text-sm font-semibold text-accent-text hover:bg-raised"
+                >
+                  <Clock className="h-4 w-4" aria-hidden />
+                  {t("web.chat.automationLink")}
+                </Link>
+              )}
             </div>
           );
         })}

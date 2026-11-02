@@ -7,9 +7,9 @@ import type { ConversationRepository } from "../chat/conversations.ts";
 import { AppError } from "../http/errors.ts";
 import { memoryPromptSection, memoryTokenBudget, selectRelevantMemories } from "../memory/recall.ts";
 import { ALL_TOOLS } from "../tools/index.ts";
-import { type ToolContext, type ToolDefinition, ToolExecutor } from "../tools/registry.ts";
+import { type Notice, type ToolContext, type ToolDefinition, ToolExecutor } from "../tools/registry.ts";
 import { contextBudget, contextWindow, SUMMARIZE_THRESHOLD, summaryRequest } from "./context.ts";
-import { buildSystemPrompt, SUMMARY_SYSTEM } from "./prompt.ts";
+import { buildSystemPrompt, scheduledInstructions, SUMMARY_SYSTEM } from "./prompt.ts";
 import { log } from "../log.ts";
 
 /** Messages read for one prompt, newest first, before the token budget picks. */
@@ -195,8 +195,10 @@ export class AgentRunner {
           activity.status = event.error ? "error" : "success";
           const actionId = turnTools.actionFor(event.id);
           const planId = turnTools.planFor(event.id);
+          const automationId = turnTools.automationFor(event.id);
           if (actionId) activity.actionId = actionId;
           if (planId) activity.planId = planId;
+          if (automationId) activity.automationId = automationId;
           yield { type: "tool", tool: { ...activity } };
           if (actionId) yield { type: "approval", action: this.deps.tools.actions.view(actionId) };
           if (planId) yield { type: "plan", plan: this.deps.tools.plans.get(planId) };
@@ -218,5 +220,57 @@ export class AgentRunner {
       yield { type: "error", code: appError.code, message: t(locale, appError.messageKey), ...(appError.details ? { details: appError.details } : {}) };
       yield { type: "done", message: finish("error", { code: appError.code, key: appError.messageKey }) };
     }
+  }
+
+  /**
+   * One run of an AI routine the owner approved (step 10): no conversation and
+   * nobody watching, so only the read tools and notify_owner are offered
+   * (mode "scheduled"); nothing is written, deleted or proposed. The routine's
+   * instruction is the owner's own, approved text; everything it reads is data.
+   */
+  async scheduled(input: { name: string; prompt: string; quiet: boolean; signal: AbortSignal }): Promise<{ text: string; notices: Notice[] }> {
+    const settings = this.deps.settings();
+    const locale = this.deps.locale();
+    const ai = this.deps.ai();
+    const registry = this.deps.registry ?? ALL_TOOLS;
+    const notices: Notice[] = [];
+    const ctx: ToolContext = { ...this.deps.tools, timeZone: settings.timeZone, mode: "scheduled", conversationId: null, notices, routineName: input.name };
+    const executor = new ToolExecutor(registry, ctx, { maxToolCalls: settings.aiMaxIterations > 1 ? settings.aiMaxToolCalls : 0 });
+    const offered = executor.available();
+    const budget = contextBudget(ai.model, settings.aiMaxContextTokens, settings.aiMaxOutputTokens, offered.length ? toolTokens(offered) : 0);
+    const repo = this.deps.tools.memories.repo;
+    const memories = memoryPromptSection(selectRelevantMemories(repo, input.prompt), memoryTokenBudget(budget), (id) => repo.get(id));
+    const system = [
+      buildSystemPrompt({
+        agentName: this.deps.agentName,
+        language: LANGUAGE[locale],
+        timeZone: settings.timeZone,
+        now: new Date(this.deps.clock?.() ?? Date.now()),
+        // Not in routines yet: a name that reaches unattended runs reopens the
+        // question of asking for the password to change it (docs/seguranca.md).
+        ownerName: "",
+        memories,
+        summary: null,
+      }),
+      scheduledInstructions(input.name, input.quiet),
+    ].join("\n\n");
+    let text = "";
+    for await (const event of ai.generateWithTools({
+      system,
+      messages: [{ role: "user", content: input.prompt }],
+      tools: offered.map((tool) => ({
+        name: tool.name,
+        description: tool.description,
+        inputSchema: tool.input,
+        execute: (toolInput, callId) => executor.execute(tool.name, toolInput, callId),
+      })),
+      maxIterations: settings.aiMaxIterations,
+      maxOutputTokens: settings.aiMaxOutputTokens,
+      toolBudgetExhausted: () => executor.budgetExhausted(),
+      signal: input.signal,
+    })) {
+      if (event.type === "text") text += event.delta;
+    }
+    return { text: text.trim(), notices };
   }
 }

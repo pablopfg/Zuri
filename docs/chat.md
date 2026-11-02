@@ -73,6 +73,14 @@ desconhecido é recusado), permissão e limite por turno.
 | `forget_memory` | destructive | 3 | Proposta: apaga a memória de vez |
 | `search` | read | 2 | Tarefas, notas, memórias e títulos de conversa de uma vez |
 | `propose_task_plan` | write | 1 | Guarda um rascunho de plano; nada é criado |
+| `create_reminder` | write | 3 | Lembrete de uma vez, num horário local ou daqui a N minutos (etapa 10) |
+| `create_automation` | write | 2 | Lembrete que se repete ou resumo das tarefas, sem IA |
+| `list_automations` | read | 2 | Lista as automações com a próxima execução no horário local |
+| `propose_ai_routine` | write | 1 | Guarda uma rotina com IA esperando a aprovação do dono; nada é agendado |
+| `cancel_automation` | destructive | 3 | Proposta: exclui uma automação |
+| `notify_owner` | write | 1 | Só dentro de uma rotina agendada: aviso com título próprio |
+
+Detalhes das automações em [automacoes.md](automacoes.md).
 
 O executor (`tools/registry.ts`) também:
 

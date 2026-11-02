@@ -5,6 +5,7 @@ import { z } from "zod";
 import { z as mini } from "zod/mini";
 import { MAX_EMAIL_LENGTH, MAX_PASSWORD_INPUT_LENGTH, MAX_TURNSTILE_TOKEN_LENGTH } from "./auth.ts";
 import { LOCALES } from "../i18n/index.ts";
+import { ownerNameSchema } from "./settings.ts";
 import { isTimeZone } from "./time-zone.ts";
 
 /**
@@ -86,6 +87,8 @@ export const setupOwnerRequestSchema = /* @__PURE__ */ z
     password,
     language: z.enum(LOCALES),
     timeZone: z.string().max(64).refine(isTimeZone),
+    /** How the owner likes to be called (the greeting); optional, the same rules as in the settings. */
+    ownerName: ownerNameSchema.optional(),
   })
   .strict();
 export type SetupOwnerRequest = z.infer<typeof setupOwnerRequestSchema>;

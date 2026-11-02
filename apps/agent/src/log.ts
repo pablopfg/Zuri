@@ -26,6 +26,9 @@ export const LOG_EVENTS = [
   "chat_turn_failed",
   "chat_stream_failed",
   "tool_failed",
+  "automation_failed",
+  "automation_interrupted",
+  "automation_reconcile_failed",
 ] as const;
 export type LogEvent = (typeof LOG_EVENTS)[number];
 
@@ -39,6 +42,10 @@ export interface LogFields {
   secrets?: readonly string[];
   /** The agent tool's registered name (never its arguments or result). */
   tool?: string;
+  /** The kind of automation (reminder, task_digest, agent_prompt), never its name or text. */
+  kind?: string;
+  /** How many items a step touched (e.g. runs interrupted by a restart). */
+  count?: number;
 }
 
 export interface LogLine {
@@ -50,6 +57,8 @@ export interface LogLine {
   error?: string;
   secrets?: string[];
   tool?: string;
+  kind?: string;
+  count?: number;
 }
 
 const ERROR_NAME = /^[A-Za-z][A-Za-z0-9]{0,39}$/;
@@ -66,9 +75,9 @@ const METHOD = /^[A-Z]{3,7}$/;
  * every route registered under `src/api/` is in this list.
  */
 export const ROUTE_WORDS: ReadonlySet<string> = new Set([
-  "api", "activity", "actions", "ai", "approve", "auth", "cancel", "chat", "code", "confirm", "conversations", "correct", "disable",
+  "api", "activity", "actions", "ai", "approve", "auth", "automations", "cancel", "chat", "code", "confirm", "conversations", "correct", "disable",
   "empty", "enable", "health", "heartbeat", "history", "login", "login-options", "logout", "memories", "mfa",
-  "notes", "options", "owner", "passkey", "passkeys", "password", "plans", "projects", "recover", "recovery-codes", "restore", "reviews",
+  "notes", "options", "owner", "passkey", "passkeys", "password", "plans", "projects", "recover", "recovery-codes", "restore", "reviews", "run", "runs",
   "session", "settings", "setup", "status", "tasks", "telegram", "transcribe", "trash", "usage", "webhook",
 ]);
 const MAX_SEGMENTS = 8;
@@ -86,6 +95,8 @@ export function logLine(level: LogLevel, event: LogEvent, fields: LogFields = {}
     }
   }
   if (fields.tool !== undefined && TOOL_NAME.test(fields.tool)) line.tool = fields.tool;
+  if (fields.kind !== undefined && TOOL_NAME.test(fields.kind)) line.kind = fields.kind;
+  if (fields.count !== undefined && Number.isSafeInteger(fields.count) && fields.count >= 0) line.count = fields.count;
   if ("error" in fields) line.error = errorName(fields.error);
   if (fields.secrets) {
     const names = fields.secrets.filter((name) => SECRET_NAME.test(name)).slice(0, 10);

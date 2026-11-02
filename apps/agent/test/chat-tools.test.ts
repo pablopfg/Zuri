@@ -153,10 +153,17 @@ describe("the limits of a turn", () => {
     });
   });
 
-  it("a scheduled run gets the read tools only: nothing it does can write, delete or propose", async () => {
+  it("a scheduled run gets the read tools only, plus notify_owner: nothing it does can write, delete or propose", async () => {
     await withChatWorld(async (world) => {
       const run = executor(world, null, { mode: "scheduled" });
-      expect(run.available().every((tool) => tool.permission === "read")).toBe(true);
+      expect(run.available().filter((tool) => tool.permission !== "read").map((tool) => tool.name)).toEqual(["notify_owner"]);
+      for (const name of ["create_reminder", "create_automation", "propose_ai_routine", "cancel_automation"]) {
+        expect(await refused(run.execute(name, {}, name))).toMatch(/not available/);
+      }
+      // And the chat never offers notify_owner: the owner is right there.
+      const chat = executor(world, conversation(world));
+      expect(chat.available().map((tool) => tool.name)).not.toContain("notify_owner");
+      expect(await refused(chat.execute("notify_owner", { title: "x", body: "y" }, "n1"))).toMatch(/not available/);
       expect(run.available().map((tool) => tool.name)).toEqual(expect.arrayContaining(["list_tasks", "search", "read_note", "search_memories"]));
       for (const name of ["create_task", "delete_task", "remember", "propose_task_plan", "forget_memory"]) {
         expect(await refused(run.execute(name, {}, name))).toMatch(/not available/);

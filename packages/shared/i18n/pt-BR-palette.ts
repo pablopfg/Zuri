@@ -14,4 +14,5 @@ export const ptBRPalette = {
   "web.palette.failed": "A busca não respondeu. Os atalhos continuam aqui.",
   "web.palette.keys": "↑ ↓ para escolher · Enter para abrir · Esc para fechar",
   "web.palette.done": "Concluída",
+  "web.palette.newAutomation": "Nova automação",
 } as const;

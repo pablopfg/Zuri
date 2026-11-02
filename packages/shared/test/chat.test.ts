@@ -27,8 +27,8 @@ describe("the chat's constants", () => {
   it("are the specification's", () => {
     expect(CHAT_MESSAGE_MAX).toBe(8_000);
     expect(CONVERSATION_TITLE_MAX).toBe(120);
-    expect(TOOL_NAMES).toHaveLength(20);
-    expect(new Set(TOOL_NAMES).size).toBe(20);
+    expect(TOOL_NAMES).toHaveLength(26);
+    expect(new Set(TOOL_NAMES).size).toBe(26);
     for (const name of DESTRUCTIVE_TOOLS) expect(TOOL_NAMES).toContain(name);
     expect(PENDING_ACTION_TTL_MS).toBe(30 * 60_000);
     expect(TASK_PLAN_TTL_MS).toBe(24 * 3_600_000);

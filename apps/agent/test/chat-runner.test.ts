@@ -386,6 +386,25 @@ describe("the context of a turn", () => {
   });
 });
 
+describe("a routine proposed in a turn", () => {
+  it("keeps the link to the routine in the streamed and the stored answer, so the chat can point to its approval", async () => {
+    await withChatWorld(async (world) => {
+      const provider = new ScriptedProvider([
+        callTools({ name: "propose_ai_routine", input: { name: "Sexta", prompt: "Revise a semana", schedule: { type: "weekly", days: [5], time: "17:00" } } }),
+        say("Propus a rotina."),
+      ]);
+      const { events, done } = await turn(world, provider, "Toda sexta revise minha semana");
+      const [routine] = world.automations.list().automations;
+      expect(routine?.status).toBe("pending_approval");
+      const streamed = events.filter((e) => e.type === "tool").at(-1);
+      expect(streamed).toMatchObject({ type: "tool", tool: { name: "propose_ai_routine", status: "success", automationId: routine?.id } });
+      expect(done.message.tools[0]?.automationId).toBe(routine?.id);
+      // Read back from the database, as a reload shows it.
+      expect(world.conversations.page(done.message.conversationId).messages.at(-1)?.tools[0]?.automationId).toBe(routine?.id);
+    });
+  });
+});
+
 describe("how a turn ends", () => {
   it("stopped by the owner: the partial answer is kept as cancelled and its plans withdrawn", async () => {
     await withChatWorld(async (world) => {
