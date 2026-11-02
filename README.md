@@ -169,7 +169,7 @@ O que está na `develop` hoje, etapa por etapa. "extra" marca melhorias feitas f
 | | Funcionalidade | O que faz | Etapa |
 | :---: | --- | --- | :---: |
 | 🔔 | **Central de avisos** | Os resultados das automações e os alertas num só lugar, com push, e-mail e prioridade. | 11 |
-| 🤖 | **Bot do Telegram** | Painel de administração no bolso: consultas sem IA, conversa por texto e voz, aprovações com passkey e modo de bloqueio. | 12–16 |
+| 🤖 | **Bot do Telegram** | Painel de administração no bolso: consultas sem IA, conversa por texto e voz (arquivo acima do limite só com a sua confirmação), aprovações com passkey e modo de bloqueio. | 12–16 |
 | 🔌 | **Integrações** | Busca semântica, servidores MCP, Google Agenda, acesso remoto para o n8n e monitor de sites, todos opcionais. | 17–22 |
 | 💾 | **Backup e instalação** | Backup e importação, guia de instalação só pelo navegador e auditoria final. | 23–25 |
 

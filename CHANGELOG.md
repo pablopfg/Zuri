@@ -23,6 +23,11 @@ o [SemVer](https://semver.org/lang/pt-BR/). Cada PR escreve a sua entrada em
 - Limite de rotinas com IA por dia em Configurações › IA: 6 por padrão, até 48.
 - "Nova automação" e "Automações" na paleta (Ctrl/⌘ K). No celular,
   Automações também aparece na lista de Configurações.
+- Planejado para o bot do Telegram (etapa 14): quando um áudio passar do
+  limite de 5 min e 5 MB, a Zuri avisa, diz quanto deve gastar da cota do dia
+  e pergunta se processa mesmo assim, em vez de recusar. Acima do que dá para
+  processar de graça (20 MB que o Telegram deixa baixar, ou a cota do dia), ela
+  explica o motivo.
 - Plano para a troca automática de provedor de IA e para proteger os dados
   enviados aos modelos, em `docs/planos/troca-de-provedores-e-protecao-de-dados.md`.
   A troca fica no próprio Zuri, com um disjuntor por provedor, em vez do AI
