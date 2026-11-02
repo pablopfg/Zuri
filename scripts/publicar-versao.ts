@@ -190,7 +190,8 @@ function main(root: string): number {
   const existing = open[0]?.number ?? null;
   if (plan.pending.length === 0) {
     if (existing !== null) {
-      gh(["pr", "close", String(existing), "--repo", repository, "--comment", "Nada a versionar: o `CHANGELOG.md` da `develop` já está em dia."]);
+      // --delete-branch: the branch belongs to this workflow and is rebuilt from develop when a version is pending.
+      gh(["pr", "close", String(existing), "--repo", repository, "--delete-branch", "--comment", "Nada a versionar: o `CHANGELOG.md` da `develop` já está em dia."]);
       console.log(`#${existing}: closed, nothing pending`);
     } else {
       console.log(`changelog up to date (${plan.changelog.versions[0]?.version ?? "no version"})`);

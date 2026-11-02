@@ -1,0 +1,74 @@
+name: README
+
+# Keeps the stage map, the stage badge and the counts of README.md in step
+# with .claude/memoria/progresso.md and the stage pull requests
+# (scripts/readme.ts, .claude/rules/readme.md). When something changed, it keeps
+# one pull request "docs(readme): …" on chore/readme-automatico with auto-merge
+# (Pablo authorized these merges). Its own merge starts no run (a merge by
+# GITHUB_TOKEN never does) and the next run finds nothing to change, so it
+# cannot loop. A stage pull request opened or merged shows within 15 minutes.
+# Never pushes to develop or main. GITHUB_TOKEN only; nothing here costs.
+on:
+  push:
+    branches: [develop]
+  schedule:
+    - cron: "2,17,32,47 * * * *"
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: readme
+  cancel-in-progress: false
+
+jobs:
+  update:
+    # A dispatch from another branch would run that branch's copy with write access.
+    if: github.ref == 'refs/heads/develop'
+    runs-on: ubuntu-26.04
+    timeout-minutes: 10
+    # contents: the chore/readme-automatico branch; pull-requests: its pull
+    # request and auto-merge; actions: approve the pull_request runs its own
+    # push started (scripts/atualizar-prs.ts, approveHeldRuns).
+    permissions:
+      contents: write
+      pull-requests: write
+      actions: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: develop
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+      - name: Update the README
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git config core.hooksPath /dev/null
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          node scripts/readme.ts --publicar
+
+  report-failure:
+    needs: update
+    if: always() && github.ref == 'refs/heads/develop' && (needs.update.result == 'failure' || needs.update.result == 'cancelled')
+    runs-on: ubuntu-26.04
+    timeout-minutes: 5
+    # issues: create the issue, its labels and the repeat comment; actions: read the failed steps.
+    permissions:
+      issues: write
+      actions: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: develop
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+      - name: Open or update the failure issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/issue-de-falha.ts
