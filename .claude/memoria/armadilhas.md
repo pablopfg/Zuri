@@ -196,10 +196,20 @@ acrescente aqui cada armadilha nova que encontrar (sem dados pessoais).
   `packages/shared` liga `z.config({ jitless: true })` em `zod-config.ts`, que
   todo arquivo com schema importa primeiro (veja acima). `tests/e2e/csp.spec.ts`
   pega a volta.
-- Pedido recusado antes de ler o corpo (CSRF, sem sessão) faz o workerd
-  registrar "Can't read from request stream after response has been sent" no
-  `wrangler dev`. Não afeta a resposta; cancelar o corpo no objeto não resolve
-  (o erro nasce no Worker, que repassa o fluxo). Fica para investigar.
+- Pedido recusado antes de ler o corpo (CSRF, sem sessão) fazia o workerd
+  registrar "Can't read from request stream after response has been sent". O
+  erro nasce no Worker: o fluxo do corpo repassado ao objeto continua sendo lido
+  depois que a resposta saiu. Cancelar o corpo no objeto não resolve, e repassar
+  por um fluxo próprio também não (cortar o fluxo derruba a resposta do objeto;
+  deixar aberto gera `Uncaught undefined` com corpo em partes). A saída é
+  `withBodyRead` (`src/gates/body.ts`): o Worker lê o corpo inteiro, com teto
+  `API_BODY_MAX_BYTES`, antes de repassar. Rota nova que leia corpo maior que
+  um clipe de voz precisa subir esse teto. O e2e falha se o Worker logar
+  `Uncaught` (`tests/e2e/worker-log.ts`). Arquivo de entrada do Worker
+  (`src/index.ts`) não pode exportar constante: o workerd recusa subir.
+- No `wrangler dev`, corpo de vários MB recusado antes de chegar todo faz o
+  ProxyWorker do wrangler registrar "Network connection lost" e responder 500.
+  É do servidor de desenvolvimento e já acontecia antes; não é o Worker.
 
 - `response.finished()` do Playwright não termina numa resposta em SSE que o
   navegador lê aos poucos: o teste trava até o tempo limite. Espere o estado da
@@ -218,7 +228,10 @@ acrescente aqui cada armadilha nova que encontrar (sem dados pessoais).
 - Com o binding `ai` no `wrangler.jsonc`, `wrangler dev` sem `--local` tenta
   abrir uma sessão remota e falha sem `CLOUDFLARE_API_TOKEN`. `npm run dev` e o
   servidor do e2e usam `--local`: o binding fica "not supported" e o agente usa
-  a IA simulada (PUBLIC_URL de loopback).
+  a IA simulada (PUBLIC_URL de loopback). O aviso "AI bindings always access
+  remote resources" continua: só some com `remote: true`, que faria o
+  `wrangler dev` sem `--local` usar a IA da conta (gasta Neurons). Com `--local`
+  nada chega à Cloudflare.
 - O e2e e o Lighthouse precisam de Node 26 e de
   `PLAYWRIGHT_CHROMIUM_EXECUTABLE=/opt/pw-browsers/chromium-*/chrome-linux*/chrome`.
 - O Biome lê a pasta `coverage/` se ela existir; ela está fora do lint em
