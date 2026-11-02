@@ -19,6 +19,17 @@ funciona: [docs/agente/versionamento.md](docs/agente/versionamento.md).
 
 O que já entrou na `develop` e ainda não ganhou número fica em [`changelog/nao-lancado/`](changelog/nao-lancado/) por alguns minutos, até o workflow de versão escrever a seção.
 
+## [0.18.4] - 2026-11-02
+
+Mesclada às 12:52 (UTC-3) · commit [`1c7b620`](https://github.com/pablopfg/Zuri/commit/1c7b62055b0e10846faede78962f685bf27e6adc) · PR [#83](https://github.com/pablopfg/Zuri/pull/83) · Fixa o runner em ubuntu-26.04 em todos os workflows
+
+### Alterado
+
+- Todos os workflows do GitHub Actions rodam agora em `ubuntu-26.04`, fixo, em
+  vez de `ubuntu-latest`. Some o aviso "The ubuntu-latest label will migrate to
+  Ubuntu 26" nos checks, e a imagem da CI só muda quando uma PR trocar a
+  versão.
+
 ## [0.18.3] - 2026-11-02
 
 Mesclada às 12:27 (UTC-3) · commit [`2564e18`](https://github.com/pablopfg/Zuri/commit/2564e18c48ca6dec1636d1c3c59d9ba009a3a9af) · PR [#85](https://github.com/pablopfg/Zuri/pull/85) · Mostra a versão no app e a mantém igual em todos os package.json
@@ -1451,7 +1462,8 @@ Mesclada às 22:15 (UTC-3) · commit [`360a79e`](https://github.com/pablopfg/Zur
   `npm audit`), CodeQL, Dependabot e rulesets para a `develop` e a `main`.
 - `LICENSE` (MIT), `NOTICE.md`, `SECURITY.md` e `CONTRIBUTING.md`.
 
-[Não lançado]: https://github.com/pablopfg/Zuri/compare/v0.18.3...develop
+[Não lançado]: https://github.com/pablopfg/Zuri/compare/v0.18.4...develop
+[0.18.4]: https://github.com/pablopfg/Zuri/releases/tag/v0.18.4
 [0.18.3]: https://github.com/pablopfg/Zuri/releases/tag/v0.18.3
 [0.18.2]: https://github.com/pablopfg/Zuri/releases/tag/v0.18.2
 [0.18.1]: https://github.com/pablopfg/Zuri/releases/tag/v0.18.1
