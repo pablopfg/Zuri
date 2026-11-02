@@ -284,7 +284,9 @@ Execute a etapa 22 da especificação ("Workflows").
 Execute a etapa 23 da especificação ("Backup, importação e retenção").
 
 - A importação segue as regras de entrada não confiável. Um backup malicioso (automação ligada, MCP, 11 MB, 10.001 memórias) é recusado inteiro, sem gravar nada (teste).
-- Teste de ida e volta: exportar, importar num banco vazio e comparar. O bot avisa quando o último backup tem mais de 30 dias, e o arquivo nunca vai pelo Telegram.
+- Teste de ida e volta: exportar, importar num banco vazio e comparar. A exportação leva tudo o que o contrato do backup permite, com versão do formato e número da última migration, e nada que dependa da Cloudflare para ser lido, para restaurar também numa VPS (`docs/planos/migracao-vps.md`).
+- Backup automático (decisão do Pablo, 02/11/2026, em decisoes.md): diário pelo alarme das automações, compactado e cifrado com a chave pública do dono (a chave privada é gerada no navegador, baixada uma vez e nunca vai ao servidor), enviado ao R2 `BACKUP_BUCKET` (⚠ aprovado; opcional, sem ele a tela avisa que está desligado) em upload por partes, sem passar de 128 MB de memória nem de 30 s de CPU por alarme. Mantém as 7 cópias mais novas e apaga as mais antigas depois do upload confirmado. Teste: 8º backup apaga o 1º, falha no upload não apaga nada, nome do objeto sem dado pessoal, conta das operações do R2 dentro do grátis.
+- Uma vez por mês, a cópia cifrada vai como documento só para o chat de `TELEGRAM_ADMIN_ID`, até o limite de envio do bot; acima disso, só o aviso com o link. O bot avisa quando o último backup baixado tem mais de 30 dias.
 - Fluxo completo de etapa, PR para develop, link e resultado dos testes.
 ```
 
