@@ -22,6 +22,19 @@ export function toDue(value: string | null | undefined, ctx: ToolContext): strin
   return instant;
 }
 
+/**
+ * A note for the model when a deadline it just set is already over: models
+ * that slip a year or a weekday write past dates without noticing, and the
+ * owner should hear about it instead of finding an overdue task later.
+ */
+export function pastDueNote(dueAt: string | null | undefined, ctx: ToolContext): { note: string } | Record<string, never> {
+  if (!dueAt) return {};
+  const now = ctx.automations.now();
+  if (Date.parse(dueAt) >= now) return {};
+  const today = instantToLocal(new Date(now).toISOString(), ctx.timeZone);
+  return { note: `This due date is already past (now it is ${today} in the owner's time zone). Tell the owner, and fix the date if it was a mistake.` };
+}
+
 /** Null when an item is gone: a snapshot of nothing. */
 export function orNull<T>(read: () => T): T | null {
   try {
@@ -110,7 +123,7 @@ export const taskTools = [
         dueAt: toDue(input.due, ctx) ?? null,
         projectId: resolveProject(input.project, ctx) ?? null,
       });
-      return { created: presentTask(task, ctx) };
+      return { created: presentTask(task, ctx), ...pastDueNote(task.dueAt, ctx) };
     },
   }),
   defineTool({
@@ -168,7 +181,8 @@ export const taskTools = [
       };
       if (Object.keys(patch).length === 0) throw new ToolError("Nothing to change: pass at least one field.");
       ctx.changed?.add(task.id);
-      return { updated: presentTask(ctx.productivity.tasks.update(task.id, patch), ctx) };
+      const updated = ctx.productivity.tasks.update(task.id, patch);
+      return { updated: presentTask(updated, ctx), ...("dueAt" in patch ? pastDueNote(updated.dueAt, ctx) : {}) };
     },
   }),
   defineTool({
