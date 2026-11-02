@@ -17,7 +17,8 @@ const HISTORY_ROWS = 200;
 /** Longest running summary the model writes. */
 const SUMMARY_TOKENS = 300;
 
-const LANGUAGE: Record<Locale, string> = { "pt-BR": "Brazilian Portuguese", en: "English" };
+/** The settings' language as the prompt names it: the name and the code, so no model confuses it with European Portuguese. */
+const LANGUAGE: Record<Locale, string> = { "pt-BR": "Brazilian Portuguese (pt-BR)", en: "English (en)" };
 
 export interface TurnInput {
   conversationId?: string | undefined;
@@ -136,6 +137,7 @@ export class AgentRunner {
           timeZone: settings.timeZone,
           now: new Date(this.deps.clock?.() ?? Date.now()),
           ownerName: settings.ownerName,
+          message: input.message,
           memories,
           summary,
         });
@@ -260,6 +262,7 @@ export class AgentRunner {
       // Not in routines yet: a name that reaches unattended runs reopens the
       // question of asking for the password to change it (docs/seguranca.md).
       ownerName: "",
+      message: input.prompt,
       memories,
       summary: null,
       routine: scheduledInstructions(input.name, input.quiet),

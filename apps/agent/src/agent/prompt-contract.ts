@@ -23,7 +23,7 @@ import { AppError } from "../http/errors.ts";
  * `<data source="tool">` block (tools/registry.ts).
  */
 
-export const PROMPT_ORIGINS = ["agent_name", "fixed_instructions", "clock", "owner_name", "memories", "summary", "routine", "summary_task"] as const;
+export const PROMPT_ORIGINS = ["agent_name", "fixed_instructions", "clock", "owner_name", "memories", "summary", "routine", "summary_task", "language_reminder"] as const;
 export type PromptOrigin = (typeof PROMPT_ORIGINS)[number];
 
 export const PROMPT_CLASSES = ["instruction", "personal", "sensitive"] as const;
@@ -34,6 +34,7 @@ export const ORIGIN_CLASS: Readonly<Record<PromptOrigin, PromptClass>> = {
   agent_name: "instruction",
   fixed_instructions: "instruction",
   clock: "instruction",
+  language_reminder: "instruction",
   summary_task: "instruction",
   owner_name: "personal",
   memories: "personal",

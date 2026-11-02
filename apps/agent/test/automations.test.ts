@@ -598,6 +598,10 @@ describe("running each kind", () => {
       const run = await world.automations.runNow(a.id, execute);
       expect([run.status, run.result]).toEqual(["success", "Uma conta atrasada: Pagar a luz."]);
       const system = provider.transcript.requests[0]?.system ?? "";
+      // A routine knows the date it runs on and answers in the settings' language.
+      expect(system).toContain("- Now: Saturday, 31 October 2026, 09:00 (America/Sao_Paulo");
+      expect(system).toContain("Write every answer in Brazilian Portuguese (pt-BR)");
+      expect(system.split("\n\n").at(-1)).toContain("Reminder: answer only in Brazilian Portuguese (pt-BR)");
       expect(system).toContain("scheduled run of a routine the owner approved");
       expect(provider.transcript.requests[0]?.messages).toEqual([{ role: "user", content: "O que está atrasado?" }]);
       expect(world.automations.aiRunsToday()).toBe(1);
