@@ -15,6 +15,10 @@ import { flushSecurityAlerts } from "../alerts/security.ts";
 import { AlertService } from "../alerts/service.ts";
 import { Watchers } from "../alerts/watchers.ts";
 import { DiagnosticsService } from "../diagnostics/service.ts";
+import { developmentPushFetcher } from "../push/dev-push.ts";
+import { PushDevices } from "../push/devices.ts";
+import { PushService } from "../push/service.ts";
+import { usableVapidKeys, type VapidKeys } from "../push/webpush.ts";
 import { createTurnstile, type Turnstile } from "../auth/turnstile.ts";
 import { MIN_OWNER_PASSWORD_LENGTH, parsePublicUrl, secretProblems } from "../config.ts";
 import { Database } from "../db/database.ts";
@@ -65,6 +69,7 @@ interface Store {
   alerts: AlertService;
   watchers: Watchers;
   diagnostics: DiagnosticsService;
+  push: PushService;
 }
 
 /**
@@ -121,7 +126,7 @@ export class ZuriAgent extends Agent<WorkerEnv> {
       locale: () => this.locale(),
       pingMs: () => this.streamPingMs,
     }),
-    notices: () => ({ alerts: this.store.alerts, diagnostics: this.store.diagnostics, auth: this.store.auth }),
+    notices: () => ({ alerts: this.store.alerts, diagnostics: this.store.diagnostics, auth: this.store.auth, push: this.store.push }),
   });
 
   private passwordSecretSet(): boolean {
@@ -178,7 +183,14 @@ export class ZuriAgent extends Agent<WorkerEnv> {
     const { db, alerts, watchers, automations, diagnostics } = this.store;
     // Each step on its own: one that fails never keeps the others (or the automations) from running.
     // The watchers go first, since their round moves the next one forward before anything else.
-    const steps = [() => watchers.tick(), () => diagnostics.flush(), () => alerts.sweep(), () => flushSecurityAlerts(db, alerts), () => alerts.escalate()];
+    const steps = [
+      () => watchers.tick(),
+      () => diagnostics.flush(),
+      () => alerts.sweep(),
+      () => this.store.push.prune(),
+      () => flushSecurityAlerts(db, alerts),
+      () => alerts.escalate(),
+    ];
     for (const step of steps) {
       try {
         await step();
@@ -287,7 +299,12 @@ export class ZuriAgent extends Agent<WorkerEnv> {
   /** The deploy's secrets: none may ever reach a model (prompt contract, D1). */
   private secretValues(): (string | undefined)[] {
     const env = this.env;
-    return [env.SESSION_SECRET, env.PASSWORD_PEPPER, env.OWNER_PASSWORD, env.OWNER_PASSWORD_HASH, env.SETUP_CODE, env.TURNSTILE_SECRET_KEY, env.TELEGRAM_BOT_TOKEN];
+    return [env.SESSION_SECRET, env.PASSWORD_PEPPER, env.OWNER_PASSWORD, env.OWNER_PASSWORD_HASH, env.SETUP_CODE, env.TURNSTILE_SECRET_KEY, env.TELEGRAM_BOT_TOKEN, env.VAPID_PRIVATE_KEY];
+  }
+
+  /** The VAPID pair from the two secrets, or null while either is missing, malformed or the published test pair (push stays "not configured"). */
+  private vapidKeys(): VapidKeys | null {
+    return usableVapidKeys({ publicKey: this.env.VAPID_PUBLIC_KEY?.trim(), privateKey: this.env.VAPID_PRIVATE_KEY?.trim() }, this.development());
   }
 
   /** The Worker refuses every request without a valid PUBLIC_URL, so one is always there by now. */
@@ -334,12 +351,22 @@ export class ZuriAgent extends Agent<WorkerEnv> {
       const actions = new PendingActionRepository(db);
       const plans = new TaskPlanService(db, productivity, () => settings.field("timeZone"));
       const state = new InternalState(db);
+      const push = new PushService({
+        devices: new PushDevices(db),
+        state,
+        events: auth.events,
+        keys: () => this.vapidKeys(),
+        subject: () => this.publicUrl().origin,
+        locale: () => this.locale(),
+        // Local development never reaches a push service (src/push/dev-push.ts).
+        ...(this.development() ? { fetcher: developmentPushFetcher as typeof fetch } : {}),
+      });
       // The notices, the watchers and the automations share one alarm: each refers to the others lazily.
       const alerts: AlertService = new AlertService(db, productivity.storage, {
         locale: () => this.locale(),
         settings: () => settings.get(),
-        // Push and e-mail plug in here in step 11b, Telegram in step 13.
-        channels: () => [],
+        // E-mail plugs in here next, Telegram in step 13.
+        channels: () => [push.channel],
         rearm: () => automations.rearm(),
       });
       const diagnostics = new DiagnosticsService(db, state, { alerts: () => alerts, release: () => env.CF_VERSION_METADATA?.id ?? null });
@@ -366,7 +393,7 @@ export class ZuriAgent extends Agent<WorkerEnv> {
           exists: async (id) => (await this.getScheduleById(id)) !== undefined,
         },
       });
-      this.#store = { db, settings, auth, productivity, memories, usage: new UsageMeter(db), conversations, actions, plans, automations, alerts, watchers, diagnostics };
+      this.#store = { db, settings, auth, productivity, memories, usage: new UsageMeter(db), conversations, actions, plans, automations, alerts, watchers, diagnostics, push };
     }
     return this.#store;
   }

@@ -73,17 +73,19 @@ test("a reminder's run reaches the bell: open, read, delete and read all @mobile
   expect((await page.request.delete(`/api/automations/${id}`, { headers: CSRF })).status()).toBe(204);
 });
 
-test("Settings > Avisos: the daily summary and the watchers are saved; the channels say they come next @mobile", async ({ page }) => {
+test("Settings > Avisos: the daily summary and the watchers are saved; the channels say which are ready @mobile", async ({ page }) => {
   await signedIn(page, "/configuracoes");
   await expect(page.getByRole("heading", { level: 1, name: "Configurações" })).toBeVisible();
   await openSettingsSection(page, "Avisos");
   const digest = page.getByRole("switch", { name: "Receber o resumo do dia" });
   await expect(digest).toBeChecked();
   await page.getByLabel("Horário do resumo").fill("06:45");
-  await page.getByRole("button", { name: "Salvar" }).click();
+  await page.getByRole("region", { name: "Resumo do dia" }).getByRole("button", { name: "Salvar" }).click();
   await expect(toast(page, "Avisos salvos.")).toBeVisible();
-  await expect(page.getByText("Ainda não disponível")).toHaveCount(3);
-  await expect(page.getByText("Nenhum aviso saiu do app ainda.")).toBeVisible();
+  // Push is set up in the e2e Worker but has no device yet; Telegram and e-mail come later.
+  await expect(page.getByText("Ainda não disponível")).toHaveCount(2);
+  // Earlier runs may have left sends (a security alert tries push even without a device), so only the card is checked.
+  await expect(page.getByRole("region", { name: "Últimos envios" })).toBeVisible();
   await expectAccessible(page, "configurações de avisos");
   expect(await tooSmallControls(page), "every control of Settings > Avisos is a 44 px target").toEqual([]);
 
@@ -118,4 +120,78 @@ test("Settings > Diagnóstico shows a screen's failure by name only, and marks i
   await entry.getByRole("button", { name: "Marcar como resolvida" }).click();
   await expect(toast(page, "Falha marcada como resolvida.")).toBeVisible();
   await expect(entry.getByText(/^Resolvida em /)).toBeVisible();
+});
+
+/**
+ * A browser that grants notifications and subscribes without a push service:
+ * headless Chromium has none. The key is a real P-256 point, so the server can
+ * encrypt for it; over loopback the Worker never posts it anywhere.
+ */
+async function fakePush(page: Page, endpoint: string) {
+  await page.addInitScript((url) => {
+    let permission: NotificationPermission = "default";
+    let subscribed = false;
+    const subscription = {
+      endpoint: url,
+      toJSON: () => ({ endpoint: url, keys: { p256dh: "BJUYKldJw8ymzdyE_0MrUOJVPoYGzDOgY5laDZ4NQvGDxZxEABkaZpjy_g6jZZ92TIW9qhMcJm3dOGJQGzDQNH8", auth: "c2VncmVkby1kZS10ZXN0ZQ" } }),
+      unsubscribe: async () => {
+        subscribed = false;
+        return true;
+      },
+    };
+    Object.defineProperty(Notification, "permission", { get: () => permission });
+    Notification.requestPermission = async () => {
+      permission = "granted";
+      return permission;
+    };
+    PushManager.prototype.subscribe = async () => {
+      subscribed = true;
+      return subscription as unknown as PushSubscription;
+    };
+    PushManager.prototype.getSubscription = async () => (subscribed ? subscription : null) as unknown as PushSubscription | null;
+  }, endpoint);
+}
+
+test("Settings > Avisos: this device gets notifications, a test goes out, and the device is removed @mobile", async ({ page }) => {
+  await fakePush(page, `https://fcm.googleapis.com/fcm/send/e2e-${crypto.randomUUID()}`);
+  await signedIn(page, "/configuracoes");
+  await expect(page.getByRole("heading", { level: 1, name: "Configurações" })).toBeVisible();
+  await openSettingsSection(page, "Avisos");
+  const card = page.getByRole("region", { name: "Notificação no aparelho" });
+  await card.getByRole("button", { name: "Receber avisos neste aparelho" }).click();
+  await expect(toast(page, "Pronto, este aparelho vai receber os avisos.")).toBeVisible();
+  await expect(card.getByText("Este aparelho já recebe os avisos.")).toBeVisible();
+  const mine = card.getByRole("listitem").filter({ hasText: "Este aparelho" });
+  await expect(mine).toHaveCount(1);
+  await expectAccessible(page, "notificação no aparelho");
+  expect(await tooSmallControls(page), "every control of the push card is a 44 px target").toEqual([]);
+
+  await card.getByRole("button", { name: "Mandar um teste" }).click();
+  await expect(toast(page, "Teste enviado. Deve aparecer em instantes.")).toBeVisible();
+
+  await mine.getByRole("button", { name: /^Remover aparelho: / }).click();
+  await expect(toast(page, "Aparelho removido.")).toBeVisible();
+  await expect(card.getByRole("listitem").filter({ hasText: "Este aparelho" })).toHaveCount(0);
+  await expect(card.getByRole("button", { name: "Receber avisos neste aparelho" })).toBeVisible();
+});
+
+test("Settings > Avisos: the channels of each kind of notice are saved; security can't change @mobile", async ({ page }) => {
+  await signedIn(page, "/configuracoes");
+  await expect(page.getByRole("heading", { level: 1, name: "Configurações" })).toBeVisible();
+  await openSettingsSection(page, "Avisos");
+  const card = page.getByRole("region", { name: "O que vai para cada canal" });
+  await expect(card.getByRole("checkbox", { name: "Segurança por E-mail" })).toBeDisabled();
+  await expect(card.getByRole("checkbox", { name: "Segurança por E-mail" })).toBeChecked();
+  const reminders = card.getByRole("checkbox", { name: "Lembretes por Notificação no aparelho" });
+  await expect(reminders).toBeChecked();
+  await reminders.uncheck();
+  await card.getByRole("button", { name: "Salvar" }).click();
+  await expect(toast(page, "Avisos salvos.")).toBeVisible();
+  await page.reload();
+  await expect(page.getByRole("region", { name: "O que vai para cada canal" }).getByRole("checkbox", { name: "Lembretes por Notificação no aparelho" })).not.toBeChecked();
+  await expectAccessible(page, "canais por tipo de aviso");
+
+  // Back to the defaults: the database is shared by the runs and the projects.
+  const reset = await page.request.patch("/api/settings", { headers: CSRF, data: { alertRoutes: { reminders: ["push", "telegram"] } } });
+  expect(reset.status()).toBe(200);
 });

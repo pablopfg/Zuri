@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { authActivitySchema, loginOptionsSchema, mfaRequiredSchema, sessionStateSchema } from "../src/auth.ts";
+import { authActivitySchema } from "../src/auth-activity.ts";
+import { loginOptionsSchema, mfaRequiredSchema, sessionStateSchema } from "../src/auth.ts";
 import { apiErrorSchema } from "../src/errors.ts";
 
 // The schemas the interface parses at runtime are built with Zod Mini (rule
