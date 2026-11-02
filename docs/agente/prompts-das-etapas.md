@@ -282,14 +282,18 @@ Não execute a etapa 21 sem a minha aprovação explícita nesta conversa. Ela g
 Primeiro me mande, em até 10 linhas: o que a etapa faz, quanto pode custar por dia com o teto padrão de US$ 2, quais segredos eu teria de criar e a sua recomendação (fazer agora, depois ou nunca). Diga também se vale passar os modelos pagos pelo AI Gateway, conforme docs/planos/ai-gateway-hyperdrive-vectorize.md (registro de conteúdo desligado, sem Guardrails, Unified Billing ou Logpush). Siga docs/planos/troca-de-provedores-e-protecao-de-dados.md: a troca de provedor é feita no Zuri (cadeia com disjuntor), não no AI Gateway, e a etapa pode ser dividida em 21a grátis (cadeia, disjuntor, modelo reserva do Workers AI, itens D1 e D2) e 21b ⚠️ (Anthropic e OpenAI com os itens D3 a D7). Proponha a divisão na recomendação. Só implemente se eu responder "aprovado". Nesse caso, siga a etapa 21 da especificação com ⚠️ no PR e no changelog.
 ```
 
-### Etapa 22 · Workflows (monitor de sites)
+### Etapa 22 · Workflows (fluxos, CRM e monitor de sites)
 
 ```text
-Execute a etapa 22 da especificação ("Workflows").
+Execute a etapa 22 da especificação ("Workflows"), ampliada pelo plano docs/planos/workflows-n8n.md (decisão do Pablo, 02/11/2026: trazer os fluxos de CRM do n8n, no escopo "CRM interno, atendimento no n8n").
 
-- Confirme com o plugin cloudflare a API atual do Cloudflare Workflows e os limites do plano Free. Se algo sair do gratuito, pare e me pergunte.
-- Endereços só pela tela, com senha recente. Nenhuma ferramenta do agente, comando do bot ou token remoto altera a lista (teste para cada caminho).
-- Reutilize o fetch protegido da etapa 18. Nada do corpo da resposta vai ao modelo. /status no bot mostra os monitores.
+- Leia o plano inteiro antes de começar. Divida em 22a (motor de fluxos no Durable Object, catálogo de nós, conexões, monitor de sites como primeiro modelo), 22b (CRM interno: contatos, tags, funil, follow-ups, rota de eventos do n8n com HMAC) e 22c (nós da agenda e do Google Contatos, depois da etapa 19 e da sincronização de contatos). Um PR por parte.
+- Mensagens a clientes e atendimento por IA ficam no n8n. Nenhum nó envia mensagem a terceiros nesta etapa.
+- Confirme com o plugin cloudflare os limites atuais do plano Free (subrequisições, alarme, Workflows). O motor roda no Durable Object; o Cloudflare Workflows só entra para um fluxo que passe de 15 min, recebendo só ids. Se algo sair do gratuito, pare e me pergunte.
+- Fluxos, conexões e endereços só pela tela, com senha recente. Nenhuma ferramenta do agente, comando do bot ou token remoto cria, liga ou altera um fluxo (teste para cada caminho); o chat só propõe, e o fluxo nasce desligado.
+- Sem nó de código, sem HTTP para endereço livre: só conexões cadastradas, pelo fetch protegido da etapa 18. Credencial cifrada nunca vai ao modelo, a log nem ao backup. Tudo o que entra é dado em <data>.
+- Tetos do plano (20 fluxos, 20 nós, 40 chamadas e 200 itens por execução, 500 execuções e 3.000 Neurons por dia, intervalo mínimo de 15 min ou 1 h com IA) medidos em free-tier-budget.test.ts (P1). Dados de contato fora dos logs; o lint de logs passa a barrar telefone.
+- Nada do corpo das respostas do monitor vai ao modelo. /status no bot mostra os monitores e os fluxos com falha.
 - Fluxo completo de etapa, PR para develop, link e resultado dos testes.
 ```
 
