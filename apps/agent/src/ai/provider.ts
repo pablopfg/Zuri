@@ -62,7 +62,9 @@ export interface ToolRequest extends GenerateRequest {
 export type AgentEvent =
   | { type: "text"; delta: string }
   | { type: "tool-start"; id: string; name: string; input: unknown }
-  | { type: "tool-end"; id: string; name: string; output: unknown; error?: string };
+  | { type: "tool-end"; id: string; name: string; output: unknown; error?: string }
+  /** Only from MeteredAI, before the first event of an answer the fallback model gives. */
+  | { type: "fallback"; model: string };
 
 /**
  * A model behind one interface. Workers AI is the only real provider; the mock
@@ -113,9 +115,29 @@ export function classifyAiError(error: unknown): AppError {
   if (text.includes("5007") || text.includes("no such model") || text.includes("model not found")) {
     return new AppError("SERVICE_UNAVAILABLE", "error.aiModelUnavailable");
   }
+  // The request itself was refused (bad input, too long for the window): another model would refuse it too.
+  const status = httpStatus(error);
+  if ((status !== undefined && status >= 400 && status < 500) || REJECTED.test(text)) {
+    return new AppError("SERVICE_UNAVAILABLE", "error.aiRequestRejected");
+  }
   // Only the name: the message may quote what the owner wrote.
   log("error", "ai_error", { code: "SERVICE_UNAVAILABLE", error });
   return new AppError("SERVICE_UNAVAILABLE", "error.aiUnavailable");
+}
+
+const REJECTED = /invalid (or incomplete )?input|context (window|length)|maximum context|too (long|large)|bad request/;
+
+/**
+ * Failures of the provider itself, which another model may not have: busy,
+ * model out of service, an unknown or server-side error. Never the owner's own
+ * limits, a stop, a refused request or a timeout of the whole turn (plan,
+ * "Quando trocar"). The account's daily allocation (4006) counts too: a
+ * provider on another account would still answer.
+ */
+const SWITCHABLE: ReadonlySet<string> = new Set(["error.aiBusy", "error.aiModelUnavailable", "error.aiUnavailable", "error.aiQuotaExhausted"]);
+
+export function isSwitchable(error: AppError): boolean {
+  return SWITCHABLE.has(error.messageKey);
 }
 
 export function isAbort(error: unknown): boolean {

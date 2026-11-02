@@ -1,6 +1,6 @@
 import { DEFAULT_LOCALE, isPasswordHash, isUsableSetupCode, type Locale } from "@zuri/shared";
 import { Agent } from "agents";
-import { chooseProvider, MeteredAI, UsageMeter } from "../ai/index.ts";
+import { chooseChain, CircuitBreaker, MeteredAI, ProviderChain, UsageMeter } from "../ai/index.ts";
 import type { AIProvider } from "../ai/provider.ts";
 import { breachCheckFor } from "../auth/dev-breach.ts";
 import { MockTranscriber, type Transcriber, WorkersAITranscriber } from "../ai/transcription.ts";
@@ -75,6 +75,10 @@ export class ZuriAgent extends Agent<WorkerEnv> {
    * AI binding. Nothing in the app sets these.
    */
   testProvider: AIProvider | null = null;
+  /** Tests only: the fallback next to testProvider. */
+  testFallbackProvider: AIProvider | null = null;
+  /** The AI providers' breaker: in memory, so it lasts as long as the object stays awake. */
+  #breaker: CircuitBreaker | undefined;
   testTranscriber: Transcriber | null = null;
   /** How often a running chat stream writes a ping (SSE_PING_MS); the tests shorten it. */
   streamPingMs = SSE_PING_MS;
@@ -190,16 +194,40 @@ export class ZuriAgent extends Agent<WorkerEnv> {
    * per use, so a change of model in the settings applies to the next turn.
    */
   ai(): MeteredAI {
-    const provider =
-      this.testProvider ??
-      chooseProvider({
-        development: this.development(),
-        binding: this.env.AI,
-        model: this.store.settings.field("aiModel"),
-        locale: () => this.locale(),
-      });
+    const breaker = this.breaker();
+    const chain = this.testProvider
+      ? new ProviderChain(this.testProvider, this.testFallbackProvider, breaker)
+      : chooseChain({
+          development: this.development(),
+          binding: this.env.AI,
+          model: this.store.settings.field("aiModel"),
+          fallback: this.store.settings.field("aiFallbackModel"),
+          locale: () => this.locale(),
+          breaker,
+        });
     const transcriber = this.testTranscriber ?? (this.development() ? new MockTranscriber() : this.env.AI ? new WorkersAITranscriber(this.env.AI) : null);
-    return new MeteredAI(provider, this.store.usage, () => this.aiLimits(), undefined, transcriber);
+    return new MeteredAI(chain, this.store.usage, () => this.aiLimits(), undefined, transcriber, this.secretValues());
+  }
+
+  /** The breaker, made once per wake of the object; the spent allocation is read back from the database. */
+  breaker(): CircuitBreaker {
+    if (!this.#breaker) {
+      const state = new InternalState(this.store.db);
+      this.#breaker = new CircuitBreaker(Date.now, {
+        load: () => {
+          const day = state.get<unknown>("ai_quota_exhausted_day");
+          return typeof day === "string" ? day : undefined;
+        },
+        save: (day) => (day === null ? state.delete("ai_quota_exhausted_day") : state.set("ai_quota_exhausted_day", day)),
+      });
+    }
+    return this.#breaker;
+  }
+
+  /** The deploy's secrets: none may ever reach a model (prompt contract, D1). */
+  private secretValues(): (string | undefined)[] {
+    const env = this.env;
+    return [env.SESSION_SECRET, env.PASSWORD_PEPPER, env.OWNER_PASSWORD, env.OWNER_PASSWORD_HASH, env.SETUP_CODE, env.TURNSTILE_SECRET_KEY, env.TELEGRAM_BOT_TOKEN];
   }
 
   /** The Worker refuses every request without a valid PUBLIC_URL, so one is always there by now. */

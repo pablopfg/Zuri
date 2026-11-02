@@ -15,6 +15,19 @@ export const CHAT_MODEL_IDS = [
 export type ChatModel = (typeof CHAT_MODEL_IDS)[number];
 export const DEFAULT_CHAT_MODEL: ChatModel = "@cf/zai-org/glm-4.7-flash";
 
+/** "No fallback model": the owner may turn the fallback off. */
+export const NO_FALLBACK_MODEL = "none";
+/** What the fallback setting holds: no model, or one of the list. */
+export const FALLBACK_MODEL_IDS = [NO_FALLBACK_MODEL, ...CHAT_MODEL_IDS] as const;
+export type FallbackModel = (typeof FALLBACK_MODEL_IDS)[number];
+/**
+ * The model that answers when the chosen one fails before answering (busy,
+ * out of service). Free like every model of the list, inside the same daily
+ * Neuron cap; the cheapest one, and not the default model, so the default pair
+ * always has two different models (decision of 02/11/2026).
+ */
+export const DEFAULT_FALLBACK_MODEL: FallbackModel = "@cf/qwen/qwen3-30b-a3b-fp8";
+
 /** Cloudflare's free Workers AI allocation per day, reset at 00:00 UTC. */
 export const FREE_NEURONS_PER_DAY = 10_000;
 

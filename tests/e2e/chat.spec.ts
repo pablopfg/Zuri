@@ -212,6 +212,34 @@ test("a link in an answer shows where it really goes, and a script link is plain
   await expect(answer.getByText("clique", { exact: true })).toBeVisible();
 });
 
+test("the fallback model answers when the chosen one is busy, with its mark, also after a reload; with none, the owner sees the error", async ({ page }) => {
+  const word = tag();
+  await openChat(page);
+  // The simulated chosen model fails a message that starts with `fail `, before answering.
+  await send(page, `fail ${word}`);
+  const answer = log(page).locator("li").filter({ hasText: `(IA simulada) Você disse: “fail ${word}”` });
+  await expect(answer).toBeVisible();
+  await expect(answer.getByText("Respondida pelo modelo reserva")).toBeVisible();
+  // An answer of the chosen model has no mark.
+  await send(page, `normal ${word}`);
+  const normal = log(page).locator("li").filter({ hasText: `Você disse: “normal ${word}”` });
+  await expect(normal).toBeVisible();
+  await expect(normal.getByText("Respondida pelo modelo reserva")).toHaveCount(0);
+  await page.reload();
+  await expect(answer.getByText("Respondida pelo modelo reserva")).toBeVisible();
+  await expect(log(page).getByText("Respondida pelo modelo reserva")).toHaveCount(1);
+  await expectAccessible(page, "conversa-reserva");
+
+  // Without a fallback the turn ends with the busy error, stored with the answer.
+  expect((await page.request.patch("/api/settings", { headers: CSRF, data: { aiFallbackModel: "none" } })).status()).toBe(200);
+  try {
+    await send(page, `fail sozinho ${word}`);
+    await expect(log(page).getByRole("alert").filter({ hasText: "A IA está ocupada agora. Tente de novo em instantes." })).toBeVisible();
+  } finally {
+    expect((await page.request.patch("/api/settings", { headers: CSRF, data: { aiFallbackModel: "@cf/qwen/qwen3-30b-a3b-fp8" } })).status()).toBe(200);
+  }
+});
+
 test("Stop in the middle of an answer keeps what was written, marked as stopped, also after a reload", async ({ page }) => {
   const word = tag();
   await openChat(page);

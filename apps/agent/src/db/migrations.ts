@@ -538,6 +538,15 @@ export const MIGRATIONS: readonly Migration[] = [
       `CREATE TRIGGER IF NOT EXISTS zur_counts_automation_runs_delete AFTER DELETE ON zur_automation_runs BEGIN UPDATE zur_counts SET n = n - 1 WHERE kind = 'automation_runs'; END`,
     ],
   },
+  {
+    version: 10,
+    name: "fallback_answers",
+    statements: [
+      // The answer came from the fallback model (Settings > AI): the chat shows
+      // "Respondida pelo modelo reserva". Only a flag, no model name. In the backup with the message.
+      `ALTER TABLE zur_messages ADD COLUMN fallback INTEGER NOT NULL DEFAULT 0 CHECK (fallback IN (0, 1))`,
+    ],
+  },
 ];
 
 export const LATEST_SCHEMA_VERSION = MIGRATIONS.at(-1)?.version ?? 0;

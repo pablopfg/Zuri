@@ -216,6 +216,8 @@ export interface ChatMessage {
   /** Why the answer stopped, in the owner's language, when it did not complete. */
   error: { code: ApiErrorCode; message: string } | null;
   source: MessageSource;
+  /** The answer came from the fallback model: the chosen one failed before answering. */
+  fallback?: true;
   createdAt: string;
 }
 

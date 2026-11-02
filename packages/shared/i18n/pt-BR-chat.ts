@@ -47,6 +47,7 @@ export const ptBRChat = {
   "web.chat.you": "Você",
   "web.chat.thinking": "Pensando…",
   "web.chat.stopped": "Resposta interrompida.",
+  "web.chat.fallback": "Respondida pelo modelo reserva",
   "web.chat.noText": "Sem resposta em texto.",
   "web.chat.streamingElsewhere": "Uma resposta está sendo escrita em outra aba. Ela aparece aqui quando terminar.",
   "web.chat.restored": "Mensagem restaurada de um backup",

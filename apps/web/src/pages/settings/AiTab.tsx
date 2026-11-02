@@ -5,9 +5,12 @@ import {
   type ChatModel,
   chatNeurons,
   DEFAULT_CHAT_MODEL,
+  FALLBACK_MODEL_IDS,
+  type FallbackModel,
   formatDateTimeParts,
   isChatModel,
   modelLabel,
+  NO_FALLBACK_MODEL,
   ptBRAi,
   type Settings,
   type SettingsUpdate,
@@ -295,12 +298,14 @@ function LimitsForm({ settings }: { settings: Settings }) {
   const save = useSettingsMutation();
   const toast = useToast();
   const [model, setModel] = useState<ChatModel>(settings.aiModel);
+  const [fallback, setFallback] = useState<FallbackModel>(usableFallback(settings.aiFallbackModel, settings.aiModel));
   const [values, setValues] = useState<Record<LimitField, string>>(() => texts(settings));
   const [status, setStatus] = useState<"unchanged" | null>(null);
 
   // The settings as stored (after a save, or changed in another tab) replace the form.
   useEffect(() => {
     setModel(settings.aiModel);
+    setFallback(usableFallback(settings.aiFallbackModel, settings.aiModel));
     setValues(texts(settings));
   }, [settings]);
 
@@ -314,6 +319,7 @@ function LimitsForm({ settings }: { settings: Settings }) {
     if (LIMIT_FIELDS.some((field) => problems[field])) return;
     const patch: SettingsUpdate = {};
     if (model !== settings.aiModel) patch.aiModel = model;
+    if (fallback !== usableFallback(settings.aiFallbackModel, settings.aiModel)) patch.aiFallbackModel = fallback;
     for (const field of LIMIT_FIELDS) {
       const value = Number(values[field]);
       if (value !== settings[field]) patch[field] = value;
@@ -338,11 +344,36 @@ function LimitsForm({ settings }: { settings: Settings }) {
         hint={t("web.ai.modelHint", { neurons: number(turn), turns: number(Math.floor(cap / turn)) })}
         value={model}
         disabled={save.isPending}
-        onChange={(e) => isChatModel(e.target.value) && setModel(e.target.value)}
+        onChange={(e) => {
+          const next = e.target.value;
+          if (!isChatModel(next)) return;
+          setModel(next);
+          // The same model twice is no fallback.
+          setFallback((current) => usableFallback(current, next));
+          setStatus(null);
+        }}
       >
         {CHAT_MODEL_IDS.map((id) => (
           <option key={id} value={id}>
             {id === DEFAULT_CHAT_MODEL ? t("web.ai.modelDefault", { label: CHAT_MODELS[id].label }) : CHAT_MODELS[id].label}
+          </option>
+        ))}
+      </SelectField>
+      <SelectField
+        label={t("web.ai.fallbackModel")}
+        hint={t("web.ai.fallbackModelHint")}
+        value={fallback}
+        disabled={save.isPending}
+        onChange={(e) => {
+          const next = FALLBACK_MODEL_IDS.find((id) => id === e.target.value);
+          if (next) setFallback(next);
+          setStatus(null);
+        }}
+      >
+        <option value={NO_FALLBACK_MODEL}>{t("web.ai.fallbackNone")}</option>
+        {CHAT_MODEL_IDS.filter((id) => id !== model).map((id) => (
+          <option key={id} value={id}>
+            {CHAT_MODELS[id].label}
           </option>
         ))}
       </SelectField>
@@ -395,6 +426,11 @@ const LABELS = {
   aiMaxContextTokens: { label: "web.ai.maxContextTokens", hint: "web.ai.maxContextTokensHint" },
   aiScheduledRunsPerDay: { label: "web.ai.scheduledRunsPerDay", hint: "web.ai.scheduledRunsPerDayHint" },
 } as const;
+
+/** The fallback as the form shows it: the chosen model again means none. */
+function usableFallback(fallback: FallbackModel, model: ChatModel): FallbackModel {
+  return fallback === model ? NO_FALLBACK_MODEL : fallback;
+}
 
 function texts(settings: Settings): Record<LimitField, string> {
   return Object.fromEntries(LIMIT_FIELDS.map((field) => [field, String(settings[field])])) as Record<LimitField, string>;
