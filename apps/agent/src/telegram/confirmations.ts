@@ -26,15 +26,23 @@ export interface ConfirmationsDeps {
   /** Always PUBLIC_URL's host and origin, never the request's. */
   relyingParty(): RelyingParty;
   /** The owner's e-mail through SEND_EMAIL, counted apart from the notices; false when it isn't set up. */
-  email: { configured(): boolean; send(code: string, minutes: number): Promise<EmailOutcome> };
+  email: { configured(): boolean; send(code: string, minutes: number, about: ConfirmationTarget & { purpose: TelegramConfirmPurpose }): Promise<EmailOutcome> };
   events: AuthEvents;
   sessionSecret(): string;
   clock?: () => number;
 }
 
+/** What an approval is tied to (step 16): the proposal and its target as the owner saw it. */
+export interface ConfirmationTarget {
+  pendingActionId: string | null;
+  targetHash: string | null;
+}
+
 interface ConfirmationRow {
   id: string;
   purpose: TelegramConfirmPurpose;
+  pending_action_id: string | null;
+  target_hash: string | null;
   message_id: number | null;
   webauthn_challenge: string | null;
   email_code_hash: string | null;
@@ -46,7 +54,7 @@ interface ConfirmationRow {
 }
 
 /** A confirmation that went through: what it was for and the bot's message that asked for it. */
-export interface Confirmed {
+export interface Confirmed extends ConfirmationTarget {
   id: string;
   purpose: TelegramConfirmPurpose;
   messageId: number | null;
@@ -57,7 +65,7 @@ export type SendCodeOutcome = "sent" | "wait" | "hourly" | "limit" | "not_config
 export type CodeCheck =
   /** The message answers no code request: the caller decides what it is. */
   | { status: "none" }
-  | { status: "not_a_code" | "wrong" | "expired" | "locked" }
+  | { status: "not_a_code" | "wrong" | "expired" | "locked"; purpose: TelegramConfirmPurpose }
   | ({ status: "ok" } & Confirmed);
 
 /**
@@ -74,7 +82,8 @@ export type CodeCheck =
  *
  * Five wrong answers in 15 minutes (a refused passkey, a wrong code) lock
  * confirming through the bot for an hour and raise a security alert, at most
- * one a day. Step 15 confirms unlocks; step 16 adds approvals with the same rows.
+ * one a day. Step 15 confirms unlocks; step 16 approves proposals with the
+ * same rows, each tied to the proposal and the hash of its target.
  */
 export class TelegramConfirmations {
   constructor(private readonly deps: ConfirmationsDeps) {}
@@ -102,21 +111,38 @@ export class TelegramConfirmations {
   /**
    * A new confirmation: any other still open ends (one at a time). The page's
    * token goes back once, only when a passkey can answer it; only its HMAC stays.
+   *
+   * An approval asked again for the same proposal and target while its
+   * confirmation is open keeps that confirmation (its code, its tries, its
+   * end): only the page's link is new, since the old one exists only as an HMAC.
    */
-  async open(purpose: TelegramConfirmPurpose): Promise<{ id: string; token: string | null; expiresAt: string }> {
+  async open(purpose: TelegramConfirmPurpose, target: ConfirmationTarget = { pendingActionId: null, targetHash: null }): Promise<{ id: string; token: string | null; expiresAt: string }> {
     const at = this.#now();
-    const id = randomId();
     const token = this.methods().passkey ? randomToken(32) : null;
     const tokenHmac = token === null ? null : await this.#tokenHmac(token);
+    if (purpose === "approval" && target.pendingActionId !== null) {
+      const reused = this.deps.db.one<{ id: string; expires_at: string }>(
+        `UPDATE zur_telegram_approvals SET page_token_hmac = ?, webauthn_challenge = NULL
+         WHERE status = 'open' AND purpose = 'approval' AND pending_action_id = ? AND target_hash IS ? AND expires_at > ? RETURNING id, expires_at`,
+        tokenHmac,
+        target.pendingActionId,
+        target.targetHash,
+        this.#iso(at),
+      );
+      if (reused) return { id: reused.id, token, expiresAt: reused.expires_at };
+    }
+    const id = randomId();
     const expiresAt = this.#iso(at + TELEGRAM_LIMITS.confirmTtlMs);
     this.deps.db.transaction(() => {
       // Rows live minutes: a day after they were made, they go.
       this.deps.db.run(`DELETE FROM zur_telegram_approvals WHERE created_at < ?`, this.#iso(at - DAY_MS));
       this.deps.db.run(`UPDATE zur_telegram_approvals SET status = 'expired' WHERE status = 'open'`);
       this.deps.db.run(
-        `INSERT INTO zur_telegram_approvals (id, purpose, page_token_hmac, status, created_at, expires_at) VALUES (?, ?, ?, 'open', ?, ?)`,
+        `INSERT INTO zur_telegram_approvals (id, purpose, pending_action_id, target_hash, page_token_hmac, status, created_at, expires_at) VALUES (?, ?, ?, ?, ?, 'open', ?, ?)`,
         id,
         purpose,
+        target.pendingActionId,
+        target.targetHash,
         tokenHmac,
         this.#iso(at),
         expiresAt,
@@ -133,7 +159,7 @@ export class TelegramConfirmations {
   // ---------- The /aprovar page (passkey) ----------
 
   /** What the page needs to ask for the passkey. The same challenge comes back while it is unanswered. */
-  async pageOptions(token: string): Promise<{ purpose: TelegramConfirmPurpose; options: PublicKeyCredentialRequestOptionsJSON; expiresAt: string }> {
+  async pageOptions(token: string): Promise<{ purpose: TelegramConfirmPurpose; options: PublicKeyCredentialRequestOptionsJSON; expiresAt: string } & ConfirmationTarget> {
     // The token first: a stranger without one learns nothing, not even that the confirmations are locked.
     const row = await this.#byToken(token);
     this.#assertUnlocked();
@@ -149,7 +175,7 @@ export class TelegramConfirmations {
       );
       if (!stored) throw expired("used");
     }
-    return { purpose: row.purpose, options: request.options, expiresAt: row.expires_at };
+    return { purpose: row.purpose, options: request.options, expiresAt: row.expires_at, pendingActionId: row.pending_action_id, targetHash: row.target_hash };
   }
 
   /**
@@ -215,7 +241,11 @@ export class TelegramConfirmations {
       row.id,
     );
     if (written.rowsWritten === 0) return "expired";
-    const outcome = await this.deps.email.send(code, TELEGRAM_LIMITS.confirmTtlMs / 60_000);
+    const outcome = await this.deps.email.send(code, TELEGRAM_LIMITS.confirmTtlMs / 60_000, {
+      purpose: row.purpose,
+      pendingActionId: row.pending_action_id,
+      targetHash: row.target_hash,
+    });
     if (outcome !== "sent") {
       // Not sent: no code is good, and the wait doesn't apply.
       this.deps.db.run(`UPDATE zur_telegram_approvals SET email_code_hash = NULL, last_email_at = ?, expires_at = ? WHERE id = ?`, row.last_email_at, row.expires_at, row.id);
@@ -240,12 +270,13 @@ export class TelegramConfirmations {
     if (!row) return { status: "none" };
     const code = text.replace(/\s+/g, "");
     // Only something shaped like a code is one: any other answer to that message is an ordinary message.
-    if (!isCodeShaped(code)) return { status: row.status === "open" ? "not_a_code" : "none" };
-    if (this.lockedUntil() !== null) return { status: "locked" };
-    if (row.status !== "open" || row.email_code_hash === null || this.#codeDeadline(row) <= this.#now()) return { status: "expired" };
+    const purpose = row.purpose;
+    if (!isCodeShaped(code)) return row.status === "open" ? { status: "not_a_code", purpose } : { status: "none" };
+    if (this.lockedUntil() !== null) return { status: "locked", purpose };
+    if (row.status !== "open" || row.email_code_hash === null || this.#codeDeadline(row) <= this.#now()) return { status: "expired", purpose };
     this.deps.db.run(`UPDATE zur_telegram_approvals SET attempts = attempts + 1 WHERE id = ?`, row.id);
     if (!timingSafeEqualText(await this.#codeHash(row.id, code), row.email_code_hash)) {
-      return { status: this.#failure() ? "locked" : "wrong" };
+      return { status: this.#failure() ? "locked" : "wrong", purpose };
     }
     const confirmed = this.#confirm(row, "email");
     return { status: "ok", ...confirmed };
@@ -266,7 +297,7 @@ export class TelegramConfirmations {
     );
     // The other way confirmed it a moment before: the token or code was still spent.
     if (written.rowsWritten === 0) throw expired("used");
-    return { id: row.id, purpose: row.purpose, messageId: row.message_id };
+    return { id: row.id, purpose: row.purpose, messageId: row.message_id, pendingActionId: row.pending_action_id, targetHash: row.target_hash };
   }
 
   /** The e-mailed code's end: the row's own, which each e-mail sets 5 minutes ahead. */

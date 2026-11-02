@@ -3,6 +3,7 @@ import "./zod-config.ts";
 
 import { z } from "zod";
 import { passkeyAssertionSchema } from "./passkeys.ts";
+import type { DestructiveToolName } from "./chat.ts";
 
 /**
  * The owner's Telegram bot (steps 12 to 16). The bot obeys one Telegram account,
@@ -188,8 +189,8 @@ export type TelegramUpdate = z.infer<typeof telegramUpdateSchema>;
 /** Where the bot's confirmation page lives; the token travels in its fragment, never to a server log. */
 export const APPROVE_PATH = "/aprovar";
 
-/** What a confirmation from the bot is for. Step 16 adds "approval". */
-export const TELEGRAM_CONFIRM_PURPOSES = ["unlock"] as const;
+/** What a confirmation from the bot is for: unlocking reading (step 15) or approving a proposal (step 16). */
+export const TELEGRAM_CONFIRM_PURPOSES = ["unlock", "approval"] as const;
 export type TelegramConfirmPurpose = (typeof TELEGRAM_CONFIRM_PURPOSES)[number];
 
 /** Why the page can't go on with a token: unknown, already used (right or wrong) or past its 5 minutes. */
@@ -207,16 +208,31 @@ export type ApproveOptionsRequest = z.infer<typeof approveOptionsSchema>;
 export const approveVerifySchema = /* @__PURE__ */ z.object({ token: approveToken, credential: passkeyAssertionSchema.shape.response }).strict();
 export type ApproveVerifyRequest = z.infer<typeof approveVerifySchema>;
 
+/**
+ * A proposal as the bot, the page and the e-mail show it (spec, "Aprovação pelo
+ * bot"): built by the server from the stored proposal and the target as it is
+ * now, never from the model's words.
+ */
+export interface ApprovalPreview {
+  tool: DestructiveToolName;
+  /** The target's current title (a memory's text), read from the database. */
+  target: string;
+  /** Rewrites: the text as it is now. */
+  before?: string;
+  /** Rewrites: the text that would be written (empty clears). */
+  after?: string;
+  /** When the proposal stops being good. */
+  expiresAt: string;
+}
+
 /** What the page gets before asking for the passkey (the options are WebAuthn's own JSON). */
 export interface ApproveOptions {
   purpose: TelegramConfirmPurpose;
   options: unknown;
   expiresAt: string;
+  /** Purpose "approval": what the passkey approves. */
+  approval?: ApprovalPreview;
 }
 
-/** A confirmation that went through. */
-export interface ApproveResult {
-  purpose: TelegramConfirmPurpose;
-  /** Until when reading through the bot is open (purpose "unlock"). */
-  unlockedUntil: string;
-}
+/** A confirmation that went through: reading unlocked, or the proposal ran. */
+export type ApproveResult = { purpose: "unlock"; unlockedUntil: string } | { purpose: "approval"; status: "approved" };

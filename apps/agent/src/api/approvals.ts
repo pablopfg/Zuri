@@ -7,8 +7,8 @@ import { readJson } from "./http.ts";
 import type { TelegramDeps } from "./telegram.ts";
 
 /**
- * The /aprovar page's routes (step 15: unlocking the bot's reading; step 16
- * adds approvals). No session: the page's token, in the JSON body, is the key.
+ * The /aprovar page's routes (step 15: unlocking the bot's reading; step 16:
+ * approving a proposal). No session: the page's token, in the JSON body, is the key.
  * Registered before the session check and after the CSRF one (same origin),
  * behind the sign-in's limiter: a network that keeps sending wrong tokens or
  * refused passkeys waits like a wrong password.
@@ -41,15 +41,19 @@ export function registerApprovalRoutes(app: Hono<ApiEnv>, deps: () => TelegramDe
       auth.limiter.release(attempt);
       return Response.json(result);
     } catch (error) {
-      // A refused passkey and an unknown token keep the try; a link that was real (used, expired, or
-      // locked by too many wrong answers, which the bot already counts) gives it back.
-      if (error instanceof AppError && (error.code === "APPROVAL_EXPIRED" || error.code === "APPROVALS_LOCKED") && !unknownToken(error)) {
+      // A refused passkey and an unknown token keep the try; a link that was real (used, expired, locked by
+      // too many wrong answers, which the bot already counts, or an approval whose target changed or that was
+      // handled in the app meanwhile, step 16) gives it back.
+      if (error instanceof AppError && GIVES_BACK.includes(error.code) && !unknownToken(error)) {
         auth.limiter.release(attempt);
       }
       throw error;
     }
   });
 }
+
+/** Refusals of a real link: the network's try comes back. */
+const GIVES_BACK: readonly string[] = ["APPROVAL_EXPIRED", "APPROVALS_LOCKED", "TARGET_CHANGED", "CONFLICT"];
 
 /** The token matched no confirmation at all. */
 function unknownToken(error: unknown): boolean {

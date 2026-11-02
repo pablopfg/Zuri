@@ -11,6 +11,7 @@ import { log } from "../log.ts";
 import { TelegramApiError, TelegramBudgetError, type TelegramClient, TelegramFileTooLargeError } from "./client.ts";
 import { answerBlocks, plainHtml, splitHtml, textOf } from "./format.ts";
 import type { TelegramLinks } from "./links.ts";
+import type { Out } from "./commands.ts";
 
 /** A voice note or an audio file, as the update describes it (nothing downloaded yet). */
 export interface IncomingAudio {
@@ -51,6 +52,11 @@ export interface TelegramConversationDeps {
   timeZone(): string;
   origin(): string;
   clock?: () => number;
+  /**
+   * The cards of the proposals a turn made (step 16): the preview from the
+   * database with Aprovar. Absent, or empty for them, and the answer points to the app.
+   */
+  proposalCards?(actionIds: string[]): Promise<Out[]>;
   /** Tests shorten the turn and the "typing…" pace. */
   turnTimeoutMs?: number;
   typingEveryMs?: number;
@@ -479,14 +485,16 @@ export class TelegramConversation {
     runs.set(conversationId, controller);
     let answer = "";
     let errorText: string | null = null;
-    let proposals = false;
+    let plans = false;
+    const actionIds: string[] = [];
     let cancelled = false;
     try {
       for await (const event of this.deps
         .runner()
         .chat({ conversationId, message: text, signal: controller.signal, source: "telegram", ...(quoted.length ? { quoted } : {}) })) {
         if (event.type === "text") answer += event.delta;
-        else if (event.type === "approval" || event.type === "plan") proposals = true;
+        else if (event.type === "approval") actionIds.push(event.action.id);
+        else if (event.type === "plan") plans = true;
         else if (event.type === "error") errorText = event.message;
         else if (event.type === "done") cancelled = event.message.status === "cancelled";
       }
@@ -502,7 +510,10 @@ export class TelegramConversation {
     // Stopped by the deadline, or by the owner's Stop in the app.
     if (cancelled) blocks.push(plainHtml(t(locale, isDeadline(controller.signal) ? "telegram.chat.timeout" : "telegram.chat.stopped")));
     else if (errorText) blocks.push(plainHtml(errorText));
-    else if (blocks.length === 0 && !proposals) blocks.push(plainHtml(t(locale, "telegram.chat.failed")));
+    else if (blocks.length === 0 && !plans && actionIds.length === 0) blocks.push(plainHtml(t(locale, "telegram.chat.failed")));
+    // Each proposal gets its card with Aprovar; a task plan (or a proposal the bot can't show) waits in the app.
+    const cards = actionIds.length > 0 && this.deps.proposalCards ? await this.deps.proposalCards(actionIds) : [];
+    const proposals = plans || (actionIds.length > 0 && cards.length === 0);
     if (proposals) blocks.push(plainHtml(t(locale, "telegram.chat.pending")));
     const openInApp = { reply_markup: { inline_keyboard: [[{ text: t(locale, "telegram.chat.openInApp"), url: new URL(`/conversa/${conversationId}`, this.deps.origin()).href }]] } };
     for (const [index, block] of blocks.entries()) {
@@ -512,7 +523,12 @@ export class TelegramConversation {
         await this.#send(client, chatId, plainHtml(t(locale, "telegram.chat.truncated")), { html: true, extra: openInApp });
         break;
       }
-      if (!(await this.#send(client, chatId, block, { html: true, extra: last && proposals ? openInApp : {} }))) break;
+      if (!(await this.#send(client, chatId, block, { html: true, extra: last && proposals ? openInApp : {} }))) return;
+    }
+    for (const card of cards) {
+      // Plain text (already disarmed by the server), after the answer: what the owner approves is never the model's words.
+      const extra = card.keyboard ? { reply_markup: { inline_keyboard: card.keyboard } } : {};
+      if (client.remaining < 1 || !(await this.#send(client, chatId, card.text, { extra }))) return;
     }
   }
 
