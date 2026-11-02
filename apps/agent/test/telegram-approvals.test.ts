@@ -351,7 +351,7 @@ describe("the proposal's card", () => {
     await inOwner((agent) => email(agent, false));
     const { card } = await proposeDelete();
     expect(buttons(card).map((b) => b.text)).toEqual(["Abrir no app"]);
-    expect(buttons(card)[0]?.url).toMatch(new RegExp(`^${ORIGIN}/conversa/`));
+    expect(buttons(card)[0]?.url?.startsWith(`${ORIGIN}/conversa/`)).toBe(true);
   });
 
   it("points to the app when the bot can't confirm: no admin id", async () => {
