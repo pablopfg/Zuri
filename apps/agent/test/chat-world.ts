@@ -84,7 +84,7 @@ export function withChatWorld<T>(fn: (world: ChatWorld) => T | Promise<T>): Prom
     migrate(db);
     const clock = { now: NOON };
     const tick = () => clock.now;
-    const productivity = new Productivity(db, { timeZone: () => TIME_ZONE });
+    const productivity = new Productivity(db, { timeZone: () => TIME_ZONE, clock: tick });
     const memories = new MemoryService(db, productivity.storage, { conflictReview: () => true, clock: tick });
     const conversations = new ConversationRepository(db, productivity.storage, () => "pt-BR");
     const actions = new PendingActionRepository(db, tick);

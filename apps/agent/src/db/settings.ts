@@ -27,6 +27,7 @@ const STORAGE_KEYS = {
   aiMaxIterations: "ai_max_iterations",
   aiMaxContextTokens: "ai_max_context_tokens",
   aiScheduledRunsPerDay: "ai_scheduled_runs_per_day",
+  ownerName: "owner_name",
 } as const satisfies Record<keyof Settings, string>;
 
 type Field = keyof Settings;

@@ -21,6 +21,7 @@ export {
   ptBRMemory,
   ptBRProductivity,
   ptBRSecurity,
+  ptBRGreeting,
   ptBRPalette,
   ptBRServer,
   ptBRSettings,
@@ -40,7 +41,10 @@ export { formatDateTime, formatDateTimeParts, formatUsd } from "./format.ts";
 export {
   DEFAULT_SETTINGS,
   DEFAULT_TIME_ZONE,
+  isOwnerName,
   isTimeZone,
+  normalizeOwnerName,
+  OWNER_NAME_MAX,
   SESSION_TIMEOUT_RANGES,
   type Settings,
   type SettingsUpdate,
