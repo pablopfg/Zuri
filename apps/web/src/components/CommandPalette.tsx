@@ -103,7 +103,15 @@ export function CommandPalette({ onClose, navigate }: { onClose: () => void; nav
       section("integracoes", "web.settings.tab.integrations", Plug),
       section("dados", "web.settings.tab.data", Database),
       { id: "new-task", group: t("web.palette.groupCreate"), label: t("web.palette.newTask"), icon: ListPlus, to: "/tarefas", state: { newTask: true } },
-      { id: "new-automation", group: t("web.palette.groupCreate"), label: t("web.palette.newAutomation"), icon: CalendarPlus, to: `/automacoes#${NEW_AUTOMATION}`, before: () => window.dispatchEvent(new Event(NEW_AUTOMATION)) },
+      {
+        id: "new-automation",
+        group: t("web.palette.groupCreate"),
+        label: t("web.palette.newAutomation"),
+        icon: CalendarPlus,
+        // Already there: the page hears the event and the address stays clean. Elsewhere: the page reads the address.
+        to: location.pathname === "/automacoes" ? "/automacoes" : `/automacoes#${NEW_AUTOMATION}`,
+        before: () => window.dispatchEvent(new Event(NEW_AUTOMATION)),
+      },
       { id: "new-note", group: t("web.palette.groupCreate"), label: t("web.palette.newNote"), icon: FilePlus2, to: "/notas/nova" },
     ];
   }, [t]);

@@ -438,7 +438,6 @@ function AutomationForm({ editing, onClose }: { editing: Editing; onClose: () =>
           value={name}
           maxLength={AUTOMATION_LIMITS.name}
           required
-          autoFocus
           onChange={(e) => setName(e.target.value)}
         />
         <TextAreaField

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { Schedule } from "@zuri/shared";
 import { t } from "../../../packages/shared/i18n/index.ts";
 import { automationAnchor, describeSchedule, draftOf, emptyDraft, joinList, scheduleOf } from "../src/lib/automations.ts";
 
@@ -80,7 +81,7 @@ describe("the form's schedule", () => {
       { type: "weekly", days: [0, 6], time: "10:00" },
       { type: "monthly", day: 31, time: "18:00" },
       { type: "interval", minutes: 180 },
-    ] as const) {
+    ] satisfies Schedule[]) {
       expect(scheduleOf(draftOf(schedule, SP, now))).toEqual(schedule);
     }
   });
