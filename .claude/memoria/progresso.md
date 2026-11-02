@@ -26,9 +26,15 @@ etapas ficam detalhadas; as mais antigas viram uma linha na tabela.
 | 8 | mesclada (31/10/2026) | #25 | Provedor Workers AI e IA simulada, medição por passo, teto de 9.000 Neurons/dia, aba IA |
 | 9 | mesclada (31/10/2026) | #28 | Conversa em SSE, 20 ferramentas com permissão e limite, aprovações e planos, voz, injeção de prompt testada |
 | 10 | mesclada (02/11/2026) | #46 | Automações: lembretes, resumo das tarefas e rotinas com IA, alarme único, recuperação após reinício, aprovação das rotinas do chat |
-| 11 | em andamento (11a em revisão) | — | Central de avisos, insistência, vigias, resumo do dia e Diagnóstico (11a); push e e-mail (11b); prioridade que aprende (11c) |
+| 11 | em andamento (11a #55 e 11b em revisão) | #55 | Central de avisos, insistência, vigias, resumo do dia e Diagnóstico (11a); notificação no aparelho e canais por tipo (11b); e-mail e recuperação de senha (11c); prioridade que aprende (11d) |
 
 ## Últimas etapas (detalhe)
+
+### Etapa 11 · Notificação no aparelho (parte 11b)
+- Entregou: `apps/agent/src/push/{webpush,devices,channel,service,dev-push}.ts` (RFC 8291 + RFC 8292 só com WebCrypto, confere com o vetor da RFC), rotas `/api/push`, `/api/push/devices`, `/api/push/test`, eventos de acesso `push_added`/`push_removed` (alerta), `sw.js` com `push` e `notificationclick`, `PushCard` e `RoutesCard` na aba Avisos, `scripts/gerar-chaves-vapid.ts`.
+- Migrations: versão 12 (`zur_push_devices`, com `browser` = HMAC do cookie de aparelho).
+- Decisões técnicas: a etapa virou 11a/11b/11c/11d (e-mail e recuperação de senha na 11c, prioridade na 11d); o aparelho se mantém pela checagem de sessão do próprio navegador (sem código no JS inicial); só hosts de push conhecidos; em desenvolvimento local nada é postado. `auth-activity.ts` saiu de `auth.ts` para tirar a atividade de acesso do primeiro carregamento (−0,4 kB; JS inicial 138,6 kB).
+- Falta (11c): canal de e-mail (`SEND_EMAIL`, 10/dia, 4 reservados) e recuperação de senha por e-mail; 11d: prioridade que aprende. Pendências de QA da 11a: teste de orçamento de uma rodada do alarme e teste próprio de `healthy()`.
 
 ### Etapa 11 · Central de avisos (parte 11a)
 - Entregou: `packages/shared/src/alerts.ts`, `apps/agent/src/alerts/{service,channels,security,watchers,automations}.ts`, `apps/agent/src/diagnostics/service.ts`, rotas `/api/notices*`, `/api/alerts`, `/api/diagnostics*`, contador `unreadNotices` na sessão e no heartbeat, sino + `NoticesPanel` sob demanda, abas Avisos e Diagnóstico, binding `CF_VERSION_METADATA`. Doc: `docs/avisos.md`.
@@ -85,6 +91,6 @@ etapas ficam detalhadas; as mais antigas viram uma linha na tabela.
 
 ## Próxima etapa
 
-- Número e nome: 11b · Push e e-mail (mesma etapa 11); depois 11c e então a 12 · Telegram (base)
-- Dependências mescladas: 11a (este PR)
+- Número e nome: 11c · E-mail e recuperação de senha (mesma etapa 11); depois 11d (prioridade que aprende) e então a 12 · Telegram (base)
+- Dependências mescladas: 11a (#55) e 11b
 - Precisa de algo do Pablo antes: não

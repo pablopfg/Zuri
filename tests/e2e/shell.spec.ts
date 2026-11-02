@@ -42,7 +42,7 @@ test("signing out ends the session on the server and in every tab @mobile", asyn
   await other.goto("/configuracoes/conta");
   await expect(other.getByRole("heading", { level: 1, name: "Configurações" })).toBeVisible();
 
-  const logout = page.waitForResponse((r) => r.url().endsWith("/api/auth/logout"));
+  const logout = page.waitForResponse((r) => new URL(r.url()).pathname === "/api/auth/logout");
   await page.getByRole("button", { name: "Sair" }).first().click();
   // On a phone the top bar's "Sair" asks first; the sidebar's leaves at once.
   if (test.info().project.name === "mobile") {
@@ -69,7 +69,7 @@ test("the session ends after the idle limit without use, with the reason on the 
   await expect(dialog).toBeVisible();
   await expect(dialog).toContainText(/termina em 1:\d\d/);
 
-  const logout = page.waitForResponse((r) => r.url().endsWith("/api/auth/logout"));
+  const logout = page.waitForResponse((r) => new URL(r.url()).pathname === "/api/auth/logout");
   await page.clock.fastForward("02:00");
   expect((await logout).status()).toBe(204);
   await expect(page).toHaveURL(/\/entrar\?next=%2Fconfiguracoes%2Fconta$/);

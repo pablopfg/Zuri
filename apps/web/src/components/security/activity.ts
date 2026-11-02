@@ -29,6 +29,8 @@ export const KIND_LABEL: Record<AuthEventKind, MessageKey> = {
   recovery_code_used: "web.activity.kind.recovery_code_used",
   passkey_added: "web.activity.kind.passkey_added",
   passkey_removed: "web.activity.kind.passkey_removed",
+  push_added: "web.activity.kind.push_added",
+  push_removed: "web.activity.kind.push_removed",
   setup_failure: "web.activity.kind.setup_failure",
   setup_locked: "web.activity.kind.setup_locked",
   owner_created: "web.activity.kind.owner_created",

@@ -6,11 +6,13 @@ import { useAlertOverview } from "../../hooks/notices.ts";
 import { useSettings, useSettingsMutation } from "../../hooks/settings.ts";
 import { errorMessage } from "../../lib/api.ts";
 import { addMessages, useI18n } from "../../lib/i18n.tsx";
+import { PushCard } from "./PushCard.tsx";
+import { RoutesCard } from "./RoutesCard.tsx";
 
 // This tab's pt-BR texts arrive with it (rule P11).
 addMessages(ptBRAlerts);
 
-/** Settings > Avisos: the daily summary, what the Zuri watches on her own, the channels and the recent sends. */
+/** Settings > Avisos: the daily summary, what the Zuri watches on her own, push on this device, the channels per kind of notice and the recent sends. */
 export function AlertsTab() {
   const settings = useSettings();
   if (settings.isPending) return <Spinner />;
@@ -19,6 +21,8 @@ export function AlertsTab() {
     <>
       <DigestCard settings={settings.data} />
       <WatchersCard settings={settings.data} />
+      <PushCard />
+      <RoutesCard settings={settings.data} />
       <ChannelsCard />
     </>
   );
