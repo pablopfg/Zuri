@@ -91,6 +91,10 @@ const PUBLIC = new Set([
   "POST /api/setup/code",
   "POST /api/setup/owner",
   "POST /api/setup/recover",
+  "GET /api/auth/recover",
+  "POST /api/auth/recover/request",
+  "POST /api/auth/recover/check",
+  "POST /api/auth/recover/confirm",
 ]);
 /** The four the owner can still use while the password must change. */
 const ALLOWED = new Set(["GET /api/auth/session", "POST /api/auth/heartbeat", "POST /api/auth/logout", "POST /api/auth/password"]);
