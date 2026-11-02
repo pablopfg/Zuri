@@ -135,6 +135,7 @@ export class AgentRunner {
           language: LANGUAGE[locale],
           timeZone: settings.timeZone,
           now: new Date(this.deps.clock?.() ?? Date.now()),
+          ownerName: settings.ownerName,
           memories,
           summary,
         });
@@ -256,6 +257,9 @@ export class AgentRunner {
       language: LANGUAGE[locale],
       timeZone: settings.timeZone,
       now: new Date(this.deps.clock?.() ?? Date.now()),
+      // Not in routines yet: a name that reaches unattended runs reopens the
+      // question of asking for the password to change it (docs/seguranca.md).
+      ownerName: "",
       memories,
       summary: null,
       routine: scheduledInstructions(input.name, input.quiet),

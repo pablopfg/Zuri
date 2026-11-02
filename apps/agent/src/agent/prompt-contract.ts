@@ -8,8 +8,8 @@ import { AppError } from "../http/errors.ts";
  *
  * - `instruction`: text written in this code (rules, the clock, the agent's
  *   name from the deploy). The only class the model may obey.
- * - `personal`: the owner's stored content (memories, the running summary, a
- *   routine's name). Always inside `<data>` lines (dataLine), never obeyed.
+ * - `personal`: the owner's stored content (the owner's name, memories, the
+ *   running summary, a routine's name). Always inside `<data>` lines (dataLine), never obeyed.
  * - `sensitive`: personal content a later profile keeps away from an external
  *   provider (plan D3/D4, step 21). Same rules as `personal`.
  *
@@ -23,7 +23,7 @@ import { AppError } from "../http/errors.ts";
  * `<data source="tool">` block (tools/registry.ts).
  */
 
-export const PROMPT_ORIGINS = ["agent_name", "fixed_instructions", "clock", "memories", "summary", "routine", "summary_task"] as const;
+export const PROMPT_ORIGINS = ["agent_name", "fixed_instructions", "clock", "owner_name", "memories", "summary", "routine", "summary_task"] as const;
 export type PromptOrigin = (typeof PROMPT_ORIGINS)[number];
 
 export const PROMPT_CLASSES = ["instruction", "personal", "sensitive"] as const;
@@ -35,6 +35,7 @@ export const ORIGIN_CLASS: Readonly<Record<PromptOrigin, PromptClass>> = {
   fixed_instructions: "instruction",
   clock: "instruction",
   summary_task: "instruction",
+  owner_name: "personal",
   memories: "personal",
   summary: "personal",
   routine: "personal",
