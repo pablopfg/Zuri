@@ -1,4 +1,5 @@
 import type { startAuthentication as startAuthenticationFn } from "@simplewebauthn/browser";
+import { useQuery } from "@tanstack/react-query";
 import { type ApproveOptions, type ApproveResult, type MessageKey, ptBRApprove } from "@zuri/shared";
 import { CircleCheck, Fingerprint, LockKeyhole, TriangleAlert } from "lucide-react";
 import { type ReactNode, useEffect, useRef, useState } from "react";
@@ -58,8 +59,9 @@ export function ApprovePage() {
   const { t, locale } = useI18n();
   useDocumentTitle(t("web.approve.pageTitle"));
   const [token] = useState(readToken);
-  const [step, setStep] = useState<Step>(() => (token ? { kind: "loading" } : { kind: "bad", reason: "invalid" }));
-  const [round, setRound] = useState(0);
+  const [supported] = useState(() => typeof window.PublicKeyCredential === "function");
+  // What happened after the options arrived (the confirmation's own result); null while they lead.
+  const [after, setAfter] = useState<Step | null>(null);
   const headingRef = useRef<HTMLHeadingElement>(null);
 
   // Off the address bar and the history before anything else (an effect: a pure first render runs twice in development).
@@ -67,21 +69,27 @@ export function ApprovePage() {
     if (window.location.hash) window.history.replaceState(window.history.state, "", APPROVE_PATH);
   }, []);
 
-  useEffect(() => {
-    if (!token) return;
-    if (typeof window.PublicKeyCredential !== "function") {
-      setStep({ kind: "unsupported" });
-      return;
-    }
-    let live = true;
-    void round;
-    api<ApproveOptions>("/approvals/telegram/options", { method: "POST", body: { token } })
-      .then((answer) => live && setStep({ kind: "ready", options: answer.options as Options, cancelled: false }))
-      .catch((error: unknown) => live && setStep(stepOf(error)));
-    return () => {
-      live = false;
-    };
-  }, [token, round]);
+  // Asked once: a refusal counts against the sign-in limiter, so nothing asks again on its own.
+  const request = useQuery({
+    queryKey: ["approve-options", token],
+    queryFn: () => api<ApproveOptions>("/approvals/telegram/options", { method: "POST", body: { token } }),
+    enabled: token !== null && supported,
+    retry: false,
+    staleTime: Number.POSITIVE_INFINITY,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+  });
+
+  const step: Step = !token
+    ? { kind: "bad", reason: "invalid" }
+    : !supported
+      ? { kind: "unsupported" }
+      : (after ??
+        (request.isFetching || request.isPending
+          ? { kind: "loading" }
+          : request.isError
+            ? stepOf(request.error)
+            : { kind: "ready", options: request.data.options as Options, cancelled: false }));
 
   // Each new state is announced from its heading: the focus follows the result.
   useEffect(() => {
@@ -91,19 +99,19 @@ export function ApprovePage() {
   async function confirm() {
     if (step.kind !== "ready" || !token) return;
     const { options } = step;
-    setStep({ kind: "working", options });
+    setAfter({ kind: "working", options });
     try {
       const { startAuthentication } = await import("@simplewebauthn/browser");
       const credential = await startAuthentication({ optionsJSON: options });
       const result = await api<ApproveResult>("/approvals/telegram/verify", { method: "POST", body: { token, credential } });
-      setStep({ kind: "done", until: result.unlockedUntil });
+      setAfter({ kind: "done", until: result.unlockedUntil });
     } catch (error) {
       // Closing the browser's prompt isn't a wrong answer: the same request is still good.
       if (error instanceof Error && (error.name === "NotAllowedError" || error.name === "AbortError")) {
-        setStep({ kind: "ready", options, cancelled: true });
+        setAfter({ kind: "ready", options, cancelled: true });
         return;
       }
-      setStep(stepOf(error));
+      setAfter(stepOf(error));
     }
   }
 
@@ -185,10 +193,13 @@ export function ApprovePage() {
           ) : step.kind === "unsupported" ? (
             ending(<TriangleAlert className="h-5 w-5" />, "web.approve.unsupportedTitle", t("web.approve.unsupportedBody"), "warning")
           ) : (
-            <ErrorNotice error={step.error} onRetry={() => {
-              setStep({ kind: "loading" });
-              setRound((n) => n + 1);
-            }} />
+            <ErrorNotice
+              error={step.error}
+              onRetry={() => {
+                setAfter(null);
+                void request.refetch();
+              }}
+            />
           )}
         </section>
       </div>
