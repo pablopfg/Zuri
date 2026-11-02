@@ -48,7 +48,9 @@ export default defineConfig({
         "--var TURNSTILE_SITE_KEY:1x00000000000000000000AA --var TURNSTILE_SECRET_KEY:1x0000000000000000000000000000000AA" +
         // A copy of everything the Worker prints, for the check after the run, and
         // all of it back on stderr: Playwright shows only the server's stderr.
-        ` 2>&1 | tee '${WORKER_LOG}' >&2`,
+        // Appending (the file was just removed): the second server writes to it too,
+        // and a writer that isn't appending would overwrite those lines.
+        ` 2>&1 | tee -a '${WORKER_LOG}' >&2`,
       url: `http://127.0.0.1:${port}/api/health`,
       reuseExistingServer: false,
       timeout: 120_000,
