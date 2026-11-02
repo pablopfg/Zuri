@@ -92,7 +92,7 @@ Respostas em texto puro, sem `parse_mode`, com o conteúdo do dono passado por
 - Botões: listas valem 1 h (números de `/tarefas`, Feito, Adiar), Desfazer
   vale 5 min, Corrigir, Pausar e Destravar valem 24 h. Cada botão é de uso
   único; numa lista só o botão tocado sai.
-- Adiar leva a tarefa para amanhã, na mesma hora (09:00 sem data).
+- Adiar leva o prazo um dia adiante, na mesma hora; vencida ou sem data, vai para amanhã (09:00 sem data).
 - Títulos e trechos: uma linha, até 100 caracteres em `/buscar`, até 80 nas
   listas.
 

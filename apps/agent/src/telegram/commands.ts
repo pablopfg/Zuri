@@ -497,7 +497,7 @@ export class TelegramCommands {
     }
   }
 
-  /** Adiar: tomorrow at the task's hour (09:00 without one). */
+  /** Adiar: a day later at the task's hour (from today when overdue; 09:00 without a deadline). */
   #later(id: string): TapOutcome {
     let task: Task;
     try {
@@ -508,8 +508,11 @@ export class TelegramCommands {
     if (task.status === "done") return { answer: this.#t("telegram.cmd.feito.jaFeita", { titulo: this.#line(task.title) }) };
     const zone = this.deps.timeZone();
     const today = zonedParts(new Date(this.#clock()), zone);
-    const clock = task.dueAt ? zonedParts(new Date(task.dueAt), zone) : { hour: DEFAULT_HOUR, minute: 0 };
-    const tomorrow = new Date(Date.UTC(today.year, today.month - 1, today.day + 1));
+    const due = task.dueAt ? zonedParts(new Date(task.dueAt), zone) : null;
+    const clock = due ?? { hour: DEFAULT_HOUR, minute: 0 };
+    // The day after the deadline, or tomorrow when the deadline is gone (or there is none).
+    const base = due && Date.UTC(due.year, due.month - 1, due.day) > Date.UTC(today.year, today.month - 1, today.day) ? due : today;
+    const tomorrow = new Date(Date.UTC(base.year, base.month - 1, base.day + 1));
     const at = zonedTimeToUtc(
       { year: tomorrow.getUTCFullYear(), month: tomorrow.getUTCMonth() + 1, day: tomorrow.getUTCDate(), hour: clock.hour, minute: clock.minute },
       zone,

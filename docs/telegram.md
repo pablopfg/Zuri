@@ -222,7 +222,7 @@ guardou. Todos contam nos 60 comandos por hora.
 | Comando | O que faz | Pede destravamento? |
 | --- | --- | --- |
 | `/hoje` | Atrasadas, vencem hoje e lembretes do dia, até 5 por bloco e "e mais N no app" | sim |
-| `/tarefas [projeto]` | Até 10 tarefas abertas numeradas, com **Feito** e **Adiar** (para amanhã, na mesma hora); os números e os botões valem 1 hora | sim |
+| `/tarefas [projeto]` | Até 10 tarefas abertas numeradas, com **Feito** e **Adiar** (um dia adiante, na mesma hora; vencida, para amanhã); os números e os botões valem 1 hora | sim |
 | `/nova <texto>` | Cria uma tarefa; a data no fim (ou no começo) do texto vira o prazo, com o botão **Corrigir data** | sim |
 | `/feito <nº>` | Conclui a tarefa de número tal da última lista, com **Desfazer** por 5 minutos | sim |
 | `/lembrar <quando> <texto>` | Cria um lembrete único, com **Corrigir data** | sim |

@@ -85,6 +85,8 @@ afterEach(async () => {
       "zur_automation_runs",
       "zur_trash",
       "zur_auth_events",
+      "zur_diagnostics",
+      "zur_usage_daily",
     ]) {
       db.run(`DELETE FROM ${table}`);
     }
@@ -418,7 +420,10 @@ describe("quick actions", () => {
     await tap(rows[1]?.[1]?.callback_data ?? "", rows);
     expect(answers()[0]).toMatch(/^Adiada para /);
     const after = (await tasks())[1]?.due_at ?? "";
-    expect(Date.parse(after) - Date.parse(before)).toBeGreaterThan(20 * HOUR);
+    // A deadline still ahead moves a day (to the minute: the seconds drop).
+    const moved = Date.parse(after) - Date.parse(before);
+    expect(moved).toBeGreaterThan(24 * HOUR - 60_000);
+    expect(moved).toBeLessThanOrEqual(24 * HOUR);
     // Adiar on a task with no date: tomorrow at 09:00.
     await addTask("Sem prazo");
     await command("/tarefas");
@@ -607,3 +612,124 @@ describe("no AI", () => {
     }
   });
 });
+
+describe("edges", () => {
+  /** /nova with a date, then Corrigir: the question's message id. */
+  async function askFix(): Promise<number> {
+    await command("/nova pagar amanhã 9h");
+    const fix = buttons(lastSent())[0]?.callback_data ?? "";
+    botCalls.length = 0;
+    await tap(fix);
+    return 5000 + botCalls.indexOf(lastSent() as BotCall) + 1;
+  }
+
+  it("Corrigir: an ambiguous date asks again; after 10 minutes the question is gone; a deleted task says so", async () => {
+    await linkOwner();
+    const questionId = await askFix();
+    await deliver(reply("amanhã à noite", questionId));
+    expect(lastText()).toBe("Que horas? Mande de novo com a hora, por exemplo: amanhã 15h.");
+    await inOwner((agent) => {
+      const stored = JSON.parse(agent.store.db.one<{ value: string }>(`SELECT value FROM zur_settings WHERE key = 'telegram_fix'`)?.value ?? '""') as string;
+      const [message, kind, target] = stored.split("|");
+      agent.store.db.run(`UPDATE zur_settings SET value = ? WHERE key = 'telegram_fix'`, JSON.stringify(`${message}|${kind}|${target}|${Date.now() - 1}`));
+    });
+    await deliver(reply("sexta 10h", questionId));
+    expect(lastText()).toBe("Esse botão venceu. Peça a lista de novo.");
+    const second = await askFix();
+    await inOwner((agent) => agent.store.db.run(`DELETE FROM zur_tasks`));
+    await deliver(reply("sexta 10h", second));
+    expect(lastText()).toBe("Esse item não existe mais.");
+  });
+
+  it("Adiar and Desfazer on a task completed or deleted meanwhile", async () => {
+    await linkOwner();
+    const task = await addTask("Uma");
+    await command("/tarefas");
+    const rows = keyboard(lastSent());
+    await inOwner((agent) => agent.store.productivity.tasks.update(task.id, { status: "done" }));
+    botCalls.length = 0;
+    await tap(rows[0]?.[1]?.callback_data ?? "", rows);
+    expect(answers()).toEqual(["Essa já estava concluída: Uma"]);
+    await tap(rows[0]?.[0]?.callback_data ?? "", rows);
+    expect(lastText()).toBe("Essa já estava concluída: Uma");
+    await inOwner((agent) => agent.store.productivity.tasks.update(task.id, { status: "todo" }));
+    await command("/feito 1");
+    const undo = buttons(lastSent())[0]?.callback_data ?? "";
+    await inOwner((agent) => agent.store.productivity.tasks.delete(task.id));
+    botCalls.length = 0;
+    await tap(undo);
+    expect(answers()).toEqual(["Esse item não existe mais."]);
+  });
+
+  it("Pausar on a routine already paused or deleted", async () => {
+    await linkOwner();
+    const first = await inOwner((agent) => agent.store.automations.create({ name: "A", kind: "task_digest", schedule: { type: "daily", time: "07:00" } }, "app"));
+    const second = await inOwner((agent) => agent.store.automations.create({ name: "B", kind: "task_digest", schedule: { type: "daily", time: "08:00" } }, "app"));
+    await command("/rotinas");
+    const rows = keyboard(lastSent());
+    await inOwner(async (agent) => {
+      await agent.store.automations.update(first.id, { paused: true });
+      await agent.store.automations.delete(second.id);
+    });
+    botCalls.length = 0;
+    await tap(rows[0]?.[0]?.callback_data ?? "", rows);
+    await tap(rows[1]?.[0]?.callback_data ?? "", rows);
+    expect(answers()).toEqual(["Essa rotina já não está ativa.", "Esse item não existe mais."]);
+  });
+
+  it("/rotinas shows 10 and counts the rest", async () => {
+    await linkOwner();
+    await inOwner(async (agent) => {
+      for (let i = 0; i < 11; i++) {
+        await agent.store.automations.create({ name: `Rotina ${i}`, kind: "task_digest", schedule: { type: "daily", time: `${String(i + 6).padStart(2, "0")}:00` } }, "app");
+      }
+    });
+    expect(await command("/rotinas")).toContain("e mais 1 no app");
+    expect(keyboard(lastSent())).toHaveLength(10);
+  });
+
+  it("/hoje lists today's reminders", async () => {
+    await linkOwner();
+    // A zone where it is about noon now, so "two hours from now" is always still today.
+    const offset = 12 - new Date().getUTCHours();
+    const zone = offset === 0 ? "Etc/GMT" : `Etc/GMT${offset > 0 ? "-" : "+"}${Math.abs(offset)}`;
+    await json(await api("PATCH", "/settings", { timeZone: zone }), 200);
+    try {
+      const local = new Intl.DateTimeFormat("sv-SE", { timeZone: zone, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" })
+        .format(Date.now() + 2 * HOUR)
+        .replace(" ", "T");
+      await inOwner((agent) => agent.store.automations.create({ name: "Tomar remédio", kind: "reminder", message: "Tomar remédio", schedule: { type: "once", at: local } }, "app"));
+      expect(await command("/hoje")).toContain("Lembretes (1)\n• Tomar remédio ·");
+    } finally {
+      await json(await api("PATCH", "/settings", { timeZone: "America/Sao_Paulo" }), 200);
+    }
+  });
+
+  it("/status: something to look at, failures in 24 h and the AI out for the day", async () => {
+    await linkOwner();
+    await inOwner((agent) => {
+      agent.store.diagnostics.record({ source: "api", code: "INTERNAL_ERROR", errorName: "TypeError", route: "POST /api/chat" });
+      agent.store.diagnostics.flush();
+      agent.store.db.run(`INSERT OR REPLACE INTO zur_usage_daily (day, neurons) VALUES (?, 9000)`, new Date().toISOString().slice(0, 10));
+    });
+    const out = await command("/status");
+    expect(out).toContain("Algo precisa da sua atenção. Veja em Configurações › Diagnóstico.");
+    expect(out).toContain("Falhas nas últimas 24 h: 1");
+    expect(out).toContain("A IA não está disponível agora.");
+  });
+
+  it("an unknown command still says so, and a command from a forwarded message is never run", async () => {
+    await linkOwner();
+    expect(await command("/qualquer")).toBe("Ainda não conheço esse comando. Use /ajuda para ver o que eu faço por aqui.");
+    botCalls.length = 0;
+    await deliver(text("/nova tarefa de outra pessoa", { forward_origin: { type: "user", date: 1, sender_user: { id: 7, is_bot: false, first_name: "X" } } }));
+    expect(await tasks()).toHaveLength(0);
+  });
+
+  it("a garbled /tarefas list in storage is no list", async () => {
+    await linkOwner();
+    await inOwner((agent) => agent.store.db.run(`INSERT OR REPLACE INTO zur_settings (key, value, updated_at) VALUES ('telegram_task_numbers', ?, ?)`, JSON.stringify("x"), new Date().toISOString()));
+    expect(await command("/feito 1")).toBe("Esse número não está na sua última lista, ou ela já venceu. Mande /tarefas para ver os números de novo.");
+  });
+});
+
