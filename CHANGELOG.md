@@ -253,8 +253,9 @@ o [SemVer](https://semver.org/lang/pt-BR/). Cada PR escreve a sua entrada em
 - Uma aba que voltava do segundo plano depois de passar do prazo de
   inatividade pela própria contagem ficava presa num vaivém entre a tela de
   entrar e a página, com dezenas de pedidos por segundo ao servidor, mesmo
-  com a sessão ainda aberta (usada em outra aba). Agora a resposta do
-  servidor conta como a notícia mais nova e a aba volta para onde estava.
+  com a sessão ainda aberta (usada em outra aba). Agora, quando a aba trava e
+  o servidor responde que a sessão segue aberta, a contagem dela recomeça da
+  última atividade que o servidor conhece e a aba volta para onde estava.
   Um sinal de presença que chega depois de a aba travar ou sair também não
   reabre mais a tela.
 - A busca de tarefas e a busca literal de notas não achavam "Água" ao digitar

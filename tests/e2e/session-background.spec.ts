@@ -56,6 +56,49 @@ test("a background tab whose own count ran out locks itself without signing out 
   await expect(page).toHaveURL(/\/configuracoes\/conta$/);
   expect(signInVisits).toEqual([]);
   expect(logouts).toEqual([]);
+
+  // Past the settling time the tab may sign everyone out on its own count; with
+  // the server's news it has no reason to, and stays put.
+  await page.clock.runFor(6_000);
+  await expect(page.getByRole("heading", { level: 1, name: "Configurações" })).toBeVisible();
+  expect(signInVisits).toEqual([]);
+  expect(logouts).toEqual([]);
+});
+
+test("a presence signal answered after signing out does not reopen the page", async ({ page }) => {
+  await page.clock.install();
+  await page.goto("/configuracoes/conta");
+  await signIn(page);
+  await expect(page.getByRole("heading", { level: 1, name: "Configurações" })).toBeVisible();
+
+  // The server answers the beat while the session is open; the answer reaches
+  // the page only after the owner signed out.
+  let release!: () => void;
+  const released = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const answered = new Promise<number>((resolve) => {
+    void page.route("**/api/auth/heartbeat", async (route) => {
+      const response = await route.fetch();
+      resolve(response.status());
+      await released;
+      await route.fulfill({ response });
+    });
+  });
+  await page.clock.fastForward("01:00");
+  expect(await answered).toBe(200);
+
+  const logout = page.waitForResponse((r) => r.url().endsWith("/api/auth/logout"));
+  await page.getByRole("button", { name: "Sair" }).first().click();
+  expect((await logout).status()).toBe(204);
+  await expect(page).toHaveURL(/\/entrar/);
+
+  const delivered = page.waitForEvent("requestfinished", (r) => r.url().endsWith("/api/auth/heartbeat"));
+  release();
+  await delivered;
+  await page.clock.runFor(2_000);
+  await expect(page).toHaveURL(/\/entrar/);
+  await expect(page.getByRole("heading", { level: 1, name: "Configurações" })).toHaveCount(0);
 });
 
 test("a tab in front for a while does sign out every tab when its count runs out", async ({ page }) => {
