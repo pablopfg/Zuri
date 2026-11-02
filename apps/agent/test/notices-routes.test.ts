@@ -54,6 +54,7 @@ describe("the notice routes", () => {
     ["POST", `/notices/${MISSING}/mute`],
     ["DELETE", `/notices/${MISSING}`],
     ["GET", "/alerts"],
+    ["DELETE", "/alerts/learning/digest.daily"],
     ["GET", "/diagnostics"],
     ["POST", "/diagnostics/client"],
     ["POST", "/diagnostics/resolve"],
@@ -115,6 +116,22 @@ describe("the notice routes", () => {
     const overview = await json<{ channels: Record<string, string>; deliveries: unknown[] }>(await api("GET", "/alerts"), 200);
     // Push has its keys in the tests but no device yet; e-mail and Telegram come later.
     expect(overview.channels).toEqual({ push: "no_target", telegram: "not_configured", email: "not_configured" });
+  });
+});
+
+describe("the priority that learns, in Settings > Notices", () => {
+  it("lists what changed and undoes it, refusing a malformed or unchanged source", async () => {
+    const key = "watch.taskStalled";
+    await inOwner((agent) =>
+      agent.store.db.run(`INSERT INTO zur_alert_learning (key, shift, label, changed_at) VALUES (?, -1, 'Tarefas paradas', ?)`, key, new Date().toISOString()),
+    );
+    const overview = await json<{ learned: { key: string; shift: number }[] }>(await api("GET", "/alerts"), 200);
+    expect(overview.learned).toEqual([expect.objectContaining({ key, label: "Tarefas paradas", shift: -1 })]);
+    expect((await api("DELETE", `/alerts/learning/${key}`)).status).toBe(204);
+    expect((await refusal(await api("DELETE", `/alerts/learning/${key}`), 404)).code).toBe("NOT_FOUND");
+    expect((await refusal(await api("DELETE", `/alerts/learning/${encodeURIComponent("Bad Key!")}`), 404)).code).toBe("NOT_FOUND");
+    expect((await refusal(await api("DELETE", `/alerts/learning/automation:${MISSING}`), 404)).code).toBe("NOT_FOUND");
+    expect((await json<{ learned: unknown[] }>(await api("GET", "/alerts"), 200)).learned).toEqual([]);
   });
 });
 

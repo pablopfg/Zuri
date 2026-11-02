@@ -24,6 +24,10 @@ export type AutomationKind = (typeof AUTOMATION_KINDS)[number];
 export const AUTOMATION_STATUSES = ["active", "paused", "pending_approval", "completed"] as const;
 export type AutomationStatus = (typeof AUTOMATION_STATUSES)[number];
 
+/** The priority an automation asks for its notices (step 11d); critical is only for security. */
+export const AUTOMATION_PRIORITIES = ["low", "normal", "high"] as const;
+export type AutomationPriority = (typeof AUTOMATION_PRIORITIES)[number];
+
 export const AUTOMATION_ORIGINS = ["app", "chat"] as const;
 export type AutomationOrigin = (typeof AUTOMATION_ORIGINS)[number];
 
@@ -110,6 +114,8 @@ export interface Automation {
   status: AutomationStatus;
   /** AI routines only: runs with nothing to report stay quiet. */
   sentinel: boolean;
+  /** How its notices arrive: low stays in the app, high insists (the priority that learns may move it). */
+  priority: AutomationPriority;
   origin: AutomationOrigin;
   /** UTC ISO; null unless active. */
   nextRunAt: string | null;
@@ -177,6 +183,7 @@ export const automationCreateSchema = /* @__PURE__ */ z
     message: text(AUTOMATION_LIMITS.message).refine(visible).default(""),
     schedule: scheduleSchema,
     sentinel: z.boolean().default(false),
+    priority: z.enum(AUTOMATION_PRIORITIES).default("normal"),
   })
   .strict();
 export type AutomationCreate = z.input<typeof automationCreateSchema>;
@@ -187,6 +194,7 @@ export const automationUpdateSchema = /* @__PURE__ */ z
     message: text(AUTOMATION_LIMITS.message).refine(visible),
     schedule: scheduleSchema,
     sentinel: z.boolean(),
+    priority: z.enum(AUTOMATION_PRIORITIES),
     /** true pauses, false resumes. */
     paused: z.boolean(),
   })

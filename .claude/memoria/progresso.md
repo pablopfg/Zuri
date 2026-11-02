@@ -26,15 +26,21 @@ etapas ficam detalhadas; as mais antigas viram uma linha na tabela.
 | 8 | mesclada (31/10/2026) | #25 | Provedor Workers AI e IA simulada, medição por passo, teto de 9.000 Neurons/dia, aba IA |
 | 9 | mesclada (31/10/2026) | #28 | Conversa em SSE, 20 ferramentas com permissão e limite, aprovações e planos, voz, injeção de prompt testada |
 | 10 | mesclada (02/11/2026) | #46 | Automações: lembretes, resumo das tarefas e rotinas com IA, alarme único, recuperação após reinício, aprovação das rotinas do chat |
-| 11 | em andamento (11a #55 e 11b #56 mescladas; 11c em revisão) | #55, #56 | Central de avisos, insistência, vigias, resumo do dia e Diagnóstico (11a); notificação no aparelho e canais por tipo (11b); e-mail e recuperação de senha (11c); prioridade que aprende (11d) |
+| 11 | em revisão (11a #55, 11b #56 e 11c #63 mescladas; 11d em revisão) | #55, #56, #63 | Central de avisos, insistência, vigias, resumo do dia e Diagnóstico (11a); notificação no aparelho e canais por tipo (11b); e-mail e recuperação de senha (11c); prioridade que aprende (11d) |
 
 ## Últimas etapas (detalhe)
+
+### Etapa 11 · Prioridade que aprende (parte 11d)
+- Entregou: `apps/agent/src/alerts/learning.ts` (`AlertLearning`: chave da origem, ajuste, revisão diária na rodada dos vigias, desfazer), avisos `alerts.lowered`/`alerts.raised`, rota `DELETE /api/alerts/learning/:key`, `learned` em `GET /api/alerts`, configuração `alertLearning` (padrão ligada), campo `priority` nas automações, cartão "Prioridades que a Zuri aprendeu" e seletor de prioridade no formulário.
+- Migrations: versão 13 (`learn_key` em `zur_notices` + índice `zur_notices_learning`, tabela `zur_alert_learning`, `priority` em `zur_automations`).
+- Decisões técnicas: origem = `automation:<id>` ou o tipo do aviso; lembretes, segurança, críticos e `source: null` nunca aprendem; janela de 14 dias menos as últimas 24 h; mínimo 5 avisos; 80% ignorados desce, 80% abertos em 15 min sobe (até alta); 1 nível/semana; desfazer segura a origem por uma semana; até 200 origens. Cartão de decisão ao Pablo (baixar e subir / só baixar / desligada); segui a recomendada.
+- Depois de mesclar: pedir a etapa 12 ao coordenador.
 
 ### Etapa 11 · E-mail e recuperação de senha (parte 11c)
 - Entregou: `packages/shared/src/email.ts` (limites, schemas, `disarmLinks`), `apps/agent/src/email/{sender,channel}.ts`, `apps/agent/src/auth/email-recovery.ts`, rotas públicas `/api/auth/recovery`, `/check`, `/complete`, eventos `recovery_requested` e `password_recovered` (alerta), página `/recuperar-senha` sob demanda e link "Esqueci minha senha" no login.
 - Migrations: nenhuma (estado em `zur_settings`: `email_sent_window`, `recovery_link`, `recovery_requests`).
 - Decisões técnicas: token no fragmento do link, só o HMAC guardado; resposta 202 igual para qualquer e-mail; com 2FA o link pede código (5 erros encerram); e-mail tenta uma vez (`firstTryOnly`); assunto discreto como o push. O binding `SEND_EMAIL` com `destination_address` fica para o deploy da etapa 24 (`ZURI_ALERT_EMAIL_TO`); `ALERT_EMAIL_FROM` é segredo. JS inicial 138,9 kB.
-- Falta (11d): prioridade que aprende e campo de prioridade nas automações.
+- Mesclada: PR #63 (02/11/2026).
 
 ### Etapa 11 · Notificação no aparelho (parte 11b)
 - Entregou: `apps/agent/src/push/{webpush,devices,channel,service,dev-push}.ts` (RFC 8291 + RFC 8292 só com WebCrypto, confere com o vetor da RFC), rotas `/api/push`, `/api/push/devices`, `/api/push/test`, eventos de acesso `push_added`/`push_removed` (alerta), `sw.js` com `push` e `notificationclick`, `PushCard` e `RoutesCard` na aba Avisos, `scripts/gerar-chaves-vapid.ts`.
@@ -97,6 +103,6 @@ etapas ficam detalhadas; as mais antigas viram uma linha na tabela.
 
 ## Próxima etapa
 
-- Número e nome: 11d · Prioridade que aprende (mesma etapa 11); depois a 12 · Telegram (base)
-- Dependências mescladas: 11a (#55), 11b (#56) e 11c
+- Número e nome: 12 · Telegram (base), depois que a 11d mesclar
+- Dependências mescladas: 11a (#55), 11b (#56) e 11c (#63); 11d em revisão
 - Precisa de algo do Pablo antes: não

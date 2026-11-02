@@ -1,10 +1,11 @@
-import { ALERT_CHANNELS, type AlertDelivery, type AlertOverview, ptBRAlerts, type Settings } from "@zuri/shared";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { ALERT_CHANNELS, type AlertDelivery, type AlertOverview, type LearnedPriority, ptBRAlerts, type Settings } from "@zuri/shared";
 import { type FormEvent, useEffect, useId, useState } from "react";
 import { Button, Card, cn, ErrorNotice, Spinner, TextField } from "../../components/ui.tsx";
 import { useToast } from "../../components/Toaster.tsx";
-import { useAlertOverview } from "../../hooks/notices.ts";
+import { ALERTS_KEY, useAlertOverview } from "../../hooks/notices.ts";
 import { useSettings, useSettingsMutation } from "../../hooks/settings.ts";
-import { errorMessage } from "../../lib/api.ts";
+import { api, errorMessage } from "../../lib/api.ts";
 import { addMessages, useI18n } from "../../lib/i18n.tsx";
 import { PushCard } from "./PushCard.tsx";
 import { RoutesCard } from "./RoutesCard.tsx";
@@ -23,6 +24,7 @@ export function AlertsTab() {
       <WatchersCard settings={settings.data} />
       <PushCard />
       <RoutesCard settings={settings.data} />
+      <LearningCard settings={settings.data} />
       <ChannelsCard />
     </>
   );
@@ -94,6 +96,76 @@ function WatchersCard({ settings }: { settings: Settings }) {
         {save.isError && (
           <p role="alert" className="text-sm text-danger">
             {errorMessage(save.error)}
+          </p>
+        )}
+      </div>
+    </Card>
+  );
+}
+
+/** The priority that learns: the switch, what changed and a way back for each one. */
+function LearningCard({ settings }: { settings: Settings }) {
+  const { t, dateTime } = useI18n();
+  const toast = useToast();
+  const qc = useQueryClient();
+  const save = useSettingsMutation();
+  const overview = useAlertOverview();
+  const id = useId();
+  const undo = useMutation({
+    mutationFn: (item: LearnedPriority) => api(`/alerts/learning/${encodeURIComponent(item.key)}`, { method: "DELETE" }),
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: ALERTS_KEY });
+      toast(t("web.alerts.learning.undone"));
+    },
+  });
+  return (
+    <Card title={t("web.alerts.learning.title")} description={t("web.alerts.learning.description")}>
+      <div className="space-y-3">
+        <Switch
+          label={t("web.alerts.learning.enabled")}
+          describedBy={`${id}-hint`}
+          checked={settings.alertLearning}
+          busy={save.isPending}
+          onChange={(on) => save.mutate({ alertLearning: on }, { onSuccess: () => toast(t("web.alerts.saved")) })}
+        />
+        <p id={`${id}-hint`} className="text-sm text-fg-muted">
+          {t("web.alerts.learning.hint")}
+        </p>
+        {save.isError && (
+          <p role="alert" className="text-sm text-danger">
+            {errorMessage(save.error)}
+          </p>
+        )}
+        {overview.isPending && <Spinner />}
+        {overview.isError && <ErrorNotice error={overview.error} onRetry={() => void overview.refetch()} />}
+        {overview.data &&
+          (overview.data.learned.length === 0 ? (
+            <p className="text-sm text-fg-muted">{t("web.alerts.learning.empty")}</p>
+          ) : (
+            <ul className="divide-y divide-border border-t border-border" aria-label={t("web.alerts.learning.listLabel")}>
+              {overview.data.learned.map((item) => (
+                <li key={item.key} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 py-2 text-sm">
+                  <span className="min-w-0">
+                    <span className="block font-medium break-words">{item.label}</span>
+                    <span className="text-fg-muted">
+                      {t(shiftKey(item.shift))} · <time dateTime={item.changedAt}>{dateTime(new Date(item.changedAt))}</time>
+                    </span>
+                  </span>
+                  <Button
+                    variant="ghost"
+                    aria-label={t("web.alerts.learning.undoNamed", { name: item.label })}
+                    loading={undo.isPending && undo.variables?.key === item.key}
+                    onClick={() => undo.mutate(item)}
+                  >
+                    {t("web.alerts.learning.undo")}
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          ))}
+        {undo.isError && (
+          <p role="alert" className="text-sm text-danger">
+            {errorMessage(undo.error)}
           </p>
         )}
       </div>
@@ -179,6 +251,8 @@ function Switch({ label, checked, onChange, busy, describedBy }: { label: string
 }
 
 // One literal key per value, so the i18n lint sees each one.
+const shiftKey = (shift: number) =>
+  shift <= -2 ? "web.alerts.learning.down2" : shift < 0 ? "web.alerts.learning.down1" : shift >= 2 ? "web.alerts.learning.up2" : "web.alerts.learning.up1";
 const CHANNEL = { push: "web.alerts.channel.push", telegram: "web.alerts.channel.telegram", email: "web.alerts.channel.email" } as const;
 const CHANNEL_STATE = {
   ready: "web.alerts.channelState.ready",
