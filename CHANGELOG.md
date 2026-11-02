@@ -19,6 +19,68 @@ funciona: [docs/agente/versionamento.md](docs/agente/versionamento.md).
 
 O que já entrou na `develop` e ainda não ganhou número fica em [`changelog/nao-lancado/`](changelog/nao-lancado/) por alguns minutos, até o workflow de versão escrever a seção.
 
+## [0.21.1] - 2026-11-02
+
+Mesclada às 17:08 (UTC-3) · commit [`b6ae4e0`](https://github.com/pablopfg/Zuri/commit/b6ae4e0cee3d486c20dc0192933d862d99e464f1) · PR [#92](https://github.com/pablopfg/Zuri/pull/92) · Compara cada pré-release com a anterior e organiza as notas
+
+### Alterado
+
+- As notas das pré-releases no GitHub ganharam um formato único: o título do
+  merge no topo, uma tabela com data e hora, PR e commit, os grupos com ícone
+  e, no fim, "Histórico completo" com a comparação entre a versão anterior e a
+  atual (antes o link levava ao `CHANGELOG.md` inteiro). O workflow de versão
+  reescreve as notas das pré-releases que já existem, da v0.15.5 em diante,
+  sem mudar o conteúdo nem as tags.
+
+## [0.21.0] - 2026-11-02
+
+Mesclada às 16:55 (UTC-3) · commit [`2881f82`](https://github.com/pablopfg/Zuri/commit/2881f822817b622055ee5da22d667129907c2a51) · PR [#93](https://github.com/pablopfg/Zuri/pull/93) · Aprova as propostas da Zuri pelo bot com passkey ou código por e-mail
+
+### Adicionado
+
+- As propostas da Zuri feitas numa conversa pelo Telegram (apagar uma tarefa
+  ou nota, trocar o texto de uma nota, esquecer uma memória, cancelar uma
+  automação) chegam com o botão **Aprovar** e uma prévia montada com o que
+  está guardado agora, nunca com as palavras da Zuri.
+- Tocar em **Aprovar** não basta: você confirma com a passkey, na página
+  `/aprovar` (que mostra a mesma prévia), ou com um código de 6 dígitos no
+  e-mail. Só então a proposta é feita, uma vez, e o bot diz o resultado.
+- `/aprovar` mostra as propostas que ainda esperam por você, até 5 por vez.
+
+### Segurança
+
+- O link e o código valem 5 minutos, uma vez só e só para aquela proposta. Se
+  o item mudou depois da proposta, nada é feito e a página e o bot dizem por
+  quê. As mesmas 5 confirmações erradas em 15 minutos travam as aprovações
+  pelo bot por 1 hora.
+- O e-mail do código traz a prévia com links desarmados e o aviso "Se não foi
+  você que tocou em Aprovar no Telegram, não digite este código".
+- Cada aprovação pelo bot aparece em Acessos e gera um aviso de segurança, uma
+  vez, que só se reconhece no app. Ações como trocar a senha ou desvincular o
+  Telegram continuam fora do bot.
+- Nas reescritas, o bot mostra os textos como citação e até 300 caracteres do
+  atual e 600 do novo. Passando disso, avisa quanto ficou de fora e só a
+  passkey confirma, porque a página mostra o texto inteiro.
+
+## [0.20.1] - 2026-11-02
+
+Mesclada às 16:30 (UTC-3) · commit [`d8be55f`](https://github.com/pablopfg/Zuri/commit/d8be55fe9fc7951d163e6027a35ea63acd82f2e7) · PR [#91](https://github.com/pablopfg/Zuri/pull/91) · Apaga branches mescladas e mantém o README em dia sozinho
+
+### Alterado
+
+- O mapa das etapas, o selo de etapas e as contagens do `README.md` se
+  atualizam sozinhos: o workflow `README` lê o `progresso.md` e as PRs de
+  etapa a cada merge na `develop` e a cada 10 minutos, e abre uma PR com
+  merge automático quando algo muda.
+- Os selos CI e CodeQL do `README.md` mostram o estado real da `develop`: os
+  dois workflows passam a rodar também a cada merge nela.
+
+### Corrigido
+
+- A branch `chore/versao` ficava no GitHub depois que a PR de versão
+  mesclava. O workflow `Branches` apaga, em até 10 minutos, toda branch cuja
+  PR já mesclou, desde que ela não tenha commit novo nem outra PR aberta.
+
 ## [0.20.0] - 2026-11-02
 
 Mesclada às 15:49 (UTC-3) · commit [`e7546bf`](https://github.com/pablopfg/Zuri/commit/e7546bf7caafc8b0607fc2397b84f31f53176d1e) · PR [#89](https://github.com/pablopfg/Zuri/pull/89) · Adiciona os comandos administrativos do bot e a gramática de datas
@@ -1538,7 +1600,10 @@ Mesclada às 22:15 (UTC-3) · commit [`360a79e`](https://github.com/pablopfg/Zur
   `npm audit`), CodeQL, Dependabot e rulesets para a `develop` e a `main`.
 - `LICENSE` (MIT), `NOTICE.md`, `SECURITY.md` e `CONTRIBUTING.md`.
 
-[Não lançado]: https://github.com/pablopfg/Zuri/compare/v0.20.0...develop
+[Não lançado]: https://github.com/pablopfg/Zuri/compare/v0.21.1...develop
+[0.21.1]: https://github.com/pablopfg/Zuri/releases/tag/v0.21.1
+[0.21.0]: https://github.com/pablopfg/Zuri/releases/tag/v0.21.0
+[0.20.1]: https://github.com/pablopfg/Zuri/releases/tag/v0.20.1
 [0.20.0]: https://github.com/pablopfg/Zuri/releases/tag/v0.20.0
 [0.19.0]: https://github.com/pablopfg/Zuri/releases/tag/v0.19.0
 [0.18.4]: https://github.com/pablopfg/Zuri/releases/tag/v0.18.4
