@@ -13,6 +13,9 @@ PLUGINS=(
   "nateherk-design@$MK"
   "cloudflare-security-audit@$MK"
   "humanizer@$MK"
+  "impeccable@$MK"
+  "frontend-design@$MK"
+  "ponytail@$MK"
 )
 
 markets="$(claude plugin marketplace list 2>/dev/null || true)"

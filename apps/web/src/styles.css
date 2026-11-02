@@ -215,6 +215,7 @@ dialog::backdrop {
   padding: 0;
 }
 .prose-zuri blockquote {
+  /* impeccable-disable-next-line side-tab -- a quote bar, not an accented card */
   border-left: 3px solid var(--color-border-strong);
   padding-left: 1rem;
   color: var(--color-fg-muted);

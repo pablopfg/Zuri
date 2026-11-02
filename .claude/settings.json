@@ -1,5 +1,10 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "env": {
+    "IMPECCABLE_NO_TELEMETRY": "1",
+    "IMPECCABLE_NO_UPDATE_CHECK": "1",
+    "IMPECCABLE_API_URL": "http://127.0.0.1:9/api"
+  },
   "permissions": {
     "allow": [
       "Bash(npm ci)",
@@ -66,7 +71,10 @@
     "mattpocock-skills@zuri-skills-externas": true,
     "nateherk-design@zuri-skills-externas": true,
     "cloudflare-security-audit@zuri-skills-externas": true,
-    "humanizer@zuri-skills-externas": true
+    "humanizer@zuri-skills-externas": true,
+    "impeccable@zuri-skills-externas": true,
+    "frontend-design@zuri-skills-externas": true,
+    "ponytail@zuri-skills-externas": true
   },
   "extraKnownMarketplaces": {
     "zuri-skills-externas": {

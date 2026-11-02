@@ -1,0 +1,17 @@
+{
+  "telemetry": false,
+  "updateCheck": false,
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": []
+  },
+  "hook": {
+    "enabled": true,
+    "quiet": true,
+    "limits": {
+      "maxFindings": 5,
+      "maxChars": 8000
+    }
+  }
+}

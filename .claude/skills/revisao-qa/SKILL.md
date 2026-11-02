@@ -9,7 +9,7 @@ Siga `docs/qa/estrategia-de-testes.md`.
 
 1. **Matriz de rastreabilidade.** Liste cada critério de aceite da etapa (inclusive os da tabela "Critérios de aceite adicionais") e o teste que o cobre (`arquivo › nome do teste`). Critério sem teste = lacuna: escreva o teste.
 2. **Revisão independente.** Peça ao subagente `qa-senior` que revise o diff passando só a branch e o número da etapa. Não passe as suas conclusões.
-3. **Padrões e especificação.** Rode `mattpocock-skills:code-review` com ponto fixo `origin/develop` e, como especificação, o bloco da etapa em `docs/especificacao.md`. Ele revisa em paralelo os padrões do repositório e a aderência à etapa.
+3. **Padrões e especificação.** Rode `mattpocock-skills:code-review` com ponto fixo `origin/develop` e, como especificação, o bloco da etapa em `docs/especificacao.md`. Ele revisa em paralelo os padrões do repositório e a aderência à etapa. Rode também `ponytail:ponytail-review` no mesmo diff: código que sobra, duplicado, risco sem teste. Achado dele que pede menos teste ou menos validação não vale.
 4. **Exigências por área e portões.** Percorra as "Exigências por área" e os "Portões obrigatórios de cada etapa" de `docs/qa/estrategia-de-testes.md` e marque, para cada item que a etapa tocou, o teste que o cobre.
 5. **Prova de que o teste pega a falha.** Para cada controle de segurança ou correção nova, quebre o código de propósito (tire a checagem, inverta a condição), rode só aquele teste, confirme o vermelho e desfaça (`git checkout` do arquivo). Teste que continua verde é teste fraco: reescreva.
 6. **Casos que sempre se testam**, quando a etapa tocar a área:
@@ -22,5 +22,5 @@ Siga `docs/qa/estrategia-de-testes.md`.
    - textos em pt-BR e en, leitor de tela e teclado nas telas novas;
    - aparelho em outro fuso que o do dono (e2e com `timezoneId: "Asia/Tokyo"`).
 7. **Regressão.** Rode a suíte completa e compare com a `develop`. Teste instável é bug: ache a corrida.
-8. **Exploratório.** Para telas e bot, rode o app (`npm run dev`) e percorra o roteiro da etapa; anote o que encontrar. Olhe as capturas do PR (`.claude/rules/capturas.md`) uma a uma: texto cortado, chave de i18n crua, contraste, tema escuro e celular.
+8. **Exploratório.** Para telas e bot, rode o app (`npm run dev`) e percorra o roteiro da etapa; anote o que encontrar. Olhe as capturas do PR (`.claude/rules/capturas.md`) uma a uma: texto cortado, chave de i18n crua, contraste, tema escuro e celular. PR com tela: rode `impeccable:impeccable` com `critique` e `audit` em cada tela mexida e corrija os achados P0 e P1 antes do PR.
 9. **Relatório no PR** (seção "QA"): matriz, exigências por área cobertas, provas de falha, cobertura (antes e depois), notas do Lighthouse, achados e correções, o que ficou de fora e por quê.
