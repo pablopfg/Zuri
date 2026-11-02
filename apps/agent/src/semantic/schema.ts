@@ -112,8 +112,3 @@ export function createTriggers(db: Database): void {
 export function dropTriggers(db: Database): void {
   for (const trigger of queueTriggers()) db.run(`DROP TRIGGER IF EXISTS ${trigger.name}`);
 }
-
-/** True once the module's tables exist. */
-export function semanticTablesExist(db: Database): boolean {
-  return db.one(`SELECT 1 AS x FROM sqlite_master WHERE type = 'table' AND name = 'zur_semantic_vectors'`) !== null;
-}

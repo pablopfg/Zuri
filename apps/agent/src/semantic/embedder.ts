@@ -42,12 +42,8 @@ export class WorkersAIEmbedder implements Embedder {
     if (texts.length === 0) return [];
     let result: { data?: unknown };
     try {
-      result = (await this.binding.run(
-        this.model as Parameters<Ai["run"]>[0],
-        // A text past the model's window is cut, never refused: the index takes the start.
-        { text: texts, truncate_inputs: true } as never,
-        signal ? ({ signal } as never) : undefined,
-      )) as { data?: unknown };
+      // A text past the model's window is cut, never refused: the index takes the start.
+      result = (await this.binding.run(EMBEDDING_MODEL, { text: texts, truncate_inputs: true }, signal ? { signal } : undefined)) as { data?: unknown };
     } catch (error) {
       throw classifyAiError(error);
     }

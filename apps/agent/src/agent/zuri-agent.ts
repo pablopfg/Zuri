@@ -237,8 +237,6 @@ export class ZuriAgent extends Agent<WorkerEnv> {
     // The watchers go first, since their round moves the next one forward before anything else.
     const steps = [
       () => watchers.tick(),
-      // The search by meaning's indexing (step 17): nothing at all while it is off.
-      () => this.store.semantic.tick(),
       () => diagnostics.flush(),
       () => alerts.sweep(),
       () => this.store.push.prune(),
@@ -253,6 +251,13 @@ export class ZuriAgent extends Agent<WorkerEnv> {
       }
     }
     await automations.wake(schedule?.id ?? null, this.executor());
+    // The search by meaning's indexing (step 17) comes after what is due, so a slow model never delays a
+    // reminder; nothing at all while it is off. The alarm `wake` just set already counts its next round.
+    try {
+      await this.store.semantic.tick();
+    } catch (error) {
+      log("error", "alert_tick_failed", { error });
+    }
     await alerts.settled();
   }
 

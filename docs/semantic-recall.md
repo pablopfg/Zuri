@@ -20,7 +20,10 @@ Plano da etapa: [`docs/planos/etapa-17-busca-semantica.md`](planos/etapa-17-busc
 - **Preparar tudo de novo:** refaz o preparo aos poucos, sem apagar o que já
   está pronto. Pede confirmação.
 - **Desligar:** a busca volta a ser só por palavra na hora. O que já foi
-  preparado fica guardado e é aproveitado ao ligar de novo.
+  preparado fica guardado e é aproveitado ao ligar de novo. O vetor de um item
+  apagado com a busca desligada só sai quando ela é ligada de novo (a primeira
+  passada remove os que sobraram). Ele nunca aparece numa busca, mas fica no
+  banco até lá.
 
 ## Limites
 
@@ -36,8 +39,21 @@ Os valores estão em `SEMANTIC_LIMITS` (`packages/shared/src/semantic.ts`).
 | Vetores por linha do banco | 64 | bloco novo |
 | Resultados por significado | cosseno ≥ 0,55 e até 0,10 abaixo do melhor | fora da lista |
 
-Se o modelo falhar, o preparo tenta de novo depois de 15 minutos. O registro
-guarda só o código do erro, nunca o texto.
+Se o modelo falhar, o preparo tenta de novo depois de 15 minutos. Depois de 3
+falhas seguidas, para até o dia seguinte (00:00 UTC), para um erro que se repete
+não gastar a cota do dia. O registro guarda só o código do erro, nunca o texto.
+
+Cada chamada tem prazo próprio: 30 s no preparo e 10 s numa pergunta. Assim um
+modelo lento não segura a conversa nem o alarme. O preparo roda depois das
+automações vencidas, então nunca atrasa um lembrete.
+
+O modelo não informa quantos tokens leu, então a conta é uma estimativa
+definitiva e pelo lado seguro: meio token por byte UTF-8. Emoji e ideogramas
+contam mais que palavras comuns.
+
+`/uso` no Telegram mostra as perguntas e os itens preparados do dia enquanto a
+busca está ligada. O cartão não fica consultando o servidor: o número anda
+quando você volta à aba.
 
 ## Como funciona
 
@@ -60,6 +76,11 @@ guarda só o código do erro, nunca o texto.
   `zur_automations` põem na fila o item criado, apagado ou com o texto mudado.
   Mudar só o estado ou a data não entra na fila. Os gatilhos existem só com a
   busca ligada.
+- **Mudanças durante a chamada:** o dono pode editar ou apagar um item enquanto
+  o modelo responde. Por isso, logo depois da resposta e antes de gravar, o
+  texto de cada item é lido de novo. Item mudado continua na fila para a
+  próxima rodada, item apagado perde o vetor, e só o texto que foi ao modelo é
+  gravado.
 - **Preparo:** roda no alarme único das automações (`otherDue` recebe
   `semantic.nextDue()`). Primeiro vem a fila, depois uma varredura que acha os
   itens sem vetor e remove os vetores de itens que não existem mais. Um texto

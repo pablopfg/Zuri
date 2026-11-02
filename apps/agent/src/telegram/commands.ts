@@ -16,6 +16,7 @@ import {
   type UsageReport,
   zonedParts,
   zonedTimeToUtc,
+  SEMANTIC_LIMITS,
 } from "@zuri/shared";
 import type { AlertService } from "../alerts/service.ts";
 import type { AutomationService } from "../automations/service.ts";
@@ -337,8 +338,20 @@ export class TelegramCommands {
         audio: number.format(Math.ceil(report.today.audioSeconds / 60)),
         audioMax: number.format(Math.floor(report.limits.audioSecondsPerDay / 60)),
         custo: money.format(report.today.costUsd),
-      }),
+      }) + this.#meaningUsage(number),
     };
+  }
+
+  /** The search by meaning's line of /uso (step 17), only while it is on. */
+  #meaningUsage(number: Intl.NumberFormat): string {
+    const today = this.deps.semantic?.usage();
+    if (!today) return "";
+    return `\n${this.#t("telegram.cmd.uso.significado", {
+      buscas: number.format(today.queries),
+      buscasMax: number.format(SEMANTIC_LIMITS.queriesPerDay),
+      itens: number.format(today.indexed),
+      itensMax: number.format(SEMANTIC_LIMITS.indexPerDay),
+    })}`;
   }
 
   /** /status: version, health, failures in 24 h and whether the AI can answer now. */

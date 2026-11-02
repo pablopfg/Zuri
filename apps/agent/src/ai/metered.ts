@@ -9,6 +9,18 @@ import type { Embedder } from "../semantic/embedder.ts";
 import { base64Bytes, estimatedSeconds, type Transcriber } from "./transcription.ts";
 import type { AiLimits, Reservation, UsageMeter } from "./usage.ts";
 
+const UTF8 = new TextEncoder();
+
+/**
+ * Tokens an embedding is charged for (step 17). No count comes back from the
+ * model, so the estimate is final: half a token per UTF-8 byte, on the safe
+ * side of bge-m3's tokenizer even for emoji and CJK (the chat's four
+ * characters per token would undercount those up to four times).
+ */
+export function estimateEmbeddingTokens(text: string): number {
+  return Math.ceil(UTF8.encode(text).length / 2);
+}
+
 /** What a caller passes: the metering hooks belong to this wrapper. */
 export type MeteredRequest = Omit<GenerateRequest, "onStepUsage" | "reserveNextStep">;
 export type MeteredToolRequest = Omit<ToolRequest, "onStepUsage" | "reserveNextStep">;
@@ -131,18 +143,22 @@ export class MeteredAI {
    * account, never a chat provider (D8). Counted against the Neuron cap before
    * the call (`ceiling` lowers it, for the background indexing) and charged in
    * full once the call was made, also when it failed. Refused with
-   * AI_LIMIT_REACHED when the day has no room.
+   * AI_LIMIT_REACHED when the day has no room. `deadlineMs` keeps a slow model
+   * from holding a turn or the shared alarm (a question takes well under a second).
    */
-  async embed(texts: string[], options: { signal?: AbortSignal | undefined; ceiling?: number } = {}): Promise<Float32Array[]> {
+  async embed(
+    texts: string[],
+    options: { signal?: AbortSignal | undefined; ceiling?: number; deadlineMs?: number } = {},
+  ): Promise<Float32Array[]> {
     if (texts.length === 0) return [];
     if (!this.embedder) throw new AppError("NOT_CONFIGURED");
     if (options.signal?.aborted) throw new AppError("SERVICE_UNAVAILABLE", "error.aiAborted");
     const embedder = this.embedder;
     const clean = texts.map((text) => this.scrub(text));
-    const tokens = clean.reduce((sum, text) => sum + estimateTokens(text), 0);
+    const tokens = clean.reduce((sum, text) => sum + estimateEmbeddingTokens(text), 0);
     const limits = this.limits();
     const reservation = this.meter.reserveEmbedding({ model: embedder.model, billable: embedder.billable, tokens }, limits, options.ceiling);
-    const call = this.callSignal(options.signal, Date.now() + this.deadlineMs);
+    const call = this.callSignal(options.signal, Date.now() + Math.min(options.deadlineMs ?? this.deadlineMs, this.deadlineMs));
     try {
       const vectors = await embedder.embed(clean, call.signal);
       if (call.timedOut()) throw timeout();

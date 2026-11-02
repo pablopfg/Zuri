@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { type Automation, type Memory, type NoteSummary, ptBRPalette, type Task } from "@zuri/shared";
+import { type Automation, type Memory, type NoteSummary, ptBRPalette, SEMANTIC_LIMITS, type Task } from "@zuri/shared";
 import {
   Activity,
   Bell,
@@ -149,7 +149,8 @@ export function CommandPalette({ onClose, navigate }: { onClose: () => void; nav
   });
   const byMeaning = useQuery({
     queryKey: ["palette", "meaning", term],
-    enabled: term !== "" && semantic.data?.enabled === true,
+    // The server takes a question of two characters or more (SEMANTIC_LIMITS.queryMinChars).
+    enabled: [...term].length >= SEMANTIC_LIMITS.queryMinChars && semantic.data?.enabled === true,
     staleTime: 30_000,
     queryFn: ({ signal }) =>
       api<{ tasks: Task[]; notes: NoteSummary[]; memories: Memory[]; automations: Automation[] }>(

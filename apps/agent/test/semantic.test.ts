@@ -4,12 +4,12 @@ import { AGENT_INSTANCE_NAME } from "@zuri/shared";
 import { describe, expect, it, vi } from "vitest";
 import { AgentRunner } from "../src/agent/runner.ts";
 import type { ZuriAgent } from "../src/agent/zuri-agent.ts";
-import { MeteredAI } from "../src/ai/metered.ts";
+import { estimateEmbeddingTokens, MeteredAI } from "../src/ai/metered.ts";
 import { MockAIProvider } from "../src/ai/mock.ts";
 import { InternalState } from "../src/db/internal-state.ts";
 import { selectRelevantMemories } from "../src/memory/recall.ts";
 import { type Embedder, MockEmbedder, WorkersAIEmbedder } from "../src/semantic/embedder.ts";
-import { SEMANTIC_RETRY_MS, SemanticSearch } from "../src/semantic/service.ts";
+import { SEMANTIC_MAX_FAILURES, SEMANTIC_RETRY_MS, SemanticSearch } from "../src/semantic/service.ts";
 import { ALL_TOOLS } from "../src/tools/index.ts";
 import { fakeAi } from "./ai-fakes.ts";
 import { type ChatWorld, collect, ScriptedProvider, withChatWorld } from "./chat-world.ts";
@@ -256,7 +256,7 @@ describe("on", () => {
       expect(await world.semantic.search("carro", ["memory"], 5)).toEqual({ memory: [] });
       expect(mock.calls).toEqual([["carro"]]);
       const report = world.meter.report({ requestsPerDay: 200, neuronsPerDay: 9_000, maxOutputTokens: 1_024 }, "mock", "@cf/zai-org/glm-4.7-flash");
-      expect(report.today.models).toEqual([expect.objectContaining({ model: EMBEDDING_MODEL, kind: "embedding", calls: 1, inputTokens: 2 })]);
+      expect(report.today.models).toEqual([expect.objectContaining({ model: EMBEDDING_MODEL, kind: "embedding", calls: 1, inputTokens: 3 })]);
       // Embeddings are not chat requests.
       expect(report.today.requests).toBe(0);
     });
@@ -476,7 +476,200 @@ describe("embeddings only on the owner's Workers AI (D8)", () => {
       semantic.enable();
       await semantic.tick();
       expect(semantic.status()).toMatchObject({ ready: 0, waiting: 1 });
+      // No alarm for work no model can do: it would wake every minute for nothing.
+      expect(semantic.nextDue()).toBeNull();
       expect(await semantic.search("carro", ["memory"], 5)).toBeNull();
     });
+  });
+});
+
+/** An embedder that runs `during` while the model "answers": the owner keeps working meanwhile. */
+function embedderWith(world: SemanticWorld, during: () => void): MockEmbedder {
+  const mock = new MockEmbedder();
+  let once = true;
+  world.setEmbedder({
+    model: mock.model,
+    dims: mock.dims,
+    billable: false,
+    floor: mock.floor,
+    embed: async (texts, signal) => {
+      if (once) {
+        once = false;
+        during();
+      }
+      return mock.embed(texts, signal);
+    },
+  });
+  return mock;
+}
+
+describe("the owner keeps working while the model answers", () => {
+  it("an item edited meanwhile is found by its new text, never by the old one", async () => {
+    await withSemantic(async (world) => {
+      const memory = world.memories.create({ content: "Gosto de chá" }).memory;
+      world.semantic.enable();
+      await indexAll(world);
+      world.memories.update(memory.id, { content: "Meu automóvel é azul" });
+      embedderWith(world, () => world.memories.update(memory.id, { content: "Tenho um cachorro chamado Rex" }));
+      await indexAll(world);
+      expect((await search(world, "cachorro")).memories.map((m) => m.content)).toEqual(["Tenho um cachorro chamado Rex"]);
+      expect(await world.semantic.search("carro", ["memory"], 5)).toEqual({ memory: [] });
+      expect(world.semantic.status()).toMatchObject({ ready: 1, total: 1, waiting: 0 });
+    });
+  });
+
+  it("an item deleted meanwhile keeps no vector, and the count never passes the total", async () => {
+    await withSemantic(async (world) => {
+      const memory = world.memories.create({ content: "Gosto de chá" }).memory;
+      world.semantic.enable();
+      await indexAll(world);
+      world.memories.update(memory.id, { content: "Meu automóvel é azul" });
+      embedderWith(world, () => world.memories.delete(memory.id));
+      await indexAll(world);
+      expect(world.db.all(`SELECT item_id FROM zur_semantic_items`)).toEqual([]);
+      expect(await world.semantic.search("carro", ["memory"], 5)).toEqual({ memory: [] });
+      expect(world.semantic.status()).toMatchObject({ ready: 0, total: 0, waiting: 0 });
+    });
+  });
+
+  it("the full pass: an item edited or deleted meanwhile is made again from its new text, or dropped", async () => {
+    await withSemantic(async (world) => {
+      const edited = world.productivity.notes.create({ title: "Viagem", content: "Praia em janeiro" });
+      const gone = world.productivity.notes.create({ title: "Mercado", content: "Comprar pão" });
+      embedderWith(world, () => {
+        world.productivity.notes.update(edited.id, { content: "Serra em julho" });
+        world.productivity.notes.delete(gone.id);
+      });
+      world.semantic.enable();
+      await indexAll(world);
+      expect(world.db.all<{ item_id: string }>(`SELECT item_id FROM zur_semantic_items`).map((row) => row.item_id)).toEqual([edited.id]);
+      expect(world.semantic.status()).toMatchObject({ ready: 1, total: 1, waiting: 0 });
+      // The stored vector is the new text's: a second look finds nothing to make again.
+      const calls = world.embedder.calls.length;
+      world.semantic.reindex();
+      world.semantic.disable();
+      world.semantic.enable();
+      expect(world.embedder.calls.length).toBe(calls);
+    });
+  });
+});
+
+describe("cost and safety of every call", () => {
+  it("a fault that repeats stops the day's indexing after a few tries; the next day starts over", async () => {
+    await withSemantic(async (world) => {
+      let tries = 0;
+      const mock = new MockEmbedder();
+      let broken = true;
+      world.setEmbedder({
+        model: mock.model,
+        dims: mock.dims,
+        billable: false,
+        floor: mock.floor,
+        embed: async (texts, signal) => {
+          tries++;
+          if (broken) throw new Error("bad batch");
+          return mock.embed(texts, signal);
+        },
+      });
+      vi.spyOn(console, "warn").mockImplementation(() => {});
+      world.memories.create({ content: "Meu automóvel é azul" });
+      world.semantic.enable();
+      for (let i = 0; i < 10; i++) {
+        await world.semantic.tick();
+        world.clock.now += SEMANTIC_RETRY_MS;
+      }
+      expect(tries).toBe(SEMANTIC_MAX_FAILURES);
+      expect(world.semantic.status().paused).toBe("limit");
+      broken = false;
+      world.clock.now += DAY;
+      await indexAll(world);
+      expect(world.semantic.status()).toMatchObject({ ready: 1, paused: null });
+      vi.restoreAllMocks();
+    });
+  });
+
+  it("a success clears the failures before they add up", async () => {
+    await withSemantic(async (world) => {
+      const mock = new MockEmbedder();
+      let fail = 0;
+      world.setEmbedder({
+        model: mock.model,
+        dims: mock.dims,
+        billable: false,
+        floor: mock.floor,
+        embed: async (texts, signal) => {
+          if (fail > 0) {
+            fail--;
+            throw new Error("hiccup");
+          }
+          return mock.embed(texts, signal);
+        },
+      });
+      vi.spyOn(console, "warn").mockImplementation(() => {});
+      world.semantic.enable();
+      for (let round = 0; round < 3; round++) {
+        world.memories.create({ content: `Lembrança ${round}` });
+        fail = SEMANTIC_MAX_FAILURES - 1;
+        for (let i = 0; i < SEMANTIC_MAX_FAILURES; i++) {
+          await world.semantic.tick();
+          world.clock.now += SEMANTIC_RETRY_MS;
+        }
+        expect(world.semantic.status().paused).toBeNull();
+      }
+      expect(world.semantic.status()).toMatchObject({ ready: 3, waiting: 0 });
+      vi.restoreAllMocks();
+    });
+  });
+
+  it("no question goes to the model during a lockdown", async () => {
+    await withSemantic(async (world) => {
+      world.memories.create({ content: "Meu automóvel é azul" });
+      world.semantic.enable();
+      await indexAll(world);
+      const calls = world.embedder.calls.length;
+      world.lockdown.on = true;
+      expect(await world.semantic.search("carro", ["memory"], 5)).toBeNull();
+      expect(world.embedder.calls.length).toBe(calls);
+    });
+  });
+
+  it("the deploy's secrets never reach the embedding model, in the indexing or in a question", async () => {
+    await withSemantic(async (world) => {
+      const secret = "s3cr3t-0123456789abcdefghijklmnopqrstuvwxyz";
+      const mock = new MockEmbedder();
+      const ai = new MeteredAI(new MockAIProvider(() => "pt-BR"), world.meter, () => ({ requestsPerDay: 200, neuronsPerDay: 9_000, maxOutputTokens: 1_024 }), undefined, null, [secret], mock);
+      const semantic = new SemanticSearch({ db: world.db, state: world.state, ai: () => ai, lockdown: () => false, neuronsPerDay: () => 9_000, clock: () => world.clock.now });
+      world.memories.create({ content: `A chave é ${secret}` });
+      semantic.enable();
+      while (semantic.nextDue() !== null) await semantic.tick();
+      await semantic.search(`qual é ${secret}?`, ["memory"], 5);
+      expect(mock.calls.length).toBe(2);
+      expect(JSON.stringify(mock.calls)).not.toContain(secret);
+    });
+  });
+
+  it("a slow model gives up at the call's own deadline, far before a whole turn's", async () => {
+    await withSemantic(async (world) => {
+      const mock = new MockEmbedder();
+      const slow: Embedder = {
+        model: mock.model,
+        dims: mock.dims,
+        billable: false,
+        floor: mock.floor,
+        embed: (_texts, signal) => new Promise((_, reject) => signal?.addEventListener("abort", () => reject(signal.reason))),
+      };
+      const ai = new MeteredAI(new MockAIProvider(() => "pt-BR"), world.meter, () => ({ requestsPerDay: 200, neuronsPerDay: 9_000, maxOutputTokens: 1_024 }), undefined, null, [], slow);
+      const started = Date.now();
+      await expect(ai.embed(["carro"], { deadlineMs: 50 })).rejects.toMatchObject({ code: "SERVICE_UNAVAILABLE" });
+      expect(Date.now() - started).toBeLessThan(5_000);
+    });
+  });
+
+  it("charges an embedding on the safe side: emoji and CJK count more than plain words", () => {
+    expect(estimateEmbeddingTokens("")).toBe(0);
+    expect(estimateEmbeddingTokens("carro")).toBe(3);
+    // Two emoji of four bytes each: 4 tokens, where the chat's four characters per token would say 1.
+    expect(estimateEmbeddingTokens("🚗🚗")).toBe(4);
+    expect(estimateEmbeddingTokens("自動車")).toBe(5);
   });
 });

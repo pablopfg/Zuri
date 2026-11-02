@@ -62,6 +62,8 @@ Em `web.ai.semantic.*` (catálogo `pt-BR-ai.ts`, en em `en.ts`) e `web.palette.g
 | Parte do teto de Neurons para preparo | 50% do teto do dia | pausa até 00:00 UTC (o chat fica com o resto) |
 | Buscas por significado por dia | 500 | a busca segue só por palavra |
 | Texto por item | 2.000 caracteres | o resto não entra no vetor |
+| Falhas seguidas do modelo no preparo | 3 (espera de 15 min entre elas) | pausa até 00:00 UTC |
+| Prazo de uma chamada | 30 s no preparo, 10 s numa pergunta | a rodada falha (preparo) ou a busca fica só por palavra |
 | Vetores por linha | 64 | bloco novo |
 | Resultados por significado | piso 0,55 do cosseno e até 0,10 abaixo do melhor (bge-m3) | fora da lista |
 

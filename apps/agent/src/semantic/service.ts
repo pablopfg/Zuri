@@ -4,13 +4,18 @@ import type { Database } from "../db/database.ts";
 import type { InternalState } from "../db/internal-state.ts";
 import { AppError } from "../http/errors.ts";
 import { log } from "../log.ts";
-import { createTriggers, dropTriggers, KIND_SOURCES, migrateSemantic, semanticTablesExist } from "./schema.ts";
+import { createTriggers, dropTriggers, KIND_SOURCES, migrateSemantic } from "./schema.ts";
 import { CHUNK, VectorStore } from "./store.ts";
 import { keepBest } from "./vectors.ts";
 
 const DAY_MS = 86_400_000;
 /** After a failed indexing call, the next try waits this long: a model out of service is not hammered. */
 export const SEMANTIC_RETRY_MS = 15 * 60_000;
+/** Failed indexing calls in a row before the day's indexing stops: a fault that repeats is not paid for all day. */
+export const SEMANTIC_MAX_FAILURES = 3;
+/** The longest an indexing call may hold the shared alarm, and a question a turn or a search. */
+export const SEMANTIC_INDEX_DEADLINE_MS = 30_000;
+export const SEMANTIC_QUERY_DEADLINE_MS = 10_000;
 /** Rows the full pass reads in one wake, at most. */
 const SCAN_ROWS = 200;
 /** Question vectors kept in memory, so typing the same search again costs nothing. */
@@ -39,9 +44,11 @@ interface State {
   /** Today's indexing stopped at the limit (texts or Neurons): it starts again at 00:00 UTC. */
   capped: boolean;
   waitUntil: string | null;
+  /** Failed indexing calls in a row; at SEMANTIC_MAX_FAILURES the day's indexing stops. */
+  failures: number;
 }
 
-const INITIAL: State = { on: false, schema: 0, gen: 1, sweep: null, day: "", indexed: 0, queries: 0, capped: false, waitUntil: null };
+const INITIAL: State = { on: false, schema: 0, gen: 1, sweep: null, day: "", indexed: 0, queries: 0, capped: false, waitUntil: null, failures: 0 };
 
 export interface SemanticDeps {
   db: Database;
@@ -101,7 +108,7 @@ export class SemanticSearch {
   private today(state: State): State {
     const day = new Date(this.now()).toISOString().slice(0, 10);
     if (state.day === day) return state;
-    return { ...state, day, indexed: 0, queries: 0, capped: false };
+    return { ...state, day, indexed: 0, queries: 0, capped: false, failures: 0 };
   }
 
   enabled(): boolean {
@@ -129,7 +136,7 @@ export class SemanticSearch {
     if (state.on) {
       this.deps.db.transaction(() => {
         dropTriggers(this.deps.db);
-        if (semanticTablesExist(this.deps.db)) this.deps.db.run(`DELETE FROM zur_semantic_queue`);
+        if (state.schema > 0) this.deps.db.run(`DELETE FROM zur_semantic_queue`);
         this.save({ ...state, on: false, sweep: null, waitUntil: null });
       });
       this.#cache.clear();
@@ -153,9 +160,12 @@ export class SemanticSearch {
         .map((row) => [row.kind, row.n]),
     );
     const total = ["memories", "tasks", "notes", "automations"].reduce((sum, kind) => sum + Math.max(0, counts.get(kind) ?? 0), 0);
-    const tables = state.schema > 0 && semanticTablesExist(this.deps.db);
-    // At most 1,000 rows read to say how many changed items wait: past that, "1,000" says enough.
-    const queued = state.on && tables ? (this.deps.db.one<{ n: number }>(`SELECT count(*) AS n FROM (SELECT 1 FROM zur_semantic_queue LIMIT 1000)`)?.n ?? 0) : 0;
+    // The tables exist once a migration ran: its version is saved in the same transaction (no look at the schema table,
+    // which reads a row per table, index and trigger).
+    const tables = state.schema > 0;
+    // At most SCAN_ROWS rows read to say how many changed items wait (the palette asks too): past that, the
+    // count says "at least", and it moves as the rounds take them.
+    const queued = state.on && tables ? (this.deps.db.one<{ n: number }>(`SELECT count(*) AS n FROM (SELECT 1 FROM zur_semantic_queue LIMIT ?)`, SCAN_ROWS)?.n ?? 0) : 0;
     const sweeping = state.on && state.sweep ? Math.max(0, state.sweep.total - state.sweep.done) : 0;
     const paused = !state.on ? null : this.deps.lockdown() ? "lockdown" : state.capped ? "limit" : null;
     return {
@@ -170,6 +180,12 @@ export class SemanticSearch {
     };
   }
 
+  /** Today's questions and prepared texts (the bot's /uso), or null with the module off. */
+  usage(): { queries: number; indexed: number } | null {
+    const state = this.today(this.read());
+    return state.on ? { queries: state.queries, indexed: state.indexed } : null;
+  }
+
   /**
    * When the shared alarm should come back for the indexing: now while there
    * is work, the next UTC day once today's limit is reached, the end of the
@@ -181,6 +197,8 @@ export class SemanticSearch {
     if (!state.on || this.deps.lockdown()) return null;
     if (state.capped) return this.nextDay();
     if (state.waitUntil && Date.parse(state.waitUntil) > this.now()) return state.waitUntil;
+    // Without a model to call (a deploy with no AI binding) there is nothing the alarm could do.
+    if (!this.embedder()) return null;
     const work = state.sweep !== null || this.deps.db.one(`SELECT 1 AS x FROM zur_semantic_queue LIMIT 1`) !== null;
     return work ? new Date(this.now()).toISOString() : null;
   }
@@ -201,9 +219,9 @@ export class SemanticSearch {
       this.save({ ...state, capped: true });
       return;
     }
-    const ai = this.deps.ai();
-    const embedding = ai.embedding;
+    const embedding = this.embedder();
     if (!embedding) return;
+    const ai = this.deps.ai();
     this.#running = true;
     try {
       const seen = new Set<string>();
@@ -287,33 +305,54 @@ export class SemanticSearch {
           const ceiling = this.deps.neuronsPerDay() * SEMANTIC_LIMITS.indexNeuronShare;
           vectors = await ai.embed(
             candidates.map((candidate) => [...candidate.text].slice(0, SEMANTIC_LIMITS.textChars).join("")),
-            { ceiling },
+            { ceiling, deadlineMs: SEMANTIC_INDEX_DEADLINE_MS },
           );
         } catch (error) {
           state = this.today(this.read());
           if (error instanceof AppError && error.code === "AI_LIMIT_REACHED") this.save({ ...state, capped: true });
           else {
             log("warn", "semantic_index_failed", { code: error instanceof AppError ? error.code : "INTERNAL_ERROR" });
-            this.save({ ...state, waitUntil: new Date(this.now() + SEMANTIC_RETRY_MS).toISOString() });
+            const failures = state.failures + 1;
+            // A fault that repeats stops the day's indexing (rule P7: no endless retries, each one charged).
+            this.save(
+              failures >= SEMANTIC_MAX_FAILURES
+                ? { ...state, failures, capped: true }
+                : { ...state, failures, waitUntil: new Date(this.now() + SEMANTIC_RETRY_MS).toISOString() },
+            );
           }
           return;
         }
+        // The owner kept working while the model answered: what changed or went meanwhile is read again
+        // here, with no await before the writes, so a stale text is never stored nor taken off the queue.
         for (const kind of SEMANTIC_KINDS) {
-          const entries = candidates.flatMap((candidate, index) =>
-            candidate.kind === kind ? [{ id: candidate.id, hash: candidate.hash, vector: vectors[index] as Float32Array }] : [],
+          const mine = candidates.flatMap((candidate, index) => (candidate.kind === kind ? [{ candidate, vector: vectors[index] as Float32Array }] : []));
+          if (mine.length === 0) continue;
+          const now = this.texts(
+            kind,
+            mine.map((entry) => entry.candidate.id),
           );
-          // The item may be gone while the model answered: its trigger queued it, and the next round removes it.
-          this.#store.put(kind, embedding.model, embedding.dims, entries);
+          const kept = mine.filter((entry) => now.get(entry.candidate.id) === entry.candidate.text);
+          const gone = mine.filter((entry) => !now.has(entry.candidate.id)).map((entry) => entry.candidate.id);
+          this.#store.put(
+            kind,
+            embedding.model,
+            embedding.dims,
+            kept.map((entry) => ({ id: entry.candidate.id, hash: entry.candidate.hash, vector: entry.vector })),
+          );
+          this.#store.remove(kind, gone);
+          // A text changed meanwhile stays queued (its trigger found the row there), and the next round makes it.
+          const settled = new Set([...kept.map((entry) => entry.candidate.id), ...gone]);
           this.unqueue(
             kind,
-            queued.filter((item) => item.kind === kind).map((item) => item.id),
+            queued.filter((item) => item.kind === kind && settled.has(item.id)).map((item) => item.id),
           );
+          // A changed item the full pass found was not in the queue: its trigger put it there.
         }
       }
       // Read again: the owner may have switched it off or asked a reindex meanwhile.
       const latest = this.today(this.read());
       const sameRun = latest.on && latest.gen === state.gen && JSON.stringify(latest.sweep) === JSON.stringify(state.sweep);
-      this.save({ ...latest, indexed: latest.indexed + candidates.length, sweep: sameRun ? sweep : latest.sweep, waitUntil: null });
+      this.save({ ...latest, indexed: latest.indexed + candidates.length, sweep: sameRun ? sweep : latest.sweep, waitUntil: null, failures: 0 });
     } finally {
       this.#running = false;
     }
@@ -326,17 +365,13 @@ export class SemanticSearch {
    */
   async search(query: string, kinds: readonly SemanticKind[], limit: number, signal?: AbortSignal): Promise<MeaningHits | null> {
     let state = this.read();
-    if (!state.on || state.schema === 0) return null;
+    // A lockdown (step 16b) stops every call to the model, a question included.
+    if (!state.on || state.schema === 0 || this.deps.lockdown()) return null;
     const text = [...query.trim()].slice(0, SEMANTIC_LIMITS.queryMaxChars).join("");
     if ([...text].length < SEMANTIC_LIMITS.queryMinChars) return {};
-    let ai: MeteredAI;
-    try {
-      ai = this.deps.ai();
-    } catch {
-      return null;
-    }
-    const embedding = ai.embedding;
+    const embedding = this.embedder();
     if (!embedding) return null;
+    const ai = this.deps.ai();
     const key = `${embedding.model}|${text.toLowerCase()}`;
     let vector = this.#cache.get(key);
     if (!vector) {
@@ -344,7 +379,7 @@ export class SemanticSearch {
       if (state.queries >= SEMANTIC_LIMITS.queriesPerDay) return null;
       this.save({ ...state, queries: state.queries + 1 });
       try {
-        vector = (await ai.embed([text], { signal }))[0];
+        vector = (await ai.embed([text], { signal, deadlineMs: SEMANTIC_QUERY_DEADLINE_MS }))[0];
       } catch (error) {
         log("warn", "semantic_query_failed", { code: error instanceof AppError ? error.code : "INTERNAL_ERROR" });
         return null;
@@ -363,6 +398,15 @@ export class SemanticSearch {
       ).map((hit) => hit.id);
     }
     return out;
+  }
+
+  /** This deploy's embedding model, or null when there is none (or the model could not be set up). */
+  private embedder(): MeteredAI["embedding"] {
+    try {
+      return this.deps.ai().embedding;
+    } catch {
+      return null;
+    }
   }
 
   /** The texts of the live items among `ids`. */

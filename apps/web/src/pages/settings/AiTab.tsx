@@ -449,9 +449,6 @@ export function invalid(field: LimitField, text: string): boolean {
 }
 
 export const SEMANTIC_KEY = ["semantic"] as const;
-/** While items wait, the card asks again this often (only with the tab visible), so the count moves. */
-const SEMANTIC_REFRESH_MS = 60_000;
-
 /**
  * The search by meaning (step 17): off by default. On, the card shows how much
  * is ready, what still waits and why it may be paused; "Preparar tudo de novo"
@@ -461,11 +458,8 @@ function SemanticCard() {
   const { t } = useI18n();
   const status = useQuery({
     queryKey: SEMANTIC_KEY,
+    // No polling (rule P11): the count moves when the owner comes back to the tab or opens the card again.
     queryFn: async ({ signal }): Promise<SemanticStatus> => semanticStatusSchema.parse(await api<unknown>("/semantic", { signal })),
-    refetchInterval: (query) => {
-      const data = query.state.data;
-      return data?.enabled && data.waiting > 0 && !data.paused ? SEMANTIC_REFRESH_MS : false;
-    },
   });
   return (
     <Card title={t("web.ai.semantic.title")} description={t("web.ai.semantic.description")}>
@@ -497,8 +491,9 @@ function SemanticBody({ status }: { status: SemanticStatus }) {
       qc.setQueryData(SEMANTIC_KEY, semanticStatusSchema.parse(await api<unknown>(path, init)));
       toast(message);
       setConfirming(false);
-      // The usage report shows what the preparing spends.
+      // The usage report shows what the preparing spends; the palette learns at once whether to search by meaning.
       void qc.invalidateQueries({ queryKey: USAGE_KEY });
+      void qc.invalidateQueries({ queryKey: ["palette", "semantic"] });
     } catch (failure) {
       setError(failure);
     } finally {
