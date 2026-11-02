@@ -1,10 +1,13 @@
 import { ChevronRight, Clock, MessageCircle, ShieldAlert, ShieldCheck } from "lucide-react";
-import { type ReactNode, useId } from "react";
+import { lazy, type ReactNode, Suspense, useId } from "react";
 import { Link } from "react-router";
-import { EmptyState, ErrorNotice, PageHeader, Spinner } from "../components/ui.tsx";
+import { EmptyState, ErrorNotice, GreetingSlot, Spinner, useDocumentTitle } from "../components/ui.tsx";
 import { useMfaStatus } from "../hooks/mfa.ts";
 import { useSession } from "../hooks/session.tsx";
 import { useI18n } from "../lib/i18n.tsx";
+
+// The greeting and its lines load on demand: none of it is needed to sign in (rule P11).
+const Greeting = lazy(() => import("../components/Greeting.tsx").then((m) => ({ default: m.Greeting })));
 
 /** A small status card of the home page. */
 function StatusCard({ icon, title, children }: { icon: ReactNode; title: string; children: ReactNode }) {
@@ -25,10 +28,13 @@ export function HomePage() {
   const { t, dateTime } = useI18n();
   const { session } = useSession();
   const mfa = useMfaStatus();
+  useDocumentTitle(t("web.nav.home"));
 
   return (
     <>
-      <PageHeader title={t("web.home.title")} description={t("web.home.subtitle")} documentTitle={t("web.nav.home")} />
+      <Suspense fallback={<GreetingSlot />}>
+        <Greeting placeholder={<GreetingSlot />} />
+      </Suspense>
       <div className="grid gap-4 md:grid-cols-2">
         <StatusCard
           icon={mfa.data && !mfa.data.enabled ? <ShieldAlert className="h-4 w-4 text-warning" aria-hidden /> : <ShieldCheck className="h-4 w-4 text-accent-text" aria-hidden />}

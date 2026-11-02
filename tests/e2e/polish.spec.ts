@@ -101,7 +101,7 @@ test.describe("on a phone-wide screen", () => {
     await signIn(page);
     await expect(page).toHaveTitle("Início · Zuri");
     await page.getByRole("banner").getByRole("button", { name: "Sair" }).click();
-    const dialog = page.getByRole("dialog", { name: "Sair do Zuri?" });
+    const dialog = page.getByRole("dialog", { name: "Sair da Zuri?" });
     await expect(dialog).toBeVisible();
     await dialog.getByRole("button", { name: "Cancelar" }).click();
     await expect(dialog).toBeHidden();
