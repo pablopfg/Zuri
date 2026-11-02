@@ -6,6 +6,10 @@
 
 <!-- Número e nome da etapa da especificação (docs/especificacao.md), e as dependências já mescladas. -->
 
+## Plano
+
+<!-- Link do arquivo em docs/planos/ (skill planejar) e resumo de até 5 linhas. Perguntas feitas ao Pablo e respostas. Correção pequena: versão curta do modelo aqui mesmo. -->
+
 ## Capturas de tela
 
 <!-- Obrigatório quando o PR cria ou muda uma tela (.claude/rules/capturas.md). Gere com

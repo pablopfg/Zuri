@@ -41,6 +41,7 @@ Nenhum pacote traz hooks, servidores MCP ou agentes (conferido com
 | Momento do fluxo | Skill | Como |
 | --- | --- | --- |
 | Plano da etapa (`iniciar-etapa`) | `mattpocock-skills:codebase-design` | Desenhar módulos profundos e onde ficam as fronteiras antes de codar |
+| Entrevista do plano (`planejar`) | `mattpocock-skills:grilling` | Formato das rodadas de perguntas ao Pablo, com o limite da `planejar`: até 3 perguntas por rodada e 3 rodadas |
 | Plano da etapa | `mattpocock-skills:domain-modeling` | Termos novos vão para `.claude/memoria/glossario.md`; decisão de arquitetura vira ADR em `docs/adr/` |
 | Implementação | `mattpocock-skills:tdd` | Vermelho, verde, refatorar: o teste do critério de aceite nasce antes do código |
 | Teste ou CI falhando, bug, lentidão | `mattpocock-skills:diagnosing-bugs` | Laço de diagnóstico antes de mexer no código |

@@ -3,6 +3,7 @@
 Depois que o PR da etapa 0 estiver mesclado, envie um prompt por vez, na ordem.
 
 - **Mande o próximo só depois de mesclar o PR anterior.** A exceção são as etapas marcadas como *paralela*, que você pode pedir em conversas separadas.
+- **Toda etapa começa pelo plano.** A skill `iniciar-etapa` chama a `planejar`, que escreve `docs/planos/etapa-NN-<assunto>.md` no modelo `docs/planos/modelo-de-plano.md` e, se faltar decisão sua, faz até 3 perguntas por rodada, cada uma com a recomendação do agente. O plano vai no próprio PR.
 - **Copie só o bloco da etapa.** O agente já tem as instruções do projeto e a especificação, e cada prompt aponta a seção certa.
 - **Etapa com tela nova ou alterada** sempre traz no PR as capturas de como a tela ficou (computador e celular, claro e escuro), mesmo que o bloco não diga. A regra está em `.claude/rules/capturas.md`.
 - **Responda antes de continuar** quando o prompt disser "▶ Antes, você fornece". Nunca cole token, senha ou id no chat. O agente explica onde colocar cada um: segredo do Worker no painel da Cloudflare ou ambiente `production` do GitHub.
