@@ -150,4 +150,12 @@ export const ptBRChat = {
   "web.chat.tool.notify_owner": "Avisar você",
   "web.chat.approval.cancel_automation": "Excluir a automação “{target}”. Ela para de rodar na hora.",
   "web.chat.automationLink": "Revisar em Automações",
+  "web.chat.tool.find_tools": "Procurar ferramenta externa",
+  "web.chat.tool.external": "Ferramenta externa",
+  "web.chat.approval.mcp_call": "Usar {target}. O serviço externo recebe os dados abaixo.",
+  "web.chat.approval.mcpArgs": "Dados enviados",
+  "web.chat.approval.mcpResult": "Resposta do serviço",
+  "web.chat.approval.mcpResultError": "O serviço respondeu com um erro",
+  "web.chat.approval.mcpResultEmpty": "(sem conteúdo)",
+  "web.chat.approval.mcpFailed": "A chamada falhou. Confira no serviço antes de pedir de novo.",
 } as const;

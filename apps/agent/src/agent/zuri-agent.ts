@@ -47,6 +47,7 @@ import { Productivity } from "../productivity/index.ts";
 import { log } from "../log.ts";
 import { MockEmbedder, type Embedder, WorkersAIEmbedder } from "../semantic/embedder.ts";
 import { SemanticSearch } from "../semantic/service.ts";
+import { McpService } from "../mcp/service.ts";
 import { ALL_TOOLS } from "../tools/index.ts";
 import type { ToolContext } from "../tools/registry.ts";
 import { AgentRunner } from "./runner.ts";
@@ -102,6 +103,8 @@ interface Store {
   semantic: SemanticSearch;
   /** The bot's conversation with the agent (step 14). */
   telegramConversation: TelegramConversation;
+  /** The remote MCP servers (step 18). */
+  mcp: McpService;
 }
 
 /**
@@ -168,6 +171,7 @@ export class ZuriAgent extends Agent<WorkerEnv> {
       automations: this.store.automations,
       rearm: () => this.store.automations.rearm(),
     }),
+    mcp: () => ({ service: this.store.mcp, auth: this.store.auth }),
     telegram: () => ({
       telegram: this.store.telegram,
       auth: this.store.auth,
@@ -189,8 +193,8 @@ export class ZuriAgent extends Agent<WorkerEnv> {
   }
 
   private toolServices(): Omit<ToolContext, "conversationId" | "mode" | "timeZone"> {
-    const { db, productivity, memories, conversations, plans, actions, automations, semantic } = this.store;
-    return { db, productivity, memories, conversations, plans, actions, automations, semantic };
+    const { db, productivity, memories, conversations, plans, actions, automations, semantic, mcp } = this.store;
+    return { db, productivity, memories, conversations, plans, actions, automations, semantic, mcpService: mcp };
   }
 
   /** How an automation runs: reminders and the digest without AI, routines through the runner. */
@@ -369,7 +373,7 @@ export class ZuriAgent extends Agent<WorkerEnv> {
   /** The deploy's secrets: none may ever reach a model (prompt contract, D1). */
   private secretValues(): (string | undefined)[] {
     const env = this.env;
-    return [env.SESSION_SECRET, env.PASSWORD_PEPPER, env.OWNER_PASSWORD, env.OWNER_PASSWORD_HASH, env.SETUP_CODE, env.TURNSTILE_SECRET_KEY, env.TELEGRAM_BOT_TOKEN, env.TELEGRAM_ADMIN_ID, env.VAPID_PRIVATE_KEY];
+    return [env.SESSION_SECRET, env.PASSWORD_PEPPER, env.OWNER_PASSWORD, env.OWNER_PASSWORD_HASH, env.SETUP_CODE, env.TURNSTILE_SECRET_KEY, env.TELEGRAM_BOT_TOKEN, env.TELEGRAM_ADMIN_ID, env.VAPID_PRIVATE_KEY, env.MCP_CREDENTIAL_KEY];
   }
 
   /** The VAPID pair from the two secrets, or null while either is missing, malformed or the published test pair (push stays "not configured"). */
@@ -501,6 +505,13 @@ export class ZuriAgent extends Agent<WorkerEnv> {
         lockdown: () => auth.lockdown.active(),
         neuronsPerDay: () => settings.field("aiNeuronsPerDay"),
       });
+      // Remote MCP servers (step 18): nothing runs while the account is locked down.
+      const mcp = new McpService({
+        db,
+        credentialKey: env.MCP_CREDENTIAL_KEY,
+        development: () => this.development(),
+        lockdown: () => auth.lockdown.active(),
+      });
       // The owner's conversation in the bot (step 14): the same runner, meter and turns as the app.
       const telegramConversation = new TelegramConversation({
         db,
@@ -622,7 +633,7 @@ export class ZuriAgent extends Agent<WorkerEnv> {
         // Local development never reaches Telegram (src/telegram/dev-telegram.ts).
         ...(this.development() ? { fetcher: developmentTelegramFetcher as typeof fetch } : {}),
       });
-      this.#store = { db, settings, auth, productivity, memories, usage, conversations, actions, plans, automations, alerts, watchers, diagnostics, push, telegram, telegramConversation, semantic };
+      this.#store = { db, settings, auth, productivity, memories, usage, conversations, actions, plans, automations, alerts, watchers, diagnostics, push, telegram, telegramConversation, semantic, mcp };
     }
     return this.#store;
   }

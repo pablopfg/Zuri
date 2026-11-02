@@ -95,4 +95,6 @@ export const ptBRSecurity = {
   "web.activity.kind.setup_locked": "Código de instalação travado",
   "web.activity.kind.owner_created": "Primeiro acesso concluído",
   "web.activity.kind.access_recovered": "Acesso recuperado com código de instalação",
+  "web.activity.kind.mcp_server_added": "Serviço externo adicionado",
+  "web.activity.kind.mcp_server_changed": "Endereço de serviço externo trocado",
 } as const;

@@ -1,6 +1,7 @@
 import {
   DESTRUCTIVE_TOOLS,
   type DestructiveToolName,
+  type ExternalToolName,
   PENDING_ACTION_TTL_MS,
   type PendingAction,
   type PendingActionProblem,
@@ -25,6 +26,8 @@ export interface ActionRow {
   created_at: string;
   expires_at: string;
   resolved_at: string | null;
+  /** External calls (step 18): `{ text, error }` of what the server answered, cut short. */
+  result?: string | null;
 }
 
 const DESTRUCTIVE: ReadonlySet<string> = new Set(DESTRUCTIVE_TOOLS);
@@ -45,7 +48,7 @@ export class PendingActionRepository {
     return new Date(this.clock()).toISOString();
   }
 
-  create(input: { conversationId: string; tool: DestructiveToolName; targetId: string; targetHash: string; targetLabel: string; payload: unknown }): PendingAction {
+  create(input: { conversationId: string; tool: DestructiveToolName | ExternalToolName; targetId: string; targetHash: string; targetLabel: string; payload: unknown }): PendingAction {
     // Never a proposal for a conversation the owner deleted while the turn ran.
     if (!this.db.one(`SELECT 1 AS ok FROM zur_conversations WHERE id = ?`, input.conversationId)) throw new AppError("NOT_FOUND", "error.conversationNotFound");
     const at = this.clock();
@@ -120,6 +123,11 @@ export class PendingActionRepository {
     return claimed.length === 1;
   }
 
+  /** An approved external call that ran: what the server answered stays with it (step 18). */
+  complete(id: string, result: string): void {
+    this.db.run(`UPDATE zur_pending_actions SET result = ? WHERE id = ?`, result, id);
+  }
+
   /** An approved action that could not run: the target changed or is gone, or it failed. */
   fail(id: string, problem: PendingActionProblem): void {
     this.db.run(`UPDATE zur_pending_actions SET status = 'failed', problem = ? WHERE id = ?`, problem, id);
@@ -138,10 +146,11 @@ export class PendingActionRepository {
 export function present(row: ActionRow, at: string): PendingAction {
   const expired = row.status === "pending" && row.expires_at <= at;
   const status: PendingActionStatus = expired ? "expired" : row.status;
+  const externalCall = row.tool.startsWith("mcp_");
   const action: PendingAction = {
     id: row.id,
     conversationId: row.conversation_id,
-    tool: (DESTRUCTIVE.has(row.tool) ? row.tool : "delete_task") as DestructiveToolName,
+    tool: externalCall ? "mcp_call" : ((DESTRUCTIVE.has(row.tool) ? row.tool : "delete_task") as DestructiveToolName),
     status,
     target: row.target_label,
     createdAt: row.created_at,
@@ -150,11 +159,32 @@ export function present(row: ActionRow, at: string): PendingAction {
   const preview = previewOf(row);
   if (preview !== undefined) action.preview = preview;
   if (row.problem) action.problem = row.problem;
+  if (externalCall && row.result) {
+    try {
+      const stored = JSON.parse(row.result) as { text?: unknown; error?: unknown };
+      if (typeof stored.text === "string") action.result = stored.text;
+      if (stored.error === true) action.resultError = true;
+    } catch {
+      // Not ours: nothing to show.
+    }
+  }
   return action;
 }
 
+/** Longest argument text a card shows: the whole call, as the server will get it. */
+const ARGS_PREVIEW_MAX = 4_000;
+
 /** The full text a rewrite would write: what the owner reads before approving. */
 function previewOf(row: ActionRow): string | undefined {
+  if (row.tool.startsWith("mcp_")) {
+    try {
+      const payload = JSON.parse(row.payload ?? "null") as { args?: unknown } | null;
+      const text = JSON.stringify(payload?.args ?? {}, null, 2);
+      return text.length > ARGS_PREVIEW_MAX ? `${text.slice(0, ARGS_PREVIEW_MAX)}…` : text;
+    } catch {
+      return undefined;
+    }
+  }
   if (row.tool !== "replace_note_content" && row.tool !== "replace_task_description") return undefined;
   try {
     const payload = JSON.parse(row.payload ?? "null") as { text?: unknown } | null;

@@ -53,6 +53,7 @@ import { type NoticeDeps, registerNoticeRoutes } from "./notices.ts";
 import { registerProductivityRoutes } from "./productivity.ts";
 import { registerApprovalRoutes } from "./approvals.ts";
 import { registerSemanticRoutes, type SemanticDeps } from "./semantic.ts";
+import { type McpRouteDeps, registerMcpRoutes } from "./mcp.ts";
 import { registerTelegramRoutes, registerTelegramWebhook, type TelegramDeps } from "./telegram.ts";
 import { log, rayOf, routeLabel } from "../log.ts";
 
@@ -85,6 +86,8 @@ export interface ApiDeps {
   telegram?(): TelegramDeps;
   /** The search by meaning (step 17). Absent only in tests of other routes. */
   semantic?(): SemanticDeps;
+  /** The remote MCP servers (step 18). Absent only in tests of other routes. */
+  mcp?(): McpRouteDeps;
   /** True when a password secret is set, so the health check can answer without opening the database. */
   passwordSecretSet(): boolean;
   /** True when a usable SETUP_CODE is set: the first access can still be done. Absent is false. */
@@ -475,6 +478,8 @@ export function createApi(deps: ApiDeps) {
   if (telegram) registerTelegramRoutes(app, () => telegram(), client);
   const semantic = deps.semantic;
   if (semantic) registerSemanticRoutes(app, () => semantic());
+  const mcp = deps.mcp;
+  if (mcp) registerMcpRoutes(app, () => mcp(), client);
 
   // Step 8: what the AI used today and the last 7 days. Read only: the limits change through /settings.
   app.get("/usage", () => Response.json(deps.aiUsage()));

@@ -57,6 +57,11 @@ export interface ToolRequest extends GenerateRequest {
   maxIterations: number;
   /** True when no more tool calls are allowed: the model must answer in text. */
   toolBudgetExhausted: () => boolean;
+  /**
+   * The tools the model sees at each step, by name; all when absent. External
+   * tools found by find_tools join from the next step (step 18).
+   */
+  activeTools?: () => string[];
 }
 
 export type AgentEvent =
