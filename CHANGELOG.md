@@ -19,6 +19,41 @@ funciona: [docs/agente/versionamento.md](docs/agente/versionamento.md).
 
 O que já entrou na `develop` e ainda não ganhou número fica em [`changelog/nao-lancado/`](changelog/nao-lancado/) por alguns minutos, até o workflow de versão escrever a seção.
 
+## [0.22.0] - 2026-11-02
+
+Mesclada às 18:24 (UTC-3) · commit [`dc8f3ce`](https://github.com/pablopfg/Zuri/commit/dc8f3ceace1275875c452c7f230ab4ded19bb4a5) · PR [#96](https://github.com/pablopfg/Zuri/pull/96) · Comandos de segurança e modo de bloqueio pelo bot
+
+### Adicionado
+
+- Comandos de emergência no Telegram: `/acessos` (os 10 acessos mais
+  recentes, com cidade, rede resumida e aparelho), `/sessoes` (as sessões
+  abertas no app, com **Encerrar** em cada uma), `/encerrar_sessoes`,
+  `/tokens`, `/pausar_rotinas` e `/bloquear`. Nenhum deles usa IA.
+- `/encerrar_sessoes`, `/pausar_rotinas` e `/bloquear` confirmam com um toque
+  e funcionam mesmo com a leitura do bot travada.
+- Modo de bloqueio: `/bloquear` encerra todas as sessões do app, para as
+  rotinas com IA e deixa o bot respondendo só a `/status`, `/avisos` e
+  `/ajuda`. Lembretes e alertas de segurança continuam.
+- Tela **Sair do bloqueio** no app, com quando o bloqueio foi ligado, o
+  pedido do código para sair e o botão **Não fui eu: desvincular o
+  Telegram**.
+- **Confirmar que vi** na central de avisos, para os alertas de segurança que
+  o bot causou.
+
+### Segurança
+
+- Na primeira hora do bloqueio, só se entra no app com a senha e um código de
+  recuperação, e esse login já desliga o bloqueio. O código do aplicativo e a
+  passkey são recusados sem gastar tentativa.
+- Durante o bloqueio, o bot não aprova, não destrava e não conversa, e o app
+  só abre a tela de sair. As rotinas com IA ficam paradas até a saída.
+- Um segundo `/bloquear` pela mesma conta até 24 horas depois de sair também
+  suspende o vínculo com o Telegram até você confirmar a conta no app.
+- Os alertas de `/bloquear`, `/encerrar_sessoes` e `/pausar_rotinas` vão a
+  todos os canais e só param quando você confirma no app, com a senha
+  digitada nos últimos 15 minutos.
+- `/acessos` nunca mostra o endereço IP inteiro.
+
 ## [0.21.1] - 2026-11-02
 
 Mesclada às 17:08 (UTC-3) · commit [`b6ae4e0`](https://github.com/pablopfg/Zuri/commit/b6ae4e0cee3d486c20dc0192933d862d99e464f1) · PR [#92](https://github.com/pablopfg/Zuri/pull/92) · Compara cada pré-release com a anterior e organiza as notas
@@ -1600,7 +1635,8 @@ Mesclada às 22:15 (UTC-3) · commit [`360a79e`](https://github.com/pablopfg/Zur
   `npm audit`), CodeQL, Dependabot e rulesets para a `develop` e a `main`.
 - `LICENSE` (MIT), `NOTICE.md`, `SECURITY.md` e `CONTRIBUTING.md`.
 
-[Não lançado]: https://github.com/pablopfg/Zuri/compare/v0.21.1...develop
+[Não lançado]: https://github.com/pablopfg/Zuri/compare/v0.22.0...develop
+[0.22.0]: https://github.com/pablopfg/Zuri/releases/tag/v0.22.0
 [0.21.1]: https://github.com/pablopfg/Zuri/releases/tag/v0.21.1
 [0.21.0]: https://github.com/pablopfg/Zuri/releases/tag/v0.21.0
 [0.20.1]: https://github.com/pablopfg/Zuri/releases/tag/v0.20.1
