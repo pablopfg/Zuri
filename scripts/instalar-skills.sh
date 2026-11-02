@@ -13,7 +13,6 @@ PLUGINS=(
   "nateherk-design@$MK"
   "cloudflare-security-audit@$MK"
   "humanizer@$MK"
-  "impeccable@$MK"
   "frontend-design@$MK"
   "ponytail@$MK"
 )

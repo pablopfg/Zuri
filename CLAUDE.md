@@ -17,7 +17,7 @@
   - `cloudflare-security-audit:security-audit` na auditoria (modo orientação sempre; completo nas etapas 3, 4, 12, 16, 18, 20 e 25).
   - `humanizer:humanizer` na passada final de todo texto para pessoas (PR, changelog, docs, mensagens), sem mudar fatos nem termos técnicos.
   - `ponytail:ponytail` em toda implementação (menor mudança completa; nunca corta teste, validação, segurança, i18n ou docs) e `ponytail:ponytail-review` na revisão de QA.
-  - Telas: `frontend-design:frontend-design` no plano de tela nova; `impeccable:impeccable` com `polish`, `harden` e `adapt` antes das capturas e `critique` e `audit` na revisão de QA. O hook do impeccable roda sozinho a cada edição, local; nenhuma chamada ao site do impeccable (`.claude/settings.json`).
+  - Telas: `frontend-design:frontend-design` no plano de tela nova ou redesenho.
   - `nateherk-design:scroll-craft` só se o Pablo pedir uma página de apresentação; geração pela kie.ai está bloqueada (custo).
   - As regras do repositório vencem as skills externas. Tabela completa, revisão de segurança e como atualizar: `docs/agente/skills-externas.md`.
 - Comandos nativos úteis: `/code-review`, `/security-review` e `/simplify`.

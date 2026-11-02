@@ -56,16 +56,6 @@
       }
     },
     {
-      "name": "impeccable",
-      "description": "impeccable: vocabulário de design para a interface (critique, audit, polish, harden, adapt, clarify) e detector local de padrões genéricos de IA após cada edição de tela.",
-      "source": {
-        "source": "git-subdir",
-        "url": "pbakaus/impeccable",
-        "path": "plugin",
-        "sha": "e89e3ada3e875a89ac2c5d33d11e65ebef6fe285"
-      }
-    },
-    {
       "name": "frontend-design",
       "description": "frontend-design da Anthropic: direção visual intencional para tela nova ou redesenho, sem cara de modelo pronto.",
       "source": {

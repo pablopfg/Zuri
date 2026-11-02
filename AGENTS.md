@@ -34,11 +34,10 @@ Antes de declarar qualquer tarefa pronta: `npm run typecheck`, `npm run lint` e 
 ## Skills de agente
 
 Além de `.claude/skills/`, o Claude Code instala sozinho, no início de cada
-sessão, o plugin `cloudflare` e sete pacotes de terceiros fixados por commit
+sessão, o plugin `cloudflare` e seis pacotes de terceiros fixados por commit
 (`mattpocock/skills`, `nateherkai/scroll-craft`,
-`cloudflare/security-audit-skill`, `blader/humanizer`, `pbakaus/impeccable`,
-`anthropics/skills` só com `frontend-design` e `DietrichGebert/ponytail` só
-com as skills). Quando e como cada um é
+`cloudflare/security-audit-skill`, `blader/humanizer`, `anthropics/skills` só
+com `frontend-design` e `DietrichGebert/ponytail` só com as skills). Quando e como cada um é
 usado, a revisão de segurança e a atualização estão em
 [docs/agente/skills-externas.md](docs/agente/skills-externas.md). Outros
 agentes podem ler as mesmas skills nos repositórios de origem, no commit fixado.

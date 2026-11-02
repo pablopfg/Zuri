@@ -17,8 +17,3 @@ playwright-report/
 # Local agent preferences (the project ones live in .claude/settings.json).
 .claude/settings.local.json
 CLAUDE.local.md
-
-# impeccable (design skill): only .impeccable/config.json is shared; caches,
-# live-mode sessions and per-developer overrides stay local.
-.impeccable/*
-!.impeccable/config.json
