@@ -21,6 +21,8 @@ concurrency:
 
 jobs:
   update:
+    # A dispatch from another branch would run that branch's copy with write access.
+    if: github.ref == 'refs/heads/develop'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     # contents: push the merge commit to the PR branch; pull-requests: the comment;
@@ -42,7 +44,10 @@ jobs:
       - name: Update the open pull requests
         env:
           GH_TOKEN: ${{ github.token }}
+          # Nothing from a PR branch runs: no LFS download, no hooks.
+          GIT_LFS_SKIP_SMUDGE: "1"
         run: |
+          git config core.hooksPath /dev/null
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           node scripts/atualizar-prs.ts

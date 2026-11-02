@@ -1,13 +1,16 @@
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
+  type GitHub,
   isAdditiveFile,
   isSafeBranchName,
   MERGE_MESSAGE,
   mergeBase,
+  needsDispatch,
+  notify,
   NOTICE_MARKER,
   noticeBody,
   OPT_OUT_LABEL,
@@ -44,6 +47,17 @@ describe("resolveAdditiveConflicts", () => {
     expect(resolveAdditiveConflicts(hunk([], ["gone"], ["gone", "added"])).resolved).toBe(false);
   });
 
+  it("refuses additions that share a line, which would come out twice", () => {
+    expect(resolveAdditiveConflicts(hunk(["- x", "- y"], [], ["- x"])).resolved).toBe(false);
+    // Blank lines on both sides are fine.
+    expect(resolveAdditiveConflicts(hunk(["- y", ""], [], ["- x", ""])).text).toBe("- x\n\n- y\n");
+  });
+
+  it("does not resolve CRLF markers", () => {
+    const crlf = hunk(["a"], [], ["b"]).replace(/\n/g, "\r\n");
+    expect(resolveAdditiveConflicts(crlf).resolved).toBe(false);
+  });
+
   it("refuses the merge style without the ancestor", () => {
     const text = ["<<<<<<< HEAD", "a", "=======", "b", ">>>>>>> develop"].join("\n");
     expect(resolveAdditiveConflicts(text).resolved).toBe(false);
@@ -73,6 +87,7 @@ describe("isAdditiveFile", () => {
     ".claude/memoria/decisoes.md",
     "docs/agente/merge-de-prs.md",
     "packages/shared/i18n/en.ts",
+    "packages/shared/i18n/pt-BR-settings.ts",
   ])("accepts %s", (path) => expect(isAdditiveFile(path)).toBe(true));
 
   it.each([
@@ -83,6 +98,7 @@ describe("isAdditiveFile", () => {
     ".github/workflows/ci.yml",
     "docs/capturas/inicio.png",
     "sub/CHANGELOG.md",
+    "packages/shared/i18n/index.ts",
   ])("refuses %s", (path) => expect(isAdditiveFile(path)).toBe(false));
 });
 
@@ -130,8 +146,66 @@ describe("noticeBody", () => {
   it.each(["workflows", "clear"] as const)("has a text for %s", (kind) => {
     expect(noticeBody({ kind }, "abc1234").startsWith(NOTICE_MARKER)).toBe(true);
   });
+  it("keeps file names from breaking the list or mentioning someone", () => {
+    const body = noticeBody({ kind: "conflict", files: ["docs/a`b@dono"] }, "abc1234");
+    expect(body).toContain("`docs/a_b_dono`");
+    expect(body).not.toContain("@dono");
+  });
+
+  it("says when GitHub refused the push", () => {
+    expect(noticeBody({ kind: "push-failed" }, "abc1234")).toContain("recusada");
+  });
+
   it("lists what was resolved", () => {
     expect(noticeBody({ kind: "resolved", files: ["CHANGELOG.md"] }, "abc1234")).toContain("`CHANGELOG.md`");
+  });
+});
+
+describe("notify and needsDispatch (fake gh)", () => {
+  const calls: string[][] = [];
+  const fake = (comments: { id: number; body: string; user: { login: string } }[], checkRuns = 0): GitHub => ({
+    repository: "dono/zuri",
+    baseSha: "abc1234",
+    exec: (_cmd, args) => {
+      calls.push(args);
+      if (args[0] === "api" && args.includes("--slurp")) return JSON.stringify([comments]);
+      if (args.some((a) => a.includes("check-runs"))) return `${checkRuns}\n`;
+      return "";
+    },
+  });
+  const writes = () => calls.filter((c) => c.includes("-X")).map((c) => `${c[2]} ${c[3]}`);
+  afterEach(() => {
+    calls.length = 0;
+  });
+
+  it("creates the comment once, then edits it", () => {
+    notify(fake([]), 7, { kind: "conflict", files: ["a.ts"] });
+    expect(writes()).toEqual(["POST repos/dono/zuri/issues/7/comments"]);
+    calls.length = 0;
+    const mine = { id: 9, body: `${NOTICE_MARKER}\nold`, user: { login: "github-actions[bot]" } };
+    notify(fake([mine]), 7, { kind: "conflict", files: ["a.ts"] });
+    expect(writes()).toEqual(["PATCH repos/dono/zuri/issues/comments/9"]);
+  });
+
+  it("leaves an identical comment alone and posts nothing when there is nothing to clear", () => {
+    const body = noticeBody({ kind: "workflows" }, "abc1234");
+    notify(fake([{ id: 9, body, user: { login: "github-actions[bot]" } }]), 7, { kind: "workflows" });
+    notify(fake([]), 7, { kind: "clear" });
+    expect(writes()).toEqual([]);
+  });
+
+  it("never edits a comment someone else wrote with the marker", () => {
+    const forged = { id: 3, body: `${NOTICE_MARKER}\nfake`, user: { login: "someone" } };
+    notify(fake([forged]), 7, { kind: "workflows" });
+    expect(writes()).toEqual(["POST repos/dono/zuri/issues/7/comments"]);
+  });
+
+  it("dispatches again only for its own merge without a CI run", () => {
+    expect(needsDispatch(fake([], 0), "a".repeat(40), MERGE_MESSAGE)).toBe(true);
+    expect(needsDispatch(fake([], 2), "a".repeat(40), MERGE_MESSAGE)).toBe(false);
+    calls.length = 0;
+    expect(needsDispatch(fake([], 0), "a".repeat(40), "feat: something")).toBe(false);
+    expect(calls).toEqual([]);
   });
 });
 
@@ -155,7 +229,10 @@ describe("mergeBase (real git)", () => {
         GIT_CONFIG_NOSYSTEM: "1",
       },
     });
-  const write = (dir: string, file: string, text: string) => writeFileSync(join(dir, file), text);
+  const write = (dir: string, file: string, text: string) => {
+    mkdirSync(dirname(join(dir, file)), { recursive: true });
+    writeFileSync(join(dir, file), text);
+  };
   const commit = (dir: string, message: string) => {
     git(dir, "add", "-A");
     git(dir, "commit", "-q", "--allow-empty", "-m", message);
@@ -214,6 +291,21 @@ describe("mergeBase (real git)", () => {
     expect(mergeBase(dir, "develop", run)).toEqual({ status: "conflict", files: ["app.ts"] });
     expect(git(dir, "rev-parse", "HEAD")).toBe(head);
     expect(git(dir, "status", "--porcelain")).toBe("");
+  });
+
+  it("aborts the whole merge when one file needs a person, discarding the resolved ones", () => {
+    const dir = repo(
+      { "CHANGELOG.md": "- old\n", "app.ts": "const a = 1;\n" },
+      { "CHANGELOG.md": "- develop\n- old\n", "app.ts": "const a = 2;\n" },
+      { "CHANGELOG.md": "- pr\n- old\n", "app.ts": "const a = 3;\n" },
+    );
+    mergeBase(dir, "develop", run);
+    expect(readFileSync(join(dir, "CHANGELOG.md"), "utf8")).toBe("- pr\n- old\n");
+  });
+
+  it("leaves a file both sides created for a person", () => {
+    const dir = repo({ "a.txt": "a\n" }, { "changelog/nao-lancado/x.md": "- develop\n" }, { "changelog/nao-lancado/x.md": "- pr\n" });
+    expect(mergeBase(dir, "develop", run)).toEqual({ status: "conflict", files: ["changelog/nao-lancado/x.md"] });
   });
 
   it("leaves an edited line in an additive file for a person", () => {

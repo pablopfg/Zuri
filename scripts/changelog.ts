@@ -103,6 +103,10 @@ export function consolidate(changelog: string, fragments: Fragment[]): string {
   const next = changelog.indexOf("\n## ", bodyStart);
   const bodyEnd = next < 0 ? changelog.length : next + 1;
   const current = parseGroups(changelog.slice(bodyStart, bodyEnd).trim());
+  // Text outside the groups (a note, a "### Removido") would be dropped: stop instead of losing it.
+  if (current.problems.some((problem) => problem !== "no entry")) {
+    throw new Error(`"${UNRELEASED}" in CHANGELOG.md: ${current.problems.join("; ")}`);
+  }
   const fromFragments = fragments.map((fragment) => parseGroups(fragment.text).groups);
   const merged = mergeGroups(mergeGroups(new Map(), ...fromFragments), current.groups);
   const body = merged.size > 0 ? `\n${renderGroups(merged)}` : "\n";

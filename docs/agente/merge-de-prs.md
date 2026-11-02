@@ -63,7 +63,11 @@ base `develop` (menos rascunho, branch de fork e PR com o rótulo
    textos, dois itens na memória), mantém os dois: primeiro o da `develop`,
    depois o da PR. Isso vale para `CHANGELOG.md`, `README.md`,
    `changelog/**`, `.claude/memoria/*.md`, `docs/**/*.md` e
-   `packages/shared/i18n/*.ts`. Linha mudada ou apagada, arquivo apagado de um
+   os catálogos `packages/shared/i18n/{pt-BR*,en}.ts`. Linha mudada ou
+   apagada, a mesma linha acrescentada dos dois lados, arquivo apagado ou
+   criado dos dois lados, link simbólico, quebra de linha CRLF e qualquer
+   outro arquivo (inclusive `i18n/index.ts`, que tem lógica) ficam para uma
+   pessoa. Se um arquivo precisa de pessoa, nada é resolvido naquela rodada.
    lado e qualquer outro arquivo ficam para uma pessoa.
 3. Envia o commit e dispara `ci.yml` e `codeql.yml` na branch. O push feito
    pelo token do GitHub Actions não dispara a CI da PR, por isso o disparo
@@ -71,7 +75,11 @@ base `develop` (menos rascunho, branch de fork e PR com o rótulo
 4. Deixa um único comentário na PR, editado a cada rodada (edição não
    notifica): o que resolveu sozinho, ou os arquivos que precisam de uma
    pessoa. Quando a `develop` muda arquivos de `.github/workflows/`, o token
-   não pode enviar; o comentário avisa e a atualização fica manual.
+   não pode enviar; o comentário avisa e a atualização fica manual. Push
+   recusado pelo GitHub também vira aviso.
+5. Uma PR que falha não para as outras; a rodada termina vermelha para
+   alguém ver. Se o disparo da CI falhou depois do push, a rodada seguinte
+   percebe o commit de merge sem CI e dispara de novo.
 
 O que continua com a thread dona ou com a passada de merge:
 

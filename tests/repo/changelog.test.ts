@@ -72,4 +72,11 @@ describe("changelog fragments", () => {
     );
     expect(() => consolidate("# C\n", [])).toThrow(/Não lançado/);
   });
+
+  it("refuses to consolidate when the current section has text it would drop", () => {
+    const withNote = "# C\n\n## Não lançado\n\nNota: ⚠️ algo pago.\n\n### Adicionado\n\n- a\n";
+    expect(() => consolidate(withNote, [])).toThrow(/outside/);
+    const unknownGroup = "# C\n\n## Não lançado\n\n### Removido\n\n- b\n";
+    expect(() => consolidate(unknownGroup, [])).toThrow(/not one of/);
+  });
 });

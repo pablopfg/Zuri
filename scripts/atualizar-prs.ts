@@ -34,7 +34,7 @@ const ADDITIVE_FILES = [
   /^changelog\/[^/]+\/[^/]+\.md$/,
   /^\.claude\/memoria\/[^/]+\.md$/,
   /^docs\/.+\.md$/,
-  /^packages\/shared\/i18n\/[^/]+\.ts$/,
+  /^packages\/shared\/i18n\/(?:pt-BR[\w-]*|en)\.ts$/,
 ];
 
 export function isAdditiveFile(path: string): boolean {
@@ -103,8 +103,14 @@ export function resolveAdditiveConflicts(text: string): Resolution {
     }
     // Without the ancestor (no diff3) there is no way to know that nothing was removed.
     if (!closed || !sawBase || base.length > 0) return { resolved: false, text, conflicts };
-    out.push(...theirs);
-    if (ours.join("\n") !== theirs.join("\n")) out.push(...ours);
+    if (ours.join("\n") === theirs.join("\n")) {
+      out.push(...theirs);
+      continue;
+    }
+    // A line on both sides (a cherry-picked entry, say) would come out twice: leave it to a person.
+    const theirLines = new Set(theirs.filter((l) => l.trim()));
+    if (ours.some((l) => l.trim() && theirLines.has(l))) return { resolved: false, text, conflicts };
+    out.push(...theirs, ...ours);
   }
   const resolvedText = out.join("\n");
   // Longer markers (conflict-marker-size) are not parsed above: never hand them back as resolved.
@@ -174,8 +180,9 @@ export function mergeBase(dir: string, baseRef: string, exec: Run = run): MergeO
     }
     // Only a conflict where both sides kept the file has all three stages;
     // a deleted or renamed side is left for a person.
-    const stages = git("ls-files", "-u", "--", file).trim().split("\n").length;
-    if (stages !== 3) {
+    // Regular files only: a symlink would make the write land somewhere else.
+    const stages = git("ls-files", "-u", "-s", "--", file).trim().split("\n");
+    if (stages.length !== 3 || !stages.every((stage) => /^100(644|755) /.test(stage))) {
       remaining.push(file);
       continue;
     }
@@ -228,13 +235,15 @@ export type Notice =
   | { kind: "conflict"; files: string[] }
   | { kind: "workflows" }
   | { kind: "resolved"; files: string[] }
+  | { kind: "push-failed" }
   | { kind: "clear" };
 
 /** The text of the one comment the workflow keeps on a pull request, in pt-BR. */
 export function noticeBody(notice: Notice, baseSha: string): string {
   const head = `${NOTICE_MARKER}\n`;
   const at = `\`${BASE_BRANCH}\` em \`${baseSha.slice(0, 7)}\``;
-  const list = (files: string[]) => files.map((file) => `- \`${file}\``).join("\n");
+  // File names come from the branch: no backtick or @ that could break the list or mention someone.
+  const list = (files: string[]) => files.map((file) => `- \`${file.replace(/[`@\r\n]/g, "_")}\``).join("\n");
   switch (notice.kind) {
     case "conflict":
       return `${head}**Conflito com a ${BASE_BRANCH} que precisa de uma pessoa.** A atualização automática (${at}) parou nestes arquivos:\n\n${list(notice.files)}\n\nTraga a \`${BASE_BRANCH}\` para a branch, resolva preservando os dois lados e rode as verificações (\`docs/agente/merge-de-prs.md\`). Os conflitos de acréscimo, como duas entradas de changelog, saem sozinhos com \`node scripts/atualizar-prs.ts --local\`.`;
@@ -242,12 +251,14 @@ export function noticeBody(notice: Notice, baseSha: string): string {
       return `${head}**Atualização automática não enviada.** A ${BASE_BRANCH} (${at}) muda arquivos de \`.github/workflows/\`, e o token do GitHub Actions não pode enviá-los. Atualize pelo botão "Update branch" ou com \`node scripts/atualizar-prs.ts --local\`.`;
     case "resolved":
       return `${head}Branch atualizada com a ${BASE_BRANCH} (${at}). Conflitos de acréscimo resolvidos sozinhos, mantendo os dois lados:\n\n${list(notice.files)}\n\nConfira se a ordem das entradas ficou boa. A CI roda de novo neste commit.`;
+    case "push-failed":
+      return `${head}**Atualização automática recusada pelo GitHub** (${at}). A branch não mudou, mas o envio foi recusado (permissão ou regra). Veja o log do workflow "Update PRs" e atualize com \`node scripts/atualizar-prs.ts --local\`.`;
     case "clear":
       return `${head}Branch em dia com a ${BASE_BRANCH} (${at}), sem conflito pendente.`;
   }
 }
 
-interface GitHub {
+export interface GitHub {
   repository: string;
   baseSha: string;
   exec: Run;
@@ -267,7 +278,7 @@ function existingNotice(ctx: GitHub, pr: number): { id: number; body: string } |
 }
 
 /** Keeps one comment per pull request: created once, edited afterwards (edits notify nobody). */
-function notify(ctx: GitHub, pr: number, notice: Notice): void {
+export function notify(ctx: GitHub, pr: number, notice: Notice): void {
   const existing = existingNotice(ctx, pr);
   if (notice.kind === "clear" && !existing) return;
   const body = noticeBody(notice, ctx.baseSha);
@@ -276,6 +287,23 @@ function notify(ctx: GitHub, pr: number, notice: Notice): void {
     gh(ctx, ["api", "-X", "PATCH", `repos/${ctx.repository}/issues/comments/${existing.id}`, "-f", `body=${body}`]);
   } else {
     gh(ctx, ["api", "-X", "POST", `repos/${ctx.repository}/issues/${pr}/comments`, "-f", `body=${body}`]);
+  }
+}
+
+/**
+ * True when the head is a merge this workflow pushed and the CI never ran on
+ * it (the dispatch failed last time): without a run the required checks would
+ * wait forever, because that push started no pull_request run.
+ */
+export function needsDispatch(ctx: GitHub, headSha: string, headSubject: string): boolean {
+  if (!headSubject.startsWith(MERGE_MESSAGE)) return false;
+  const out = gh(ctx, ["api", `repos/${ctx.repository}/commits/${headSha}/check-runs?check_name=typecheck`, "--jq", ".total_count"]);
+  return Number(out.trim()) === 0;
+}
+
+function dispatch(ctx: GitHub, ref: string): void {
+  for (const workflow of DISPATCHED_WORKFLOWS) {
+    gh(ctx, ["workflow", "run", workflow, "--repo", ctx.repository, "--ref", ref]);
   }
 }
 
@@ -290,16 +318,19 @@ function authEnv(token: string): NodeJS.ProcessEnv {
   };
 }
 
-function updateAll(root: string): void {
+function updateAll(root: string): number {
   const repository = process.env.GITHUB_REPOSITORY;
   const token = process.env.GH_TOKEN;
   if (!repository || !token) throw new Error("GITHUB_REPOSITORY and GH_TOKEN are required");
-  const env = authEnv(token);
-  const git = (args: string[], cwd = root) => run("git", args, { cwd, env });
+  // The token goes only to the commands that talk to GitHub; the merge runs without it.
+  const auth = authEnv(token);
+  const remote = (args: string[], cwd = root) => run("git", args, { cwd, env: auth });
+  const git = (args: string[], cwd = root) => run("git", args, { cwd });
 
-  git(["fetch", "--no-tags", "origin", `+refs/heads/${BASE_BRANCH}:refs/remotes/origin/${BASE_BRANCH}`]);
+  remote(["fetch", "--no-tags", "origin", `+refs/heads/${BASE_BRANCH}:refs/remotes/origin/${BASE_BRANCH}`]);
   const baseSha = git(["rev-parse", `origin/${BASE_BRANCH}`]).trim();
   const ctx: GitHub = { repository, baseSha, exec: run };
+  let failures = 0;
 
   for (const pr of openPullRequests(ctx)) {
     const label = `#${pr.number}`;
@@ -313,14 +344,20 @@ function updateAll(root: string): void {
       console.log(`${label}: skipped (branch name)`);
       continue;
     }
-    git(["fetch", "--no-tags", "origin", `+refs/heads/${ref}:refs/remotes/origin/${ref}`]);
-    const before = git(["rev-parse", `refs/remotes/origin/${ref}`]).trim();
     const dir = mkdtempSync(join(tmpdir(), "pr-"));
+    // One pull request failing never stops the others; the run ends red so someone sees it.
     try {
+      remote(["fetch", "--no-tags", "origin", `+refs/heads/${ref}:refs/remotes/origin/${ref}`]);
+      const before = git(["rev-parse", `refs/remotes/origin/${ref}`]).trim();
       git(["worktree", "add", "--detach", dir, before]);
       const outcome = mergeBase(dir, `refs/remotes/origin/${BASE_BRANCH}`);
       if (outcome.status === "up-to-date") {
-        console.log(`${label}: up to date`);
+        if (needsDispatch(ctx, before, git(["log", "-1", "--format=%s", before]))) {
+          dispatch(ctx, ref);
+          console.log(`${label}: up to date, CI dispatched again`);
+        } else {
+          console.log(`${label}: up to date`);
+        }
         notify(ctx, pr.number, { kind: "clear" });
         continue;
       }
@@ -334,32 +371,45 @@ function updateAll(root: string): void {
         notify(ctx, pr.number, { kind: "workflows" });
         continue;
       }
-      // A plain push: if the branch moved meanwhile it is refused, and the next run tries again.
-      const push = tryRun(() => git(["push", "origin", `HEAD:refs/heads/${ref}`], dir));
+      // A plain push, never forced: if the branch moved meanwhile it is refused, and the next run tries again.
+      const push = tryRun(() => remote(["push", "origin", `HEAD:refs/heads/${ref}`], dir));
       if (!push.ok) {
-        console.log(`${label}: push refused, branch moved; next run tries again`);
+        const now = remote(["ls-remote", "origin", `refs/heads/${ref}`]).split("\t")[0]?.trim();
+        if (now && now !== before) {
+          console.log(`${label}: branch moved during the update; next run tries again`);
+        } else {
+          console.log(`${label}: push refused: ${push.out.trim()}`);
+          notify(ctx, pr.number, { kind: "push-failed" });
+          failures++;
+        }
         continue;
       }
-      for (const workflow of DISPATCHED_WORKFLOWS) {
-        gh(ctx, ["workflow", "run", workflow, "--repo", repository, "--ref", ref]);
-      }
+      dispatch(ctx, ref);
       console.log(`${label}: updated${outcome.resolved.length ? `, resolved ${outcome.resolved.join(", ")}` : ""}`);
       notify(
         ctx,
         pr.number,
         outcome.resolved.length ? { kind: "resolved", files: outcome.resolved } : { kind: "clear" },
       );
+    } catch (error) {
+      failures++;
+      console.log(`${label}: failed: ${error instanceof Error ? error.message : String(error)}`);
     } finally {
       tryRun(() => git(["worktree", "remove", "--force", dir]));
       rmSync(dir, { recursive: true, force: true });
     }
   }
+  return failures > 0 ? 1 : 0;
 }
 
 function updateLocal(root: string): number {
   const branch = run("git", ["rev-parse", "--abbrev-ref", "HEAD"], { cwd: root }).trim();
   if (PROTECTED_BRANCHES.includes(branch)) {
     console.error(`atualizar-prs: you are on ${branch}; switch to the PR branch first`);
+    return 1;
+  }
+  if (run("git", ["status", "--porcelain", "--untracked-files=no"], { cwd: root }).trim()) {
+    console.error("atualizar-prs: commit or stash your changes first (an aborted merge could lose them)");
     return 1;
   }
   run("git", ["fetch", "--no-tags", "origin", BASE_BRANCH], { cwd: root });
@@ -377,5 +427,5 @@ function updateLocal(root: string): number {
 if (import.meta.main) {
   const root = join(import.meta.dirname, "..");
   if (process.argv.includes("--local")) process.exit(updateLocal(root));
-  updateAll(root);
+  process.exit(updateAll(root));
 }
