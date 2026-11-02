@@ -206,6 +206,18 @@ export class LoginLimiter {
     if (index >= 0) list.splice(index, 1);
   }
 
+  /**
+   * Gives a try back without vouching for the network: the try is forgotten,
+   * and nothing marks the network as the owner's (unlike succeed, which only a
+   * sign-in earns). The bot's /aprovar page uses it (step 15a).
+   */
+  release(attemptId: number): void {
+    this.db.run(`DELETE FROM zur_login_attempts WHERE id = ?`, attemptId);
+    const list = this.refusals();
+    const index = list.findIndex((r) => r.id === attemptId);
+    if (index >= 0) list.splice(index, 1);
+  }
+
   /** RATE_LIMITED until the network's oldest counted row of this kind leaves the window. */
   private wait(outcomes: readonly number[], network: string): AppError {
     const now = this.clock();

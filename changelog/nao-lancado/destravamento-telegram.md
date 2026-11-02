@@ -34,8 +34,8 @@
   1 hora e geram um alerta de segurança (no máximo 1 por dia).
 - Cada destravamento aparece em Acessos e gera um aviso de segurança, uma vez,
   sem insistir.
-- Limite de 60 comandos por hora no bot, além das 30 mensagens por hora para a
-  Zuri.
+- Limite de 60 comandos por hora no bot, além das 30 mensagens por hora, que
+  agora contam também as mensagens enviadas com a leitura travada.
 - O rodapé dos e-mails avisa que códigos de confirmação só servem no bot.
 
 ### Atualização

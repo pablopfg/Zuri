@@ -22,9 +22,9 @@ export function registerApprovalRoutes(app: Hono<ApiEnv>, deps: () => TelegramDe
     try {
       return Response.json(await telegram.approveOptions(token));
     } catch (error) {
-      // A token that opens nothing spends one of the network's tries. A good one marks nothing:
-      // only the passkey's answer proves it is the owner.
-      if (error instanceof AppError && error.code === "APPROVAL_EXPIRED") auth.limiter.begin(network);
+      // A token that opens nothing spends one of the network's tries (so does any refusal while the
+      // confirmations are locked). A good one marks nothing: only the passkey's answer proves it is the owner.
+      if (error instanceof AppError && (error.code === "APPROVAL_EXPIRED" || error.code === "APPROVALS_LOCKED")) auth.limiter.begin(network);
       throw error;
     }
   });
@@ -36,7 +36,8 @@ export function registerApprovalRoutes(app: Hono<ApiEnv>, deps: () => TelegramDe
     auth.limiter.assertAllowed(network);
     const attempt = auth.limiter.begin(network);
     const result = await telegram.approveVerify(token, credential);
-    auth.limiter.succeed(attempt);
+    // The try comes back, but the network isn't vouched for: confirming the bot is not a sign-in.
+    auth.limiter.release(attempt);
     return Response.json(result);
   });
 }

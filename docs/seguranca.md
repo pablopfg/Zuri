@@ -798,7 +798,7 @@ Etapa 12, fundação. O bot obedece a uma conta só, no chat privado
   Ele vai no fragmento, que nunca chega a log de servidor, e a página tira o
   fragmento da barra de endereço antes de qualquer pedido. As rotas
   `POST /api/approvals/telegram/options` (1 KB) e `/verify` (32 KB) não pedem
-  sessão, mas passam pelo CSRF e pelo mesmo limitador do login. O desafio
+  sessão, mas passam pelo CSRF e pelo mesmo limitador do login. Token que não abre nada e recusa durante a trava gastam uma tentativa da rede; a passkey aceita devolve a tentativa sem marcar a rede como confiável (só login faz isso). Sem um token bom, ninguém fica sabendo que as confirmações estão travadas. O desafio
   WebAuthn é tirado da linha num `UPDATE` condicional (repetir a mesma
   asserção falha) e a verificação exige `userVerification: required`. Abrir
   outro `/destravar` invalida o link anterior.
@@ -813,7 +813,7 @@ Etapa 12, fundação. O bot obedece a uma conta só, no chat privado
   alerta `telegram_confirm_locked`, no máximo 1 por dia. Cada destravamento gera
   `telegram_unlocked` em Acessos e um aviso de segurança que não insiste. Os dois
   têm origem `bot`: só o app os reconhece.
-- **Limites.** 60 comandos por hora e 30 mensagens por hora para a Zuri. Arquivo
+- **Limites.** 60 comandos por hora e 30 mensagens por hora, contadas antes de qualquer resposta (também com a conversa desligada ou a leitura travada). Arquivo
   de áudio (não a nota de voz) e mensagem de bot inline entram como dado de
   terceiros.
 

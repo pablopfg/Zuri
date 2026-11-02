@@ -134,8 +134,9 @@ export class TelegramConfirmations {
 
   /** What the page needs to ask for the passkey. The same challenge comes back while it is unanswered. */
   async pageOptions(token: string): Promise<{ purpose: TelegramConfirmPurpose; options: PublicKeyCredentialRequestOptionsJSON; expiresAt: string }> {
-    this.#assertUnlocked();
+    // The token first: a stranger without one learns nothing, not even that the confirmations are locked.
     const row = await this.#byToken(token);
+    this.#assertUnlocked();
     const rp = this.deps.relyingParty();
     const request = await this.deps.passkeys.authenticationOptions(rp, "required", row.webauthn_challenge ?? undefined);
     if (!request) throw new AppError("NOT_FOUND", "error.approvePasskeyMissing");
@@ -157,8 +158,9 @@ export class TelegramConfirmations {
    * confirmed. Wrong: the token is spent and the try counts toward the lock.
    */
   async pageVerify(token: string, credential: PasskeyAssertion["response"]): Promise<Confirmed> {
-    this.#assertUnlocked();
+    // The token first: a stranger without one learns nothing, not even that the confirmations are locked.
     const row = await this.#byToken(token);
+    this.#assertUnlocked();
     const challenge = row.webauthn_challenge;
     if (challenge === null) throw expired("invalid");
     // Taken off before the check (compare-and-swap, no await in between): a second answer finds nothing.

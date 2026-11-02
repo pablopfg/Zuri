@@ -510,6 +510,10 @@ describe("five wrong confirmations", () => {
     expect(res.status).toBe(423);
     expect(Number(res.headers.get("retry-after"))).toBeGreaterThan(3500);
     expect(apiErrorSchema.parse(await res.json()).code).toBe("APPROVALS_LOCKED");
+    // Without a good token nobody learns that the confirmations are locked.
+    const stranger = await page("options", { token: "E".repeat(43) }, "198.51.100.88");
+    expect(stranger.status).toBe(410);
+    expect(apiErrorSchema.parse(await stranger.json()).details).toEqual({ approval: "invalid" });
   });
 });
 
@@ -539,6 +543,20 @@ describe("the /aprovar page", () => {
     const again = await page("options", { token });
     expect(again.status).toBe(410);
     expect(apiErrorSchema.parse(await again.json()).details).toEqual({ approval: "used" });
+  });
+
+  it("gives the try back without vouching for the network: confirming the bot is not a sign-in", async () => {
+    await linkOwner();
+    await idle(13 * HOUR);
+    const key = await addPasskey();
+    const { token } = await askUnlock();
+    const attempts = () => inOwner((agent) => agent.store.db.all<{ outcome: number }>(`SELECT outcome FROM zur_login_attempts`));
+    const before = await attempts();
+    const net = "198.51.100.90";
+    const options = await json<{ options: { challenge: string; rpId?: string } }>(await page("options", { token }, net), 200);
+    const credential = await key.assert(options.options, ORIGIN);
+    await json(await page("verify", { token, credential }, net), 200);
+    expect(await attempts()).toEqual(before);
   });
 
   it("asks the same challenge again while it is unanswered, and spends it on the first answer", async () => {
@@ -633,6 +651,18 @@ describe("limits and a new conversation", () => {
     botCalls.length = 0;
     await deliver(text("/ajuda"));
     expect(texts()[0]).toMatch(/^Por aqui eu mando os seus avisos/);
+  });
+
+  it("caps the answers to messages sent while locked at 30 an hour, like messages to the Zuri", async () => {
+    await linkOwner();
+    await idle(13 * HOUR);
+    await inOwner((agent) => new InternalState(agent.store.db).set("telegram_chat_window", `${Date.now()}|${TELEGRAM_LIMITS.chatPerHour - 1}`));
+    botCalls.length = 0;
+    await deliver(text("Oi"));
+    await deliver(text("Oi de novo"));
+    await deliver(text("E agora?"));
+    expect(texts()).toEqual([LOCKED, "Você chegou ao limite de 30 mensagens por hora para mim aqui. Até a hora virar, ignoro as próximas por segurança."]);
+    expect(prompts).toHaveLength(0);
   });
 
   it("/nova_conversa makes the next message start another app conversation", async () => {

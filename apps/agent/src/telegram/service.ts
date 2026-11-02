@@ -335,6 +335,14 @@ export class TelegramService {
       return null;
     }
     const kind = message.audio?.kind ?? (message.other ? "other" : "text");
+    // 30 messages an hour, counted before any answer (switch off and locked too, so a flood can't make the
+    // bot write and send without end): past that the bot says so once and ignores the rest until the hour turns.
+    const rate = this.#rate("telegram_chat_window", TELEGRAM_LIMITS.chatPerHour);
+    if (rate !== "ok") {
+      this.deps.links.audit("message", kind, "rate_limited");
+      if (rate === "first") await this.#say(link.chatId, "telegram.chat.rate");
+      return null;
+    }
     // The switch is off: the bot says so and reads nothing, not even the audio's file.
     if (!link.conversation || !this.deps.conversation) {
       this.deps.links.audit("message", kind, "off");
@@ -357,13 +365,6 @@ export class TelegramService {
     if (forwardedText) quoted.push({ kind: "forward", text: forwardedText });
     if (message.quote) quoted.push({ kind: "quote", text: message.quote });
     if (message.replyText) quoted.push({ kind: "reply", text: message.replyText });
-    // 30 messages to the agent an hour: past that the bot says so once and ignores the rest until the hour turns.
-    const rate = this.#rate("telegram_chat_window", TELEGRAM_LIMITS.chatPerHour);
-    if (rate !== "ok") {
-      this.deps.links.audit("message", kind, "rate_limited");
-      if (rate === "first") await this.#say(link.chatId, "telegram.chat.rate");
-      return null;
-    }
     this.deps.links.audit("message", kind, "turn");
     return this.deps.conversation.receive(this.client(), {
       chatId: link.chatId,
