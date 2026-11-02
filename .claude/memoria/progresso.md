@@ -26,7 +26,6 @@ etapas ficam detalhadas; as mais antigas viram uma linha na tabela.
 | 8 | mesclada (31/10/2026) | #25 | Provedor Workers AI e IA simulada, medição por passo, teto de 9.000 Neurons/dia, aba IA |
 | 9 | mesclada (31/10/2026) | #28 | Conversa em SSE, 20 ferramentas com permissão e limite, aprovações e planos, voz, injeção de prompt testada |
 | 10 | mesclada (02/11/2026) | #46 | Automações: lembretes, resumo das tarefas e rotinas com IA, alarme único, recuperação após reinício, aprovação das rotinas do chat |
-
 | 11 | em andamento (11a em revisão) | — | Central de avisos, insistência, vigias, resumo do dia e Diagnóstico (11a); push e e-mail (11b); prioridade que aprende (11c) |
 
 ## Últimas etapas (detalhe)
