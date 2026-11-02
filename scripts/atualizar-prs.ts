@@ -7,8 +7,9 @@
 //   node scripts/atualizar-prs.ts           every open PR into develop (GitHub Actions, update-prs.yml)
 //   node scripts/atualizar-prs.ts --local   merges origin/develop into the current branch (threads, by hand)
 //
-// It never merges a pull request, never force-pushes and never pushes to
-// develop or main. See docs/agente/merge-de-prs.md.
+// After its own push it approves the pull_request runs GitHub holds for the
+// bot (approveHeldRuns). It never merges a pull request, never force-pushes
+// and never pushes to develop or main. See docs/agente/merge-de-prs.md.
 import { execFileSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -20,8 +21,14 @@ export const PROTECTED_BRANCHES = ["develop", "main"];
 export const OPT_OUT_LABEL = "sem-atualizacao-automatica";
 /** Hidden marker of the one comment the workflow keeps on each pull request. */
 export const NOTICE_MARKER = "<!-- zuri:atualizar-prs -->";
-/** Workflows dispatched after a push: a push made with GITHUB_TOKEN starts no pull_request run. */
-export const DISPATCHED_WORKFLOWS = ["ci.yml", "codeql.yml", "merge-order.yml"];
+/**
+ * The pull_request workflows that report the required checks, by file and by
+ * run name. A push made with GITHUB_TOKEN starts them held for approval
+ * ("action_required"), and this script approves the ones its own push started.
+ */
+export const PR_WORKFLOWS: Record<string, string> = { "ci.yml": "CI", "codeql.yml": "CodeQL", "merge-order.yml": "Merge order" };
+/** The account that pushes with GITHUB_TOKEN. */
+export const BOT_LOGIN = "github-actions[bot]";
 
 /**
  * Files where two additions at the same place can simply be kept together:
@@ -236,6 +243,7 @@ export type Notice =
   | { kind: "workflows" }
   | { kind: "resolved"; files: string[] }
   | { kind: "push-failed" }
+  | { kind: "approval"; runs: string[] }
   | { kind: "clear" };
 
 /** The text of the one comment the workflow keeps on a pull request, in pt-BR. */
@@ -253,6 +261,8 @@ export function noticeBody(notice: Notice, baseSha: string): string {
       return `${head}Branch atualizada com a ${BASE_BRANCH} (${at}). Conflitos de acréscimo resolvidos sozinhos, mantendo os dois lados:\n\n${list(notice.files)}\n\nConfira se a ordem das entradas ficou boa. A CI roda de novo neste commit.`;
     case "push-failed":
       return `${head}**Atualização automática recusada pelo GitHub** (${at}). A branch não mudou, mas o envio foi recusado (permissão ou regra). Veja o log do workflow "Update PRs" e atualize com \`node scripts/atualizar-prs.ts --local\`.`;
+    case "approval":
+      return `${head}**A CI deste commit está parada esperando aprovação** (${at}). A atualização automática enviou o commit, mas não conseguiu aprovar as execuções que o GitHub segura para o bot: ${notice.runs.map((r) => `\`${r.replace(/[`@\r\n]/g, "_")}\``).join(", ")}. Aprove em Actions, na execução, com "Approve and run" (\`docs/configuracao-github.md\`).`;
     case "clear":
       return `${head}Branch em dia com a ${BASE_BRANCH} (${at}), sem conflito pendente.`;
   }
@@ -290,21 +300,67 @@ export function notify(ctx: GitHub, pr: number, notice: Notice): void {
   }
 }
 
-/**
- * True when the head is a merge this workflow pushed and the CI never ran on
- * it (the dispatch failed last time): without a run the required checks would
- * wait forever, because that push started no pull_request run.
- */
-export function needsDispatch(ctx: GitHub, headSha: string, headSubject: string): boolean {
-  if (!headSubject.startsWith(MERGE_MESSAGE)) return false;
-  const out = gh(ctx, ["api", `repos/${ctx.repository}/commits/${headSha}/check-runs?check_name=typecheck`, "--jq", ".total_count"]);
-  return Number(out.trim()) === 0;
+export interface WorkflowRun {
+  id: number;
+  name: string;
+  event: string;
+  status: string;
+  conclusion: string | null;
+  head_sha: string;
+  created_at: string;
+  actor: { login: string } | null;
+  head_repository: { full_name: string } | null;
 }
 
-function dispatch(ctx: GitHub, ref: string): void {
-  for (const workflow of DISPATCHED_WORKFLOWS) {
-    gh(ctx, ["workflow", "run", workflow, "--repo", ctx.repository, "--ref", ref]);
+/** The pull_request runs on `sha`, from this repository (never a fork). */
+export function pullRequestRuns(ctx: Pick<GitHub, "repository" | "exec">, sha: string): WorkflowRun[] {
+  const out = ctx.exec("gh", [
+    "api",
+    `repos/${ctx.repository}/actions/runs?head_sha=${sha}&event=pull_request&per_page=100`,
+  ]);
+  const runs = (JSON.parse(out) as { workflow_runs: WorkflowRun[] }).workflow_runs;
+  return runs.filter((r) => r.event === "pull_request" && r.head_sha === sha && r.head_repository?.full_name === ctx.repository);
+}
+
+/** Runs GitHub holds for approval because this workflow's push (the bot) started them. */
+export const isHeldForBot = (run: WorkflowRun) => run.conclusion === "action_required" && run.actor?.login === BOT_LOGIN;
+
+export interface Approval {
+  approved: string[];
+  failed: string[];
+  /** Required workflows with no run on the commit after waiting. */
+  missing: string[];
+}
+
+const sleepMs = (ms: number) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+
+/**
+ * A push made with GITHUB_TOKEN starts the pull_request runs held as
+ * "action_required": GitHub treats github-actions[bot] as a contributor whose
+ * runs need approval. The ruleset counts only the checks of those runs (a
+ * workflow_dispatch run on the branch left the merge "expected" on #60), so
+ * the workflow approves the runs its own push started, on its own branch,
+ * never a fork's. GitHub creates the runs a few seconds after the push:
+ * `attempts` reads, `waitMs` apart, until every required workflow has one.
+ */
+export function approveHeldRuns(
+  ctx: Pick<GitHub, "repository" | "exec">,
+  sha: string,
+  { attempts = 8, waitMs = 5000, sleep = sleepMs }: { attempts?: number; waitMs?: number; sleep?: (ms: number) => unknown } = {},
+): Approval {
+  const required = Object.values(PR_WORKFLOWS);
+  let runs: WorkflowRun[] = [];
+  for (let i = 0; i < attempts; i++) {
+    if (i > 0) sleep(waitMs);
+    runs = pullRequestRuns(ctx, sha);
+    if (required.every((name) => runs.some((r) => r.name === name))) break;
   }
+  const result: Approval = { approved: [], failed: [], missing: required.filter((name) => !runs.some((r) => r.name === name)) };
+  for (const run of runs.filter(isHeldForBot)) {
+    const done = tryRun(() => ctx.exec("gh", ["api", "-X", "POST", `repos/${ctx.repository}/actions/runs/${run.id}/approve`]));
+    (done.ok ? result.approved : result.failed).push(run.name);
+  }
+  return result;
 }
 
 /** Git config for one authenticated command, through the environment so the token never shows in argv. */
@@ -352,9 +408,16 @@ function updateAll(root: string): number {
       git(["worktree", "add", "--detach", dir, before]);
       const outcome = mergeBase(dir, `refs/remotes/origin/${BASE_BRANCH}`);
       if (outcome.status === "up-to-date") {
-        if (needsDispatch(ctx, before, git(["log", "-1", "--format=%s", before]))) {
-          dispatch(ctx, ref);
-          console.log(`${label}: up to date, CI dispatched again`);
+        // Its own merge from an earlier round may still have runs held (approval failed then).
+        if (git(["log", "-1", "--format=%s", before]).startsWith(MERGE_MESSAGE)) {
+          const approval = approveHeldRuns(ctx, before, { attempts: 1 });
+          if (approval.failed.length > 0) {
+            console.log(`${label}: up to date, approval failed for ${approval.failed.join(", ")}`);
+            notify(ctx, pr.number, { kind: "approval", runs: approval.failed });
+            failures++;
+            continue;
+          }
+          console.log(`${label}: up to date${approval.approved.length ? `, approved ${approval.approved.join(", ")}` : ""}`);
         } else {
           console.log(`${label}: up to date`);
         }
@@ -384,8 +447,18 @@ function updateAll(root: string): number {
         }
         continue;
       }
-      dispatch(ctx, ref);
-      console.log(`${label}: updated${outcome.resolved.length ? `, resolved ${outcome.resolved.join(", ")}` : ""}`);
+      const approval = approveHeldRuns(ctx, git(["rev-parse", "HEAD"], dir).trim());
+      console.log(
+        `${label}: updated${outcome.resolved.length ? `, resolved ${outcome.resolved.join(", ")}` : ""}; approved ${approval.approved.join(", ") || "none"}`,
+      );
+      // Without the pull_request runs the required checks never report: someone has to approve them.
+      const stuck = [...approval.failed, ...approval.missing];
+      if (stuck.length > 0) {
+        console.log(`${label}: checks waiting: ${stuck.join(", ")}`);
+        notify(ctx, pr.number, { kind: "approval", runs: stuck });
+        failures++;
+        continue;
+      }
       notify(
         ctx,
         pr.number,

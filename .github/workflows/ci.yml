@@ -3,12 +3,11 @@ name: CI
 # Runs only on pull requests and never sees a secret: develop and main change
 # only through pull requests (rulesets in .github/rulesets/), so a push run
 # would repeat what the pull request already tested. Each job name is a check
-# required by the rulesets. workflow_dispatch exists for update-prs.yml: its
-# push to a PR branch (GITHUB_TOKEN) starts no pull_request run, so it starts
-# this one on the branch; same jobs, same read-only token, no secret.
+# required by the rulesets. A push by update-prs.yml (GITHUB_TOKEN) starts this
+# run held for approval, and that workflow approves it: the rulesets count only
+# the checks of pull_request runs, never of a workflow_dispatch run.
 on:
   pull_request:
-  workflow_dispatch:
 
 permissions:
   contents: read

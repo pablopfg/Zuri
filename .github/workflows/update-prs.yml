@@ -4,9 +4,10 @@ name: Update PRs
 # resolves the conflicts that are only two additions at the same place
 # (scripts/atualizar-prs.ts). Any other conflict gets one comment on the pull
 # request. It never merges, never force-pushes and never pushes to develop or
-# main. A push made with GITHUB_TOKEN starts no pull_request run, so the script
-# dispatches ci.yml and codeql.yml on the branch: the required checks run on
-# the new commit, the same jobs as always. docs/agente/merge-de-prs.md.
+# main. GitHub holds the pull_request runs that a GITHUB_TOKEN push starts
+# ("action_required"), and the rulesets count only those runs' checks, so the
+# script approves the runs its own push started (never a fork's). The same
+# jobs as always run on the new commit. docs/agente/merge-de-prs.md.
 # When the run fails, report-failure opens a standard issue (docs/agente/issues.md).
 on:
   push:
@@ -31,7 +32,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     # contents: push the merge commit to the PR branch; pull-requests: the comment;
-    # actions: dispatch the CI on that commit.
+    # actions: approve the held pull_request runs and rerun a stale merge-order.
     permissions:
       contents: write
       pull-requests: write
