@@ -20,6 +20,8 @@ async function watchViolations(page: Page): Promise<string[]> {
 
 test("no page breaks the Content Security Policy @mobile", async ({ page }) => {
   const violations = await watchViolations(page);
+  await page.goto("/primeiro-acesso");
+  await expect(page.getByRole("heading", { level: 1, name: "Recuperar o acesso" })).toBeVisible();
   await page.goto("/entrar");
   await expect(page.getByRole("button", { name: "Entrar" })).toBeVisible();
   await signIn(page);

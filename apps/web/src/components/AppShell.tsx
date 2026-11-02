@@ -10,10 +10,11 @@ import { Logo } from "./Logo.tsx";
 import { MfaReminder } from "./MfaReminder.tsx";
 import { NotificationCenter } from "./NotificationCenter.tsx";
 import { SessionGuard } from "./SessionGuard.tsx";
-import { Button, cn, Dialog, Notice } from "./ui.tsx";
+import { Button, cn, Dialog } from "./ui.tsx";
 
 // Downloaded the first time it opens (rule P11): most visits never use it.
 const CommandPalette = lazy(() => import("./CommandPalette.tsx").then((m) => ({ default: m.CommandPalette })));
+const SecretNotices = lazy(() => import("./SecretNotices.tsx").then((m) => ({ default: m.SecretNotices })));
 
 /**
  * The frame of every signed-in page, after the Talorys layout: a full-height
@@ -203,7 +204,11 @@ export function AppShell() {
         </header>
         <MfaReminder />
         <main id="conteudo" tabIndex={-1} className="mx-auto w-full max-w-5xl flex-1 space-y-6 px-4 pb-24 pt-6 focus:outline-none md:px-8 md:pb-10 md:pt-8">
-          {session?.removePlainPasswordSecret && <Notice tone="warning">{t("web.shell.removePlainSecret")}</Notice>}
+          {(session?.removePlainPasswordSecret || session?.removeSetupCodeSecret) && (
+            <Suspense fallback={null}>
+              <SecretNotices />
+            </Suspense>
+          )}
           <Outlet />
         </main>
       </div>

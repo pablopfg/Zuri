@@ -30,7 +30,7 @@ export const ptBRServer = {
   "error.turnstileRequired": "Confirme a verificação de segurança e tente de novo.",
   "error.turnstileFailed": "A verificação de segurança não passou. Tente de novo.",
   "error.turnstileUnavailable": "Não deu para confirmar a verificação contra robôs agora. Tente de novo em instantes.",
-  "error.turnstileNotConfigured": "O login está fechado: falta configurar a verificação contra robôs (Turnstile). Veja docs/configuracao-cloudflare.md.",
+  "error.turnstileNotConfigured": "O login está fechado: falta configurar a verificação contra robôs. Veja o guia de instalação.",
   "error.breachCheckUnavailable": "Não deu para conferir a senha nas listas de vazamentos agora. Tente de novo em instantes.",
   "error.serviceUnavailable": "Um serviço necessário não respondeu. Tente de novo em instantes.",
   "error.bodyTooLarge": "O pedido é grande demais.",
