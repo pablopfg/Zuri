@@ -2,9 +2,9 @@ import type { Page, Route } from "@playwright/test";
 import { expect, test } from "./fixtures.ts";
 import { expectAccessible } from "./ui-helpers.ts";
 
-// The bot's confirmation page, /aprovar (step 15). The local Worker has no bot
-// linked, so every token is unknown to it: the first test goes all the way to
-// it; the others rewrite the server's answers on their way. WebAuthn can't run
+// The bot's confirmation page, /aprovar (step 15). The server's answers are
+// stood in for: an unknown token would spend one of this network's sign-in
+// tries on the shared e2e Worker, and the other files sign in from it. WebAuthn can't run
 // on 127.0.0.1 (an IP is never a passkey's host), so the browser's passkey
 // prompt is a stand-in that answers, or is cancelled, as told. The server's
 // side of the passkey is tested in apps/agent/test/telegram-unlock.test.ts.
@@ -47,6 +47,7 @@ async function passkeyPrompt(page: Page, mode: "ok" | "cancel" = "ok") {
 }
 
 test("a link the server doesn't know says so, with how to ask again @mobile", async ({ page }) => {
+  await page.route("**/api/approvals/telegram/options", (route) => refusal(route, 410, "APPROVAL_EXPIRED", "x", { approval: "invalid" }));
   await page.goto(`/aprovar#${TOKEN}`);
   await expect(page.getByRole("heading", { level: 1, name: "Destravar o bot do Telegram" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Este link não serve mais" })).toBeFocused();

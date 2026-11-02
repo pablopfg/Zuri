@@ -681,6 +681,22 @@ describe("the /aprovar page", () => {
     for (let i = 0; i < 4; i++) statuses.push((await page("options", { token: `${"B".repeat(42)}${i}` }, net)).status);
     expect(statuses).toEqual([410, 410, 410, 429]);
   });
+
+  it("never makes the owner wait for a link that was real: used or expired links spend no try", async () => {
+    await linkOwner();
+    await idle(13 * HOUR);
+    const key = await addPasskey();
+    const { token } = await askUnlock();
+    const net = "198.51.100.78";
+    const options = await json<{ options: { challenge: string; rpId?: string } }>(await page("options", { token }, net), 200);
+    await json(await page("verify", { token, credential: await key.assert(options.options, ORIGIN) }, net), 200);
+    const statuses: number[] = [];
+    for (let i = 0; i < 4; i++) {
+      const res = i % 2 ? await page("options", { token }, net) : await page("verify", { token, credential: await key.assert(options.options, ORIGIN) }, net);
+      statuses.push(res.status);
+    }
+    expect(statuses).toEqual([410, 410, 410, 410]);
+  });
 });
 
 describe("limits and a new conversation", () => {

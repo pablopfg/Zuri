@@ -22,9 +22,9 @@ export function registerApprovalRoutes(app: Hono<ApiEnv>, deps: () => TelegramDe
     try {
       return Response.json(await telegram.approveOptions(token));
     } catch (error) {
-      // A token that opens nothing spends one of the network's tries (so does any refusal while the
-      // confirmations are locked). A good one marks nothing: only the passkey's answer proves it is the owner.
-      if (error instanceof AppError && (error.code === "APPROVAL_EXPIRED" || error.code === "APPROVALS_LOCKED")) auth.limiter.begin(network);
+      // Only a token the server never issued spends one of the network's tries: that is guessing. A used
+      // or expired link is the owner's own (a guess can't find one), and must not keep them from signing in.
+      if (unknownToken(error)) auth.limiter.begin(network);
       throw error;
     }
   });
@@ -35,9 +35,23 @@ export function registerApprovalRoutes(app: Hono<ApiEnv>, deps: () => TelegramDe
     const network = client(c).network;
     auth.limiter.assertAllowed(network);
     const attempt = auth.limiter.begin(network);
-    const result = await telegram.approveVerify(token, credential);
-    // The try comes back, but the network isn't vouched for: confirming the bot is not a sign-in.
-    auth.limiter.release(attempt);
-    return Response.json(result);
+    try {
+      const result = await telegram.approveVerify(token, credential);
+      // The try comes back, but the network isn't vouched for: confirming the bot is not a sign-in.
+      auth.limiter.release(attempt);
+      return Response.json(result);
+    } catch (error) {
+      // A refused passkey and an unknown token keep the try; a link that was real (used, expired, or
+      // locked by too many wrong answers, which the bot already counts) gives it back.
+      if (error instanceof AppError && (error.code === "APPROVAL_EXPIRED" || error.code === "APPROVALS_LOCKED") && !unknownToken(error)) {
+        auth.limiter.release(attempt);
+      }
+      throw error;
+    }
   });
+}
+
+/** The token matched no confirmation at all. */
+function unknownToken(error: unknown): boolean {
+  return error instanceof AppError && error.code === "APPROVAL_EXPIRED" && error.details?.approval === "invalid";
 }
