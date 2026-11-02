@@ -1,8 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { TelegramAccount, TelegramConnect, TelegramGroupCode, TelegramStatus } from "@zuri/shared";
 import { Copy, ExternalLink, Send, Users } from "lucide-react";
-import { useState } from "react";
+import { useId, useState } from "react";
 import { Button, Card, Dialog, ErrorNotice, Notice, Spinner } from "../../components/ui.tsx";
+import { Switch } from "../../components/Switch.tsx";
 import { useToast } from "../../components/Toaster.tsx";
 import { ALERTS_KEY } from "../../hooks/notices.ts";
 import { api, errorMessage } from "../../lib/api.ts";
@@ -118,6 +119,8 @@ function TelegramBody({ status }: { status: TelegramStatus }) {
           <p className="text-sm text-fg-muted">{t("web.alerts.telegram.linked", { date: dateTime(new Date(status.account.confirmedAt ?? status.account.linkedAt)) })}</p>
         </div>
       )}
+
+      {status.state === "linked" && <ConversationSwitch on={status.conversation} />}
 
       {status.state === "linked" && <GroupSection status={status} onChange={refresh} />}
 
@@ -309,5 +312,32 @@ function AccountLine({ account }: { account: TelegramAccount }) {
       {account.username && account.name && <span className="text-fg-muted"> · @{account.username}</span>}
       <span className="text-fg-muted"> · {t("web.alerts.telegram.idTail", { tail: account.idTail })}</span>
     </p>
+  );
+}
+
+/**
+ * "Conversar com a Zuri por aqui" (step 14): off by default. Off, the bot
+ * answers how to turn it on and never downloads an audio.
+ */
+function ConversationSwitch({ on }: { on: boolean }) {
+  const { t } = useI18n();
+  const toast = useToast();
+  const qc = useQueryClient();
+  const hint = useId();
+  const save = useMutation({
+    mutationFn: (conversation: boolean) => api<TelegramStatus>("/telegram", { method: "PATCH", body: { conversation } }),
+    onSuccess: (status) => {
+      qc.setQueryData(TELEGRAM_KEY, status);
+      toast(t(status.conversation ? "web.alerts.telegram.conversation.on" : "web.alerts.telegram.conversation.off"));
+    },
+    onError: (error) => toast(errorMessage(error)),
+  });
+  return (
+    <div className="space-y-1 border-t border-border pt-4">
+      <Switch label={t("web.alerts.telegram.conversation.label")} checked={save.isPending ? (save.variables ?? on) : on} busy={save.isPending} describedBy={hint} onChange={(next) => save.mutate(next)} />
+      <p id={hint} className="text-sm text-fg-muted">
+        {t("web.alerts.telegram.conversation.hint")}
+      </p>
+    </div>
   );
 }

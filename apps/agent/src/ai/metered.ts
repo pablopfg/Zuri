@@ -32,6 +32,14 @@ const MIN_SECRET_LENGTH = 12;
 
 type Outcome = "ok" | "error" | "aborted";
 
+/** Audio counted against the day before the clip exists (MeteredAI.reserveAudio). */
+export interface HeldAudio {
+  /** The clip to text, once; charged in full when it reached the model. */
+  transcribe(audio: string, options: { locale: Locale; signal?: AbortSignal | undefined }): Promise<{ text: string; seconds: number }>;
+  /** Gives the hold back: the clip never reached the model. */
+  release(): void;
+}
+
 /**
  * A provider whose every model call goes through the meter: counted against the
  * daily limits before it runs, settled with what it used afterwards (step by
@@ -70,25 +78,45 @@ export class MeteredAI {
    * the day's hour spent (rule P7).
    */
   async transcribe(audio: string, browserSeconds: number, options: { locale: Locale; signal?: AbortSignal | undefined }): Promise<{ text: string; seconds: number }> {
-    if (!this.transcriber) throw new AppError("NOT_CONFIGURED");
-    if (options.signal?.aborted) throw new AppError("SERVICE_UNAVAILABLE", "error.aiAborted");
     const seconds = Math.min(VOICE_LIMITS.maxClipSeconds, Math.ceil(Math.max(browserSeconds, estimatedSeconds(base64Bytes(audio)))));
-    const reservation = this.meter.reserveAudio({ model: this.transcriber.model, seconds, billable: this.transcriber.billable }, this.limits());
-    const call = this.callSignal(options.signal, Date.now() + this.deadlineMs);
-    let charged = seconds;
-    try {
-      const result = await this.transcriber.transcribe(audio, { locale: options.locale, signal: call.signal });
-      charged = Math.max(seconds, Math.ceil(result.seconds ?? 0));
-      if (call.timedOut()) throw timeout();
-      return { text: result.text, seconds: charged };
-    } catch (error) {
-      const outcome = call.outcome(error);
-      this.meter.failed(reservation.day, outcome === "aborted");
-      throw outcome === "error" && call.timedOut() ? timeout() : classifyAiError(error);
-    } finally {
-      call.end();
-      this.meter.settleAudio(reservation, charged);
-    }
+    const held = this.reserveAudio(seconds, options.signal);
+    return held.transcribe(audio, options);
+  }
+
+  /**
+   * Holds `seconds` of audio against the day's hour and the Neuron cap before
+   * anything is downloaded (a Telegram file, step 14): the file's length as
+   * Telegram declared it. Refused with AI_LIMIT_REACHED when the day has no
+   * room left. `release` gives the hold back when the download fails; once
+   * `transcribe` ran, the call is charged like any other clip.
+   */
+  reserveAudio(seconds: number, signal?: AbortSignal): HeldAudio {
+    if (!this.transcriber) throw new AppError("NOT_CONFIGURED");
+    if (signal?.aborted) throw new AppError("SERVICE_UNAVAILABLE", "error.aiAborted");
+    const transcriber = this.transcriber;
+    const reserved = Math.max(1, Math.ceil(seconds));
+    const reservation = this.meter.reserveAudio({ model: transcriber.model, seconds: reserved, billable: transcriber.billable }, this.limits());
+    return {
+      release: () => this.meter.release(reservation),
+      transcribe: async (audio, options) => {
+        if (reservation.done) throw new AppError("INTERNAL_ERROR");
+        const call = this.callSignal(options.signal, Date.now() + this.deadlineMs);
+        let charged = reserved;
+        try {
+          const result = await transcriber.transcribe(audio, { locale: options.locale, signal: call.signal });
+          charged = Math.max(reserved, Math.ceil(result.seconds ?? 0));
+          if (call.timedOut()) throw timeout();
+          return { text: result.text, seconds: charged };
+        } catch (error) {
+          const outcome = call.outcome(error);
+          this.meter.failed(reservation.day, outcome === "aborted");
+          throw outcome === "error" && call.timedOut() ? timeout() : classifyAiError(error);
+        } finally {
+          call.end();
+          this.meter.settleAudio(reservation, charged);
+        }
+      },
+    };
   }
 
   get id(): AIProvider["id"] {

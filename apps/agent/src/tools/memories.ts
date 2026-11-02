@@ -29,7 +29,7 @@ export const memoryTools = [
     maxCallsPerTurn: 3,
     input: z.object({ content: z.string().min(3).max(1_000), category: z.enum(MEMORY_CATEGORIES).optional() }).strict(),
     execute: (input, ctx) => {
-      const result = ctx.memories.create({ content: input.content, category: input.category ?? "other" }, "app", "agent");
+      const result = ctx.memories.create({ content: input.content, category: input.category ?? "other" }, ctx.source === "telegram" ? "telegram" : "app", "agent");
       return {
         ...(result.duplicate ? { already_known: presentMemory(result.memory) } : { remembered: presentMemory(result.memory) }),
         ...(result.reviews ? { needs_owner_review: "This may conflict with an older memory; both are kept until the owner reviews them." } : {}),
@@ -58,7 +58,7 @@ export const memoryTools = [
       const before = memory(input.id, ctx);
       if (before.status === "historical") throw new ToolError("This memory is already a past fact. Save the new fact with remember.");
       // A new version, never an overwrite: the agent can't erase what the owner told it (rule 4 of the tools).
-      const result = ctx.memories.correct(before.id, { content: input.content, ...(input.category ? { category: input.category } : {}) }, "app", "agent");
+      const result = ctx.memories.correct(before.id, { content: input.content, ...(input.category ? { category: input.category } : {}) }, ctx.source === "telegram" ? "telegram" : "app", "agent");
       ctx.changed?.add(before.id).add(result.memory.id);
       return { updated: presentMemory(result.memory), previous_kept_as_history: before.id };
     },

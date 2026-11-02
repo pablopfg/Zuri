@@ -96,6 +96,7 @@ describe("the migration list", () => {
       13: "c624e0db89d6aed17b6a751b21cfe2fcec4b117206baeadc4d2c860967b1fe05",
       14: "090919da832586473e230fa78cb31715d432200ed144fc94a57b83b73e4543b5",
       15: "862c580be5d38907e9632922016c755a65b6ec6a60ed17dc381e4681dd82edbb",
+      16: "0670271af26f7129e724c31b2de44737396c3c420aee68a96b2585662489e53d",
     };
     for (const m of MIGRATIONS) {
       const digest = createHash("sha256").update(statementText(m).replace(/\r\n/g, "\n")).digest("hex");
@@ -111,7 +112,7 @@ describe("migrate", () => {
       expect(zurObjects(db)).toEqual([]);
 
       expect(migrate(db)).toBe(LATEST_SCHEMA_VERSION);
-      expect(schemaVersion(db)).toBe(15);
+      expect(schemaVersion(db)).toBe(16);
       // FTS5 keeps shadow tables of its own (zur_notes_fts_data and others): only ours are listed.
       expect(zurObjects(db).filter((name) => !/^table:zur_(notes|memories)_fts_/.test(name))).toEqual([
         "table:zur_activity",
@@ -235,6 +236,8 @@ describe("migrate", () => {
         "table:zur_telegram_link_codes",
         "table:zur_telegram_links",
         "index:zur_telegram_links_kind",
+        "table:zur_telegram_pending_files",
+        "index:zur_telegram_pending_files_chat",
         "table:zur_trash",
         "index:zur_trash_deleted",
         "index:zur_trash_expires",
@@ -433,13 +436,27 @@ describe("migrate", () => {
       db.run(
         `INSERT INTO zur_notices (id, kind, category, priority, params, origin, created_at) VALUES ('n1', 'digest.daily', 'digests', 'normal', '{}', 'system', '2026-11-02T10:00:00.000Z')`,
       );
-      expect(migrate(db)).toBe(15);
+      expect(migrate(db, MIGRATIONS.slice(0, 15))).toBe(15);
       expect(db.one(`SELECT title FROM zur_tasks WHERE id = 't1'`)).toEqual({ title: "Pagar a luz" });
       expect(db.one(`SELECT snoozed_until FROM zur_notices WHERE id = 'n1'`)).toEqual({ snoozed_until: null });
       db.run(`INSERT INTO zur_telegram_callbacks (id, action, target_type, target_id, expires_at) VALUES ('c1', 'done', 'notice', 'n1', 'x')`);
       expect(db.one(`SELECT message_id, used_at FROM zur_telegram_callbacks WHERE id = 'c1'`)).toEqual({ message_id: null, used_at: null });
       // The id is the key: the same button can't be stored twice.
       expect(() => db.run(`INSERT INTO zur_telegram_callbacks (id, action, expires_at) VALUES ('c1', 'done', 'x')`)).toThrow();
+    });
+  });
+
+  it("upgrades a database at version 15 to 16: pending audio files and quoted text, the owner's messages kept", async () => {
+    await withEmptyDatabase("from-15", (db) => {
+      expect(migrate(db, MIGRATIONS.slice(0, 15))).toBe(15);
+      db.run(`INSERT INTO zur_conversations (id, title, created_at, updated_at) VALUES ('c1', 'Oi', 'x', 'x')`);
+      db.run(`INSERT INTO zur_messages (id, conversation_id, role, content, created_at) VALUES ('m1', 'c1', 'user', 'Oi, Zuri', 'x')`);
+      expect(migrate(db)).toBe(16);
+      expect(db.one(`SELECT content, quoted FROM zur_messages WHERE id = 'm1'`)).toEqual({ content: "Oi, Zuri", quoted: null });
+      db.run(`INSERT INTO zur_telegram_pending_files (id, chat_id, file_id, kind, created_at, expires_at) VALUES ('p1', 1, 'f', 'voice', 'x', 'y')`);
+      expect(db.one(`SELECT used_at, size_bytes FROM zur_telegram_pending_files WHERE id = 'p1'`)).toEqual({ used_at: null, size_bytes: null });
+      // Only voice and audio files wait for a tap.
+      expect(() => db.run(`INSERT INTO zur_telegram_pending_files (id, chat_id, file_id, kind, created_at, expires_at) VALUES ('p2', 1, 'f', 'photo', 'x', 'y')`)).toThrow();
     });
   });
 

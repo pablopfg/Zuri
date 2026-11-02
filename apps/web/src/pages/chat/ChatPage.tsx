@@ -553,8 +553,18 @@ function MessageItem({
     return (
       <li className="flex flex-col items-end gap-1">
         <span className="sr-only">{t("web.chat.you")}:</span>
-        <div className="max-w-[85%] whitespace-pre-wrap break-words rounded-2xl rounded-br-md bg-accent px-4 py-2.5 text-[15px] leading-6 text-accent-fg shadow-sm">{message.content}</div>
+        {message.quoted?.map((item) => (
+          // Someone else's text the owner sent along from Telegram: shown apart from their own words.
+          <figure key={`${item.kind}:${item.text.slice(0, 64)}`} className="max-w-[85%] rounded-2xl rounded-br-md border border-border bg-raised px-4 py-2.5 text-sm text-fg">
+            <figcaption className="mb-1 text-xs font-medium text-fg-muted">{t(QUOTED_LABEL[item.kind])}</figcaption>
+            <blockquote className="whitespace-pre-wrap break-words">{item.text}</blockquote>
+          </figure>
+        ))}
+        {message.content && (
+          <div className="max-w-[85%] whitespace-pre-wrap break-words rounded-2xl rounded-br-md bg-accent px-4 py-2.5 text-[15px] leading-6 text-accent-fg shadow-sm">{message.content}</div>
+        )}
         {message.source === "import" && <span className="text-xs text-fg-muted">{t("web.chat.restored")}</span>}
+        {message.source === "telegram" && <span className="text-xs text-fg-muted">{t("web.chat.viaTelegram")}</span>}
       </li>
     );
   }
@@ -817,3 +827,11 @@ function Composer({
     </form>
   );
 }
+
+// One literal key per value, so the i18n lint sees each one.
+const QUOTED_LABEL = {
+  forward: "web.chat.quoted.forward",
+  quote: "web.chat.quoted.quote",
+  reply: "web.chat.quoted.reply",
+  voice: "web.chat.quoted.voice",
+} as const;

@@ -3,6 +3,7 @@ import "./zod-config.ts";
 
 import { z } from "zod";
 import type { ApiErrorCode } from "./errors.ts";
+import type { QuotedKind } from "./telegram.ts";
 import { isValidCalendarDate, MAX_DATE_YEAR, MIN_DATE_YEAR } from "./dates.ts";
 import { line, RECORD_ID, recordIdSchema, TASK_PRIORITIES, type TaskPriority, text } from "./productivity.ts";
 
@@ -216,6 +217,11 @@ export interface ChatMessage {
   /** Why the answer stopped, in the owner's language, when it did not complete. */
   error: { code: ApiErrorCode; message: string } | null;
   source: MessageSource;
+  /**
+   * Text by someone else the owner sent along (a forwarded message, a quote,
+   * step 14): shown as a quote, and in the prompt only as <data>.
+   */
+  quoted?: { kind: QuotedKind; text: string }[];
   /** The answer came from the fallback model: the chosen one failed before answering. */
   fallback?: true;
   createdAt: string;

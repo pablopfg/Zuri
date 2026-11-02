@@ -328,7 +328,8 @@ describe("linking the owner's account", () => {
     await deliver(update(startCode, id(), "QUALQUER1"));
     expect(sent()[1]?.body.text).toContain("já está conectada");
     await deliver(update(ownerText, id()));
-    expect(sent()[2]?.body.text).toContain("Fale comigo pelo app");
+    // The conversation starts off (step 14): the bot says so and reads nothing.
+    expect(sent()[2]?.body.text).toContain("A conversa por aqui está desligada");
     await deliver(update(callbackOwner, id()));
     // A button that points nowhere (step 13): answered, nothing done.
     expect(sent("answerCallbackQuery")[0]?.body).toEqual({ callback_query_id: "4382bfdwdsb323b2d9", text: "Este aviso não existe mais." });
@@ -338,7 +339,7 @@ describe("linking the owner's account", () => {
       "link:confirm:active",
       "command:ajuda:ok",
       "command:start:already_linked",
-      "message:text:not_yet",
+      "message:text:off",
       "callback:notice:unknown",
     ]);
     expect(JSON.stringify(audit)).not.toContain("Oi, Zuri");
