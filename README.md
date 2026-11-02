@@ -290,7 +290,7 @@ Antes do primeiro `npm run dev`, crie o `apps/agent/.dev.vars` com valores locai
 | `npm run test:e2e` | Testes de interface com Playwright |
 | `npm run build` | Build da interface e do Worker |
 
-A instalação na sua conta Cloudflare será feita só pelo navegador (fork, segredos e GitHub Actions). O guia chega na etapa 24; até lá, [docs/configuracao-cloudflare.md](docs/configuracao-cloudflare.md) lista os segredos já usados, como as chaves do Turnstile.
+A instalação na sua conta Cloudflare será feita só pelo navegador (fork, segredos e GitHub Actions); o deploy automático chega na etapa 24. Os segredos, a verificação contra robôs, o primeiro acesso com o código de instalação e a recuperação do acesso já estão em [docs/configuracao-cloudflare.md](docs/configuracao-cloudflare.md).
 
 ## 🧪 Qualidade
 
@@ -327,7 +327,7 @@ scripts/        Lint de i18n, ícones, tamanho do pacote e capturas do README
 | [Interface](docs/interface.md) | Telas, acessibilidade e a identidade visual Sinal |
 | [Produtividade](docs/produtividade.md) | Tarefas, notas, projetos e lixeira |
 | [Memória](docs/memoria.md) | Estados, histórico e revisão de conflitos |
-| [Configurar a Cloudflare](docs/configuracao-cloudflare.md) | Segredos e Turnstile |
+| [Configurar a Cloudflare](docs/configuracao-cloudflare.md) | Segredos, Turnstile, primeiro acesso e recuperação |
 | [Configurar o GitHub](docs/configuracao-github.md) | Rulesets e proteção das branches |
 
 ## 🤝 Como contribuir
