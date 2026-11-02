@@ -1,10 +1,13 @@
 import { useQueryClient } from "@tanstack/react-query";
-import { PASSWORD_MIN_LENGTH, sessionStateSchema } from "@zuri/shared";
+import { PASSWORD_MIN_LENGTH, ptBRSetup, sessionStateSchema } from "@zuri/shared";
 import { type FormEvent, useState } from "react";
 import { SESSION_KEY } from "../hooks/session.tsx";
 import { api, errorMessage } from "../lib/api.ts";
-import { useI18n } from "../lib/i18n.tsx";
+import { addMessages, useI18n } from "../lib/i18n.tsx";
 import { Button, Notice, PasswordField } from "./ui.tsx";
+
+// Its texts come with the screens that lock the rest of the app (it also opens in Settings).
+addMessages(ptBRSetup);
 
 /**
  * Changes the password. The server checks the rules (length, predictable parts, leaks) and answers with a new session.

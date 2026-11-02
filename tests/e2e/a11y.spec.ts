@@ -16,6 +16,13 @@ for (const scheme of ["light", "dark"] as const) {
       await expect(page.locator("html")).toHaveClass(scheme === "dark" ? /dark/ : /^(?!.*dark).*$/);
       await expectAccessible(page, "entrar");
 
+      // The first access of an installation that has its owner: only the recovery is left.
+      await page.goto("/primeiro-acesso");
+      await expect(page.getByRole("heading", { level: 1, name: "Recuperar o acesso" })).toBeVisible();
+      await expectAccessible(page, "primeiro-acesso");
+      expect(await tooSmallControls(page)).toEqual([]);
+      await page.goto("/entrar");
+
       await signIn(page);
       await expect(page.getByRole("heading", { level: 1, name: /^(Bom dia|Boa tarde|Boa noite)/ })).toBeVisible();
       await expectAccessible(page, "inicio");
