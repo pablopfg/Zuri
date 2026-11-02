@@ -74,6 +74,7 @@ agentes podem ler as mesmas skills nos repositórios de origem, no commit fixado
 - PRs abertas para a `develop` não ficam paradas: a passada de merge confere, atualiza, resolve conflitos e mescla na ordem certa. Critérios e ordem em [docs/agente/merge-de-prs.md](docs/agente/merge-de-prs.md).
 - Antes de codar uma etapa ou um ajuste grande: skill `planejar` (`.claude/skills/planejar/SKILL.md`), que escreve o plano em `docs/planos/` no modelo `docs/planos/modelo-de-plano.md` e entrevista o dono quando falta decisão de produto, custo ou segurança.
 - Ao terminar: skills `verificar`, `revisao-qa` e `auditoria-seguranca`, nessa ordem, e corrija o que elas acharem.
+- Erro fora do escopo da PR vira issue pelo modelo `erro`, com a possível solução. Veja [docs/agente/issues.md](docs/agente/issues.md).
 
 ## Como evitar erros
 
