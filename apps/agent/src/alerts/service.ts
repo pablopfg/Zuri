@@ -29,6 +29,7 @@ import { AppError } from "../http/errors.ts";
 import { log } from "../log.ts";
 import type { StorageGuard } from "../productivity/storage.ts";
 import type { AlertChannel, SendResult } from "./channels.ts";
+import { AlertLearning } from "./learning.ts";
 
 /** Data a notice's text is written from: names and counts, never translated text. */
 export type NoticeParams = Record<string, string | number>;
@@ -45,6 +46,12 @@ export interface RaiseInput {
   dedupeKey?: string;
   dedupeMs?: number;
   origin?: NoticeOrigin;
+  /**
+   * Where the notice comes from, for the priority that learns: an automation's
+   * results learn apart ("automation:<id>"); left out, the kind is the source;
+   * null never learns.
+   */
+  source?: string | null;
 }
 
 interface NoticeRow {
@@ -61,6 +68,7 @@ interface NoticeRow {
   escalation: EscalationState | null;
   attempts: number;
   next_attempt_at: string | null;
+  learn_key?: string | null;
 }
 
 interface DeliveryRow {
@@ -89,7 +97,7 @@ const DAY = 24 * HOUR;
 export interface AlertServiceDeps {
   locale: () => Locale;
   /** The routes and limits, read when a notice goes out, so a change applies to the next one. */
-  settings: () => Pick<Settings, "alertRoutes" | "alertPerHour" | "alertPerDay">;
+  settings: () => Pick<Settings, "alertRoutes" | "alertPerHour" | "alertPerDay" | "alertLearning">;
   /** The channels this deploy has (none until step 11b). */
   channels: () => readonly AlertChannel[];
   /** Sets the object's one alarm again after an insisting notice changed its next try (rule P8). */
@@ -113,12 +121,19 @@ export interface AlertServiceDeps {
  */
 export class AlertService {
   readonly #sending = new Set<Promise<void>>();
+  readonly learning: AlertLearning;
 
   constructor(
     private readonly db: Database,
     private readonly storage: StorageGuard,
     private readonly deps: AlertServiceDeps,
-  ) {}
+  ) {
+    this.learning = new AlertLearning(db, {
+      enabled: () => deps.settings().alertLearning,
+      sourceName: (kind) => (Object.hasOwn(SOURCE_NAME, kind) ? t(deps.locale(), SOURCE_NAME[kind as keyof typeof SOURCE_NAME]) : ""),
+      ...(deps.clock ? { clock: deps.clock } : {}),
+    });
+  }
 
   private now(): number {
     return this.deps.clock?.() ?? Date.now();
@@ -133,7 +148,9 @@ export class AlertService {
     const nowMs = this.now();
     const at = iso(nowMs);
     // A security alert is always critical: nobody can lower one, not even the caller.
-    const priority: AlertPriority = input.category === "security" ? "critical" : input.priority;
+    const asked: AlertPriority = input.category === "security" ? "critical" : input.priority;
+    const learnKey = this.learning.keyOf({ kind: input.kind, category: input.category, priority: asked, source: input.source });
+    const priority = this.learning.adjust(learnKey, asked);
     const link = input.link && (NOTICE_LINKS as readonly string[]).includes(input.link) ? input.link : null;
     const body = input.body == null ? null : [...input.body].slice(0, BODY_MAX).join("");
     const row: NoticeRow = {
@@ -150,6 +167,7 @@ export class AlertService {
       escalation: null,
       attempts: 0,
       next_attempt_at: null,
+      learn_key: learnKey,
     };
     const created = this.db.transaction(() => {
       if (input.dedupeKey) {
@@ -163,7 +181,7 @@ export class AlertService {
         );
       }
       this.db.run(
-        `INSERT INTO zur_notices (id, kind, category, priority, params, body, link, origin, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO zur_notices (id, kind, category, priority, params, body, link, origin, created_at, learn_key, asked_priority) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         row.id,
         row.kind,
         row.category,
@@ -173,6 +191,8 @@ export class AlertService {
         row.link,
         row.origin,
         row.created_at,
+        learnKey,
+        learnKey === null ? null : asked,
       );
       this.prune(row.category === "security");
       return true;
@@ -438,7 +458,7 @@ export class AlertService {
     );
     const channels = Object.fromEntries(ALERT_CHANNELS.map((name) => [name, "not_configured"])) as Record<AlertChannelName, ChannelState>;
     for (const channel of this.deps.channels()) channels[channel.name] = channel.state();
-    return { deliveries: rows.map((row): AlertDelivery => ({ ...row })), channels };
+    return { deliveries: rows.map((row): AlertDelivery => ({ ...row })), channels, learned: this.learning.list() };
   }
 
   private row(id: string): NoticeRow {
@@ -502,6 +522,21 @@ export class AlertService {
 
 type Text = { title: MessageKey; body: MessageKey | null };
 
+/** The name of a kind of notice when it is the source that learned (an automation's source uses its own name). */
+const SOURCE_NAME = {
+  "automation.skipped": "notice.learning.source.automation.skipped",
+  "digest.daily": "notice.learning.source.digest.daily",
+  "watch.taskDueDay": "notice.learning.source.watch.taskDueDay",
+  "watch.taskDueHour": "notice.learning.source.watch.taskDueHour",
+  "watch.taskOverdue": "notice.learning.source.watch.taskOverdue",
+  "watch.taskStalled": "notice.learning.source.watch.taskStalled",
+  "watch.routineFailing": "notice.learning.source.watch.routineFailing",
+  "watch.aiBudget80": "notice.learning.source.watch.aiBudget80",
+  "watch.aiBudget100": "notice.learning.source.watch.aiBudget100",
+  "diagnostic.repeated": "notice.learning.source.diagnostic.repeated",
+  "diagnostic.new": "notice.learning.source.diagnostic.new",
+} as const satisfies Partial<Record<NoticeKind, MessageKey>>;
+
 /** Each kind's title and body in the catalog (null: the stored body is the text). */
 const KIND_TEXT: Record<Exclude<NoticeKind, "security">, Text> = {
   "automation.result": { title: "notice.automation.result.title", body: null },
@@ -517,6 +552,8 @@ const KIND_TEXT: Record<Exclude<NoticeKind, "security">, Text> = {
   "watch.health": { title: "notice.watch.health.title", body: "notice.watch.health.body" },
   "diagnostic.repeated": { title: "notice.diagnostic.repeated.title", body: "notice.diagnostic.repeated.body" },
   "diagnostic.new": { title: "notice.diagnostic.new.title", body: "notice.diagnostic.new.body" },
+  "alerts.lowered": { title: "notice.alerts.lowered.title", body: "notice.alerts.lowered.body" },
+  "alerts.raised": { title: "notice.alerts.raised.title", body: "notice.alerts.raised.body" },
 };
 
 /** Security alerts: what happened and what to do if it was not the owner, never where it came from (it may show on a locked screen). */

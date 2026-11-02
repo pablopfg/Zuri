@@ -1,4 +1,4 @@
-import type { AutomationKind, AutomationRunProblem, AutomationRunStatus, AutomationRunTrigger, AutomationStatus, MessageKey, ScheduleType } from "@zuri/shared";
+import type { AutomationKind, AutomationPriority, AutomationRunProblem, AutomationRunStatus, AutomationRunTrigger, AutomationStatus, MessageKey, ScheduleType } from "@zuri/shared";
 
 /** Catalog keys for the automation codes the server sends: the interface words them in the owner's language. */
 
@@ -6,6 +6,18 @@ export const KIND_LABEL: Record<AutomationKind, MessageKey> = {
   reminder: "web.automations.kind.reminder",
   task_digest: "web.automations.kind.task_digest",
   agent_prompt: "web.automations.kind.agent_prompt",
+};
+
+export const PRIORITY_LABEL: Record<AutomationPriority, MessageKey> = {
+  low: "web.automations.priority.low",
+  normal: "web.automations.priority.normal",
+  high: "web.automations.priority.high",
+};
+
+export const PRIORITY_HINT: Record<AutomationPriority, MessageKey> = {
+  low: "web.automations.priorityHint.low",
+  normal: "web.automations.priorityHint.normal",
+  high: "web.automations.priorityHint.high",
 };
 
 export const KIND_HINT: Record<AutomationKind, MessageKey> = {

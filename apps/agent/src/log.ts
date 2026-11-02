@@ -85,7 +85,7 @@ const METHOD = /^[A-Z]{3,7}$/;
  */
 export const ROUTE_WORDS: ReadonlySet<string> = new Set([
   "api", "activity", "actions", "ai", "alerts", "approve", "auth", "automations", "cancel", "chat", "check", "client", "code", "confirm", "conversations", "correct", "devices", "diagnostics", "disable",
-  "empty", "enable", "health", "heartbeat", "history", "login", "login-options", "logout", "memories", "mfa", "mute",
+  "empty", "enable", "health", "heartbeat", "history", "learning", "login", "login-options", "logout", "memories", "mfa", "mute",
   "notes", "notices", "read", "resolve", "options", "owner", "passkey", "passkeys", "password", "plans", "projects", "push", "recover", "recovery-codes", "request", "restore", "reviews", "run", "runs",
   "session", "settings", "setup", "status", "tasks", "telegram", "test", "transcribe", "trash", "usage", "webhook",
 ]);
