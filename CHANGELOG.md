@@ -19,6 +19,36 @@ funciona: [docs/agente/versionamento.md](docs/agente/versionamento.md).
 
 O que já entrou na `develop` e ainda não ganhou número fica em [`changelog/nao-lancado/`](changelog/nao-lancado/) por alguns minutos, até o workflow de versão escrever a seção.
 
+## [0.20.0] - 2026-11-02
+
+Mesclada às 15:49 (UTC-3) · commit [`e7546bf`](https://github.com/pablopfg/Zuri/commit/e7546bf7caafc8b0607fc2397b84f31f53176d1e) · PR [#89](https://github.com/pablopfg/Zuri/pull/89) · Adiciona os comandos administrativos do bot e a gramática de datas
+
+### Adicionado
+
+- Comandos rápidos no bot do Telegram, sem gastar IA: `/hoje`, `/tarefas`,
+  `/nova`, `/feito`, `/lembrar`, `/nota`, `/buscar`, `/memoria`, `/rotinas`,
+  `/avisos`, `/uso`, `/status` e `/backup`. O menu do bot e o `/ajuda`
+  mostram todos.
+- `/nova` e `/lembrar` entendem datas como "amanhã 9h", "sexta-feira",
+  "dia 5", "5/11", "daqui a 2 horas" e "semana que vem", respondem com a data
+  entendida e o botão **Corrigir data**. Quando a data é ambígua, a Zuri
+  pergunta em vez de adivinhar.
+- `/tarefas` numera até 10 tarefas abertas, com **Feito** e **Adiar** em cada
+  uma; `/feito 2` conclui a segunda e oferece **Desfazer** por 5 minutos.
+  `/rotinas` tem **Pausar**.
+- Foto ou documento com legenda vira nota, com uma linha dizendo o tipo e o
+  tamanho do anexo. O arquivo não é baixado nem guardado.
+- O aviso de leitura travada tem o botão **Destravar**.
+
+### Segurança
+
+- Os comandos que mostram ou mudam conteúdo pedem a leitura destravada,
+  inclusive os botões das listas; `/uso`, `/status` e `/backup` nunca pedem, e
+  `/avisos` travado mostra só a hora, a categoria e a prioridade.
+- O que você guardou volta ao chat com links, comandos e menções desarmados.
+  Os botões levam só um código aleatório, valem uma vez e vencem (1 hora nas
+  listas, 5 minutos no Desfazer).
+
 ## [0.19.0] - 2026-11-02
 
 Mesclada às 14:58 (UTC-3) · commit [`0d390c6`](https://github.com/pablopfg/Zuri/commit/0d390c6a6fcb90b2e8925441a90cc5c72cb74707) · PR [#84](https://github.com/pablopfg/Zuri/pull/84) · Adiciona a trava de leitura com /destravar por passkey ou e-mail
@@ -1508,7 +1538,8 @@ Mesclada às 22:15 (UTC-3) · commit [`360a79e`](https://github.com/pablopfg/Zur
   `npm audit`), CodeQL, Dependabot e rulesets para a `develop` e a `main`.
 - `LICENSE` (MIT), `NOTICE.md`, `SECURITY.md` e `CONTRIBUTING.md`.
 
-[Não lançado]: https://github.com/pablopfg/Zuri/compare/v0.19.0...develop
+[Não lançado]: https://github.com/pablopfg/Zuri/compare/v0.20.0...develop
+[0.20.0]: https://github.com/pablopfg/Zuri/releases/tag/v0.20.0
 [0.19.0]: https://github.com/pablopfg/Zuri/releases/tag/v0.19.0
 [0.18.4]: https://github.com/pablopfg/Zuri/releases/tag/v0.18.4
 [0.18.3]: https://github.com/pablopfg/Zuri/releases/tag/v0.18.3
