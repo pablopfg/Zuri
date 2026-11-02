@@ -182,8 +182,10 @@ Cloudflare, a recomendação é outra: **documentar o caminho (este arquivo) e
 adotar três cuidados baratos nas etapas que faltam.**
 
 1. **Etapa 23 (backup) sai portável.** A exportação JSON leva tudo o que o
-   dono tem (inclusive automações, configurações e 2FA cifrado), tem versão e
-   um teste que importa o arquivo num banco vazio. É o que garante a saída.
+   contrato do backup permite (dados e configurações não sensíveis; nunca
+   credenciais), tem versão e um teste que importa o arquivo num banco vazio.
+   Decidido em 02/11/2026: cópia diária cifrada no R2 (7 cópias) e cópia
+   mensal pelo Telegram, fora da Cloudflare. É o que garante a saída.
 2. **Código da Cloudflare fica nas pontas.** Binding, `request.cf`, `ctx` e
    `this.schedule` só aparecem nos módulos de entrada (`index.ts`,
    `zuri-agent.ts`, `database.ts`, `ai/workers-ai.ts` e o agendador da etapa
