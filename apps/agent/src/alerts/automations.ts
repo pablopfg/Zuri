@@ -18,8 +18,10 @@ export function noticeForRun(alerts: AlertService, diagnostics: DiagnosticsServi
     alerts.raise({
       kind: "automation.result",
       category: CATEGORY[automation.kind],
-      priority: "normal",
+      priority: automation.priority,
       params: { name: automation.name },
+      // Each automation learns apart: one routine ignored doesn't lower another.
+      source: `automation:${automation.id}`,
       body: outcome.result,
       link: automation.kind === "task_digest" ? "/tarefas" : null,
     });
