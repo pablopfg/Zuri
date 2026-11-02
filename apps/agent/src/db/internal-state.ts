@@ -25,7 +25,9 @@ export type InternalKey =
   | "setup_alerted_at"
   | "setup_second_step_required"
   // The one alarm of the automations: "<UTC ISO>|<schedule id>" (step 10).
-  | "automation_alarm";
+  | "automation_alarm"
+  // The UTC day Cloudflare said the account's free AI allocation was spent (the AI breaker).
+  | "ai_quota_exhausted_day";
 
 export class InternalState {
   constructor(private readonly db: Database) {}

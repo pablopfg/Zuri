@@ -14,6 +14,7 @@ export const ptBRAi = {
   "error.aiBusy": "A IA está ocupada agora. Tente de novo em instantes.",
   "error.aiModelUnavailable": "O modelo de IA escolhido não está disponível. Escolha outro em Configurações > IA.",
   "error.aiUnavailable": "A IA não conseguiu responder. Tente de novo.",
+  "error.aiRequestRejected": "A IA não aceitou este pedido. Tente uma mensagem mais curta ou com outras palavras.",
   "ai.mock.reply":
     "(IA simulada) Você disse: “{message}”. Neste ambiente as respostas são de teste; tarefas, notas e memórias funcionam do mesmo jeito.",
   "ai.mock.toolDone": "(IA simulada) Usei a ferramenta {tool}.",
@@ -56,6 +57,9 @@ export const ptBRAi = {
   "web.ai.model": "Modelo de conversa",
   "web.ai.modelHint": "Cerca de {neurons} Neurons por resposta típica; {turns} respostas cabem no teto do dia.",
   "web.ai.modelDefault": "{label} (padrão)",
+  "web.ai.fallbackModel": "Modelo reserva",
+  "web.ai.fallbackModelHint": "Responde no lugar do modelo de conversa quando ele está ocupado ou fora do ar, antes de começar a resposta. Também é grátis e usa o mesmo teto do dia.",
+  "web.ai.fallbackNone": "Nenhum (só o modelo de conversa)",
   "web.ai.requestsPerDay": "Pedidos por dia",
   "web.ai.requestsPerDayHint": "Cada chamada ao modelo conta um. Uma resposta que usa ferramentas pode contar mais de um. De {min} a {max}.",
   "web.ai.neuronsPerDay": "Teto de Neurons por dia",

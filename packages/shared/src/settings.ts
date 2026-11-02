@@ -3,7 +3,7 @@ import "./zod-config.ts";
 
 import { z } from "zod";
 import { DEFAULT_LOCALE, LOCALES } from "../i18n/index.ts";
-import { AI_LIMIT_RANGES, CHAT_MODEL_IDS, DEFAULT_CHAT_MODEL } from "./ai-limits.ts";
+import { AI_LIMIT_RANGES, CHAT_MODEL_IDS, DEFAULT_CHAT_MODEL, DEFAULT_FALLBACK_MODEL, FALLBACK_MODEL_IDS } from "./ai-limits.ts";
 
 import { DEFAULT_TIME_ZONE, isTimeZone } from "./time-zone.ts";
 
@@ -62,6 +62,8 @@ export const settingsSchema = /* @__PURE__ */ z
     memoryConflictReview: z.boolean(),
     /** Step 8: the chat model and the daily AI limits, counted before every call. */
     aiModel: z.enum(CHAT_MODEL_IDS),
+    /** The model that answers when aiModel fails before answering; "none", or the same model, turns it off. */
+    aiFallbackModel: z.enum(FALLBACK_MODEL_IDS),
     aiRequestsPerDay: range(AI_LIMIT_RANGES.aiRequestsPerDay),
     aiNeuronsPerDay: range(AI_LIMIT_RANGES.aiNeuronsPerDay),
     aiMaxOutputTokens: range(AI_LIMIT_RANGES.aiMaxOutputTokens),
@@ -92,6 +94,7 @@ export const DEFAULT_SETTINGS: Settings = /* @__PURE__ */ Object.freeze({
   sessionMaxHours: SESSION_TIMEOUT_RANGES.sessionMaxHours.default,
   memoryConflictReview: true,
   aiModel: DEFAULT_CHAT_MODEL,
+  aiFallbackModel: DEFAULT_FALLBACK_MODEL,
   aiRequestsPerDay: AI_LIMIT_RANGES.aiRequestsPerDay.default,
   aiNeuronsPerDay: AI_LIMIT_RANGES.aiNeuronsPerDay.default,
   aiMaxOutputTokens: AI_LIMIT_RANGES.aiMaxOutputTokens.default,

@@ -2,6 +2,7 @@ import { AGENT_INSTANCE_NAME, LIST_LIMIT_DEFAULT } from "@zuri/shared";
 import { runInDurableObject } from "cloudflare:test";
 import { beforeAll, describe, expect, it } from "vitest";
 import type { ZuriAgent } from "../src/agent/zuri-agent.ts";
+import { ProviderChain } from "../src/ai/chain.ts";
 import { MeteredAI } from "../src/ai/metered.ts";
 import { MockAIProvider } from "../src/ai/mock.ts";
 import { MockTranscriber } from "../src/ai/transcription.ts";
@@ -312,6 +313,34 @@ describe("the Free plan budget of each route", () => {
     expect(spent.read).toBeLessThanOrEqual(8);
     expect(spent.written).toBeLessThanOrEqual(4);
   });
+  it("AI fallback: a switched call is two counted calls and a few rows; an open breaker skips the chosen model with no call at all (P1, P7, P9)", async () => {
+    const spent = await runInDurableObject(owner(), async (agent: ZuriAgent) => {
+      const { db, usage } = agent.store;
+      const breaker = agent.breaker();
+      const chosen = new MockAIProvider(undefined, { model: "budget-chosen", failOnRequest: true });
+      const fallback = new MockAIProvider(undefined, { model: "budget-fallback" });
+      const ai = new MeteredAI(new ProviderChain(chosen, fallback, breaker), usage, () => agent.aiLimits());
+      const requests = () => db.one<{ n: number }>(`SELECT ai_requests AS n FROM zur_usage_daily ORDER BY day DESC LIMIT 1`)?.n ?? 0;
+      const ask = { system: "s", messages: [{ role: "user" as const, content: "fail oi" }], maxOutputTokens: 100 };
+      const first = { ...db.usage };
+      const startRequests = requests();
+      for await (const _ of ai.stream(ask));
+      const switched = { read: db.usage.rowsRead - first.rowsRead, written: db.usage.rowsWritten - first.rowsWritten, requests: requests() - startRequests };
+      // Two more failures open the chosen model's breaker; then the fallback answers alone.
+      for await (const _ of ai.stream(ask));
+      for await (const _ of ai.stream(ask));
+      const before = requests();
+      for await (const _ of ai.stream(ask));
+      return { switched, skipped: requests() - before };
+    });
+    // Each try is reserved and settled like any call (P7): twice the single call's rows at most.
+    expect(spent.switched.requests).toBe(2);
+    expect(spent.switched.read).toBeLessThanOrEqual(16);
+    expect(spent.switched.written).toBeLessThanOrEqual(8);
+    // No health ping: with the breaker open only the fallback is called (P9, one subrequest).
+    expect(spent.skipped).toBe(1);
+  });
+
   it("chat: the list and a long conversation read about one page; a turn reads a bounded window, whatever the history", async () => {
     const id = await runInDurableObject(owner(), (agent: ZuriAgent) => {
       agent.testProvider = new MockAIProvider();

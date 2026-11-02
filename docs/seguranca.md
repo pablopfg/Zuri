@@ -451,6 +451,39 @@ garante que ele é lido como dado. Trocar o nome não pede senha recente; a
 etapa que levar o nome às execuções agendadas reavalia isso. Texto do
 servidor que mostrar o nome (Telegram com HTML, e-mail) escapa o valor ali.
 
+## Contrato do prompt e teste canário
+
+Plano D1 e D2 de [troca de provedores e proteção de dados](planos/troca-de-provedores-e-protecao-de-dados.md).
+
+- **Contrato** (`apps/agent/src/agent/prompt-contract.ts`). O prompt de
+  sistema só se monta por `composePrompt`, seção por seção. Cada seção tem uma
+  origem de uma lista fechada (`PROMPT_ORIGINS`), e a origem define a classe:
+  `instruction` (texto deste código: regras, relógio, nome da agente),
+  `personal` (memórias, resumo, nome da rotina) e `sensitive` (reservada para
+  o que a etapa 21 vai manter longe de provedor externo). Seção de conteúdo
+  com `<` ou `>` fora das suas linhas `<data>` derruba a vez com
+  `INTERNAL_ERROR` em vez de chegar ao modelo.
+- **O que nunca entra** (`NEVER_IN_PROMPT`): e-mail do dono, senha e hashes,
+  segredos e tokens, ids do Telegram, IP, cidade e rede dos Acessos, códigos
+  de 2FA e de recuperação, cookies e ids de sessão, credenciais de MCP.
+  Nenhuma origem lê isso e nenhuma ferramenta devolve.
+- **Última rede.** `MeteredAI` recebe os segredos do deploy (`SESSION_SECRET`,
+  `PASSWORD_PEPPER`, senha e hash do dono, `SETUP_CODE`, segredo do
+  Turnstile, token do bot) e troca qualquer um que apareça no prompt, nas
+  mensagens ou num resultado de ferramenta por `[removido]`, inclusive na
+  forma escapada em JSON. O log registra `prompt_secret_removed` sem o valor.
+  É um bug a corrigir, nunca o caminho normal.
+- **Teste canário** (`apps/agent/test/prompt-canary.test.ts`). Grava valores
+  marcados em todo lugar sensível (login, sessão e cookie do aparelho,
+  Acessos com rede, cidade, região e navegador, segredo do 2FA e códigos de
+  recuperação, e-mail e código de instalação guardados, segredos do deploy),
+  conversa com a IA simulada por todas as ferramentas de leitura e algumas de
+  escrita, roda uma rotina, e confere que nenhum valor aparece em nenhum
+  prompt nem resultado de ferramenta. Um marcador visível no conteúdo do dono
+  prova que o gravador vê o que as ferramentas leem. Cada etapa que cria um
+  lugar sensível (ids do Telegram na 12, credenciais de MCP na 18) acrescenta
+  o seu canário.
+
 ## Ferramentas do agente e injeção de prompt
 
 A partir da etapa 9 o agente usa ferramentas na conversa

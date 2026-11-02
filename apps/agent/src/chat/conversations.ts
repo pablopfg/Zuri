@@ -40,10 +40,12 @@ export interface MessageRow {
   error_code: string | null;
   error_key: string | null;
   source: MessageSource;
+  /** 1 when the fallback model gave the answer (migration 10). */
+  fallback: number;
   created_at: string;
 }
 
-const MESSAGE_COLUMNS = `rowid AS seq, id, conversation_id, role, content, tools, status, error_code, error_key, source, created_at`;
+const MESSAGE_COLUMNS = `rowid AS seq, id, conversation_id, role, content, tools, status, error_code, error_key, source, fallback, created_at`;
 
 /** Longest stored summary: it goes into every prompt of the conversation. */
 export const SUMMARY_MAX = 2_000;
@@ -181,6 +183,8 @@ export class ConversationRepository {
     error?: { code: ApiErrorCode; key: MessageKey } | null;
     source?: MessageSource;
     id?: string;
+    /** The fallback model gave this answer. */
+    fallback?: boolean;
   }): ChatMessage {
     // A conversation deleted while its answer was being written takes no more messages (no orphan rows).
     this.row(input.conversationId);
@@ -189,8 +193,8 @@ export class ConversationRepository {
     const id = input.id ?? crypto.randomUUID();
     this.db.transaction(() => {
       this.db.run(
-        `INSERT INTO zur_messages (id, conversation_id, role, content, tools, status, error_code, error_key, source, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO zur_messages (id, conversation_id, role, content, tools, status, error_code, error_key, source, fallback, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         id,
         input.conversationId,
         input.role,
@@ -200,6 +204,7 @@ export class ConversationRepository {
         input.error?.code ?? null,
         input.error?.key ?? null,
         input.source ?? "app",
+        input.fallback === true && input.role === "assistant" ? 1 : 0,
         at,
       );
       this.db.run(`UPDATE zur_conversations SET updated_at = ? WHERE id = ?`, at, input.conversationId);
@@ -268,6 +273,7 @@ export class ConversationRepository {
       status: row.status,
       error: row.error_code && key ? { code: row.error_code as ApiErrorCode, message: t(this.locale(), key) } : null,
       source: row.source,
+      ...(row.fallback === 1 ? { fallback: true as const } : {}),
       createdAt: row.created_at,
     };
   }

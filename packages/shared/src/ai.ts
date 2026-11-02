@@ -3,9 +3,29 @@ import "./zod-config.ts";
 
 // The interface parses the usage report with this one: Zod Mini keeps the classic API out of its bundle.
 import { z as mini } from "zod/mini";
-import { AI_LIMIT_RANGES, CHAT_MODEL_IDS, type ChatModel, DEFAULT_CHAT_MODEL, FREE_NEURONS_PER_DAY } from "./ai-limits.ts";
+import {
+  AI_LIMIT_RANGES,
+  CHAT_MODEL_IDS,
+  type ChatModel,
+  DEFAULT_CHAT_MODEL,
+  DEFAULT_FALLBACK_MODEL,
+  FALLBACK_MODEL_IDS,
+  type FallbackModel,
+  FREE_NEURONS_PER_DAY,
+  NO_FALLBACK_MODEL,
+} from "./ai-limits.ts";
 
-export { AI_LIMIT_RANGES, CHAT_MODEL_IDS, type ChatModel, DEFAULT_CHAT_MODEL, FREE_NEURONS_PER_DAY };
+export {
+  AI_LIMIT_RANGES,
+  CHAT_MODEL_IDS,
+  type ChatModel,
+  DEFAULT_CHAT_MODEL,
+  DEFAULT_FALLBACK_MODEL,
+  FALLBACK_MODEL_IDS,
+  type FallbackModel,
+  FREE_NEURONS_PER_DAY,
+  NO_FALLBACK_MODEL,
+};
 
 /**
  * Workers AI prices, copied from the official pricing page on the date below
