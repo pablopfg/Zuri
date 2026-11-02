@@ -187,6 +187,55 @@ test("rename and delete a conversation", async ({ page }) => {
   await expect(page.getByRole("complementary", { name: "Conversas" }).getByText(`Renomeada ${word}`)).toHaveCount(0);
 });
 
+test("a rename right after a turn stays when an older refresh of the conversation lands later", async ({ page }) => {
+  // Issue #72: on a busy machine the refresh the turn starts answers after the rename,
+  // with the old title. Every read of one conversation here answers 1.5 s late, so the
+  // race happens on every run instead of once in a while.
+  const late: Promise<void>[] = [];
+  // A read still held when the rename leaves also waits for its answer, so the old title
+  // lands after the new one however slow the machine is.
+  let renamed: Promise<unknown> | null = null;
+  page.on("request", (request) => {
+    if (request.method() === "PATCH" && /\/api\/conversations\//.test(request.url())) renamed ??= request.response();
+  });
+  await page.route(/\/api\/conversations\/[0-9a-f-]{36}$/, (route) => {
+    if (route.request().method() !== "GET") return route.fallback();
+    const answer = (async () => {
+      const response = await route.fetch();
+      await new Promise((resolve) => setTimeout(resolve, 1_500));
+      await renamed;
+      // The page may have given up on this read (it was cancelled): nothing left to answer.
+      await route.fulfill({ response }).catch(() => undefined);
+    })();
+    late.push(answer);
+    return answer;
+  });
+  const word = tag();
+  await openChat(page);
+  // A slow answer (a word every 200 ms, about 4 s here) keeps the turn open while the page
+  // loads the new conversation, as on a busy machine. The wait below is that answer plus
+  // the late reads, not slack for a failure.
+  const box = page.getByRole("textbox", { name: "Mensagem" });
+  await box.fill(`slow ${word}`);
+  await box.press("Enter");
+  await expect(log(page).getByText("(IA simulada)", { exact: false })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Parar" })).toHaveCount(0, { timeout: 15_000 });
+  await page.getByRole("button", { name: "Renomear" }).click();
+  const rename = page.getByRole("dialog", { name: "Renomear" });
+  await rename.getByLabel("Nome da conversa").fill(`Renomeada ${word}`);
+  await rename.getByRole("button", { name: "Salvar" }).click();
+  const heading = page.getByRole("heading", { level: 1, name: `Renomeada ${word}` });
+  await expect(heading).toBeVisible();
+
+  // The reads held so far (the stale one among them) have answered or were dropped, and
+  // the page drew what it got. Reads after the rename carry the new title anyway.
+  await Promise.all(late);
+  await page.evaluate(() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+  await expect(heading).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: new RegExp(`^slow ${word}`) })).toHaveCount(0);
+  await page.unrouteAll({ behavior: "ignoreErrors" });
+});
+
 test("a message over 8,000 characters can't be sent; the counter says why", async ({ page }) => {
   await openChat(page);
   const box = page.getByRole("textbox", { name: "Mensagem" });

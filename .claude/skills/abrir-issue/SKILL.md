@@ -13,4 +13,4 @@ Procedimento completo: `docs/agente/issues.md`.
 4. **Escreva o corpo** com os títulos de `.github/ISSUE_TEMPLATE/erro.yml`, nesta ordem: `### Onde aconteceu`, `### Contexto`, `### Passos para reproduzir`, `### Esperado`, `### Obtido`, `### Código do erro`, `### Possível solução`, `### Impacto`. Título `[erro] <o que quebra, em poucas palavras>`.
 5. **Revise antes de enviar**: nada de domínio, e-mail, ids, IP, tokens, chaves ou texto do dono (o repositório é público). Passe o texto pela `humanizer:humanizer`.
 6. **Abra** com a ferramenta `issue_write` do GitHub (ou `gh issue create`), rótulo `erro`.
-7. **Registre** o número da issue na descrição da sua PR ou em `progresso.md`, se afeta uma etapa. Quem corrigir escreve `Closes #N` na PR.
+7. **Registre** o número da issue na descrição da sua PR ou em `progresso.md`, se afeta uma etapa. Quem corrigir escreve `Closes #N` (uma linha por issue) na seção "Issues" da PR, e o GitHub fecha a issue no merge na `develop`. Detalhes em "Fechamento automático" de `docs/agente/issues.md`.
