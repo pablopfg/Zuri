@@ -9,6 +9,11 @@ o [SemVer](https://semver.org/lang/pt-BR/). Cada PR escreve a sua entrada em
 
 ### Adicionado
 
+- Avaliação de como instalar o Zuri numa VPS e sair da Cloudflare se for
+  preciso, em `docs/planos/portabilidade-vps.md`: o que depende da Cloudflare,
+  o equivalente de cada peça, dois caminhos de migração, custo estimado de uma
+  VPS (⚠ nada contratado) e três cuidados para as próximas etapas, entre eles
+  um backup que dê para restaurar fora da Cloudflare.
 - Planejado para o bot do Telegram (etapa 14): quando um áudio passar do
   limite de 5 min e 5 MB, a Zuri avisa, diz quanto deve gastar da cota do dia
   e pergunta se processa mesmo assim, em vez de recusar. Acima do que dá para
