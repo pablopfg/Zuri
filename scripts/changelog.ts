@@ -5,6 +5,7 @@
 // (docs/agente/versionamento.md).
 //
 //   node scripts/changelog.ts   checks the fragments and prints how each one bumps the version
+import { execFileSync } from "node:child_process";
 import { lstatSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -110,9 +111,19 @@ export function fragmentProblems(fragments: Fragment[]): string[] {
   });
 }
 
+/** An etapa branch (feat/etapa-NN-…) must ship a fragment marked minor, or its merge would only bump the patch. */
+export function branchProblems(branch: string, fragments: Fragment[]): string[] {
+  if (!branch.startsWith("feat/etapa-")) return [];
+  return fragments.some((f) => fragmentBump(f.text) === "minor")
+    ? []
+    : [`${branch} concludes an etapa: start its file in ${FRAGMENT_DIR}/ with "<!-- versao: minor -->"`];
+}
+
+// In CI (npm run lint) GITHUB_HEAD_REF names the pull request's branch; locally, the current branch.
 if (import.meta.main) {
   const fragments = readFragments(join(import.meta.dirname, ".."));
-  const problems = fragmentProblems(fragments);
+  const branch = process.env.GITHUB_HEAD_REF || execFileSync("git", ["branch", "--show-current"], { encoding: "utf8" }).trim();
+  const problems = [...fragmentProblems(fragments), ...branchProblems(branch, fragments)];
   if (problems.length > 0) {
     for (const problem of problems) console.error(problem);
     process.exit(1);

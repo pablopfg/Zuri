@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { APP_VERSION } from "../../packages/shared/src/version.ts";
 import { afterEach, describe, expect, it } from "vitest";
-import { parseLsRemoteTags, pullRequestBody, pullRequestTitle, releaseWork } from "../../scripts/publicar-versao.ts";
+import { isSameRelease, parseLsRemoteTags, pullRequestBody, pullRequestTitle, releaseWork } from "../../scripts/publicar-versao.ts";
 import {
   applyPlan,
   bumpVersion,
@@ -24,6 +24,7 @@ import {
   renderChangelog,
   renderVersionFile,
   type Version,
+  versionsByCommit,
 } from "../../scripts/versao.ts";
 import { fragmentProblems, readFragments } from "../../scripts/changelog.ts";
 import { loadWorkflow, readText } from "./helpers.ts";
@@ -106,6 +107,10 @@ describe("localTime", () => {
     expect(localTime("2026-10-31T00:15:11-03:00")).toEqual({ date: "2026-10-31", time: "00:15", offset: "UTC-3" });
   });
 
+  it("reads the offset from the zone, so daylight saving time shows as UTC-2", () => {
+    expect(localTime("2018-12-01T12:00:00Z")).toEqual({ date: "2018-12-01", time: "10:00", offset: "UTC-2" });
+  });
+
   it("refuses a date that is not one", () => expect(() => localTime("ontem")).toThrow(/not a date/));
 });
 
@@ -141,6 +146,21 @@ describe("planVersions", () => {
     const plan = planVersions("0.17.0", [merge({ subject: "chore(release): versão 0.17.1 (#90)" }), merge({ commit: sha("4") })]);
     expect(plan).toHaveLength(1);
     expect(plan[0]).toMatchObject({ version: "0.17.1", commit: sha("4"), pr: 73, title: "Envia avisos com botões", time: "09:20" });
+  });
+
+  it("keeps the number of a merge that already has a tag, even if its fragment changed later", () => {
+    // A was tagged 0.17.1 as a patch; a later fix added the minor marker to its fragment.
+    const tagged = new Map([[sha("1"), "0.17.1"], [sha("2"), "0.18.0"]]);
+    const plan = planVersions(
+      "0.17.0",
+      [merge({ commit: sha("1"), fragments: [minor] }), merge({ commit: sha("2"), fragments: [minor] }), merge({ commit: sha("3") })],
+      tagged,
+    );
+    expect(plan.map((v) => v.version)).toEqual(["0.17.1", "0.18.0", "0.18.1"]);
+  });
+
+  it("stops when a tag would make the versions go backwards", () => {
+    expect(() => planVersions("0.17.0", [merge({ commit: sha("1") })], new Map([[sha("1"), "0.16.9"]]))).toThrow(/not after 0\.17\.0/);
   });
 
   it("joins the fragments of one merge in the fixed group order", () => {
@@ -191,6 +211,22 @@ describe("release notes", () => {
     expect(notes).toMatch(/^Mesclada às 09:20 \(UTC-3\)/);
     expect(notes).toContain("### Adicionado\n\n- Avisos.");
     expect(notes).toContain("blob/develop/CHANGELOG.md");
+  });
+});
+
+describe("versionsByCommit", () => {
+  it("keeps the newest vX.Y.Z tag of each commit and ignores other names", () => {
+    const tags = new Map([
+      ["v0.1.0", sha("a")],
+      ["v0.1.1", sha("a")],
+      ["v0.2.0", sha("b")],
+      ["release-1", sha("c")],
+      ["v1.0", sha("d")],
+    ]);
+    expect([...versionsByCommit(tags)]).toEqual([
+      [sha("a"), "0.1.1"],
+      [sha("b"), "0.2.0"],
+    ]);
   });
 });
 
@@ -322,6 +358,45 @@ describe("computePlan and applyPlan on a real repository", () => {
     write(dir, "changelog/nao-lancado/ajuste.md", "### Corrigido\n\n- Ajuste.\n");
     const fourth = commit(dir, "fix: ajuste (#10)", "2026-10-31T13:00:00Z");
     expect(computePlan(dir).pending.map((v) => [v.version, v.commit])).toEqual([["0.1.2", fourth]]);
+  });
+
+  it("freezes a tagged version and reads its fragment as it was merged", () => {
+    const dir = mkdtempSync(join(tmpdir(), "versao-"));
+    dirs.push(dir);
+    git(dir, "init", "-q", "-b", "develop");
+    write(dir, "CHANGELOG.md", renderChangelog({ intro: "I.", versions: [] }));
+    write(dir, "changelog/nao-lancado/a.md", "### Corrigido\n\n- Antes.\n");
+    const a = commit(dir, "fix: a (#2)", "2026-10-30T22:15:05-03:00");
+    write(dir, "changelog/nao-lancado/a.md", "<!-- versao: minor -->\n### Corrigido\n\n- Depois.\n");
+    const c = commit(dir, "fix: c (#3)", "2026-10-30T23:15:05-03:00");
+    const plan = computePlan(dir, undefined, "HEAD", new Map([["v0.0.1", a]]));
+    expect(plan.pending.map((v) => [v.version, v.commit])).toEqual([
+      ["0.0.1", a],
+      ["0.0.2", c],
+    ]);
+    expect(plan.pending[0]?.body).toBe("### Corrigido\n\n- Antes.");
+  });
+
+  it("tells a release branch that already holds the same result from one that changed", () => {
+    const dir = mkdtempSync(join(tmpdir(), "versao-"));
+    dirs.push(dir);
+    git(dir, "init", "-q", "-b", "develop");
+    write(dir, "a.txt", "a\n");
+    const base = commit(dir, "base", "2026-10-30T22:15:05-03:00");
+    write(dir, "CHANGELOG.md", "x\n");
+    const first = commit(dir, "chore(release): versão 0.0.1", "2026-10-30T22:16:00-03:00");
+    git(dir, "reset", "-q", "--hard", base);
+    write(dir, "CHANGELOG.md", "x\n");
+    const again = commit(dir, "chore(release): versão 0.0.1", "2026-10-30T23:16:00-03:00");
+    const run = (args: string[]) => git(dir, ...args);
+    expect(again).not.toBe(first);
+    expect(isSameRelease(run, first, base, again)).toBe(true);
+    git(dir, "reset", "-q", "--hard", base);
+    write(dir, "CHANGELOG.md", "y\n");
+    const changed = commit(dir, "chore(release): versão 0.0.1", "2026-10-30T23:17:00-03:00");
+    expect(isSameRelease(run, first, base, changed)).toBe(false);
+    expect(isSameRelease(run, first, changed, again)).toBe(false);
+    expect(isSameRelease(run, base, base, again)).toBe(false);
   });
 
   it("stops when the newest section names a commit that is not on the branch", () => {

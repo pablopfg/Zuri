@@ -198,14 +198,21 @@ export function mergeBody(merge: Merge): string {
   return `### Alterado\n\n- Sem mudança visível: ${title.charAt(0).toLowerCase()}${title.slice(1)}.`;
 }
 
-/** Numbers the merges after `last`, oldest first. Returns them oldest first too. */
-export function planVersions(last: string, merges: Merge[]): Version[] {
+/**
+ * Numbers the merges after `last`, oldest first. Returns them oldest first too.
+ * A merge that already has a tag (`tagged`, by commit) keeps that number: a
+ * version is public once its tag exists, and a later edit to a fragment never
+ * renumbers it. The next merges count on from it.
+ */
+export function planVersions(last: string, merges: Merge[], tagged: ReadonlyMap<string, string> = new Map()): Version[] {
   let current = last;
   return merges
     .filter((merge) => !RELEASE_SUBJECT.test(merge.subject))
     .map((merge) => {
       const bump: Bump = merge.fragments.some((f) => fragmentBump(f.text) === "minor") ? "minor" : "patch";
-      current = bumpVersion(current, bump);
+      const frozen = tagged.get(merge.commit);
+      if (frozen && compareVersions(frozen, current) <= 0) throw new Error(`tag v${frozen} of ${merge.commit.slice(0, 7)} is not after ${current}`);
+      current = frozen ?? bumpVersion(current, bump);
       return {
         version: current,
         ...localTime(merge.committedAt),
@@ -245,7 +252,7 @@ export function gitIn(root: string): Git {
 }
 
 /** Merges on the first-parent line of `ref` after `since` (or all of them), oldest first, with the fragments each added. */
-export function mergesSince(git: Git, since: string | null, ref = "HEAD"): Merge[] {
+export function mergesSince(git: Git, since: string | null, ref = "HEAD", tagged: ReadonlyMap<string, string> = new Map()): Merge[] {
   const range = since ? `${since}..${ref}` : ref;
   const out = git("log", "--first-parent", "--reverse", "--format=%H%x09%cI%x09%s", range).trim();
   if (!out) return [];
@@ -255,8 +262,9 @@ export function mergesSince(git: Git, since: string | null, ref = "HEAD"): Merge
       .split("\n")
       .filter((path) => path.endsWith(".md"));
     const fragments = [...new Set(names)].map((path) => {
-      // The text on the branch now wins: a later fix to the file is part of the same entry.
-      const at = git("ls-tree", ref, "--", path).trim() ? ref : commit;
+      // Until the version is tagged, the text on the branch now wins (a later fix is part of the same entry);
+      // once tagged, the text of the merge itself, the same as the notes of its pre-release.
+      const at = !tagged.has(commit) && git("ls-tree", ref, "--", path).trim() ? ref : commit;
       // Read from git, never from disk, and only regular files: a symlink would pull a file of the runner into public notes.
       const mode = git("ls-tree", at, "--", path).split(/\s/, 1)[0];
       if (mode !== "100644" && mode !== "100755") throw new Error(`${path}: only regular files can be changelog fragments`);
@@ -273,7 +281,19 @@ export interface Plan {
   consumed: string[];
 }
 
-export function computePlan(root: string, git: Git = gitIn(root), ref = "HEAD"): Plan {
+/** The newest version tag of each commit, from tags as `name → commit` (only vX.Y.Z names count). */
+export function versionsByCommit(tags: ReadonlyMap<string, string>): Map<string, string> {
+  const out = new Map<string, string>();
+  for (const [name, commit] of tags) {
+    const version = /^v(\d+\.\d+\.\d+)$/.exec(name)?.[1];
+    if (!version || !SEMVER.test(version)) continue;
+    const seen = out.get(commit);
+    if (!seen || compareVersions(version, seen) > 0) out.set(commit, version);
+  }
+  return out;
+}
+
+export function computePlan(root: string, git: Git = gitIn(root), ref = "HEAD", tags: ReadonlyMap<string, string> = new Map()): Plan {
   const changelog = parseChangelog(readFileSync(join(root, "CHANGELOG.md"), "utf8"));
   const latest = changelog.versions[0];
   // Every section must name a merge on the main line of this branch: a tag is never made for code that was not merged.
@@ -281,10 +301,11 @@ export function computePlan(root: string, git: Git = gitIn(root), ref = "HEAD"):
   for (const v of changelog.versions) {
     if (!mainLine.has(v.commit)) throw new Error(`commit ${v.commit} of version ${v.version} is not a merge on ${ref}`);
   }
-  const merges = mergesSince(git, latest?.commit ?? null, ref);
+  const tagged = versionsByCommit(tags);
+  const merges = mergesSince(git, latest?.commit ?? null, ref, tagged);
   const problems = fragmentProblems(merges.flatMap((m) => m.fragments));
   if (problems.length > 0) throw new Error(problems.join("\n"));
-  const pending = planVersions(latest?.version ?? "0.0.0", merges);
+  const pending = planVersions(latest?.version ?? "0.0.0", merges, tagged);
   const consumed = [
     ...new Set(
       merges

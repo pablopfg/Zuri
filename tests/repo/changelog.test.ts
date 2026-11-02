@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  branchProblems,
   fragmentBump,
   fragmentProblems,
   mergeGroups,
@@ -10,6 +11,16 @@ import {
 import { ROOT } from "./helpers.ts";
 
 describe("changelog fragments", () => {
+  it("asks an etapa branch for a minor fragment and nothing of other branches", () => {
+    const minor = { name: "e.md", text: "<!-- versao: minor -->\n### Adicionado\n\n- x\n" };
+    const patch = { name: "p.md", text: "### Adicionado\n\n- x\n" };
+    expect(branchProblems("feat/etapa-14-conversa", [patch])).toEqual([expect.stringMatching(/versao: minor/)]);
+    expect(branchProblems("feat/etapa-14-conversa", [])).toHaveLength(1);
+    expect(branchProblems("feat/etapa-14-conversa", [patch, minor])).toEqual([]);
+    expect(branchProblems("fix/login", [patch])).toEqual([]);
+    expect(branchProblems("", [patch])).toEqual([]);
+  });
+
   it("every fragment in the repository follows the format", () => {
     expect(fragmentProblems(readFragments(ROOT))).toEqual([]);
   });

@@ -64,6 +64,13 @@ export function pullRequestBody(pending: Version[]): string {
   ].join("\n"));
 }
 
+/** True when `current` is a single commit on `base` with the same tree as `head`. */
+export function isSameRelease(git: (args: string[]) => string, current: string, base: string, head: string): boolean {
+  const parent = tryRun(() => git(["rev-parse", `${current}^`]));
+  if (!parent.ok || parent.out.trim() !== base) return false;
+  return git(["rev-parse", `${current}^{tree}`]).trim() === git(["rev-parse", `${head}^{tree}`]).trim();
+}
+
 /** Tags on GitHub, by name, with the commit each one points to (annotated tags peeled). */
 export function parseLsRemoteTags(out: string): Map<string, string> {
   const tags = new Map<string, string>();
@@ -86,11 +93,12 @@ function main(root: string): number {
   const remote = (args: string[]) => run("git", args, { cwd: root, env: auth });
   const gh = (args: string[]) => run("gh", args, { cwd: root });
 
-  const plan = computePlan(root, (...args) => git(args));
+  // Tags first: a merge that already has one keeps its number (planVersions).
+  const tags = parseLsRemoteTags(remote(["ls-remote", "--tags", "origin"]));
+  const plan = computePlan(root, (...args) => git(args), "HEAD", tags);
   const versions = [...[...plan.changelog.versions].reverse(), ...plan.pending];
 
   // 1. Tags and pre-releases.
-  const tags = parseLsRemoteTags(remote(["ls-remote", "--tags", "origin"]));
   const releases = new Set(
     (JSON.parse(gh(["api", "--paginate", "--slurp", `repos/${repository}/releases?per_page=100`])) as { tag_name: string }[][])
       .flat()
@@ -110,7 +118,11 @@ function main(root: string): number {
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
-  for (const conflict of work.conflicts) console.log(`::error::${conflict}`);
+  if (work.conflicts.length > 0) {
+    // A tag and the changelog disagree: nothing more is written until a person looks (docs/agente/versionamento.md).
+    for (const conflict of work.conflicts) console.log(`::error::${conflict}`);
+    return work.conflicts.length;
+  }
 
   // 2. The pull request with the sections.
   const open = JSON.parse(
@@ -128,12 +140,21 @@ function main(root: string): number {
   }
   applyPlan(root, plan);
   const title = pullRequestTitle(plan.pending);
+  const base = git(["rev-parse", "HEAD"]).trim();
   git(["checkout", "-B", RELEASE_BRANCH]);
   git(["add", "-A", "--", "CHANGELOG.md", VERSION_FILE, "changelog/"]);
   git(["commit", "-m", title]);
-  const head = git(["rev-parse", "HEAD"]).trim();
-  // The branch belongs to this workflow and is always rebuilt from develop, so the push is forced.
-  remote(["push", "--force", "origin", `HEAD:refs/heads/${RELEASE_BRANCH}`]);
+  let head = git(["rev-parse", "HEAD"]).trim();
+  // Same base and same files as the branch already there: no push, so its CI keeps running instead of starting over every hour.
+  const current = remote(["ls-remote", "origin", `refs/heads/${RELEASE_BRANCH}`]).split("\t")[0]?.trim() ?? "";
+  if (current) remote(["fetch", "--no-tags", "origin", `+refs/heads/${RELEASE_BRANCH}:refs/remotes/origin/${RELEASE_BRANCH}`]);
+  if (current && existing !== null && isSameRelease(git, current, base, head)) {
+    head = current;
+    console.log(`#${existing}: already up to date`);
+  } else {
+    // The branch belongs to this workflow and is always rebuilt from develop, so the push is forced.
+    remote(["push", "--force", "origin", `HEAD:refs/heads/${RELEASE_BRANCH}`]);
+  }
   const body = pullRequestBody(plan.pending);
   let number = existing;
   if (number === null) {

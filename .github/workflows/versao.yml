@@ -18,7 +18,7 @@ on:
 
 permissions: {}
 
-# One run at a time and none dropped: every run rebuilds everything from develop.
+# One run at a time; GitHub keeps only the newest waiting run, which is enough: every run rebuilds everything from develop.
 concurrency:
   group: versao
   cancel-in-progress: false

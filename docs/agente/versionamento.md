@@ -28,6 +28,11 @@ A versão vale em três lugares, sempre iguais (um teste em
   no formulário de "Relatar no GitHub";
 - a tag `vX.Y.Z` no commit do merge, com a pré-release do GitHub.
 
+O `version.ts` só muda quando a PR `chore(release):` mescla, minutos depois do
+merge. Por isso o build do commit marcado com `vX.Y.Z` ainda mostra a versão
+anterior; o build da `develop` depois da PR de versão mostra a certa. Um deploy
+sempre parte da `develop` (ou da `main`) em dia, nunca de uma tag solta.
+
 Os `package.json` ficam em 0.0.0 de propósito: os pacotes são privados e nada
 vai para o npm.
 
@@ -99,8 +104,16 @@ versão para a pré-release e de "Não lançado" para a comparação com a `deve
   novo) e permissões de escrever tags, releases, a própria branch e a própria
   PR. Nunca empurra para `develop` ou `main`, nunca apaga tag e nunca edita uma
   pré-release que já existe.
-- Tag que já aponta para outro commit para o workflow em vez de ser movida, e
-  ele abre a issue padrão de falha (`docs/agente/issues.md`).
+- Versão com tag fica congelada: se um fragmento for corrigido depois (por
+  exemplo, o marcador `minor` esquecido), o número e as notas daquele merge
+  não mudam, e os merges seguintes contam a partir dele.
+- Tag que já aponta para outro commit para o workflow antes de mexer na PR de
+  versão, em vez de ser movida, e ele abre a issue padrão de falha
+  (`docs/agente/issues.md`).
+- Sem mudança desde o último run, a branch `chore/versao` não é empurrada de
+  novo, para a CI dela não recomeçar a cada hora.
+- Esquecer o marcador numa branch `feat/etapa-*` falha o `npm run lint`
+  (`node scripts/changelog.ts`) na CI da própria PR.
 - Fragmento fora do formato, `CHANGELOG.md` editado à mão ou a seção mais nova
   apontando para um commit fora da `develop` também param o workflow.
 - A rotina de merge e as threads tratam a PR `chore(release):` como qualquer
