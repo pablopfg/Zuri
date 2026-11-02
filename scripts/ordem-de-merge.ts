@@ -9,15 +9,15 @@
 // The check reads only: no comment, no merge. Its result can go stale (the
 // older pull request is closed, leaves draft, changes files), so
 // update-prs.yml runs `--atualizar` on every develop push and every 15
-// minutes and dispatches the check again where the result changed.
+// minutes and reruns the check where the result changed.
 //
 //   node scripts/ordem-de-merge.ts              one pull request (PR_NUMBER or HEAD_REF)
-//   node scripts/ordem-de-merge.ts --atualizar  re-dispatches stale results (update-prs.yml)
+//   node scripts/ordem-de-merge.ts --atualizar  reruns stale results (update-prs.yml)
 //
 // See docs/agente/merge-de-prs.md.
 import { execFileSync } from "node:child_process";
 import { appendFileSync } from "node:fs";
-import { BASE_BRANCH, isAdditiveFile, type Run } from "./atualizar-prs.ts";
+import { BASE_BRANCH, isAdditiveFile, isHeldForBot, pullRequestRuns, type Run } from "./atualizar-prs.ts";
 
 /** Label that lets a pull request go ahead of an older one (a stale or blocked PR); then re-run the check. */
 export const OVERRIDE_LABEL = "fora-de-ordem";
@@ -132,39 +132,51 @@ function verdictFor(ctx: Context, current: OpenPullRequest, open: readonly OpenP
   return { status: "fail", blockers };
 }
 
-/** The workflow that reports the check; update-prs.yml dispatches it again when its result went stale. */
-export const ORDER_WORKFLOW = "merge-order.yml";
-export const ORDER_CHECK = "merge-order";
+/** The pull_request workflow run that reports the check (PR_WORKFLOWS in atualizar-prs.ts). */
+export const ORDER_RUN_NAME = "Merge order";
+
+export interface Refreshed {
+  pr: number;
+  action: "rerun" | "approved";
+}
 
 /**
  * The check only runs on the newer pull request's own events. When an older
  * one is closed, leaves draft or changes files, the result on the newer one
  * goes stale. update-prs.yml calls this on every develop push and every 15
- * minutes: it recomputes each open pull request into develop and dispatches
- * the check again only where the last result disagrees (or there is none).
- * Never while a run is still going. Returns the pull requests dispatched.
+ * minutes: it recomputes each open pull request into develop and reruns the
+ * newest pull_request run of the check where its result disagrees. A
+ * workflow_dispatch run would not do: the ruleset counts only the checks of
+ * pull_request runs. A run GitHub holds for the bot's approval is approved.
+ * Never while a run is still going, never on a fork.
  */
-export function refreshStale(ctx: Context): number[] {
+export function refreshStale(ctx: Context): Refreshed[] {
   const open = openPullRequests(ctx);
-  const dispatched: number[] = [];
+  const refreshed: Refreshed[] = [];
   for (const pr of open) {
     if (pr.base.ref !== BASE_BRANCH || isFork(ctx, pr)) continue;
-    const runs = JSON.parse(
-      ctx.exec("gh", ["api", `repos/${ctx.repository}/commits/${pr.head.sha}/check-runs?check_name=${ORDER_CHECK}`]),
-    ) as { check_runs: { status: string; conclusion: string | null; started_at: string }[] };
-    const latest = [...runs.check_runs].sort((a, b) => b.started_at.localeCompare(a.started_at))[0];
-    if (latest && latest.status !== "completed") continue;
-    const passing = verdictFor(ctx, pr, open).status === "pass";
-    if (latest && (latest.conclusion === "success") === passing) continue;
-    // A branch made before merge-order.yml existed has no such workflow: the next develop update brings it.
-    try {
-      ctx.exec("gh", ["workflow", "run", ORDER_WORKFLOW, "--repo", ctx.repository, "--ref", pr.head.ref]);
-      dispatched.push(pr.number);
-    } catch (error) {
-      console.log(`#${pr.number}: dispatch failed: ${error instanceof Error ? error.message : String(error)}`);
+    const latest = pullRequestRuns(ctx, pr.head.sha)
+      .filter((run) => run.name === ORDER_RUN_NAME)
+      .sort((a, b) => b.created_at.localeCompare(a.created_at))[0];
+    // No run yet (GitHub is still creating it, or the branch predates merge-order.yml): the next round looks again.
+    if (latest?.status !== "completed") continue;
+    const step = (action: Refreshed["action"], path: string) => {
+      try {
+        ctx.exec("gh", ["api", "-X", "POST", `repos/${ctx.repository}/actions/runs/${latest.id}/${path}`]);
+        refreshed.push({ pr: pr.number, action });
+      } catch (error) {
+        console.log(`#${pr.number}: ${path} failed: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    };
+    // Held for approval: the bot's own push is approved; a run held for someone else waits for a person.
+    if (latest.conclusion === "action_required") {
+      if (isHeldForBot(latest)) step("approved", "approve");
+      continue;
     }
+    const passing = verdictFor(ctx, pr, open).status === "pass";
+    if ((latest.conclusion === "success") !== passing) step("rerun", "rerun");
   }
-  return dispatched;
+  return refreshed;
 }
 
 /** Reads the target from the environment set by merge-order.yml; never from argv or event text in a shell. */
@@ -183,8 +195,8 @@ if (import.meta.main) {
   const exec: Run = (cmd, args) =>
     execFileSync(cmd, args, { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], maxBuffer: 64 * 1024 * 1024 });
   if (process.argv.includes("--atualizar")) {
-    const dispatched = refreshStale({ repository, exec });
-    console.log(`ordem-de-merge: check dispatched again on ${dispatched.map((n) => `#${n}`).join(", ") || "none"}`);
+    const refreshed = refreshStale({ repository, exec });
+    console.log(`ordem-de-merge: refreshed ${refreshed.map((r) => `#${r.pr} (${r.action})`).join(", ") || "none"}`);
     process.exit(0);
   }
   const result = checkOrder({ repository, exec }, targetFromEnv(process.env));

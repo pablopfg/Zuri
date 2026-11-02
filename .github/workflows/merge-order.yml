@@ -5,12 +5,12 @@ name: Merge order
 # older open one into develop changes the same code (scripts/ordem-de-merge.ts,
 # docs/agente/merge-de-prs.md). It reads the open pull requests and their
 # files, nothing else. Label events rerun it (the "fora-de-ordem" override).
-# workflow_dispatch: update-prs.yml reruns it on a branch when the result went
-# stale (an older pull request closed, left draft or changed files).
+# When the result goes stale (an older pull request closed, left draft or
+# changed files), update-prs.yml reruns this pull_request run: the rulesets
+# count only pull_request runs.
 on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review, labeled, unlabeled]
-  workflow_dispatch:
 
 permissions:
   contents: read
@@ -45,6 +45,6 @@ jobs:
           node scripts/ordem-de-merge.ts
         env:
           GH_TOKEN: ${{ github.token }}
-          # Dispatched runs have no pull request: the branch finds it.
+          # A run without the pull request number finds it by branch.
           PR_NUMBER: ${{ github.event.pull_request.number }}
           HEAD_REF: ${{ github.head_ref || github.ref_name }}
