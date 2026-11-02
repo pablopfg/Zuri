@@ -192,6 +192,22 @@ describe("checkOrder (fake gh)", () => {
     expect(checkOrder(ctx, { number: 60 })?.verdict).toEqual({ status: "pass", reason: "base é main" });
   });
 
+  it("never holds the version pull request, nor lets it hold others (only version lines)", () => {
+    const release = pr(51, { head: { ref: "chore/versao", sha: "s51", repo: { full_name: REPO } }, user: { login: "github-actions[bot]" } });
+    const { ctx, asked } = fake([pr(50), release, pr(52)], { 50: f("package.json"), 51: f("package.json", "package-lock.json"), 52: f("package-lock.json") });
+    expect(checkOrder(ctx, { number: 51 })?.verdict).toEqual({ status: "pass", reason: "PR de versão" });
+    expect(asked.some((p) => p.includes("/files"))).toBe(false);
+    expect(checkOrder(ctx, { number: 52 })?.verdict.status).toBe("pass");
+    // From a fork the branch name proves nothing: it waits like any other pull request.
+    const forked = pr(53, { head: { ref: "chore/versao", sha: "s53", repo: { full_name: "outra/zuri" } } });
+    const other = fake([pr(50), forked], { 50: f("package.json"), 53: f("package.json") });
+    expect(checkOrder(other.ctx, { number: 53 })?.verdict).toEqual({ status: "fail", blockers: [{ number: 50, files: ["package.json"] }] });
+    // Nor from a person pushing to a branch of that name: only the workflow's own pull request.
+    const byHand = pr(54, { head: { ref: "chore/versao", sha: "s54", repo: { full_name: REPO } }, user: { login: "dono" } });
+    const third = fake([pr(50), byHand], { 50: f("package.json"), 54: f("package.json") });
+    expect(checkOrder(third.ctx, { number: 54 })?.verdict).toEqual({ status: "fail", blockers: [{ number: 50, files: ["package.json"] }] });
+  });
+
   it("ignores an older draft and passes when no older one shares code", () => {
     const { ctx } = fake([pr(49, { draft: true }), pr(50), pr(52)], { 49: f(prompt), 50: f("other.ts"), 52: f(prompt) });
     expect(checkOrder(ctx, { number: 52 })?.verdict.status).toBe("pass");
