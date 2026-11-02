@@ -1,0 +1,321 @@
+// Version of the system in development (docs/agente/versionamento.md).
+//
+// Every pull request merged into develop is one version. CHANGELOG.md keeps a
+// section per version, newest first, with the merge time in UTC-3, the merge
+// commit and the pull request. This script finds the merges on develop that
+// have no section yet, numbers them (an etapa bumps the minor, anything else
+// the patch, SemVer 0.x until the first release on main), writes their
+// sections from their files in changelog/nao-lancado/, removes those files and
+// writes the version into packages/shared/src/version.ts.
+//
+//   node scripts/versao.ts              prints the versions still to write
+//   node scripts/versao.ts --gravar     writes them (the versao.yml workflow does this)
+//   node scripts/versao.ts --notas X    prints the notes of version X (for its GitHub release)
+import { execFileSync } from "node:child_process";
+import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { type Bump, FRAGMENT_DIR, fragmentBump, fragmentProblems, mergeGroups, parseGroups, renderGroups } from "./changelog.ts";
+
+export const REPOSITORY = "pablopfg/Zuri";
+export const REPO_URL = `https://github.com/${REPOSITORY}`;
+export const BASE_BRANCH = "develop";
+export const TIME_ZONE = "America/Sao_Paulo";
+export const UNRELEASED = "## [Não lançado]";
+export const VERSION_FILE = "packages/shared/src/version.ts";
+/** The squash title of the pull request the workflow opens: never a version of its own. */
+export const RELEASE_SUBJECT = /^chore\(release\):/;
+
+const SEMVER = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
+const HEADING = /^## \[(\d+\.\d+\.\d+)\] - (\d{4}-\d{2}-\d{2})$/;
+const META =
+  /^Mesclada às (\d{2}:\d{2}) \((UTC[+-]\d{1,2}(?::\d{2})?)\) · commit \[`[0-9a-f]{7}`\]\([^)]*\/commit\/([0-9a-f]{40})\)(?: · PR \[#(\d+)\]\([^)]*\))? · (.+)$/;
+
+export interface Version {
+  version: string;
+  /** Day of the merge in TIME_ZONE, YYYY-MM-DD. */
+  date: string;
+  /** Hour of the merge in TIME_ZONE, HH:MM. */
+  time: string;
+  /** Offset of TIME_ZONE at that moment, as "UTC-3". */
+  offset: string;
+  /** The merge commit on develop (40 hex). */
+  commit: string;
+  pr: number | null;
+  /** What the merge did, in pt-BR (the pull request title without its type). */
+  title: string;
+  /** "### Group" sections with "- " entries. */
+  body: string;
+}
+
+export interface Changelog {
+  /** Everything between "# Changelog" and the unreleased section. */
+  intro: string;
+  /** Newest first. */
+  versions: Version[];
+}
+
+export function bumpVersion(version: string, bump: Bump): string {
+  const match = SEMVER.exec(version);
+  if (!match) throw new Error(`not a version: ${version}`);
+  const [major, minor, patch] = match.slice(1).map(Number) as [number, number, number];
+  return bump === "minor" ? `${major}.${minor + 1}.0` : `${major}.${minor}.${patch + 1}`;
+}
+
+export function compareVersions(a: string, b: string): number {
+  const pa = a.split(".").map(Number);
+  const pb = b.split(".").map(Number);
+  for (let i = 0; i < 3; i++) if (pa[i] !== pb[i]) return (pa[i] ?? 0) - (pb[i] ?? 0);
+  return 0;
+}
+
+/** Date, hour and UTC offset of an instant in TIME_ZONE (Brazil has had no daylight saving since 2019, but the offset is read, not assumed). */
+export function localTime(iso: string): Pick<Version, "date" | "time" | "offset"> {
+  const instant = new Date(iso);
+  if (Number.isNaN(instant.getTime())) throw new Error(`not a date: ${iso}`);
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat("en-CA", {
+      timeZone: TIME_ZONE,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      hourCycle: "h23",
+      timeZoneName: "longOffset",
+    })
+      .formatToParts(instant)
+      .map((part) => [part.type, part.value]),
+  );
+  // "GMT-03:00" → "UTC-3"; "GMT-02:30" → "UTC-2:30".
+  const zone = /^GMT([+-])(\d{2}):(\d{2})$/.exec(parts.timeZoneName ?? "");
+  const offset = zone ? `UTC${zone[1]}${Number(zone[2])}${zone[3] === "00" ? "" : `:${zone[3]}`}` : "UTC";
+  return { date: `${parts.year}-${parts.month}-${parts.day}`, time: `${parts.hour}:${parts.minute}`, offset };
+}
+
+/** The pull request number at the end of a squash title, "… (#73)". */
+export function pullRequestNumber(subject: string): number | null {
+  const match = /\(#(\d+)\)\s*$/.exec(subject);
+  return match ? Number(match[1]) : null;
+}
+
+/** A squash title as a pt-BR sentence: no Conventional Commits type, no "(#N)", Dependabot titles translated. */
+export function describeSubject(subject: string): string {
+  let text = subject.replace(/\s*\(#\d+\)\s*$/, "").trim();
+  text = text.replace(/^[a-z]+(?:\([^)]*\))?!?:\s*/, "");
+  const group = /^Bump the (\S+) group(?: across \d+ directories?)? with (\d+) updates?$/i.exec(text);
+  if (group) text = `atualiza ${group[2]} ${group[2] === "1" ? "dependência" : "dependências"} do grupo ${group[1]}`;
+  const single = /^Bump (\S+) from (\S+) to (\S+)(?: in .*)?$/i.exec(text);
+  if (single) text = `atualiza ${single[1]} da ${single[2]} para a ${single[3]}`;
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
+export function renderMeta(v: Version): string {
+  const pr = v.pr === null ? "" : ` · PR [#${v.pr}](${REPO_URL}/pull/${v.pr})`;
+  return `Mesclada às ${v.time} (${v.offset}) · commit [\`${v.commit.slice(0, 7)}\`](${REPO_URL}/commit/${v.commit})${pr} · ${v.title}`;
+}
+
+export function renderVersion(v: Version): string {
+  return `## [${v.version}] - ${v.date}\n\n${renderMeta(v)}\n\n${v.body.trim()}\n`;
+}
+
+export function renderChangelog(changelog: Changelog): string {
+  const latest = changelog.versions[0]?.version;
+  const links = [
+    `[Não lançado]: ${latest ? `${REPO_URL}/compare/v${latest}...${BASE_BRANCH}` : `${REPO_URL}/commits/${BASE_BRANCH}`}`,
+    ...changelog.versions.map((v) => `[${v.version}]: ${REPO_URL}/releases/tag/v${v.version}`),
+  ];
+  const unreleased = `${UNRELEASED}\n\nO que já entrou na \`${BASE_BRANCH}\` e ainda não ganhou número fica em [\`${FRAGMENT_DIR}/\`](${FRAGMENT_DIR}/) por alguns minutos, até o workflow de versão escrever a seção.\n`;
+  return ["# Changelog\n", `${changelog.intro.trim()}\n`, unreleased, ...changelog.versions.map(renderVersion), `${links.join("\n")}\n`].join("\n");
+}
+
+/** Reads a CHANGELOG.md written by renderChangelog. Throws on anything it would not write back the same way. */
+export function parseChangelog(text: string): Changelog {
+  const lines = text.replace(/\r\n/g, "\n").split("\n");
+  if (lines[0] !== "# Changelog") throw new Error('CHANGELOG.md must start with "# Changelog"');
+  const unreleasedAt = lines.indexOf(UNRELEASED);
+  if (unreleasedAt < 0) throw new Error(`CHANGELOG.md has no "${UNRELEASED}" section`);
+  const intro = lines.slice(1, unreleasedAt).join("\n").trim();
+  const versions: Version[] = [];
+  let i = unreleasedAt + 1;
+  // The unreleased section holds only the fixed sentence: entries live in changelog/nao-lancado/.
+  while (i < lines.length && !lines[i]?.startsWith("## ") && !/^\[.+\]: /.test(lines[i] ?? "")) {
+    if (/^(###|- )/.test(lines[i] ?? "")) throw new Error(`"${UNRELEASED}" must stay empty: write the entry in ${FRAGMENT_DIR}/`);
+    i++;
+  }
+  while (i < lines.length && lines[i]?.startsWith("## ")) {
+    const heading = HEADING.exec(lines[i] ?? "");
+    if (!heading) throw new Error(`bad version heading: ${lines[i]}`);
+    let j = i + 1;
+    while (j < lines.length && !lines[j]?.startsWith("## ") && !/^\[.+\]: /.test(lines[j] ?? "")) j++;
+    const section = lines.slice(i + 1, j).join("\n").trim().split("\n");
+    const meta = META.exec(section[0] ?? "");
+    if (!meta) throw new Error(`version ${heading[1]} has no "Mesclada às …" line`);
+    const body = section.slice(1).join("\n").trim();
+    const problems = parseGroups(body).problems;
+    if (problems.length > 0) throw new Error(`version ${heading[1]}: ${problems.join("; ")}`);
+    versions.push({
+      version: heading[1] as string,
+      date: heading[2] as string,
+      time: meta[1] as string,
+      offset: meta[2] as string,
+      commit: meta[3] as string,
+      pr: meta[4] ? Number(meta[4]) : null,
+      title: meta[5] as string,
+      body,
+    });
+    i = j;
+  }
+  for (; i < lines.length; i++) {
+    if (lines[i]?.trim() && !/^\[.+\]: \S+$/.test(lines[i] ?? "")) throw new Error(`unexpected text after the versions: ${lines[i]}`);
+  }
+  for (let k = 1; k < versions.length; k++) {
+    if (compareVersions(versions[k - 1]?.version ?? "", versions[k]?.version ?? "") <= 0) {
+      throw new Error(`versions out of order: ${versions[k - 1]?.version} before ${versions[k]?.version}`);
+    }
+  }
+  return { intro, versions };
+}
+
+export interface Fragment {
+  name: string;
+  text: string;
+}
+
+export interface Merge {
+  commit: string;
+  /** Committer date, ISO 8601. */
+  committedAt: string;
+  subject: string;
+  /** The changelog files the merge added (a later edit to one is still the same entry). */
+  fragments: Fragment[];
+}
+
+/** The section of a merge: its fragments joined, or one line saying it changed nothing visible. */
+export function mergeBody(merge: Merge): string {
+  const groups = mergeGroups(new Map(), ...merge.fragments.map((f) => parseGroups(f.text).groups));
+  if (groups.size > 0) return renderGroups(groups).trim();
+  const title = describeSubject(merge.subject);
+  return `### Alterado\n\n- Sem mudança visível: ${title.charAt(0).toLowerCase()}${title.slice(1)}.`;
+}
+
+/** Numbers the merges after `last`, oldest first. Returns them oldest first too. */
+export function planVersions(last: string, merges: Merge[]): Version[] {
+  let current = last;
+  return merges
+    .filter((merge) => !RELEASE_SUBJECT.test(merge.subject))
+    .map((merge) => {
+      const bump: Bump = merge.fragments.some((f) => fragmentBump(f.text) === "minor") ? "minor" : "patch";
+      current = bumpVersion(current, bump);
+      return {
+        version: current,
+        ...localTime(merge.committedAt),
+        commit: merge.commit,
+        pr: pullRequestNumber(merge.subject),
+        title: describeSubject(merge.subject),
+        body: mergeBody(merge),
+      };
+    });
+}
+
+export function renderVersionFile(version: string): string {
+  return `// Written by scripts/versao.ts when a merge into develop gets its version: do not edit by hand.\n// The history of each version is in CHANGELOG.md (docs/agente/versionamento.md).\nexport const APP_VERSION = "${version}";\n`;
+}
+
+/** Notes of a GitHub release: the section of the version, with the merge line. */
+export function releaseNotes(v: Version): string {
+  return `${renderMeta(v)}\n\n${v.body.trim()}\n\nHistórico completo: [CHANGELOG.md](${REPO_URL}/blob/${BASE_BRANCH}/CHANGELOG.md)\n`;
+}
+
+export function releaseName(v: Version): string {
+  return `v${v.version} · ${v.title}`;
+}
+
+type Git = (...args: string[]) => string;
+
+export function gitIn(root: string): Git {
+  return (...args) => execFileSync("git", args, { cwd: root, encoding: "utf8", maxBuffer: 64 * 1024 * 1024 });
+}
+
+/** Merges on the first-parent line of `ref` after `since` (or all of them), oldest first, with the fragments each added. */
+export function mergesSince(git: Git, root: string, since: string | null, ref = "HEAD"): Merge[] {
+  const range = since ? `${since}..${ref}` : ref;
+  const out = git("log", "--first-parent", "--reverse", "--format=%H%x09%cI%x09%s", range).trim();
+  if (!out) return [];
+  return out.split("\n").map((line) => {
+    const [commit = "", committedAt = "", ...rest] = line.split("\t");
+    const names = git("diff-tree", "--no-commit-id", "-r", "--name-only", "--diff-filter=A", "--root", "--first-parent", "-m", commit, "--", `${FRAGMENT_DIR}/`)
+      .split("\n")
+      .filter((path) => path.endsWith(".md"));
+    const fragments = [...new Set(names)].map((path) => {
+      // The text on the branch now wins: a later fix to the file is part of the same entry.
+      const text = existsSync(join(root, path)) ? readFileSync(join(root, path), "utf8") : git("show", `${commit}:${path}`);
+      return { name: path.slice(FRAGMENT_DIR.length + 1), text };
+    });
+    return { commit, committedAt, subject: rest.join("\t"), fragments };
+  });
+}
+
+export interface Plan {
+  changelog: Changelog;
+  pending: Version[];
+  /** Fragment paths that the pending versions consume. */
+  consumed: string[];
+}
+
+export function computePlan(root: string, git: Git = gitIn(root), ref = "HEAD"): Plan {
+  const changelog = parseChangelog(readFileSync(join(root, "CHANGELOG.md"), "utf8"));
+  const latest = changelog.versions[0];
+  if (latest) {
+    // The newest section must sit on this branch, or the merges after it cannot be found.
+    try {
+      git("merge-base", "--is-ancestor", latest.commit, ref);
+    } catch {
+      throw new Error(`commit ${latest.commit} of version ${latest.version} is not on ${ref}`);
+    }
+  }
+  const merges = mergesSince(git, root, latest?.commit ?? null, ref);
+  const problems = fragmentProblems(merges.flatMap((m) => m.fragments));
+  if (problems.length > 0) throw new Error(problems.join("\n"));
+  const pending = planVersions(latest?.version ?? "0.0.0", merges);
+  const consumed = [
+    ...new Set(
+      merges
+        .filter((m) => !RELEASE_SUBJECT.test(m.subject))
+        .flatMap((m) => m.fragments.map((f) => `${FRAGMENT_DIR}/${f.name}`))
+        .filter((path) => existsSync(join(root, path))),
+    ),
+  ];
+  return { changelog, pending, consumed };
+}
+
+/** Writes the pending versions into CHANGELOG.md and version.ts and removes their fragments. */
+export function applyPlan(root: string, plan: Plan): Changelog {
+  const changelog: Changelog = { intro: plan.changelog.intro, versions: [...[...plan.pending].reverse(), ...plan.changelog.versions] };
+  writeFileSync(join(root, "CHANGELOG.md"), renderChangelog(changelog));
+  const latest = changelog.versions[0];
+  if (latest) writeFileSync(join(root, VERSION_FILE), renderVersionFile(latest.version));
+  for (const path of plan.consumed) rmSync(join(root, path));
+  return changelog;
+}
+
+if (import.meta.main) {
+  const root = join(import.meta.dirname, "..");
+  const notes = process.argv.indexOf("--notas");
+  if (notes >= 0) {
+    const wanted = (process.argv[notes + 1] ?? "").replace(/^v/, "");
+    const found = parseChangelog(readFileSync(join(root, "CHANGELOG.md"), "utf8")).versions.find((v) => v.version === wanted);
+    if (!found) {
+      console.error(`version ${wanted} is not in CHANGELOG.md`);
+      process.exit(1);
+    }
+    process.stdout.write(releaseNotes(found));
+  } else {
+    const plan = computePlan(root);
+    for (const v of plan.pending) console.log(`${v.version}  ${v.commit.slice(0, 7)}  ${v.date} ${v.time} (${v.offset})  ${v.title}`);
+    if (plan.pending.length === 0) console.log(`versao: nothing to write, current ${plan.changelog.versions[0]?.version ?? "none"}`);
+    if (process.argv.includes("--gravar") && plan.pending.length > 0) {
+      applyPlan(root, plan);
+      console.log(`versao: wrote ${plan.pending.length} version(s), removed ${plan.consumed.length} fragment(s)`);
+    }
+  }
+}

@@ -170,7 +170,8 @@ linha longa (a lista de partes do catálogo em `pt-BR.ts`, `index.ts` e no
 teste de i18n). As causas que deu para tirar:
 
 - Changelog em arquivos por PR (`changelog/nao-lancado/<assunto>.md`). O
-  `CHANGELOG.md` só muda no release, com `node scripts/changelog.ts --gravar`.
+  `CHANGELOG.md` só muda pela PR `chore(release):` que o workflow `Versão`
+  abre depois de cada merge (`docs/agente/versionamento.md`).
 - Registro das partes do catálogo uma por linha, e o teste de i18n confere as
   partes exportadas sem lista própria (`.claude/rules/i18n.md`).
 - Itens novos de listas e tabelas numa linha nova, sem reescrever a vizinha

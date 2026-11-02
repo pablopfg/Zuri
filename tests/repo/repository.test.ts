@@ -76,7 +76,7 @@ describe("required project files", () => {
   });
 
   it("keeps the changelog with an unreleased section", () => {
-    expect(readText("CHANGELOG.md")).toMatch(/^## Não lançado$/m);
+    expect(readText("CHANGELOG.md")).toMatch(/^## \[Não lançado\]$/m);
   });
 });
 

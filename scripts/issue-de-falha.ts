@@ -55,6 +55,8 @@ export function failureTitle(workflow: string): string {
 const HINTS: Record<string, string> = {
   "Update PRs":
     "Abra o passo que falhou no link da execução. Conflito que não é só acréscimo já vira comentário na PR; erro aqui costuma ser permissão do `GITHUB_TOKEN`, branch protegida ou mudança em `scripts/atualizar-prs.ts` / `scripts/ordem-de-merge.ts`. Reproduza com os testes de `tests/repo/` e corrija o script.",
+  Versão:
+    "Abra o passo que falhou no link da execução. Tag apontando para outro commit, `CHANGELOG.md` fora do formato ou fragmento inválido param o workflow de propósito; sem permissão para abrir a PR, ligue \"Allow GitHub Actions to create and approve pull requests\" em Settings > Actions. Reproduza com `node scripts/versao.ts` e os testes de `tests/repo/versao.test.ts`. Passo a passo em `docs/agente/versionamento.md`.",
 };
 
 const DEFAULT_HINT =
