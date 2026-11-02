@@ -19,6 +19,14 @@ funciona: [docs/agente/versionamento.md](docs/agente/versionamento.md).
 
 O que já entrou na `develop` e ainda não ganhou número fica em [`changelog/nao-lancado/`](changelog/nao-lancado/) por alguns minutos, até o workflow de versão escrever a seção.
 
+## [0.18.2] - 2026-11-02
+
+Mesclada às 11:42 (UTC-3) · commit [`a0866a1`](https://github.com/pablopfg/Zuri/commit/a0866a1c038b6c788554f69cbd8efaf70b700d4f) · PR [#81](https://github.com/pablopfg/Zuri/pull/81) · Pré-releases a partir da 0.15.5 e com título só da versão
+
+### Alterado
+
+- Sem mudança visível: pré-releases a partir da 0.15.5 e com título só da versão.
+
 ## [0.18.1] - 2026-11-02
 
 Mesclada às 11:11 (UTC-3) · commit [`7cf8147`](https://github.com/pablopfg/Zuri/commit/7cf81477b2383e7b78664b9df4a1a615a4033703) · PR [#78](https://github.com/pablopfg/Zuri/pull/78) · Cria as tags de versão por git push e segue quando uma release é recusada
@@ -1431,7 +1439,8 @@ Mesclada às 22:15 (UTC-3) · commit [`360a79e`](https://github.com/pablopfg/Zur
   `npm audit`), CodeQL, Dependabot e rulesets para a `develop` e a `main`.
 - `LICENSE` (MIT), `NOTICE.md`, `SECURITY.md` e `CONTRIBUTING.md`.
 
-[Não lançado]: https://github.com/pablopfg/Zuri/compare/v0.18.1...develop
+[Não lançado]: https://github.com/pablopfg/Zuri/compare/v0.18.2...develop
+[0.18.2]: https://github.com/pablopfg/Zuri/releases/tag/v0.18.2
 [0.18.1]: https://github.com/pablopfg/Zuri/releases/tag/v0.18.1
 [0.18.0]: https://github.com/pablopfg/Zuri/releases/tag/v0.18.0
 [0.17.2]: https://github.com/pablopfg/Zuri/releases/tag/v0.17.2
