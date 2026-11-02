@@ -633,24 +633,32 @@ Detalhes em [avisos.md](avisos.md).
 - O endereço e as chaves da inscrição ficam só no servidor; a tela vê o id, o
   navegador e as datas. O aparelho se liga ao navegador pelo HMAC do cookie de
   aparelho, o mesmo do registro de acessos: abrir a Zuri naquele navegador o
-  mantém ativo, e 7 dias sem abrir o removem.
-- Sair da conta remove o aparelho daquele navegador (o navegador também cancela
-  a inscrição). Trocar a senha, recuperar o acesso com um código novo ou
-  redefinir a senha pelo painel remove todos os aparelhos: nenhum aparelho
-  ativado com a senha antiga continua recebendo. Uma sessão que só expira deixa
-  o aparelho até completar os 7 dias sem abrir.
-- O título e o texto perdem caracteres de controle e pedaços soltos de
-  caractere antes do corte (120 e 600 caracteres), então a mensagem sempre cabe
-  nos 4 KB que o serviço de notificação aceita.
+  mantém ativo. Ele sai depois de 7 dias completos sem abrir (o "visto por
+  último" só é gravado uma vez por dia, então o corte real fica entre 7 e 8
+  dias).
+- A notificação é sempre discreta (decisão do dono): a tela bloqueada mostra
+  "Zuri" e "Você tem um aviso novo" ou "um aviso importante". O título e o
+  texto do aviso nem saem do servidor; o conteúdo só aparece no app. Não há
+  botões, e o service worker só abre páginas do próprio app.
+- Quando o dono clica em Sair, o aparelho daquele navegador é removido e o
+  navegador cancela a inscrição. A saída automática por inatividade não mexe
+  no aparelho. Trocar a senha, recuperar o acesso com um código novo ou
+  redefinir a senha pelo painel aposenta todos os aparelhos: eles somem da
+  lista e só recebem o alerta de segurança dessa mudança, porque o dono precisa
+  saber de uma troca que não fez. 15 minutos depois, na rodada seguinte do
+  alarme, são apagados.
+- Se o serviço de notificação responde 404 ou 410 (inscrição encerrada) ou 403
+  (inscrição feita com outro par VAPID), o aparelho é removido e pode ser
+  ativado de novo.
+- A chave do aparelho precisa ser um ponto válido da curva P-256; uma chave
+  inválida é recusada na entrada em vez de ocupar uma das 3 vagas.
 - O par VAPID de teste, que está no repositório público, só vale em
   desenvolvimento local. Com outro endereço, o push fica "não configurado" até
   o dono gravar um par próprio.
 - Cada aviso faz uma requisição por aparelho (até 3). O push faz no máximo 30
   em 30 segundos, para nunca esgotar as 50 subrequisições por invocação do
-  plano gratuito (regra P9); o excesso de uma rajada fica só no sino.
-- O que aparece na tela bloqueada é o título e o texto do aviso, em texto puro,
-  sem botões. Alerta de segurança não diz de onde veio. O service worker só abre
-  páginas do próprio app.
+  plano gratuito (regra P9). Alertas de segurança têm uma reserva de mais 9
+  (três alertas para três aparelhos). O que passar disso fica só no sino.
 - Em desenvolvimento local o servidor cifra e assina, mas não posta para
   nenhum serviço (`src/push/dev-push.ts`).
 

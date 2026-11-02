@@ -124,16 +124,17 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       // The screen locks at once; the server's answer can't bring the data back.
       endHere(reason);
       try {
-        await api("/auth/logout", { method: "POST" });
+        await api(reason === "manual" ? "/auth/logout?manual=1" : "/auth/logout", { method: "POST" });
       } catch {
         // Already signed out there, or offline: the server ends it on its own deadline.
       }
-      // The server forgot this browser's push device; the browser lets go of its subscription too.
-      void navigator.serviceWorker
-        ?.getRegistration()
-        .then((r) => r?.pushManager?.getSubscription())
-        .then((s) => s?.unsubscribe())
-        .catch(() => undefined);
+      // "Sair": the server forgot this browser's push device; the browser lets go of its subscription too.
+      if (reason === "manual")
+        void navigator.serviceWorker
+          ?.getRegistration()
+          .then((r) => r?.pushManager?.getSubscription())
+          .then((s) => s?.unsubscribe())
+          .catch(() => undefined);
     },
     [endHere],
   );

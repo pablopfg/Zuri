@@ -8,7 +8,8 @@ self.addEventListener("activate", (event) => event.waitUntil(self.clients.claim(
 
 /** Only a page of this app, never an address from outside ("/x", not "//x" nor "/\\x"). */
 const internal = (link) => (typeof link === "string" && /^\/(?![/\\])[A-Za-z0-9/_-]*$/.test(link) ? link : "/");
-const text = (value, max) => (typeof value === "string" ? value.slice(0, max) : "");
+/** Cut by characters, as the server counts them, so an emoji is never split in two. */
+const text = (value, max) => (typeof value === "string" ? [...value].slice(0, max).join("") : "");
 
 // The server encrypted the message for this browser alone (RFC 8291); the
 // browser opened it before this runs. Title and body are plain text: a
@@ -21,10 +22,14 @@ self.addEventListener("push", (event) => {
     data = {};
   }
   const title = text(data.title, 120) || "Zuri";
+  const tag = text(data.id, 64) || undefined;
   event.waitUntil(
     self.registration.showNotification(title, {
       body: text(data.body, 600),
-      tag: text(data.id, 64) || undefined,
+      tag,
+      // A notice that insists replaces its own notification: renotify makes it
+      // ring and vibrate again instead of changing in silence.
+      renotify: tag !== undefined,
       icon: "/icon-192.png",
       badge: "/favicon-32.png",
       requireInteraction: data.sticky === true,

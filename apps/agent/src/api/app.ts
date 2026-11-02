@@ -281,7 +281,10 @@ export function createApi(deps: ApiDeps) {
 
   app.post("/auth/logout", async (c) => {
     const auth = deps.auth();
-    auth.logout(c.get("session"), client(c), await auth.browserId(readDeviceCookie(c.req.raw)));
+    // Only the owner's own "Sair" (?manual=1) drops this browser's push device;
+    // the interface signing out by itself after idle time keeps it (7-day rule).
+    const manual = c.req.query("manual") === "1";
+    auth.logout(c.get("session"), client(c), manual ? await auth.browserId(readDeviceCookie(c.req.raw)) : null);
     const response = new Response(null, { status: 204 });
     response.headers.append("set-cookie", sessionCookie(c.req.raw, null));
     // What this browser cached of the app goes too. Not "cookies": that would

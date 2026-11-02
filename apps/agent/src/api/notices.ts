@@ -64,7 +64,7 @@ export function registerNoticeRoutes(app: Hono<ApiEnv>, deps: () => NoticeDeps, 
     const { push, auth } = deps();
     const session = c.get("session");
     auth.requireRecentAuth(session);
-    return Response.json({ device: push.add(input, client(c), session.id, await browser(c)) }, { status: 201 });
+    return Response.json({ device: await push.add(input, client(c), session.id, await browser(c)) }, { status: 201 });
   });
 
   // Removing one also asks for it: silencing the owner's phone is the first step of hiding something.

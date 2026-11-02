@@ -25,7 +25,7 @@ test("a background tab whose own count ran out locks itself without signing out 
 
   const logouts: string[] = [];
   page.on("request", (r) => {
-    if (r.url().endsWith("/api/auth/logout")) logouts.push(r.url());
+    if (new URL(r.url()).pathname === "/api/auth/logout") logouts.push(r.url());
   });
 
   await setVisibility(page, "hidden");
@@ -88,7 +88,7 @@ test("a presence signal answered after signing out does not reopen the page", as
   await page.clock.fastForward("01:00");
   expect(await answered).toBe(200);
 
-  const logout = page.waitForResponse((r) => r.url().endsWith("/api/auth/logout"));
+  const logout = page.waitForResponse((r) => new URL(r.url()).pathname === "/api/auth/logout");
   await page.getByRole("button", { name: "Sair" }).first().click();
   expect((await logout).status()).toBe(204);
   await expect(page).toHaveURL(/\/entrar/);
@@ -108,7 +108,7 @@ test("a tab in front for a while does sign out every tab when its count runs out
   await expect(page.getByRole("heading", { level: 1, name: /^(Bom dia|Boa tarde|Boa noite)/ })).toBeVisible();
 
   // The control case of the test above: same jump, tab visible the whole time.
-  const logout = page.waitForResponse((r) => r.url().endsWith("/api/auth/logout"));
+  const logout = page.waitForResponse((r) => new URL(r.url()).pathname === "/api/auth/logout");
   await page.clock.fastForward("31:00");
   expect((await logout).status()).toBe(204);
   await expect(page).toHaveURL(/\/entrar$/);

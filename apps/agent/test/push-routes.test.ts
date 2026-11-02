@@ -128,7 +128,14 @@ describe("the push routes", () => {
     }
     expect((await refusal(await api("POST", "/push/devices", { ...sub, keys: { ...sub.keys, p256dh: "curta" } }), 400)).code).toBe("VALIDATION_FAILED");
     expect((await refusal(await api("POST", "/push/devices", { ...sub, expirationTime: null }), 400)).code).toBe("VALIDATION_FAILED");
-    expect((await refusal(await api("POST", "/push/devices", "x".repeat(5000)), 400)).code).toBe("VALIDATION_FAILED");
+    // Well formed, starts with 0x04, but not a point on the curve: it would take a place and fail every send.
+    expect((await refusal(await api("POST", "/push/devices", { ...sub, keys: { ...sub.keys, p256dh: `B${"A".repeat(86)}` } }), 400)).details).toEqual({ fields: ["keys.p256dh"] });
+    expect((await refusal(await api("POST", "/push/devices", { ...sub, keys: { ...sub.keys, p256dh: `E${sub.keys.p256dh.slice(1)}` } }), 400)).code).toBe("VALIDATION_FAILED");
+    // Valid JSON one byte over the route's 4,096: refused for its size, before parsing.
+    const padded = JSON.stringify({ ...sub, pad: "" });
+    const over = JSON.stringify({ ...sub, pad: "x".repeat(4097 - padded.length) });
+    expect(new TextEncoder().encode(over).length).toBe(4097);
+    expect(await refusal(await api("POST", "/push/devices", over), 400)).toMatchObject({ code: "VALIDATION_FAILED", details: { fields: ["_body"] } });
   });
 
   it("refuse a fourth device", async () => {

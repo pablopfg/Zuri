@@ -34,7 +34,7 @@ export function seedPush(db: Database, browser: string): void {
   );
 }
 
-export const pushCount = (db: Database) => db.one<{ n: number }>(`SELECT count(*) AS n FROM zur_push_devices`)?.n ?? 0;
+export const pushCount = (db: Database) => db.one<{ n: number }>(`SELECT count(*) AS n FROM zur_push_devices WHERE retired_at IS NULL`)?.n ?? 0;
 
 export const MINUTE = 60_000;
 export const HOUR = 60 * MINUTE;

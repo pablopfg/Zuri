@@ -241,7 +241,7 @@ export class AuthService {
         this.twoStep.dropChallenges();
         // Browsers known to the old password stop being trusted with the new one.
         this.events.forgetDevices();
-        this.#push.removeAll();
+        this.#push.retireAll();
         this.events.record("credentials_reset", null, { alert: true, reason: newPepper ? "pepper" : "password" });
         // A new pepper is the full reset (lost password and phone): the sealed
         // secret can't be opened with it anyway, so the second step goes too.
@@ -741,7 +741,7 @@ export class AuthService {
       this.twoStep.dropChallenges();
       // A browser that knew the old password is new again (its next sign-in is an alert).
       this.events.forgetDevices();
-      this.#push.removeAll();
+      this.#push.retireAll();
       this.events.record("password_changed", client, { session: next.row.id.slice(0, 16), alert: true });
     });
     return { token: next.token, session: next.row };
@@ -909,7 +909,7 @@ export class AuthService {
       this.sessions.revokeAll();
       this.twoStep.dropChallenges();
       this.events.forgetDevices();
-      this.#push.removeAll();
+      this.#push.retireAll();
       this.events.record("access_recovered", client, { alert: true });
       return true;
     });

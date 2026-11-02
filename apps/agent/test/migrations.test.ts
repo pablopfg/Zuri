@@ -92,7 +92,7 @@ describe("the migration list", () => {
       9: "bc70a4e518b48d148475ac3881abb565015f4f21b69c26c36a28054c47429c91",
       10: "e1033d98cc925094806c0b7829568e64c0a3cbdeef9df30fba265f4879b5102d",
       11: "fa7a411f3603944c4ac983fea3d0958275f683c89795325df12f71b77dd49a4d",
-      12: "a3693a5379d4aac08d00d243031ed8632cfd05a43759e77d3abded1ff5f6a785",
+      12: "7731fefa0ced903440fd2ecf1235715834e22347a37c93cbf71d7a25bb8a43a5",
     };
     for (const m of MIGRATIONS) {
       const digest = createHash("sha256").update(statementText(m).replace(/\r\n/g, "\n")).digest("hex");

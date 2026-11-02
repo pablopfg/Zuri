@@ -4,6 +4,8 @@
   aparelho" faz os avisos aparecerem no celular ou no computador mesmo com a
   Zuri fechada. Até 3 aparelhos; quem fica 7 dias sem abrir a Zuri deixa de
   receber. Dá para mandar um teste e remover um aparelho dali mesmo.
+- A notificação é discreta: na tela bloqueada aparece só "Você tem um aviso
+  novo" (ou "importante"), e o conteúdo fica no app.
 - Ativar ou remover um aparelho pede a senha e vira alerta de segurança nos
   outros canais. Os avisos importantes passam a insistir pelo aparelho.
 - Configurações > Avisos ganhou a tabela "O que vai para cada canal", para
@@ -20,6 +22,8 @@
 - As notificações saem cifradas para cada aparelho e assinadas com a chave da
   instalação; o serviço de notificação do navegador não lê o conteúdo. O
   servidor só envia para os serviços de notificação conhecidos.
+- Clicar em Sair desliga a notificação naquele aparelho. Trocar a senha
+  desliga em todos, depois de avisar dessa troca.
 
 ### Atualização
 

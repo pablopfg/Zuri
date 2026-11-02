@@ -161,15 +161,22 @@ describe("push devices", () => {
     });
   });
 
-  it("drops a device seven days after its browser last opened the app, not a moment before", async () => {
+  it("drops a device only after seven full days without its browser opening the app", async () => {
     await withPush(async (w) => {
+      const added = w.world.clock.now;
       w.devices.add((await browser()).subscription, "a", "ba");
       w.devices.add((await browser()).subscription, "b", "bb");
-      w.world.clock.now += PUSH_LIMITS.staleMs - 1000;
+      // Opened again within the day: "last seen" doesn't move (one write a day),
+      // so the cut adds that day and still never comes before seven days of quiet.
+      w.world.clock.now = added + 0.9 * PUSH_LIMITS.seenEveryMs;
+      w.devices.seen("ba");
+      w.world.clock.now = added + PUSH_LIMITS.staleMs - 1000;
       w.devices.seen("bb");
       // Unknown browsers change nothing.
       w.devices.seen("desconhecido");
-      w.world.clock.now += 1000;
+      w.world.clock.now = added + 0.9 * PUSH_LIMITS.seenEveryMs + PUSH_LIMITS.staleMs;
+      expect(w.devices.pruneStale()).toBe(0);
+      w.world.clock.now = added + PUSH_LIMITS.staleMs + PUSH_LIMITS.seenEveryMs;
       expect(w.devices.pruneStale()).toBe(0);
       w.world.clock.now += 1;
       expect(w.devices.pruneStale()).toBe(1);
@@ -223,43 +230,25 @@ describe("the push channel", () => {
         expect(post.headers.get("authorization")).toMatch(new RegExp(`^vapid t=[\\w-]+\\.[\\w-]+\\.[\\w-]+, k=${KEYS.publicKey}$`));
         expect(post.redirect).toBe("manual");
         // Nothing readable on the wire.
-        expect(new TextDecoder().decode(post.body)).not.toContain("Água");
+        expect(new TextDecoder().decode(post.body)).not.toContain("Zuri");
       }
       const toA = w.net.posted.find((p) => p.url === a.subscription.endpoint);
-      expect(await open(toA?.body ?? new Uint8Array(), a.keys, a.auth)).toEqual({ id: sent.id, title: "Água", body: "Beber um copo de água", link: "/acessos", sticky: true });
+      expect(await open(toA?.body ?? new Uint8Array(), a.keys, a.auth)).toEqual({ id: sent.id, title: "Zuri", body: "Você tem um aviso importante. Abra o app para ver.", link: "/acessos", sticky: true });
       await expect(open(toA?.body ?? new Uint8Array(), b.keys, b.auth)).rejects.toThrow();
       expect(w.devices.list(null).every((d) => d.lastSentAt !== null)).toBe(true);
     });
   });
 
-  it("clips long text, drops a link outside the app and marks low priority as such", async () => {
+  it("is always discreet: the notice's title and text never leave the server, and a link outside the app is dropped", async () => {
     await withPush(async (w) => {
       const a = await browser();
       w.devices.add(a.subscription, "a", null);
-      await w.channel.send({ notice: notice({ title: "T".repeat(500), body: "🙂".repeat(5000), link: "https://exemplo.com.br/x", priority: "low" }), attempt: 1 });
+      await w.channel.send({ notice: notice({ title: "Consulta no médico", body: "Levar os exames de sangue", link: "https://exemplo.com.br/x", priority: "low" }), attempt: 1 });
       const post = w.net.posted[0];
       expect(post?.headers.get("urgency")).toBe("low");
       const payload = await open(post?.body ?? new Uint8Array(), a.keys, a.auth);
-      expect([...payload.title]).toHaveLength(PUSH_LIMITS.titleMax);
-      expect([...payload.body]).toHaveLength(PUSH_LIMITS.bodyMax);
-      expect(payload.body.endsWith("…")).toBe(true);
-      expect(payload).toMatchObject({ link: null, sticky: false });
-    });
-  });
-
-  it("strips control characters and lone surrogates before the cut, so the worst text still fits 4 KB", async () => {
-    await withPush(async (w) => {
-      const a = await browser();
-      w.devices.add(a.subscription, "a", null);
-      // Each \u0001 would take six bytes as JSON; 600 of them plus emoji would overflow the record.
-      const result = await w.channel.send({ notice: notice({ title: "\u0001".repeat(600) + "🙂".repeat(200), body: `linha 1\nlinha 2\t\u2028${"\u0001".repeat(600)}\uD800fim${"🙂".repeat(900)}` }), attempt: 1 });
-      expect(result).toEqual({ status: "sent" });
-      const payload = await open(w.net.posted[0]?.body ?? new Uint8Array(), a.keys, a.auth);
-      expect(payload.title).toBe(`${"🙂".repeat(PUSH_LIMITS.titleMax - 1)}…`);
-      expect(payload.body.startsWith("linha 1\nlinha 2\uFFFDfim🙂")).toBe(true);
-      expect([...payload.body]).toHaveLength(PUSH_LIMITS.bodyMax);
-      // biome-ignore lint/suspicious/noControlCharactersInRegex: checking none is left.
-      expect(payload.body).not.toMatch(/[\u0000-\u0009\u000b-\u001f\u2028]/);
+      expect(payload).toMatchObject({ title: "Zuri", body: "Você tem um aviso novo. Abra o app para ver.", link: null, sticky: false });
+      expect(JSON.stringify(payload)).not.toMatch(/médico|exames/);
     });
   });
 
@@ -271,9 +260,15 @@ describe("the push channel", () => {
       expect(w.net.posted).toHaveLength(PUSH_BURST.posts);
       w.world.clock.now += PUSH_BURST.windowMs - 1;
       expect(await w.channel.send({ notice: notice(), attempt: 1 })).toEqual({ status: "skipped", reason: "channel_limit" });
+      // Security alerts keep a reserve: three more of them still go out, then none.
+      const alert = () => notice({ priority: "critical", category: "security", security: true });
+      for (let i = 0; i < (PUSH_BURST.securityPosts - PUSH_BURST.posts) / 3; i++) expect(await w.channel.send({ notice: alert(), attempt: 1 })).toEqual({ status: "sent" });
+      expect(await w.channel.send({ notice: alert(), attempt: 1 })).toEqual({ status: "skipped", reason: "channel_limit" });
+      expect(w.net.posted).toHaveLength(PUSH_BURST.securityPosts);
+      // The first 30 leave the window; the 9 of the reserve still count.
       w.world.clock.now += 1;
       expect(await w.channel.send({ notice: notice(), attempt: 1 })).toEqual({ status: "sent" });
-      expect(w.net.posted).toHaveLength(PUSH_BURST.posts + 3);
+      expect(w.net.posted).toHaveLength(PUSH_BURST.securityPosts + 3);
     });
   });
 
@@ -291,7 +286,8 @@ describe("the push channel", () => {
       expect(await w.channel.send({ notice: notice(), attempt: 1 })).toEqual({ status: "failed", reason: "error" });
       w.net.answers.set(busy.endpoint, "throw");
       expect(await w.channel.send({ notice: notice(), attempt: 1 })).toEqual({ status: "failed", reason: "unreachable" });
-      w.net.answers.set(busy.endpoint, 404);
+      // 403: made with another VAPID pair (the owner changed it); it never works again.
+      w.net.answers.set(busy.endpoint, 403);
       expect(await w.channel.send({ notice: notice(), attempt: 1 })).toEqual({ status: "skipped", reason: "no_target" });
       expect(w.devices.count()).toBe(0);
     });
@@ -313,7 +309,7 @@ describe("Settings > Notices, push part", () => {
   it("shows the public key and the devices, never the endpoints", async () => {
     await withPush(async (w) => {
       expect(w.service.status(null)).toEqual({ publicKey: KEYS.publicKey, devices: [], max: 3 });
-      w.service.add((await browser()).subscription, CLIENT, "s".repeat(64), "este");
+      await w.service.add((await browser()).subscription, CLIENT, "s".repeat(64), "este");
       const status = w.service.status("este");
       expect(status.devices).toMatchObject([{ current: true }]);
       expect(JSON.stringify(status)).not.toMatch(/fcm|p256dh|auth|este/);
@@ -325,8 +321,8 @@ describe("Settings > Notices, push part", () => {
   it("adding and removing a device are access events that alert the owner; renewing is not", async () => {
     await withPush(async (w) => {
       const a = (await browser()).subscription;
-      const device = w.service.add(a, CLIENT, "s".repeat(64), null);
-      w.service.add(a, CLIENT, "s".repeat(64), null);
+      const device = await w.service.add(a, CLIENT, "s".repeat(64), null);
+      await w.service.add(a, CLIENT, "s".repeat(64), null);
       w.service.remove(device.id, CLIENT, "s".repeat(64));
       expect(events(w)).toEqual([
         { kind: "push_added", alert: 1 },
@@ -349,7 +345,7 @@ describe("Settings > Notices, push part", () => {
     await withPush(async (w) => {
       expect(await refusal(() => w.service.test())).toMatchObject({ code: "CONFLICT", messageKey: "error.pushNoDevice" });
       const a = await browser();
-      w.service.add(a.subscription, CLIENT, "s".repeat(64), null);
+      await w.service.add(a.subscription, CLIENT, "s".repeat(64), null);
       // The refused try above counted too: two left.
       expect(await w.service.test()).toEqual({ sent: true });
       expect(await w.service.test()).toEqual({ sent: true });
@@ -366,11 +362,11 @@ describe("Settings > Notices, push part", () => {
 
   it("keeps a device its browser opens, and prunes quiet ones from the wake", async () => {
     await withPush(async (w) => {
-      w.service.add((await browser()).subscription, CLIENT, "s".repeat(64), "usado");
-      w.service.add((await browser()).subscription, CLIENT, "s".repeat(64), "esquecido");
+      await w.service.add((await browser()).subscription, CLIENT, "s".repeat(64), "usado");
+      await w.service.add((await browser()).subscription, CLIENT, "s".repeat(64), "esquecido");
       w.world.clock.now += 6 * DAY;
       w.service.seen("usado");
-      w.world.clock.now += 2 * DAY;
+      w.world.clock.now += 2 * DAY + 1;
       w.service.prune();
       expect(w.devices.count()).toBe(1);
       expect(w.service.status("usado").devices).toMatchObject([{ current: true }]);

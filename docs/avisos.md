@@ -57,14 +57,23 @@ pode apontar para uma das páginas da lista `NOTICE_LINKS`.
 - Configurações › Avisos › **Receber avisos neste aparelho** pede a permissão do
   navegador, inscreve com a chave pública VAPID e manda a inscrição ao servidor
   (`POST /api/push/devices`, com a senha digitada há pouco). Até 3 aparelhos.
-- Cada aviso que vai para o push sai cifrado para cada aparelho (título até 120
-  caracteres, texto até 600, link só da lista `NOTICE_LINKS`), com urgência alta
-  para prioridade alta ou crítica, e fica na tela até o dono agir.
-- Resposta 404 ou 410 do serviço de notificação apaga o aparelho na hora. 429 e
+- A notificação é sempre discreta (decisão do Pablo, 02/11): mostra "Zuri" e
+  "Você tem um aviso novo" (ou "um aviso importante", para prioridade alta e
+  crítica). O título e o texto do aviso ficam no servidor e só aparecem no app.
+  O link segue só da lista `NOTICE_LINKS`. Prioridade alta ou crítica sai com
+  urgência alta, fica na tela até o dono agir e toca de novo a cada insistência.
+- Resposta 404, 410 ou 403 (outro par VAPID) do serviço de notificação apaga o
+  aparelho na hora. 429 e
   5xx contam como "o destino não respondeu"; o aviso conta como enviado quando
   pelo menos um aparelho o recebeu.
 - O aparelho se mantém pela checagem de sessão do navegador dele (uma escrita
-  por dia, no máximo); 7 dias sem abrir a Zuri e ele sai, na rodada do alarme.
+  por dia, no máximo); depois de 7 dias completos sem abrir a Zuri ele sai, na
+  rodada do alarme.
+- Clicar em Sair remove o aparelho daquele navegador; a saída automática por
+  inatividade não remove. Trocar ou redefinir a senha aposenta todos: eles só
+  recebem o alerta dessa troca e são apagados 15 minutos depois.
+- O push faz no máximo 30 envios em 30 segundos, mais 9 de reserva para
+  alertas de segurança (regra P9).
 - **Mandar um teste** manda uma notificação a todos os aparelhos, 3 por hora.
 - Sem `VAPID_PUBLIC_KEY` e `VAPID_PRIVATE_KEY` o canal fica "Ainda não
   disponível" (guia em [configuracao-cloudflare.md](configuracao-cloudflare.md)).

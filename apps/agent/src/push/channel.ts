@@ -1,4 +1,4 @@
-import { type ChannelState, NOTICE_LINKS, PUSH_LIMITS, type PushPayload } from "@zuri/shared";
+import { type ChannelState, type Locale, NOTICE_LINKS, PUSH_LIMITS, type PushPayload, t } from "@zuri/shared";
 import type { AlertChannel, AlertMessage, SendResult } from "../alerts/channels.ts";
 import { log } from "../log.ts";
 import type { PushDevices, PushTarget } from "./devices.ts";
@@ -10,6 +10,8 @@ export interface PushChannelDeps {
   keys: () => VapidKeys | null;
   /** The owner's address (https), the contact the push services see in the signature. */
   subject: () => string;
+  /** The owner's language, for the discreet text. */
+  locale: () => Locale;
   fetcher?: typeof fetch;
   clock?: () => number;
 }
@@ -23,23 +25,11 @@ const encoder = new TextEncoder();
  * Push's share of the 50 subrequests an invocation may make (P9: stop before
  * 45): at most 30 posts in any 30 seconds, ten notices to three devices. The
  * rest of a burst stays in the bell, recorded as the channel's own cap.
+ * Security alerts keep a reserve of 9 more (three alerts to three devices),
+ * so a busy morning never silences a new sign-in.
  */
-export const PUSH_BURST = { posts: 30, windowMs: 30_000 } as const;
+export const PUSH_BURST = { posts: 30, securityPosts: 39, windowMs: 30_000 } as const;
 
-/**
- * Plain text that fits the 4 KB a push message carries: control characters
- * (they would grow sixfold as JSON escapes) and lone surrogates go before the
- * cut, which falls at a character, never in the middle of one. At most four
- * bytes per kept character, so 120 + 600 of them always fit.
- */
-const clip = (text: string, max: number) => {
-  const clean = text
-    // biome-ignore lint/suspicious/noControlCharactersInRegex: removing them is the point; a line break stays.
-    .replace(/[\u0000-\u0009\u000b-\u001f\u007f-\u009f\u2028\u2029]/g, "")
-    .replace(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g, "\uFFFD");
-  const chars = [...clean];
-  return chars.length > max ? `${chars.slice(0, max - 1).join("")}…` : clean;
-};
 
 /**
  * The push channel: one encrypted message per device, posted to its push
@@ -55,38 +45,47 @@ export class PushChannel implements AlertChannel {
   constructor(private readonly deps: PushChannelDeps) {}
 
   /** Takes room for `n` posts in the burst window, or says there is none. */
-  private room(n: number): boolean {
+  private room(n: number, security: boolean): boolean {
     const now = (this.deps.clock ?? Date.now)();
     this.#posts = this.#posts.filter((at) => at > now - PUSH_BURST.windowMs);
-    if (this.#posts.length + n > PUSH_BURST.posts) return false;
+    if (this.#posts.length + n > (security ? PUSH_BURST.securityPosts : PUSH_BURST.posts)) return false;
     for (let i = 0; i < n; i++) this.#posts.push(now);
     return true;
   }
 
   state(): ChannelState {
     if (!this.deps.keys()) return "not_configured";
-    return this.deps.devices.count() > 0 ? "ready" : "no_target";
+    return this.deps.devices.any() ? "ready" : "no_target";
   }
 
   async send({ notice }: AlertMessage): Promise<SendResult> {
+    // Always discreet (the owner's choice, 02/11/2026): a locked screen shows
+    // only that there is a notice, never its title or text. The content stays
+    // in the app; it doesn't even travel, encrypted, to the push service.
+    const locale = this.deps.locale();
+    const urgent = notice.priority === "high" || notice.priority === "critical";
     const payload: PushPayload = {
       id: notice.id,
-      title: clip(notice.title, PUSH_LIMITS.titleMax),
-      body: clip(notice.body, PUSH_LIMITS.bodyMax),
+      title: t(locale, "notice.push.discreet.title"),
+      body: t(locale, urgent ? "notice.push.discreet.urgent" : "notice.push.discreet.body"),
       link: notice.link && (NOTICE_LINKS as readonly string[]).includes(notice.link) ? notice.link : null,
       sticky: notice.priority === "high" || notice.priority === "critical",
     };
     const urgency = notice.priority === "critical" || notice.priority === "high" ? "high" : notice.priority === "low" ? "low" : "normal";
-    return this.broadcast(payload, urgency);
+    return this.broadcast(payload, urgency, notice.security);
   }
 
-  /** Sends one payload to every device; also the test notice of Settings > Notices. */
-  async broadcast(payload: PushPayload, urgency: "low" | "normal" | "high" = "normal"): Promise<SendResult> {
+  /**
+   * Sends one payload to every device; also the test notice of Settings >
+   * Notices. A security alert also goes to devices just retired, and may use
+   * the burst's reserve.
+   */
+  async broadcast(payload: PushPayload, urgency: "low" | "normal" | "high" = "normal", security = false): Promise<SendResult> {
     const keys = this.deps.keys();
     if (!keys) return { status: "skipped", reason: "not_configured" };
-    const targets = this.deps.devices.targets();
+    const targets = this.deps.devices.targets(security);
     if (targets.length === 0) return { status: "skipped", reason: "no_target" };
-    if (!this.room(targets.length)) {
+    if (!this.room(targets.length, security)) {
       log("warn", "push_burst_limit", { count: targets.length });
       return { status: "skipped", reason: "channel_limit" };
     }
@@ -120,7 +119,10 @@ export class PushChannel implements AlertChannel {
         this.deps.devices.sent(target.id);
         return "sent";
       }
-      if (res.status === 404 || res.status === 410) {
+      // 404/410: the subscription is gone. 403: it was made with another VAPID
+      // pair (the owner changed it); it never works again, so it goes and the
+      // browser can be activated anew.
+      if (res.status === 404 || res.status === 410 || res.status === 403) {
         this.deps.devices.remove(target.id);
         return "gone";
       }

@@ -18,6 +18,8 @@ export const PUSH_LIMITS = {
   staleMs: 7 * DAY,
   /** How often opening the app from a device moves its "last seen" (one write a day, at most). */
   seenEveryMs: DAY,
+  /** A device retired by a password change gets only security alerts for this long, then goes. */
+  retiredGraceMs: 15 * 60_000,
   /** Test notices per hour, from Settings > Notices. */
   testsPerHour: 3,
   /** How long a push service keeps an undelivered notice, in seconds (a day). */
@@ -66,7 +68,8 @@ export const pushSubscribeSchema = /* @__PURE__ */ (() =>
     keys: z
       .object({
         // A P-256 public key, uncompressed (65 bytes = 87 characters), and a 16-byte secret (22 characters), unpadded.
-        p256dh: base64Url(87, 87),
+        // An uncompressed point starts with the byte 0x04, which encodes as "B".
+        p256dh: base64Url(87, 87).refine((key) => key.startsWith("B")),
         auth: base64Url(22, 22),
       })
       .strict(),

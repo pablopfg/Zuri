@@ -12,6 +12,7 @@ interface DeviceRow {
   created_at: string;
   last_seen_at: string;
   last_sent_at: string | null;
+  retired_at: string | null;
 }
 
 /** A device as the channel needs it: where to post and the keys to encrypt for it. */
@@ -44,15 +45,25 @@ export class PushDevices {
   }
 
   list(browser: string | null): PushDevice[] {
-    return this.db.all<DeviceRow>(`SELECT * FROM zur_push_devices ORDER BY created_at, id`).map((row) => this.present(row, browser));
+    return this.db.all<DeviceRow>(`SELECT * FROM zur_push_devices WHERE retired_at IS NULL ORDER BY created_at, id`).map((row) => this.present(row, browser));
   }
 
-  targets(): PushTarget[] {
-    return this.db.all<PushTarget>(`SELECT id, endpoint, p256dh, auth FROM zur_push_devices ORDER BY created_at, id`);
+  /** Where a notice goes. A security alert also reaches the devices a password change just retired. */
+  targets(security = false): PushTarget[] {
+    return this.db.all<PushTarget>(
+      `SELECT id, endpoint, p256dh, auth FROM zur_push_devices ${security ? "" : "WHERE retired_at IS NULL "}ORDER BY created_at, id`,
+    );
   }
 
+  /** Devices the owner sees and that count toward the three. */
   count(): number {
-    return this.db.one<{ n: number }>(`SELECT count(*) AS n FROM zur_push_devices`)?.n ?? 0;
+    return this.db.one<{ n: number }>(`SELECT count(*) AS n FROM zur_push_devices WHERE retired_at IS NULL`)?.n ?? 0;
+  }
+
+  /** Any device to post to, retired ones included (the channel's state). */
+  any(): boolean {
+    // A bare count(*) is the cheapest question for SQLite (no row scan in the read count).
+    return (this.db.one<{ n: number }>(`SELECT count(*) AS n FROM zur_push_devices`)?.n ?? 0) > 0;
   }
 
   /**
@@ -64,7 +75,7 @@ export class PushDevices {
     const at = this.now();
     return this.db.transaction(() => {
       const existing = this.db.one<DeviceRow>(`SELECT * FROM zur_push_devices WHERE endpoint = ?`, input.endpoint);
-      if (existing) {
+      if (existing && existing.retired_at === null) {
         this.db.run(
           `UPDATE zur_push_devices SET p256dh = ?, auth = ?, browser = coalesce(?, browser), last_seen_at = ? WHERE id = ?`,
           input.keys.p256dh,
@@ -75,6 +86,8 @@ export class PushDevices {
         );
         return { device: this.present({ ...existing, browser: browser ?? existing.browser, last_seen_at: at }, browser), created: false };
       }
+      // Retired by a password change and activated again with the new one: a new device.
+      if (existing) this.db.run(`DELETE FROM zur_push_devices WHERE id = ?`, existing.id);
       if (this.count() >= PUSH_LIMITS.maxDevices) throw new AppError("CONFLICT", "error.pushDeviceLimit", { max: PUSH_LIMITS.maxDevices });
       const row: DeviceRow = {
         id: crypto.randomUUID(),
@@ -86,6 +99,7 @@ export class PushDevices {
         created_at: at,
         last_seen_at: at,
         last_sent_at: null,
+        retired_at: null,
       };
       this.db.run(
         `INSERT INTO zur_push_devices (id, endpoint, p256dh, auth, browser, user_agent, created_at, last_seen_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -110,7 +124,7 @@ export class PushDevices {
   seen(browser: string): void {
     const nowMs = this.clock();
     this.db.run(
-      `UPDATE zur_push_devices SET last_seen_at = ? WHERE browser = ? AND last_seen_at < ?`,
+      `UPDATE zur_push_devices SET last_seen_at = ? WHERE browser = ? AND retired_at IS NULL AND last_seen_at < ?`,
       new Date(nowMs).toISOString(),
       browser,
       new Date(nowMs - PUSH_LIMITS.seenEveryMs).toISOString(),
@@ -126,9 +140,13 @@ export class PushDevices {
     return this.db.run(`DELETE FROM zur_push_devices WHERE browser = ?`, browser).rowsWritten;
   }
 
-  /** A new password or a reset: no device signed in with the old one keeps receiving. */
-  removeAll(): number {
-    return this.db.run(`DELETE FROM zur_push_devices`).rowsWritten;
+  /**
+   * A new password or a reset: no device activated with the old one keeps
+   * receiving. Each one still gets the security alert about it (the owner must
+   * hear of a change they didn't make), then the next prune removes it.
+   */
+  retireAll(): number {
+    return this.db.run(`UPDATE zur_push_devices SET retired_at = ? WHERE retired_at IS NULL`, this.now()).rowsWritten;
   }
 
   /** The push service took a notice for this device. */
@@ -136,10 +154,18 @@ export class PushDevices {
     this.db.run(`UPDATE zur_push_devices SET last_sent_at = ? WHERE id = ?`, this.now(), id);
   }
 
-  /** Devices quiet for seven days stop receiving (spec, step 11). Called from each wake. */
+  /**
+   * Devices quiet for seven days stop receiving (spec, step 11), and retired
+   * ones after their grace. Called from each wake. "Last seen" moves once a day
+   * at most, so the cut adds that day: never less than seven days without access.
+   */
   pruneStale(): number {
-    const before = new Date(this.clock() - PUSH_LIMITS.staleMs).toISOString();
-    return this.db.run(`DELETE FROM zur_push_devices WHERE last_seen_at < ?`, before).rowsWritten;
+    const nowMs = this.clock();
+    return this.db.run(
+      `DELETE FROM zur_push_devices WHERE last_seen_at < ? OR retired_at < ?`,
+      new Date(nowMs - PUSH_LIMITS.staleMs - PUSH_LIMITS.seenEveryMs).toISOString(),
+      new Date(nowMs - PUSH_LIMITS.retiredGraceMs).toISOString(),
+    ).rowsWritten;
   }
 
   private present(row: DeviceRow, browser: string | null): PushDevice {

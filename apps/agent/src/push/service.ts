@@ -1,4 +1,4 @@
-import { type Locale, PUSH_LIMITS, type PushDevice, type PushStatus, type PushSubscribe, t } from "@zuri/shared";
+import { fromBase64Url, type Locale, PUSH_LIMITS, type PushDevice, type PushStatus, type PushSubscribe, t } from "@zuri/shared";
 import type { AuthEvents } from "../auth/events.ts";
 import type { ClientInfo } from "../auth/client.ts";
 import type { InternalState } from "../db/internal-state.ts";
@@ -33,6 +33,7 @@ export class PushService {
       devices: deps.devices,
       keys: deps.keys,
       subject: deps.subject,
+      locale: deps.locale,
       ...(deps.fetcher ? { fetcher: deps.fetcher } : {}),
       ...(deps.clock ? { clock: deps.clock } : {}),
     });
@@ -48,8 +49,11 @@ export class PushService {
   }
 
   /** The route asked for the password typed recently before this ("novo aparelho pede passo extra"). */
-  add(input: PushSubscribe, client: ClientInfo, session: string, browser: string | null): PushDevice {
+  async add(input: PushSubscribe, client: ClientInfo, session: string, browser: string | null): Promise<PushDevice> {
     if (!this.deps.keys()) throw new AppError("NOT_CONFIGURED", "error.pushNotConfigured");
+    // A key off the curve would take one of the three places and fail every send.
+    const point = await crypto.subtle.importKey("raw", fromBase64Url(input.keys.p256dh), { name: "ECDH", namedCurve: "P-256" }, false, []).catch(() => null);
+    if (!point) throw new AppError("VALIDATION_FAILED", undefined, { fields: ["keys.p256dh"] });
     const { device, created } = this.deps.devices.add(input, client.userAgent, browser);
     if (created) this.deps.events.record("push_added", client, { session: session.slice(0, 16), alert: true });
     return device;
