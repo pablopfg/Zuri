@@ -166,7 +166,7 @@ O que está na `develop` hoje, etapa por etapa. "extra" marca melhorias feitas f
 | ⏰ | **Automações** | Lembretes, o resumo das tarefas e rotinas da Zuri, por dia, semana, mês ou a cada algumas horas, sempre no seu fuso. A rotina que a Zuri sugere na conversa só roda depois que você aprova, e um reinício nunca faz nada rodar duas vezes. | 10 |
 | 🔔 | **Central de avisos** | Um sino com contador junta os resultados das automações, o resumo do dia, prazos chegando, tarefas paradas, rotinas falhando, o uso da IA perto do limite e os alertas de segurança. Alerta de segurança não pode ser silenciado e só sai com a senha. | 11 |
 | 🩺 | **Diagnóstico** | Em Configurações, as falhas dos últimos 30 dias por tipo (nunca o que você escreveu), com aviso quando uma falha se repete ou aparece numa versão nova. | 11 |
-| 📲 | **Notificação no aparelho** | Os avisos chegam ao celular ou ao computador com a Zuri fechada, em até 3 aparelhos, cifrados de ponta a ponta. Você escolhe o que vai para cada canal, e um aparelho novo pede a senha e avisa nos outros. | 11 |
+| 📲 | **Notificação no aparelho** | Os avisos chegam ao celular ou ao computador com a Zuri fechada, em até 3 aparelhos, cifrados de ponta a ponta e discretos na tela bloqueada (o conteúdo fica no app). Você escolhe o que vai para cada canal, e um aparelho novo pede a senha e avisa nos outros. | 11 |
 
 ## 🔭 O que vem a seguir
 
