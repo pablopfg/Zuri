@@ -80,7 +80,22 @@ export class TelegramCallbacks {
 }
 
 /** The buttons under the commands' answers (step 15): each points to one row with its target. */
-export const COMMAND_ACTIONS = ["task_done", "task_later", "task_undo", "task_fix", "reminder_fix", "routine_pause", "unlock", "approve"] as const;
+export const COMMAND_ACTIONS = [
+  "task_done",
+  "task_later",
+  "task_undo",
+  "task_fix",
+  "reminder_fix",
+  "routine_pause",
+  "unlock",
+  "approve",
+  // Step 16b: the security commands' buttons (telegram/security.ts).
+  "session_end",
+  "sessions_end",
+  "routines_pause",
+  "lockdown",
+  "sec_cancel",
+] as const;
 
 /** Buttons a tap never uses up: Aprovar can be asked again, and reuses the open confirmation (step 16). */
 const REUSABLE: readonly CommandAction[] = ["approve"];

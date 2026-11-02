@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { initialLocale } from "../src/lib/i18n.tsx";
-import { describeUserAgent } from "../src/lib/user-agent.ts";
+import { describeUserAgent } from "@zuri/shared";
 
 const PUBLIC = join(import.meta.dirname, "..", "public");
 

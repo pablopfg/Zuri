@@ -19,6 +19,8 @@ export const ptBRApprove = {
   "web.approve.lockedTitle": "Muitas tentativas erradas",
   "web.approve.lockedBody": "Por segurança, a confirmação pelo bot volta às {hora}.",
   "web.approve.lockedLater": "Por segurança, a confirmação pelo bot está pausada. Tente mais tarde.",
+  "web.approve.lockdownTitle": "Modo de bloqueio ligado",
+  "web.approve.lockdownBody": "Durante o bloqueio, nada é aprovado nem destravado pelo bot. Para sair, entre no app.",
   "web.approve.refusedTitle": "A passkey não foi aceita",
   "web.approve.refusedBody": "Por segurança, este link parou de valer.",
   "web.approve.missingTitle": "Nenhuma passkey deste endereço",

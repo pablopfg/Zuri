@@ -1,7 +1,7 @@
 import type { AuthActivityEvent, AuthActivityGroup, AuthEventKind, MessageKey } from "@zuri/shared";
 import { AUTH_ACTIVITY_GROUPS, ptBRSecurity } from "@zuri/shared";
 import { addMessages } from "../../lib/i18n.tsx";
-import { describeUserAgent } from "../../lib/user-agent.ts";
+import { describeUserAgent } from "@zuri/shared";
 
 // The Access log page and the activity card import this module: their pt-BR texts arrive
 // with it, not in the first bundle (rule P11).
@@ -37,6 +37,10 @@ export const KIND_LABEL: Record<AuthEventKind, MessageKey> = {
   telegram_unlocked: "web.activity.kind.telegram_unlocked",
   telegram_confirm_locked: "web.activity.kind.telegram_confirm_locked",
   telegram_approved: "web.activity.kind.telegram_approved",
+  telegram_lockdown: "web.activity.kind.telegram_lockdown",
+  telegram_sessions_ended: "web.activity.kind.telegram_sessions_ended",
+  telegram_routines_paused: "web.activity.kind.telegram_routines_paused",
+  lockdown_exited: "web.activity.kind.lockdown_exited",
   setup_failure: "web.activity.kind.setup_failure",
   setup_locked: "web.activity.kind.setup_locked",
   owner_created: "web.activity.kind.owner_created",

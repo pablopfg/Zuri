@@ -24,14 +24,16 @@ const RecoveryPage = lazy(() => import("./pages/setup/RecoveryPage.tsx").then((m
 const ApprovePage = lazy(() => import("./pages/ApprovePage.tsx").then((m) => ({ default: m.ApprovePage })));
 const NotesPage = lazy(() => import("./pages/productivity/NotesPage.tsx").then((m) => ({ default: m.NotesPage })));
 
-/** While the password must change, or the second step must be turned on, the server refuses everything else: so does the interface. */
+/** While the password must change, the second step must be turned on or a lockdown is on, the server refuses everything else: so does the interface. */
 function SignedIn() {
   const { session } = useSession();
   // Turning the second step on opens the server's session at once, while the recovery codes are
   // still on screen: a session check then (back from another app) must not swap them for the app.
   // The screen holds itself until the owner says the codes are kept.
   const [held, hold] = useState(false);
-  const locked = session?.passwordChangeRequired ? <PasswordChangePage /> : held || session?.secondStepRequired ? <SecondStepPage hold={hold} /> : null;
+  // A lockdown (step 16b) opens the same lazy screen, which then shows "Sair do bloqueio".
+  const locked =
+    session?.passwordChangeRequired || session?.lockdown ? <PasswordChangePage /> : held || session?.secondStepRequired ? <SecondStepPage hold={hold} /> : null;
   if (locked) return <Suspense fallback={<SessionChecking />}>{locked}</Suspense>;
   return <AppShell />;
 }

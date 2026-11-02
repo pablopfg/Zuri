@@ -57,6 +57,8 @@ export type MfaFactor = "totp" | "recovery_code" | "passkey";
 /** What a code may be: the app's code only, or a recovery code too (which is then used up). */
 export interface CodeOptions {
   recovery: boolean;
+  /** False: the app's code is not taken, only a recovery code (the lockdown's first hour, step 16). */
+  totp?: boolean;
 }
 
 /**
@@ -232,7 +234,7 @@ export class TwoStep {
     const active = this.row("active");
     if (!active) return null;
     const secret = await this.open(active.secret);
-    const step = secret ? await matchTotp(secret, code, active.last_step, this.clock()) : null;
+    const step = secret && options.totp !== false ? await matchTotp(secret, code, active.last_step, this.clock()) : null;
     const hash = options.recovery ? await hashRecoveryCode(code) : null;
     // No await from here on: two requests with the same code can't both use it.
     const current = this.row("active");

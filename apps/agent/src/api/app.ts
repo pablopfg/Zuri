@@ -6,6 +6,7 @@ import {
   confirmRequestSchema,
   heartbeatRequestSchema,
   type Locale,
+  lockdownExitSchema,
   loginRequestSchema,
   type MfaRequired,
   mfaCodeRequestSchema,
@@ -104,6 +105,25 @@ const WHILE_SECOND_STEP_SETUP = new Set([
   "POST /api/auth/mfa/setup",
   "POST /api/auth/mfa/enable",
   "GET /api/settings",
+]);
+
+/**
+ * Signed-in routes that still work during a lockdown (step 16): the session
+ * itself, typing the password again, "Sair do bloqueio", the language, and the
+ * Telegram card, whose Desvincular is "Não fui eu". Everything else answers
+ * 423 LOCKDOWN_ACTIVE until the owner leaves it.
+ */
+const WHILE_LOCKDOWN = new Set([
+  "GET /api/auth/session",
+  "POST /api/auth/logout",
+  "POST /api/auth/heartbeat",
+  "POST /api/auth/confirm",
+  "GET /api/auth/mfa",
+  "GET /api/lockdown",
+  "POST /api/lockdown/exit",
+  "GET /api/settings",
+  "GET /api/telegram",
+  "DELETE /api/telegram",
 ]);
 
 /**
@@ -300,6 +320,7 @@ export function createApi(deps: ApiDeps) {
     if (auth.secondStepRequired() && !WHILE_SECOND_STEP_SETUP.has(route)) {
       throw new AppError("FORBIDDEN", "auth.setup.secondStepRequired", { secondStepRequired: true });
     }
+    if (!WHILE_LOCKDOWN.has(route) && auth.lockdown.active()) throw new AppError("LOCKDOWN_ACTIVE", "auth.lockdown.active");
     c.set("session", session);
     await next();
   });
@@ -346,6 +367,16 @@ export function createApi(deps: ApiDeps) {
     const response = Response.json(auth.state(next.session));
     response.headers.append("set-cookie", sessionCookie(c.req.raw, next.token));
     return response;
+  });
+
+  // ---------- Lockdown (step 16): "Sair do bloqueio" ----------
+
+  app.get("/lockdown", () => Response.json(deps.auth().lockdownStatus()));
+
+  app.post("/lockdown/exit", async (c) => {
+    const proof = await readJson(c.req.raw, lockdownExitSchema, 1024);
+    await deps.auth().exitLockdown(c.get("session"), proof, client(c));
+    return new Response(null, { status: 204 });
   });
 
   // ---------- Settings ----------

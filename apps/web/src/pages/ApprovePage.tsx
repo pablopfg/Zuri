@@ -13,7 +13,7 @@ addMessages(ptBRApprove);
 
 type Options = Parameters<typeof startAuthenticationFn>[0]["optionsJSON"];
 
-/** Where the page can be. The ends (done, bad, locked, refused, missing, unsupported, changed, handled) never go back. */
+/** Where the page can be. The ends (done, bad, locked, lockdown, refused, missing, unsupported, changed, handled) never go back. */
 type Step =
   | { kind: "loading" }
   | { kind: "ready"; options: Options; cancelled: boolean }
@@ -23,6 +23,7 @@ type Step =
   | { kind: "changed" }
   | { kind: "handled" }
   | { kind: "locked"; retryAfter: number | null }
+  | { kind: "lockdown" }
   | { kind: "refused" }
   | { kind: "missing" }
   | { kind: "unsupported" }
@@ -38,6 +39,8 @@ function stepOf(error: unknown): Step {
   if (!(error instanceof ApiError)) return { kind: "error", error };
   const reason = error.details.approval;
   if (error.code === "APPROVAL_EXPIRED") return { kind: "bad", reason: reason === "used" || reason === "expired" ? reason : "invalid" };
+  // Step 16b: during a lockdown nothing is approved or unlocked through the bot.
+  if (error.code === "APPROVALS_LOCKED" && reason === "lockdown") return { kind: "lockdown" };
   if (error.code === "APPROVALS_LOCKED") return { kind: "locked", retryAfter: typeof error.details.retryAfter === "number" ? error.details.retryAfter : null };
   if (error.code === "INVALID_CREDENTIALS") return { kind: "refused" };
   if (error.code === "NOT_FOUND") return { kind: "missing" };
@@ -270,6 +273,8 @@ export function ApprovePage() {
                 : t("web.approve.lockedBody", { hora: hour(new Date(Date.now() + step.retryAfter * 1000).toISOString()) }),
               "warning",
             )
+          ) : step.kind === "lockdown" ? (
+            ending(<LockKeyhole className="h-5 w-5" />, "web.approve.lockdownTitle", t("web.approve.lockdownBody"), "warning")
           ) : step.kind === "refused" ? (
             ending(<TriangleAlert className="h-5 w-5" />, "web.approve.refusedTitle", t("web.approve.refusedBody"), "warning")
           ) : step.kind === "missing" ? (

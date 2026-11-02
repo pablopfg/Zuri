@@ -131,4 +131,5 @@ export const ptBRAutomations = {
   "web.automations.problem.ai_unavailable": "a IA não respondeu a tempo. A próxima execução tenta de novo.",
   "web.automations.problem.interrupted": "o sistema reiniciou no meio da execução. Ela não é repetida para não avisar duas vezes.",
   "web.automations.problem.failed": "algo deu errado. A próxima execução tenta de novo.",
+  "web.automations.problem.lockdown": "o modo de bloqueio estava ligado. A rotina volta quando você sair dele.",
 } as const;

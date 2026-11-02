@@ -68,6 +68,10 @@ export const SECURITY_ALERT_EVENTS = [
   "telegram_unlocked",
   "telegram_confirm_locked",
   "telegram_approved",
+  "telegram_lockdown",
+  "telegram_sessions_ended",
+  "telegram_routines_paused",
+  "lockdown_exited",
   "setup_failure",
   "setup_locked",
   "owner_created",
@@ -251,6 +255,8 @@ export interface Notice {
   nextAttemptAt: string | null;
   /** True for security alerts: muting and deleting follow stricter rules. */
   security: boolean;
+  /** A security alert the bot caused (step 16): it stops insisting only when acknowledged here, with the password typed recently. */
+  ackInApp: boolean;
 }
 
 export interface NoticePage {

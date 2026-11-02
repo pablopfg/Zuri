@@ -107,6 +107,15 @@ export class TelegramLinks {
     return changed !== null;
   }
 
+  /**
+   * A second /bloquear within 24 hours of leaving the last (step 16): the link
+   * stops being heard until the owner confirms it again in the app. False when
+   * there was no active link.
+   */
+  suspend(): boolean {
+    return this.db.one<{ id: string }>(`UPDATE zur_telegram_links SET status = 'suspended' WHERE kind = 'private' AND status = 'active' RETURNING id`) !== null;
+  }
+
   /** Unlinks the account (and the group with it) and drops any code waiting. True when there was something to remove. */
   remove(): boolean {
     return this.db.transaction(() => {
