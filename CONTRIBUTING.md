@@ -26,6 +26,7 @@ sigam as regras abaixo.
 2. Escreva o teste junto com o código. Bug corrigido vem com o teste que
    falhava antes.
 3. Escreva o changelog num arquivo novo em `changelog/nao-lancado/<assunto>.md`
+   (com `<!-- versao: minor -->` na primeira linha se a PR conclui uma etapa)
    e, quando couber, atualize o `README.md` (veja abaixo).
 4. Rode antes de abrir o PR:
 
@@ -80,7 +81,9 @@ A regra completa está em [`.claude/rules/capturas.md`](.claude/rules/capturas.m
   Documentação, changelog e PRs em pt-BR.
 - Todo texto visível sai do catálogo `packages/shared/i18n`, em pt-BR e en.
 - Mudança visível ganha um arquivo em `changelog/nao-lancado/`, com os grupos
-  do `CHANGELOG.md` (`### Adicionado`, `### Corrigido`…). O release junta tudo.
+  do `CHANGELOG.md` (`### Adicionado`, `### Corrigido`…). Depois do merge, o
+  workflow `Versão` dá o número, escreve a seção e cria a tag e a pré-release
+  ([docs/agente/versionamento.md](docs/agente/versionamento.md)).
 - Dependência nova só com motivo claro, com versão exata.
 - Nada de domínio real, e-mail, id do Telegram, token ou chave no repositório.
   Use `exemplo.com.br` nos exemplos.

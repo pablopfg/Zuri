@@ -735,7 +735,7 @@ Nenhum teste chama a Cloudflare, o Telegram ou provedores de IA de verdade. Um *
 
 - `ci.yml` em `pull_request`: instalar com `npm ci`, typecheck, lint, testes, i18n, build, e2e, `npm audit`.
 - `deploy.yml` em push para `main`: mesmos testes, depois `wrangler deploy` do Worker único com o ambiente `production` (só `main`, com aprovação) e geração do binding `SEND_EMAIL` com `destination_address` a partir da variável `ZURI_ALERT_EMAIL_TO` do ambiente. O webhook e o menu do bot são registrados pelo próprio Worker (etapa 12), nunca pelo Actions. O deploy falha se `workers_dev` ou `preview_urls` estiverem ligados com domínio próprio.
-- `release.yml` por tag `vX.Y.Z` (SemVer): cada PR escreve o changelog à mão em `changelog/nao-lancado/<assunto>.md`; o release junta os arquivos em "Não lançado" (`node scripts/changelog.ts --gravar`) e copia a seção para a versão.
+- `versao.yml` a cada merge na `develop` (SemVer 0.x; decisão de 02/11/2026): cada PR escreve o changelog à mão em `changelog/nao-lancado/<assunto>.md` (`<!-- versao: minor -->` quando conclui etapa); o workflow numera a versão, cria a tag `vX.Y.Z` e a pré-release no commit do merge e abre a PR `chore(release):` que escreve a seção no `CHANGELOG.md` (data, hora UTC-3, commit e PR). A 1.0.0 sai com o primeiro release para a `main`. Detalhes em `docs/agente/versionamento.md`.
 - Segredos do Worker são gravados pelo dono no painel da Cloudflare, nunca no GitHub.
 
 ### Documentação (toda em pt-BR)

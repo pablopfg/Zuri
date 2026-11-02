@@ -1,4 +1,4 @@
-import type { DiagnosticEntry } from "@zuri/shared";
+import { APP_VERSION, type DiagnosticEntry } from "@zuri/shared";
 import { describe, expect, it } from "vitest";
 import { ISSUE_REPOSITORY, issueReportUrl } from "../src/lib/issue-report.ts";
 
@@ -40,7 +40,7 @@ describe("issueReportUrl", () => {
     const p = params(entry());
     expect(p.get("title")).toBe("[erro] CLIENT_ERROR TypeError (tela)");
     expect(p.get("contexto")).toBe(
-      ["Falha registrada no Diagnóstico (origem: tela).", "Rota: /notas/id", "Primeira vez: 2026-10-30 10:00 UTC", "Última vez: 2026-11-02 08:00 UTC"].join("\n"),
+      ["Falha registrada no Diagnóstico (origem: tela).", "Rota: /notas/id", "Primeira vez: 2026-10-30 10:00 UTC", "Última vez: 2026-11-02 08:00 UTC", `Versão da Zuri: ${APP_VERSION}`].join("\n"),
     );
     expect(p.get("obtido")).toBe("CLIENT_ERROR TypeError: 3 hoje, 14 nos últimos 30 dias.");
     expect(p.get("codigo")).toBe("CLIENT_ERROR · TypeError · cf-ray 8f1e2d3c4b5a6978 · id 0123456789abcdef");

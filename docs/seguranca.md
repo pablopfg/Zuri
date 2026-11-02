@@ -803,3 +803,23 @@ escreve nos logs nomes e códigos, nunca valores: tudo passa por
 `apps/agent/src/log.ts`, que só aceita uma lista fechada de campos e descarta
 o que não tiver cara de nome de erro, código, rota ou `cf-ray` (teste em
 `apps/agent/test/log.test.ts`).
+
+## Versões e pré-releases
+
+O workflow `Versão` (`.github/workflows/versao.yml`, `docs/agente/versionamento.md`)
+roda só na `develop`, com o `GITHUB_TOKEN` e sem instalar dependências.
+
+- Escreve só tags novas, pré-releases novas, a branch `chore/versao` e a PR
+  dela. Nunca empurra para `develop` ou `main`, nunca move nem apaga tag: uma
+  tag em outro commit para o workflow e abre a issue padrão.
+- Toda seção do `CHANGELOG.md` precisa apontar para um merge da linha principal
+  da `develop`; senão o workflow para, e nenhuma tag cai em código que não foi
+  mesclado.
+- Os fragmentos são lidos do git, nunca do disco, e só como arquivo comum: um
+  symlink é recusado, para nada do runner parar nas notas públicas.
+- Títulos e textos vão para o `gh` como argumentos, sem shell, e `@nome` fora
+  de código vira texto inerte nas notas e na PR, sem notificar ninguém.
+- A opção "Allow GitHub Actions to create and approve pull requests" vale para
+  o repositório inteiro. A regra da `develop` pede 0 aprovações e o merge
+  depende só dos checks, então a aprovação do bot não abre nenhum atalho; os
+  workflows com `pull-requests: write` são só o `Update PRs` e o `Versão`.
