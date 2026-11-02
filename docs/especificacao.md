@@ -58,6 +58,7 @@ Cada linha é um requisito. A coluna da direita aponta onde o agente estuda a re
 | Canais | Push (Web Push, máx. 3 aparelhos, remoção após 7 dias sem acesso), e-mail pelo Email Routing, Telegram | `push/`, `alerts/email.ts`, `telegram/` |
 | Integrações | Servidores MCP remotos (sem auth, bearer, OAuth), ferramentas desligadas por padrão, aprovação para o que altera | `mcp/`, `docs/mcp.md` |
 | Google Agenda | Leitura e escrita de eventos, rotinas do dia com a agenda | `calendar/`, `docs/google-calendar.md` |
+| Google Contatos | Cópia só leitura dos contatos das etiquetas escolhidas, busca na conversa, aniversários e datas nas automações, fonte de dados dos workflows (novo no Zuri, etapa 19b) | `docs/planos/google-contatos.md` |
 | Acesso remoto | Tokens pessoais com escopo `read` ou `write`, 90 dias, só hash; eventos de entrada do n8n | `remote/`, `docs/remote-access.md` |
 | Workflows | Monitor de sites com Cloudflare Workflows (passos duráveis e novas tentativas) | `workflows/` |
 | Modelos de IA | Workers AI por padrão; Anthropic e OpenAI opcionais, com teto diário em US$ e fallback | `ai/`, `docs/modelos-de-ia.md` |
@@ -221,7 +222,7 @@ Todas as rotas ficam sob `/api`, recebem e devolvem JSON validado por Zod (`pack
 | 4 | GET `/api/auth/passkeys`; POST `/api/auth/passkeys/options`, POST `/api/auth/passkeys`; PATCH e DELETE `/api/auth/passkeys/:id` | sessão + CSRF + senha recente (menos o GET); `options` pede a senha digitada agora, e só a mesma sessão conclui | — / `{password}` (options) / `{name, response}` / `{name}` | 200 `{passkeys}` com `usableHere`; 201 `{passkey}`; 204; 400 `VALIDATION_FAILED`; 401 `INVALID_CREDENTIALS` (senha errada); 404; 409 `CONFLICT`; 429 `RATE_LIMITED` |
 | 8 | GET `/api/usage` | sessão + CSRF | — | 200 uso de hoje contra os limites, por modelo, e os últimos 7 dias (`usageReportSchema`) |
 | 9 | POST `/api/chat` (SSE), POST `/api/chat/cancel`, POST `/api/actions/:id/approve`, POST `/api/actions/:id/cancel` | sessão + CSRF | `{conversationId?, message}` | eventos SSE `text`, `tool`, `approval`, `done`, `error` |
-| 11 | POST `/api/auth/recover/request`, POST `/api/auth/recover/confirm` | nenhuma + limitador | `{email}` / `{token, password, totp?}` | 202 sempre no pedido; 204; 410 `RECOVERY_EXPIRED` |
+| 11 | GET `/api/auth/recover`; POST `/api/auth/recover/request`, POST `/api/auth/recover/check`, POST `/api/auth/recover/confirm` | CSRF + limitador (Turnstile no pedido) | — / `{email, turnstileToken?}` / `{token}` / `{token, password, totp?}` | 200 `{available}`; 202 sempre no pedido; 200 `{secondStep}`; 204; 410 `RECOVERY_EXPIRED`; 401 `INVALID_CREDENTIALS` com `details.attemptsLeft` (código errado) |
 | 12 | POST `/api/telegram/webhook` | cabeçalho secreto | atualização (máx. 64 KB) | 200 sempre; 403 sem cabeçalho; 413 acima de 64 KB |
 | 12 | GET, PATCH e DELETE `/api/telegram`; POST `/api/telegram/{connect,confirm,test}` | sessão + CSRF (+ senha recente em connect, confirm e DELETE) | PATCH `{conversation:boolean, readLockHours:number}` | — |
 | 16 | POST `/api/approvals/telegram/options`, POST `/api/approvals/telegram/verify` | token de aprovação no corpo | `{token}` / `{token, credential}` | 200; 410 `APPROVAL_EXPIRED`; 409 `TARGET_CHANGED`; 423 `APPROVALS_LOCKED` |
@@ -308,6 +309,7 @@ Ordem: nome do agente (uma linha) → instruções fixas → relógio do dono �
 
 - **Avisos:** copie de `docs/alerts.md` do Talorys a tabela de categorias, as prioridades, os limites padrão por canal (por hora e por dia), a chave de deduplicação e a tabela de vigias com prioridade e repetição.
 - **MCP:** limites de servidores, ferramentas e tamanho de resposta iguais aos de `docs/mcp.md`; nenhuma ferramenta MCP roda em execuções agendadas; callback OAuth em `/settings/mcp-oauth` → `POST /api/mcp/oauth/callback`.
+- **Google Contatos (etapa 19b):** escopo `https://www.googleapis.com/auth/contacts.readonly`, somado à conexão da agenda com `include_granted_scopes=true`; People API (`people.googleapis.com`) com `contactGroups.list` e `people.connections.list` (`syncToken`, 1.000 por página). O app OAuth fica publicado "Em produção" sem verificação, porque em "Teste" o refresh token de escopo sensível vence em 7 dias (vale também para a agenda).
 - **Google Agenda:** escopos `https://www.googleapis.com/auth/calendar.events` (leitura e escrita) e `calendar.readonly` (só leitura), refresh token cifrado com `MCP_CREDENTIAL_KEY`, `redirect_uri` = `PUBLIC_URL` + `/settings/google-oauth`.
 - **Eventos remotos:** schema de `docs/alerts.md` (título até 120 caracteres, corpo até 1.000, `priority`, `category`, `dedupeKey`) e rotas por escopo de `docs/remote-access.md`.
 - **Backup:** `{ format: "zuri-backup", version: 1, exportedAt, data: {...} }` com tarefas, notas, projetos, memórias, conversas, automações (chegam pausadas) e configurações não sensíveis. Nunca inclui segredos TOTP, passkeys, sessões, tokens, vínculo do Telegram, credenciais MCP e Google. A importação mescla com ids novos e segue as regras de backup das Regras de segurança.
@@ -331,6 +333,7 @@ Aceito: "hoje", "amanhã", "depois de amanhã", dias da semana com ou sem "-feir
 | 15 | 6, 7, 10, 11, 12 |
 | 16 | 4, 9, 11, 12 |
 | 17 a 22 | 9 e 11; independentes entre si. 19, 22 e 23 estendem comandos da etapa 15 |
+| 19b | 10, 11 e 19 (usa a conexão Google da 19); a 22 pode ler os contatos se vier depois |
 | 23 | 15 |
 | 24 | pode começar após a 5 e é atualizada a cada etapa que cria variável ou segredo |
 | 25 | todas |
@@ -343,6 +346,7 @@ Aceito: "hoje", "amanhã", "depois de amanhã", dias da semana com ou sem "-feir
 | 10 | Recorrência correta na virada de horário de verão (fuso de teste) e no dia 31; reconciliação roda uma vez só |
 | 13 | Insistência +15/+60 com relógio falso; o grupo nunca recebe sozinho um alerta de segurança |
 | 17 | A busca híbrida acha "carro" na memória "automóvel" com o mock de embeddings |
+| 19b | Só contatos das etiquetas escolhidas chegam ao banco; token de sincronização vencido leva à leitura completa sozinho; nenhum dado de contato em log ou backup; desconectar revoga e apaga a cópia |
 | 20 | Token `read` recebe 403 em toda rota de escrita; nenhum token alcança as rotas proibidas (teste que percorre todas) |
 | 23 | Backup malicioso (automação ligada, MCP, 11 MB, 10.001 memórias) é recusado inteiro |
 | 24 | O deploy falha com `workers_dev` ou `preview_urls` ligados e domínio próprio |
@@ -512,6 +516,8 @@ O comportamento completo está na seção "Bot do Telegram do administrador"; aq
 **Etapa 18 · Servidores MCP remotos** (`feat: adiciona servidores MCP remotos`) — Streamable HTTP com o cliente MCP oficial, sem auth / bearer / OAuth, credenciais cifradas com `MCP_CREDENTIAL_KEY`, `fetch` protegido (trava de origem, DNS conferido, sem redirecionamento, limites de tamanho, 35 s), ferramentas desligadas por padrão com prefixo `mcp_`, troca de URL zera confiança e credencial. Diferente do Talorys, as ferramentas MCP passam por triagem por turno (dica "Quando usar" do dono, no máximo 10 ligadas e 6 oferecidas, ferramenta `find_tools`) e a sessão fecha no fim do turno; detalhes em `docs/planos/mcp.md`. Pode ser entregue em duas partes: 18a (sem auth e Bearer) e 18b (OAuth). Aceite: os testes de `docs/mcp.md` do Talorys e os de `docs/planos/mcp.md`.
 
 **Etapa 19 · Google Agenda** (`feat: integra o Google Agenda`) — OAuth com cliente do próprio dono, agendas só leitura ou leitura e escrita, ferramentas `list_calendar_events`, `create_calendar_event`, `update_calendar_event`, `delete_calendar_event` (esta como proposta), rotinas de briefing às 07:00 e fechamento às 19:00. No bot, `/hoje` passa a incluir a agenda.
+
+**Etapa 19b · Google Contatos** (`feat: sincroniza os contatos do Google por etiqueta`) — escopo `contacts.readonly` somado à conexão Google da etapa 19 (autorização incremental, mesmo refresh token cifrado), cópia só leitura dos contatos das etiquetas escolhidas pelo dono na tela, sincronização incremental com `syncToken` de hora em hora e pelo botão, teto de 5.000 contatos, ferramentas `search_contacts` e `get_contact` (classe `read`, resultado em `<data source="contact">`), automações de aniversários e datas especiais e gatilho de contato novo na etiqueta. Contatos nunca vão para log nem para backup; desconectar revoga e apaga a cópia. A Zuri não manda nada aos contatos. Detalhes, perguntas ao Pablo e custo em `docs/planos/google-contatos.md`.
 
 **Etapa 20 · Acesso remoto e eventos** (`feat: adiciona tokens de acesso remoto e eventos de entrada`) — tokens `zur_pat_` com escopo, 90 dias, só hash, lista de rotas permitidas; `POST /api/remote/events` para n8n e outros (60 por hora, 100 por dia, metade dos limites de canal). Tokens nunca alcançam `/api/telegram`, aprovações nem planos.
 

@@ -103,7 +103,8 @@ async function request<T>(path: string, { method = "GET", body, signal }: Reques
     if (error.code === "PASSWORD_CHANGE_REQUIRED") for (const fn of passwordChange) fn(error);
     throw error;
   }
-  if (res.status === 204) return undefined as T;
+  // 202: the server took the request and says nothing more (the recovery link, step 11c).
+  if (res.status === 204 || res.status === 202) return undefined as T;
   return (await res.json()) as T;
 }
 

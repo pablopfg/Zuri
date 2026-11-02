@@ -167,14 +167,15 @@ O que está na `develop` hoje, etapa por etapa. "extra" marca melhorias feitas f
 | 🔔 | **Central de avisos** | Um sino com contador junta os resultados das automações, o resumo do dia, prazos chegando, tarefas paradas, rotinas falhando, o uso da IA perto do limite e os alertas de segurança. Alerta de segurança não pode ser silenciado e só sai com a senha. | 11 |
 | 🩺 | **Diagnóstico** | Em Configurações, as falhas dos últimos 30 dias por tipo (nunca o que você escreveu), com aviso quando uma falha se repete ou aparece numa versão nova, e um botão que abre o relato do problema no GitHub já preenchido. | 11 |
 | 📲 | **Notificação no aparelho** | Os avisos chegam ao celular ou ao computador com a Zuri fechada, em até 3 aparelhos, cifrados de ponta a ponta e discretos na tela bloqueada (o conteúdo fica no app). Você escolhe o que vai para cada canal, e um aparelho novo pede a senha e avisa nos outros. | 11 |
+| 📧 | **E-mail e "Esqueci minha senha"** | Avisos também por e-mail, com assunto discreto e no máximo 10 por dia (4 guardados para segurança). Na tela de entrada, um link de 30 minutos no seu e-mail cria uma senha nova, pedindo o código do autenticador quando a verificação em duas etapas está ligada. | 11 |
 
 ## 🔭 O que vem a seguir
 
 | | Funcionalidade | O que faz | Etapa |
 | :---: | --- | --- | :---: |
-| 📧 | **E-mail e prioridade** | Os avisos também por e-mail, recuperação de senha por e-mail e prioridade que aprende. | 11 |
+| 🎯 | **Prioridade que aprende** | A Zuri percebe quais avisos você abre e ignora e ajusta a prioridade, e as automações ganham um campo de prioridade. | 11 |
 | 🤖 | **Bot do Telegram** | Painel de administração no bolso: consultas sem IA, conversa por texto e voz (arquivo acima do limite só com a sua confirmação), aprovações com passkey e modo de bloqueio. | 12–16 |
-| 🔌 | **Integrações** | Busca semântica, servidores MCP, Google Agenda, acesso remoto para o n8n e monitor de sites, todos opcionais. | 17–22 |
+| 🔌 | **Integrações** | Busca semântica, servidores MCP, Google Agenda, Google Contatos por etiqueta, acesso remoto para o n8n e monitor de sites, todos opcionais. | 17–22 |
 | 💾 | **Backup e instalação** | Backup e importação, guia de instalação só pelo navegador e auditoria final. | 23–25 |
 
 ## 🧭 Como funciona
@@ -265,6 +266,7 @@ O orçamento de cada cota está em [docs/arquitetura/orcamento-free-tier.md](doc
 | **D · Integrações** | 17 | Busca semântica | ⬜ |
 | | 18 | Servidores MCP remotos | ⬜ |
 | | 19 | Google Agenda | ⬜ |
+| | 19b | Google Contatos | ⬜ |
 | | 20 | Acesso remoto e eventos | ⬜ |
 | | 21 | Modelos pagos ⚠️ | ⬜ |
 | | 22 | Workflows (monitor de sites) | ⬜ |

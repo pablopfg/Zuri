@@ -261,6 +261,10 @@ const PUBLIC = new Set([
   "POST /api/setup/code",
   "POST /api/setup/owner",
   "POST /api/setup/recover",
+  "GET /api/auth/recover",
+  "POST /api/auth/recover/request",
+  "POST /api/auth/recover/check",
+  "POST /api/auth/recover/confirm",
 ]);
 /** What still works before two-step sign-in is on. */
 const OPEN = new Set([

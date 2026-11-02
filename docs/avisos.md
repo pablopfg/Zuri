@@ -7,8 +7,8 @@ três partes:
 | Parte | O que entrega | Situação |
 | --- | --- | --- |
 | 11a | Central de avisos, insistência, alertas de acesso, resultados das automações, vigias, resumo do dia e a aba Diagnóstico | mesclada |
-| 11b | Notificação no aparelho (Web Push com VAPID) e canais por tipo de aviso | este PR |
-| 11c | E-mail (`SEND_EMAIL`) e recuperação de senha por e-mail | próxima |
+| 11b | Notificação no aparelho (Web Push com VAPID) e canais por tipo de aviso | mesclada |
+| 11c | E-mail (`SEND_EMAIL`) e recuperação de senha por e-mail | este PR |
 | 11d | Prioridade que aprende e campo de prioridade nas automações | depois da 11c |
 
 ## Onde fica o código
@@ -16,6 +16,7 @@ três partes:
 - `packages/shared/src/alerts.ts`: prioridades, categorias, canais, tipos de aviso, limites (`ALERT_LIMITS`, `ESCALATION`, `WATCH`, `DIAGNOSTIC_LIMITS`) e schemas das rotas.
 - `apps/agent/src/alerts/service.ts`: `AlertService` cria, lista, marca como lido, silencia e apaga avisos; entrega aos canais; faz a insistência.
 - `apps/agent/src/alerts/channels.ts`: a interface `AlertChannel` que push (11b), e-mail (11c) e Telegram (13) implementam.
+- `apps/agent/src/email/`: o envio com a conta do dia (`sender.ts`) e o canal de e-mail (`channel.ts`); `apps/agent/src/auth/email-recovery.ts` guarda o link de senha nova.
 - `apps/agent/src/push/`: a cifra e a assinatura do Web Push (`webpush.ts`), os aparelhos (`devices.ts`), o canal (`channel.ts`) e o que a aba usa (`service.ts`).
 - `apps/agent/src/alerts/security.ts`: transforma os eventos de acesso marcados para alerta em avisos críticos.
 - `apps/agent/src/alerts/watchers.ts`: os vigias e o resumo do dia.
@@ -77,6 +78,34 @@ pode apontar para uma das páginas da lista `NOTICE_LINKS`.
 - **Mandar um teste** manda uma notificação a todos os aparelhos, 3 por hora.
 - Sem `VAPID_PUBLIC_KEY` e `VAPID_PRIVATE_KEY` o canal fica "Ainda não
   disponível" (guia em [configuracao-cloudflare.md](configuracao-cloudflare.md)).
+
+## E-mail
+
+- O canal de e-mail manda texto puro, só para o e-mail cadastrado do dono, pelo
+  binding `SEND_EMAIL` (destino verificado, grátis em todos os planos). Sem o
+  binding, o remetente `ALERT_EMAIL_FROM` ou o e-mail do dono, o canal fica
+  "Ainda não disponível" (guia em
+  [configuracao-cloudflare.md](configuracao-cloudflare.md#e-mail-opcional)).
+- O assunto é discreto como o push: "Zuri: você tem um aviso novo" (ou "um
+  aviso importante"). O corpo traz o título e o texto do aviso com os links de
+  fora desarmados (`hxxps://exemplo[.]com`), o link do próprio app ("Abrir na
+  Zuri: …") e, no fim, "A Zuri nunca pede a sua senha por e-mail."
+- No máximo 10 e-mails em qualquer janela de 24 horas, somando avisos e links de
+  senha nova. Os avisos comuns param no 6º: os 4 últimos ficam para alertas de
+  segurança e para a recuperação de senha. Um envio que falha devolve a vaga.
+- O e-mail é tentado uma vez só (sem insistência): a insistência fica com o
+  push e o Telegram, para não gastar a cota do dia.
+
+## Recuperação de senha por e-mail
+
+"Esqueci minha senha", na tela de entrada, abre `/recuperar-senha`. O dono digita
+o e-mail e passa pela verificação de robô; a resposta é sempre a mesma, seja o
+e-mail o da conta ou não. Se for, chega um link que vale 30 minutos e funciona
+uma vez. Com a verificação em duas etapas ligada, o link pede também um código
+do app autenticador ou de recuperação. Salvar a senha nova encerra todas as
+sessões, esquece os navegadores conhecidos, aposenta os aparelhos do push e
+gera o alerta "Senha trocada pelo e-mail" em todos os canais. Regras de
+segurança em [seguranca.md](seguranca.md#recuperação-de-senha-por-e-mail).
 
 ## Canais por tipo de aviso
 
