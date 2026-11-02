@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { APP_VERSION } from "../../packages/shared/src/version.ts";
 import { afterEach, describe, expect, it } from "vitest";
-import { isSameRelease, parseLsRemoteTags, pullRequestBody, pullRequestTitle, releaseWork } from "../../scripts/publicar-versao.ts";
+import { isSameRelease, parseLsRemoteTags, pullRequestBody, pullRequestTitle, releaseWork, tagRefspecs } from "../../scripts/publicar-versao.ts";
 import {
   applyPlan,
   bumpVersion,
@@ -256,6 +256,11 @@ describe("releaseWork", () => {
     const work = releaseWork([a], new Map([["v0.1.0", sha("f")]]), new Set());
     expect(work.create).toEqual([]);
     expect(work.conflicts[0]).toMatch(/v0\.1\.0 points to fffffff/);
+  });
+
+  it("pushes by git only the tags still missing, each on its merge commit", () => {
+    expect(tagRefspecs([a, b], new Map([["v0.1.0", sha("a")]]))).toEqual([`${sha("b")}:refs/tags/v0.1.1`]);
+    expect(tagRefspecs([a], new Map([["v0.1.0", sha("a")]]))).toEqual([]);
   });
 
   it("reads tags from ls-remote, peeling annotated ones", () => {

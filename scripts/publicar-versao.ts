@@ -64,6 +64,11 @@ export function pullRequestBody(pending: Version[]): string {
   ].join("\n"));
 }
 
+/** `sha:refs/tags/vX.Y.Z` for each version whose tag does not exist yet. */
+export function tagRefspecs(versions: Version[], tags: ReadonlyMap<string, string>): string[] {
+  return versions.filter((v) => !tags.has(`v${v.version}`)).map((v) => `${v.commit}:refs/tags/v${v.version}`);
+}
+
 /** True when `current` is a single commit on `base` with the same tree as `head`. */
 export function isSameRelease(git: (args: string[]) => string, current: string, base: string, head: string): boolean {
   const parent = tryRun(() => git(["rev-parse", `${current}^`]));
@@ -105,15 +110,42 @@ function main(root: string): number {
       .map((r) => r.tag_name),
   );
   const work = releaseWork(versions, tags, releases);
+  if (work.conflicts.length === 0) {
+    // Tags go by git push, never by the releases API: the API refuses GITHUB_TOKEN a tag on a commit whose
+    // workflow files differ from develop's (HTTP 403 "Resource not accessible by integration", run of #76).
+    // The commits are already on develop, so the push adds no object and creates nothing but the names.
+    const refspecs = tagRefspecs(work.create, tags);
+    if (refspecs.length > 0) {
+      // Each ref is accepted or refused on its own; the ones refused are reported below.
+      const pushed = tryRun(() => remote(["push", "origin", ...refspecs]));
+      console.log(pushed.ok ? `tags pushed: ${refspecs.length}` : `some tags refused:\n${pushed.out.trim()}`);
+      for (const [name, sha] of parseLsRemoteTags(remote(["ls-remote", "--tags", "origin"]))) tags.set(name, sha);
+    }
+  }
+  let releaseFailures = 0;
   const dir = mkdtempSync(join(tmpdir(), "notas-"));
   try {
-    for (const [i, v] of work.create.entries()) {
+    for (const [i, v] of (work.conflicts.length === 0 ? work.create : []).entries()) {
+      if (!tags.has(`v${v.version}`)) {
+        releaseFailures++;
+        console.log(`::error::tag v${v.version} could not be created on ${v.commit.slice(0, 7)}`);
+        continue;
+      }
       if (i > 0) sleepMs(RELEASE_PAUSE_MS);
       const notes = join(dir, `${v.version}.md`);
       writeFileSync(notes, releaseNotes(v));
       // A version in development is a pre-release: it is never "Latest" and nothing is deployed.
-      gh(["release", "create", `v${v.version}`, "--repo", repository, "--target", v.commit, "--title", releaseName(v), "--notes-file", notes, "--prerelease"]);
-      console.log(`release v${v.version} created on ${v.commit.slice(0, 7)}`);
+      // --verify-tag: the tag pushed above, never a new one made by the API.
+      const created = tryRun(() =>
+        gh(["release", "create", `v${v.version}`, "--repo", repository, "--verify-tag", "--title", releaseName(v), "--notes-file", notes, "--prerelease"]),
+      );
+      if (created.ok) {
+        console.log(`release v${v.version} created on ${v.commit.slice(0, 7)}`);
+      } else {
+        // One release failing never stops the changelog pull request; the run still ends red.
+        releaseFailures++;
+        console.log(`::error::release v${v.version} not created: ${created.out.trim().split("\n").at(-1)}`);
+      }
     }
   } finally {
     rmSync(dir, { recursive: true, force: true });
@@ -136,7 +168,7 @@ function main(root: string): number {
     } else {
       console.log(`changelog up to date (${plan.changelog.versions[0]?.version ?? "no version"})`);
     }
-    return work.conflicts.length;
+    return releaseFailures;
   }
   applyPlan(root, plan);
   const title = pullRequestTitle(plan.pending);
@@ -169,7 +201,7 @@ function main(root: string): number {
   console.log(`#${number}: approved ${approval.approved.join(", ") || "none"}${approval.missing.length ? `; missing ${approval.missing.join(", ")}` : ""}`);
   const merge = tryRun(() => gh(["pr", "merge", String(number), "--repo", repository, "--auto", "--squash"]));
   console.log(merge.ok ? `#${number}: auto-merge on` : `#${number}: auto-merge not enabled: ${merge.out.trim()}`);
-  return work.conflicts.length + approval.failed.length;
+  return releaseFailures + approval.failed.length;
 }
 
 if (import.meta.main) {

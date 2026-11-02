@@ -70,7 +70,9 @@ sempre vazio; o teste do repositório falha se alguém escrever ali.
    `develop` depois da versão mais nova (só a linha principal, `--first-parent`).
    Cada merge ganha um número, na ordem, pelos arquivos que ele acrescentou em
    `changelog/nao-lancado/` (`scripts/versao.ts`).
-3. Cada versão sem tag ganha a tag `vX.Y.Z` no commit do merge e uma
+3. Cada versão sem tag ganha a tag `vX.Y.Z` no commit do merge (por `git push`:
+   a API de releases recusa ao `GITHUB_TOKEN` criar tag num commit cujos
+   workflows diferem dos da `develop`) e uma
    **pré-release** no GitHub, com o título "vX.Y.Z · <título da PR>" e as notas
    da seção. Pré-release nunca vira "Latest" e não publica nada: não é deploy.
 4. A branch `chore/versao` é refeita a partir da `develop` com as seções novas
@@ -125,6 +127,7 @@ versão para a pré-release e de "Não lançado" para a comparação com a `deve
 | Sinal | Causa provável | O que fazer |
 | --- | --- | --- |
 | Issue "[falha automática] Versão" com "GitHub Actions is not permitted to create or approve pull requests" | a opção do repositório está desligada | Pablo liga **Settings > Actions > General > Allow GitHub Actions to create and approve pull requests** e roda o workflow de novo |
+| "tag vX.Y.Z could not be created" ou "release vX.Y.Z not created" | o GitHub recusou a tag ou a pré-release ao `GITHUB_TOKEN` | o resto do run segue (a PR de versão abre); veja a linha recusada no log e rode o workflow de novo |
 | "vX.Y.Z points to …" | alguém criou a tag na mão | apague a tag errada (Pablo) ou corrija a seção, e rode de novo |
 | A PR `chore(release):` parada com checks esperando | a aprovação da CI do bot falhou | aprove as execuções na aba Actions ou rode o workflow de novo |
 | `node scripts/versao.ts` mostra versões pendentes há mais de uma hora | o workflow não rodou | abra Actions > Versão > Run workflow |
