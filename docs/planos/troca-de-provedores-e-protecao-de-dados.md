@@ -1,7 +1,10 @@
 # Troca automática de provedor de IA e proteção dos dados enviados aos modelos: plano
 
-Situação: **proposta, sem código.** Escrita em 02/11/2026 a partir de dois
-pedidos do Pablo:
+Situação: **em andamento.** Feito em 02/11/2026, num PR avulso e grátis: D1
+(contrato do prompt), D2 (teste canário) e a parte 2 com o modelo reserva do
+Workers AI e o disjuntor (`apps/agent/src/ai/chain.ts`, [docs/ia.md](../ia.md)).
+Falta o segundo provedor distinto (⚠️, etapa 21) e D3 a D10. Escrito em
+02/11/2026 a partir de dois pedidos do Pablo:
 
 - "Algo que me chamou atenção no Cloudflare's AI Gateway é a possibilidade de
   trocar de provedor automaticamente caso algum caia ou fique sem crédito

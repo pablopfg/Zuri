@@ -58,6 +58,14 @@ function toolTokens(tools: readonly ToolDefinition[]): number {
 }
 
 /**
+ * The prompt's budget for every model the turn may reach: the fallback gets
+ * the same prompt, so it must fit the smaller window of the two.
+ */
+function chainBudget(ai: MeteredAI, limitTokens: number, maxOutputTokens: number, toolTokens: number): number {
+  return Math.min(...ai.models.map((model) => contextBudget(model, limitTokens, maxOutputTokens, toolTokens)));
+}
+
+/**
  * One chat turn, end to end: the owner's message is stored, the prompt is
  * built (name, rules, memories in <data>, the running summary, the history
  * within the budget), the model answers through the meter with the tools of
@@ -81,6 +89,7 @@ export class AgentRunner {
     yield { type: "start", conversation: conversations.get(conversation.id), userMessage, assistantMessageId };
 
     let text = "";
+    let fallback = false;
     const tools: ToolActivity[] = [];
     let executor: ToolExecutor | null = null;
     const finish = (status: ChatMessage["status"], error: { code: ApiErrorCode; key: MessageKey } | null): ChatMessage => {
@@ -88,7 +97,7 @@ export class AgentRunner {
       if (status === "cancelled" && executor) this.deps.tools.plans.discard(executor.proposedPlans());
       for (const tool of tools) if (tool.status === "running") tool.status = "error";
       try {
-        return conversations.addMessage({ id: assistantMessageId, conversationId: conversation.id, role: "assistant", content: text, tools, status, error });
+        return conversations.addMessage({ id: assistantMessageId, conversationId: conversation.id, role: "assistant", content: text, tools, status, error, fallback });
       } catch (failure) {
         if (!(failure instanceof AppError && failure.code === "NOT_FOUND")) throw failure;
         // The owner deleted the conversation meanwhile: nothing is stored, the tab only learns how it ended.
@@ -112,7 +121,7 @@ export class AgentRunner {
       const ctx: ToolContext = { ...this.deps.tools, timeZone: settings.timeZone, mode: "chat", conversationId: conversation.id };
       executor = new ToolExecutor(registry, ctx, { maxToolCalls: settings.aiMaxIterations > 1 ? settings.aiMaxToolCalls : 0 });
       const offered = executor.available();
-      const budget = contextBudget(ai.model, settings.aiMaxContextTokens, settings.aiMaxOutputTokens, offered.length ? toolTokens(offered) : 0);
+      const budget = chainBudget(ai, settings.aiMaxContextTokens, settings.aiMaxOutputTokens, offered.length ? toolTokens(offered) : 0);
 
       // Memories: a fifth of the budget at most, every one a <data> line.
       const repo = this.deps.tools.memories.repo;
@@ -177,7 +186,10 @@ export class AgentRunner {
         toolBudgetExhausted: () => turnTools.budgetExhausted(),
         signal: input.signal,
       })) {
-        if (event.type === "text") {
+        if (event.type === "fallback") {
+          // The chosen model failed before answering; the mark goes with the stored answer.
+          fallback = true;
+        } else if (event.type === "text") {
           text += event.delta;
           yield { type: "text", delta: event.delta };
         } else if (event.type === "tool-start") {
@@ -237,23 +249,21 @@ export class AgentRunner {
     const ctx: ToolContext = { ...this.deps.tools, timeZone: settings.timeZone, mode: "scheduled", conversationId: null, notices, routineName: input.name };
     const executor = new ToolExecutor(registry, ctx, { maxToolCalls: settings.aiMaxIterations > 1 ? settings.aiMaxToolCalls : 0 });
     const offered = executor.available();
-    const budget = contextBudget(ai.model, settings.aiMaxContextTokens, settings.aiMaxOutputTokens, offered.length ? toolTokens(offered) : 0);
+    const budget = chainBudget(ai, settings.aiMaxContextTokens, settings.aiMaxOutputTokens, offered.length ? toolTokens(offered) : 0);
     const repo = this.deps.tools.memories.repo;
     const memories = memoryPromptSection(selectRelevantMemories(repo, input.prompt), memoryTokenBudget(budget), (id) => repo.get(id));
-    const system = [
-      buildSystemPrompt({
-        agentName: this.deps.agentName,
-        language: LANGUAGE[locale],
-        timeZone: settings.timeZone,
-        now: new Date(this.deps.clock?.() ?? Date.now()),
-        // Not in routines yet: a name that reaches unattended runs reopens the
-        // question of asking for the password to change it (docs/seguranca.md).
-        ownerName: "",
-        memories,
-        summary: null,
-      }),
-      scheduledInstructions(input.name, input.quiet),
-    ].join("\n\n");
+    const system = buildSystemPrompt({
+      agentName: this.deps.agentName,
+      language: LANGUAGE[locale],
+      timeZone: settings.timeZone,
+      now: new Date(this.deps.clock?.() ?? Date.now()),
+      // Not in routines yet: a name that reaches unattended runs reopens the
+      // question of asking for the password to change it (docs/seguranca.md).
+      ownerName: "",
+      memories,
+      summary: null,
+      routine: scheduledInstructions(input.name, input.quiet),
+    });
     let text = "";
     for await (const event of ai.generateWithTools({
       system,

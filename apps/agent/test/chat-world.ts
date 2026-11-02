@@ -1,6 +1,7 @@
 import { DEFAULT_SETTINGS, type Settings } from "@zuri/shared";
 import { runInDurableObject } from "cloudflare:test";
 import type { ZuriAgent } from "../src/agent/zuri-agent.ts";
+import type { ProviderChain } from "../src/ai/chain.ts";
 import { MeteredAI } from "../src/ai/metered.ts";
 import type { AgentEvent, AIProvider, GenerateRequest, ToolRequest } from "../src/ai/provider.ts";
 import { UsageMeter } from "../src/ai/usage.ts";
@@ -37,7 +38,7 @@ export interface ChatWorld {
   ctx(conversationId: string | null, mode?: ToolContext["mode"]): ToolContext;
   services(): Omit<ToolContext, "conversationId" | "mode" | "timeZone">;
   /** The model behind the real meter, as the runner gets it. */
-  ai(provider: AIProvider): MeteredAI;
+  ai(provider: AIProvider | ProviderChain): MeteredAI;
 }
 
 /** The Agents SDK's schedule, in memory: one row per alarm set, as the SDK keeps them. */

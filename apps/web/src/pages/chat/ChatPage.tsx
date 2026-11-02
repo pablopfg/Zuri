@@ -11,7 +11,7 @@ import {
   type TaskPlan,
   type ToolActivity,
 } from "@zuri/shared";
-import { Check, CircleAlert, Clock, History, LoaderCircle, Mic, Pencil, Plus, SendHorizontal, Sparkles, Square, Trash2, X } from "lucide-react";
+import { Check, CircleAlert, Clock, History, LifeBuoy, LoaderCircle, Mic, Pencil, Plus, SendHorizontal, Sparkles, Square, Trash2, X } from "lucide-react";
 import { type FormEvent, type KeyboardEvent, useCallback, useEffect, useId, useRef, useState } from "react";
 import { Link, NavLink, useNavigate, useParams } from "react-router";
 import { Markdown } from "../../components/Markdown.tsx";
@@ -556,6 +556,12 @@ function MessageItem({
   return (
     <li className="space-y-3">
       <AssistantBody text={message.content} tools={message.tools} actions={actions} plans={plans} onAction={onAction} onPlan={onPlan} />
+      {message.fallback && (
+        <p className="flex items-center gap-1.5 text-xs text-fg-muted">
+          <LifeBuoy className="h-3.5 w-3.5 shrink-0" aria-hidden />
+          {t("web.chat.fallback")}
+        </p>
+      )}
       {message.status === "cancelled" && <p className="text-xs font-medium text-fg-muted">{t("web.chat.stopped")}</p>}
       {message.status === "error" && message.error && <ErrorLine text={message.error.message} />}
       {message.status === "complete" && !message.content.trim() && message.tools.length === 0 && <p className="text-sm text-fg-muted">{t("web.chat.noText")}</p>}

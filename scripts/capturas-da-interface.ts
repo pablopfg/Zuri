@@ -11,6 +11,7 @@
  * - `name=/path`: one screen per pair, saved as <name>-<device>-<scheme>.png.
  *   `entrar` is the sign-in screen, shot before signing in. Without pairs the
  *   script shoots the sign-in screen and home.
+ * - `name=/path>Region name`: the same, with that region (role region) scrolled to the top first.
  * - `--exemplos`: fills the empty database with the sample data of
  *   dados-de-exemplo.ts first, so lists are not empty.
  */
@@ -31,10 +32,12 @@ if (!out) {
 const withSamples = args.includes("--exemplos");
 const pairs = args.filter((arg) => arg.includes("="));
 const screens = (pairs.length > 0 ? pairs : ["entrar=/entrar", "inicio=/"]).map((pair) => {
-  const [name = "", path = ""] = pair.split("=", 2);
+  const [name = "", target = ""] = pair.split("=", 2);
+  // `name=/path>Region name` scrolls that region (role region, by its name) to the top before the shot.
+  const [path = "", region] = target.split(">", 2);
   // The name becomes a file name: keep it to a plain slug.
   if (!/^[a-z0-9-]+$/.test(name) || !path.startsWith("/")) throw new Error(`Invalid screen "${pair}": use name=/path`);
-  return { name, path };
+  return { name, path, region };
 });
 mkdirSync(out, { recursive: true });
 
@@ -90,6 +93,11 @@ for (const [device, options] of [
     for (const screen of signedIn) {
       await page.goto(BASE + screen.path);
       await page.getByRole("heading", { level: 1 }).first().waitFor();
+      if (screen.region) {
+        const region = page.getByRole("region", { name: screen.region });
+        await region.waitFor();
+        await region.evaluate((box: HTMLElement) => box.scrollIntoView({ block: "start" }));
+      }
       await shot(screen.name);
     }
     await context.close();

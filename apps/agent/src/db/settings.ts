@@ -20,6 +20,7 @@ const STORAGE_KEYS = {
   sessionMaxHours: "session_max_hours",
   memoryConflictReview: "memory_conflict_review",
   aiModel: "ai_model",
+  aiFallbackModel: "ai_fallback_model",
   aiRequestsPerDay: "ai_requests_per_day",
   aiNeuronsPerDay: "ai_neurons_per_day",
   aiMaxOutputTokens: "ai_max_output_tokens",

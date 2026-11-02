@@ -1,4 +1,5 @@
 import { type Locale, t } from "@zuri/shared";
+import { AppError } from "../http/errors.ts";
 import type { AgentEvent, AIProvider, GenerateRequest, ModelMessage, StepUsage, ToolRequest } from "./provider.ts";
 import { estimateTokens, tokens } from "./provider.ts";
 
@@ -20,6 +21,25 @@ function pause(ms: number, signal: AbortSignal | undefined): Promise<void> {
   });
 }
 
+/** Everything one call handed the model: what the canary test (D2) searches. */
+export interface RecordedPrompt {
+  model: string;
+  system: string;
+  messages: ModelMessage[];
+  tools: { name: string; description: string }[];
+  /** What the tools returned to the model during the call. */
+  toolResults: unknown[];
+}
+
+export interface MockOptions {
+  /** The name it reports; the fallback mock has its own, so each has its breaker. */
+  model?: string;
+  /** A message that starts with `fail ` makes this one fail before answering (the chosen model in dev and e2e). */
+  failOnRequest?: boolean;
+  /** Tests only: every prompt it receives. */
+  record?: (prompt: RecordedPrompt) => void;
+}
+
 /**
  * A deterministic stand-in for the model: local development (`npm run dev`)
  * and the tests. It never calls anything. It repeats the last message back,
@@ -27,20 +47,42 @@ function pause(ms: number, signal: AbortSignal | undefined): Promise<void> {
  * real tool pipeline (limits, validation, approvals) runs without a model.
  * A message that starts with `slow ` comes back a word every 200 ms, so a
  * browser test can press Stop in the middle of an answer.
+ * A message that starts with `fail ` makes the mock built with `failOnRequest`
+ * fail as a busy model would, before any event: the fallback answers it.
  * Its calls cost no Neurons but are metered and count as requests like any other.
  */
 export class MockAIProvider implements AIProvider {
   readonly id = "mock";
-  readonly model = "mock";
+  readonly model: string;
   readonly billable = false;
 
-  constructor(private readonly locale: () => Locale = () => "pt-BR") {}
+  constructor(
+    private readonly locale: () => Locale = () => "pt-BR",
+    private readonly options: MockOptions = {},
+  ) {
+    this.model = options.model ?? "mock";
+  }
 
   async generate(req: GenerateRequest): Promise<{ text: string }> {
     req.signal?.throwIfAborted();
+    this.record(req, []);
+    this.failIfAsked(req);
     const text = this.reply(lastMessage(req.messages));
     req.onStepUsage?.(this.usage(req, text.length));
     return { text };
+  }
+
+  /** The call reached the "model" and failed: it is metered like a real failed call. */
+  private failIfAsked(req: GenerateRequest): void {
+    if (!this.options.failOnRequest || !/^fail\s/i.test(lastMessage(req.messages))) return;
+    req.onStepUsage?.(this.usage(req, 0));
+    throw new AppError("SERVICE_UNAVAILABLE", "error.aiBusy");
+  }
+
+  private record(req: GenerateRequest, tools: { name: string; description: string }[]): unknown[] {
+    const toolResults: unknown[] = [];
+    this.options.record?.({ model: this.model, system: req.system, messages: req.messages.map((m) => ({ ...m })), tools, toolResults });
+    return toolResults;
   }
 
   async *stream(req: GenerateRequest): AsyncIterable<AgentEvent> {
@@ -49,6 +91,11 @@ export class MockAIProvider implements AIProvider {
 
   async *generateWithTools(req: ToolRequest): AsyncIterable<AgentEvent> {
     req.signal?.throwIfAborted();
+    const toolResults = this.record(
+      req,
+      req.tools.map((tool) => ({ name: tool.name, description: tool.description })),
+    );
+    this.failIfAsked(req);
     const input = lastMessage(req.messages);
     let outputChars = 0;
     let reported = false;
@@ -73,6 +120,7 @@ export class MockAIProvider implements AIProvider {
         } catch (failure) {
           error = failure instanceof Error ? failure.message : String(failure);
         }
+        toolResults.push(error === undefined ? output : { error });
         yield { type: "tool-end", id, name: tool.name, output, ...(error === undefined ? {} : { error }) };
         // The first step ends with the tool call; answering about it is a second model call.
         report();
