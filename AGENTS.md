@@ -73,6 +73,7 @@ agentes podem ler as mesmas skills nos repositórios de origem, no commit fixado
 - Conflito: `node scripts/atualizar-prs.ts --local` traz a `develop` e resolve sozinho o que é só acréscimo dos dois lados; o resto você resolve preservando os dois lados e roda tudo de novo. O workflow `Update PRs` faz o mesmo nas PRs abertas a cada mudança da `develop`, então faça `git pull` da sua branch antes de cada push.
 - PRs abertas para a `develop` não ficam paradas: a passada de merge confere, atualiza, resolve conflitos e mescla na ordem certa. Critérios e ordem em [docs/agente/merge-de-prs.md](docs/agente/merge-de-prs.md).
 - Ao terminar: skills `verificar`, `revisao-qa` e `auditoria-seguranca`, nessa ordem, e corrija o que elas acharem.
+- Erro fora do escopo da PR vira issue pelo modelo `erro`, com a possível solução. Veja [docs/agente/issues.md](docs/agente/issues.md).
 
 ## Como evitar erros
 

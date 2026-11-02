@@ -11,6 +11,7 @@
   - `/preparar-pr`: título, changelog e descrição do PR em pt-BR.
   - `/proxima-etapa`: confere as travas, atualiza o progresso, mescla quando permitido e passa o bastão para uma conversa nova.
   - `/nova-migration` e `/nova-ferramenta`: passo a passo seguro das duas mudanças mais delicadas.
+  - `/abrir-issue`: issue de erro padronizada (erro, passos e possível solução) para o que fica fora do escopo da PR.
 - Subagentes (`.claude/agents/`): `qa-senior`, `auditor-seguranca`, `revisor-cloudflare` e `verificador`. Eles não editam código, só relatam. Passe a eles o escopo, nunca as suas conclusões.
 - Skills externas (instaladas sozinhas no início da sessão por `scripts/instalar-skills.sh`, fixadas por commit em `.claude/skills-externas/`). Use sem esperar pedido:
   - `mattpocock-skills:codebase-design` e `domain-modeling` no plano; `tdd` na implementação; `diagnosing-bugs` em qualquer falha; `code-review` na revisão de QA; `writing-for-agents` ao editar skills, `AGENTS.md` ou `CLAUDE.md`; `handoff` só para alimentar `progresso.md`.
@@ -28,7 +29,7 @@
 
 ### Issue tracker
 
-Etapas em `docs/especificacao.md`, estado em `.claude/memoria/progresso.md`, bugs em issues do GitHub. See `docs/agents/issue-tracker.md`.
+Etapas em `docs/especificacao.md`, estado em `.claude/memoria/progresso.md`, bugs em issues do GitHub pelo modelo `erro` (`docs/agente/issues.md`). See `docs/agents/issue-tracker.md`.
 
 ### Domain docs
 
