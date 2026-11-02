@@ -133,6 +133,7 @@ Tudo roda num **único Worker** que serve a interface e a API, com **um único D
 | `ASSETS` | assets | sim | Interface web |
 | `WORKFLOW` | Workflows | sim | Monitor de sites |
 | `SEND_EMAIL` | send\_email | não | Alertas e recuperação por e-mail (Email Routing) |
+| `BACKUP_BUCKET` | R2 ⚠ | não | Backups diários cifrados, 7 cópias (etapa 23; decisão de 02/11/2026) |
 | `SESSION_SECRET` | segredo | sim | Assinatura de sessões e derivação de HMACs (inclusive o segredo do webhook do Telegram) |
 | `SETUP_CODE` | segredo | até o primeiro acesso | Código de instalação (32+ caracteres aleatórios, 1 h, uso único); um código novo depois só recupera o acesso (N13) |
 | `OWNER_PASSWORD_HASH` | segredo | não (instalações antigas) | Senha do dono (PBKDF2 com pepper); o primeiro acesso grava a senha no banco |
@@ -206,7 +207,7 @@ Todas as rotas ficam sob `/api`, recebem e devolvem JSON validado por Zod (`pack
 | 1 | GET `/api/health` | nenhuma | — | 200 `{ok:true}`; 503 `NOT_CONFIGURED` sem segredos obrigatórios |
 | N13 | GET `/api/setup` | CSRF | — | 200 `{setup}` (primeiro acesso ainda por fazer); não grava nada |
 | N13 | POST `/api/setup/code` | CSRF + Turnstile em toda tentativa | `{code, turnstileToken?}` | 200 `{mode: "setup"\|"recovery", expiresAt}` + cookie `__Host-zuri_setup` (15 min); 401 `INVALID_CREDENTIALS`; 429 `RATE_LIMITED` (por rede: 5 em 15 min, 20 em 24 h); 400 `TURNSTILE_REQUIRED`; 503 |
-| N13 | POST `/api/setup/owner` | CSRF + cookie do primeiro acesso | `{email, password, language, timeZone}` | 201 sessão (`secondStepRequired: true`); 400 `VALIDATION_FAILED`; 401 `UNAUTHORIZED` com `details.setup: "expired"`; 409 `CONFLICT` (dono já existe); 503 (HIBP sem resposta) |
+| N13 | POST `/api/setup/owner` | CSRF + cookie do primeiro acesso | `{email, password, language, timeZone, ownerName?}` (nome com as regras de Configurações) | 201 sessão (`secondStepRequired: true`); 400 `VALIDATION_FAILED`; 401 `UNAUTHORIZED` com `details.setup: "expired"`; 409 `CONFLICT` (dono já existe); 503 (HIBP sem resposta) |
 | N13 | POST `/api/setup/recover` | CSRF + cookie do primeiro acesso | `{email, password}` | 204 (todas as sessões terminam); 401 `INVALID_CREDENTIALS`; 401 `UNAUTHORIZED`; 409 `CONFLICT` (sem dono) |
 | 3 | POST `/api/auth/login` | CSRF + Turnstile em toda tentativa | `{email, password, turnstileToken?}` | 200 sessão; 200 `{mfaRequired:true}`; 401 `INVALID_CREDENTIALS`; 429 `RATE_LIMITED` + `Retry-After`; 400 `TURNSTILE_REQUIRED`; 503 `SERVICE_UNAVAILABLE` (Turnstile sem resposta) |
 | 3 | GET `/api/auth/login-options` (respondido pelo Worker, sem o Durable Object) | CSRF | — | 200 `{turnstileSiteKey}`; `null` só no local sem chaves |
@@ -519,7 +520,7 @@ O comportamento completo está na seção "Bot do Telegram do administrador"; aq
 
 ### Fase E — Dados, operação e fechamento
 
-**Etapa 23 · Backup, importação e retenção** (`feat: adiciona backup, importação e limites de armazenamento`) — exportação JSON versionada, importação com as regras de entrada não confiável, limites por tipo, lixeira e limpeza automática. O bot avisa quando o último backup tem mais de 30 dias e responde `/backup` com o link para a tela (nunca envia o arquivo pelo Telegram).
+**Etapa 23 · Backup, importação e retenção** (`feat: adiciona backup, importação e limites de armazenamento`) — exportação JSON versionada, importação com as regras de entrada não confiável, limites por tipo, lixeira e limpeza automática. Backup automático diário (decisão de 02/11/2026): completo, compactado e cifrado com a chave pública do dono, enviado ao binding opcional `BACKUP_BUCKET` (R2 ⚠, faixa grátis) em partes quando grande, guardando as 7 cópias mais novas e apagando as mais antigas; sem o binding, o backup automático fica desligado e a tela diz isso. Uma vez por mês, a cópia cifrada vai como documento só para o chat de `TELEGRAM_ADMIN_ID`, até o limite de envio do bot; acima disso, só o aviso. O bot avisa quando o último backup baixado tem mais de 30 dias e responde `/backup` com o link para a tela. Restaurar abre o arquivo no navegador com a chave privada, que nunca vai ao servidor nem ao R2.
 
 **Etapa 24 · Deploy e guia de instalação** (`ci: adiciona o deploy pelo GitHub Actions`) — workflow de deploy em push para `main`, ambiente `production` só para `main`, token e conta da Cloudflare como segredos do ambiente, conferência via API de que `workers.dev` e previews estão desligados com domínio próprio, `npm audit` bloqueando `high`. `docs/instalacao-cloudflare.md` com o passo a passo só pelo navegador, incluindo criar o bot no @BotFather e a regra de Bypass do Access para o webhook. Release por tag com changelog em pt-BR. `docs/solucao-de-problemas.md` explica como achar no Workers Logs a linha de um erro pelo código que a aba Diagnóstico mostra.
 
@@ -576,7 +577,7 @@ Todos os textos em pt-BR, do catálogo de i18n. Comandos não gastam pedido de I
 | `/avisos` | Últimos 10 avisos e os pendentes de reconhecimento | não | nenhuma | sim, para o texto completo |
 | `/uso` | Pedidos de IA, áudio, embeddings e US$ de hoje contra os limites | não | nenhuma | não |
 | `/status` | Versão, saúde do Worker, resumo do Diagnóstico (falhas em 24 h), IA disponível, monitores de sites, MCP sem login, idade do backup | não | nenhuma | não |
-| `/backup` | Idade do último backup e botão **Abrir no app** (o arquivo nunca vai pelo Telegram) | não | nenhuma | não |
+| `/backup` | Idade do último backup e botão **Abrir no app** (o arquivo só vai pelo Telegram na cópia mensal cifrada da etapa 23) | não | nenhuma | não |
 | `/nova_conversa` | Começa outra conversa com o agente | sim | nenhuma | sim |
 | `/aprovar` | Propostas pendentes com o botão Aprovar | depois da confirmação | passkey ou e-mail | sim |
 | `/destravar` | Destrava a leitura por 12 h | sim | passkey ou e-mail | não |
