@@ -27,6 +27,20 @@ describe("default settings", () => {
       aiMaxContextTokens: 6_000,
       aiScheduledRunsPerDay: 6,
       ownerName: "",
+      digestEnabled: true,
+      digestTime: "07:30",
+      watchersEnabled: true,
+      alertRoutes: {
+        reminders: ["push", "telegram"],
+        digests: ["push", "telegram"],
+        routines: ["push", "telegram"],
+        tasks: ["push", "telegram"],
+        system: ["push", "telegram"],
+        security: ["push", "telegram", "email"],
+        events: ["push", "telegram"],
+      },
+      alertPerHour: 6,
+      alertPerDay: 30,
     });
     expect(DEFAULT_TIME_ZONE).toBe("America/Sao_Paulo");
     expect(settingsSchema.parse(DEFAULT_SETTINGS)).toEqual(DEFAULT_SETTINGS);
@@ -35,6 +49,13 @@ describe("default settings", () => {
   it("take only a boolean for memory conflict review", () => {
     expect(settingsUpdateSchema.safeParse({ memoryConflictReview: false }).success).toBe(true);
     for (const value of ["false", 0, null, "yes"]) expect(settingsUpdateSchema.safeParse({ memoryConflictReview: value }).success).toBe(false);
+  });
+
+  it("take alert routes per known category, dropping a repeated channel", () => {
+    expect(settingsUpdateSchema.parse({ alertRoutes: { security: ["email", "email", "push"] } })).toEqual({ alertRoutes: { security: ["email", "push"] } });
+    for (const alertRoutes of [{ security: ["sms"] }, { other: ["push"] }, { tasks: ["push", "push", "push", "push"] }, { tasks: "push" }]) {
+      expect(settingsUpdateSchema.safeParse({ alertRoutes }).success, JSON.stringify(alertRoutes)).toBe(false);
+    }
   });
 
   it("cannot be changed in place", () => {

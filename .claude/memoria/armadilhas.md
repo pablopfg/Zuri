@@ -202,6 +202,12 @@ acrescente aqui cada armadilha nova que encontrar (sem dados pessoais).
   senha desenham o próprio `<main>` e recebem `go` por propriedade.
   Lembrete: um `lazy()` sem uso continua no pacote (a chamada não é pura), então
   para medir tire a declaração inteira, não só o uso.
+- `/* @__PURE__ */` deixa o bundler apagar a chamada, mas não os argumentos
+  dela. Na etapa 11, `z.partialRecord(z.enum(...), z.array(...).transform(...))`
+  em `alerts.ts` (importado por `settings.ts`, que está no pacote inicial)
+  deixou os argumentos no pacote e trouxe o Zod clássico para a tela de
+  Configurações, com +3,2 kB no JS inicial. A saída foi construir o schema
+  dentro de uma função marcada: `/* @__PURE__ */ (() => z.partialRecord(...))()`.
 - Uma tela sob demanda que importa um módulo do pacote inicial que importa
   `ui.tsx` (o `Logo.tsx` importava `cn`) separou `ui.tsx` em `ui-*.js` e subiu
   o JS inicial em 1,1 KB, mas só junto com outra tela sob demanda (o

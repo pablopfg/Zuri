@@ -12,7 +12,7 @@ export function reportClientError(error: unknown, csrfHeader: string, path = win
   const raw = error instanceof Error ? error.name : "";
   const name = /^[A-Za-z][A-Za-z0-9]{0,39}$/.test(raw) ? raw : "Error";
   const route =
-    path
+    (path.split(/[?#]/)[0] ?? "")
       .replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, "id")
       .replace(/[^A-Za-z0-9/_-]/g, "")
       .slice(0, 120) || "/";

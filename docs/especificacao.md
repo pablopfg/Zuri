@@ -132,6 +132,7 @@ Tudo roda num **único Worker** que serve a interface e a API, com **um único D
 | `AGENT` | Durable Object | sim | Instância única do agente |
 | `ASSETS` | assets | sim | Interface web |
 | `WORKFLOW` | Workflows | sim | Monitor de sites |
+| `CF_VERSION_METADATA` | version\_metadata | não | Versão publicada, para o alerta "falha nova nesta versão" do Diagnóstico (etapa 11; grátis) |
 | `SEND_EMAIL` | send\_email | não | Alertas e recuperação por e-mail (Email Routing) |
 | `BACKUP_BUCKET` | R2 ⚠ | não | Backups diários cifrados, 7 cópias (etapa 23; decisão de 02/11/2026) |
 | `SESSION_SECRET` | segredo | sim | Assinatura de sessões e derivação de HMACs (inclusive o segredo do webhook do Telegram) |
