@@ -281,7 +281,7 @@ export class TelegramConfirmations {
 
   #assertUnlocked(): void {
     const until = this.lockedUntil();
-    if (until !== null) throw new AppError("APPROVALS_LOCKED", undefined, { retryAfter: Math.max(1, Math.ceil((until - this.#now()) / 1000)) });
+    if (until !== null) throw new AppError("APPROVALS_LOCKED", "error.approvalsLocked", { retryAfter: Math.max(1, Math.ceil((until - this.#now()) / 1000)) });
   }
 
   /**
