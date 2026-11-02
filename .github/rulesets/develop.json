@@ -65,6 +65,9 @@
             "context": "lighthouse"
           },
           {
+            "context": "merge-order"
+          },
+          {
             "context": "analyze (javascript-typescript)"
           },
           {

@@ -62,6 +62,9 @@
             "context": "lighthouse"
           },
           {
+            "context": "merge-order"
+          },
+          {
             "context": "source-branch"
           },
           {
