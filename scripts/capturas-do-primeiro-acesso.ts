@@ -78,6 +78,7 @@ for (const [device, options] of [
     await shot("primeiro-acesso-codigo");
     await enterCode();
     await page.getByRole("heading", { level: 2, name: "Seus dados" }).waitFor();
+    await page.getByLabel("Seu nome").fill("Ana");
     await page.getByLabel("E-mail").fill(EMAIL);
     await page.getByLabel("Senha", { exact: true }).fill(SAMPLE_PASSWORD);
     await page.getByLabel("Repita a senha").fill(SAMPLE_PASSWORD);

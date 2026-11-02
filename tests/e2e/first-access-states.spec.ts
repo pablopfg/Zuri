@@ -87,6 +87,7 @@ test("the details: a refused password shows on its field, other refusals keep it
   await setupStatus(page, () => !owner);
   await page.route("**/api/setup/code", (route) => route.fulfill({ json: ticket(owner ? "recovery" : "setup") }));
   const answers = [
+    (route: Route) => refusal(route, 400, "VALIDATION_FAILED", "Confira os dados enviados.", { fields: ["ownerName"] }),
     (route: Route) => refusal(route, 400, "VALIDATION_FAILED", "Use pelo menos 15 caracteres.", { fields: ["password"], problem: "tooShort" }),
     (route: Route) => refusal(route, 503, "SERVICE_UNAVAILABLE", "O serviço está fora do ar. Tente de novo em instantes."),
     (route: Route) => refusal(route, 400, "VALIDATION_FAILED", "Este formulário venceu. Digite o código de novo.", { setup: "expired" }),
@@ -101,6 +102,7 @@ test("the details: a refused password shows on its field, other refusals keep it
   await enterCode(page);
   await expect(page.getByRole("heading", { level: 2, name: "Seus dados" })).toBeFocused();
   await expectAccessible(page, "first access: details, dark");
+  await expect(page.getByLabel("Seu nome")).toHaveAccessibleDescription(/Opcional/);
   expect(await tooSmallControls(page)).toEqual([]);
 
   // Two different passwords: the focus goes to the field that says so.
@@ -110,8 +112,19 @@ test("the details: a refused password shows on its field, other refusals keep it
   await page.getByRole("button", { name: "Criar minha conta" }).click();
   await expect(page.getByLabel("Repita a senha")).toBeFocused();
 
-  // The password refused: its own field says why and both empty.
+  // A name the server refuses (its rules are the screen's, but versions can differ): its field
+  // says what to fix and the passwords stay.
+  await page.getByLabel("Seu nome").fill("Ana");
   await page.getByLabel("Repita a senha").fill(PASSWORD);
+  await page.getByRole("button", { name: "Criar minha conta" }).click();
+  const nameField = page.getByLabel("Seu nome");
+  await expect(nameField).toHaveAttribute("aria-invalid", "true");
+  await expect(nameField).toBeFocused();
+  await expect(page.getByLabel("Senha", { exact: true })).toHaveValue(PASSWORD);
+  await nameField.fill("Ana Maria");
+  await expect(nameField).not.toHaveAttribute("aria-invalid");
+
+  // The password refused: its own field says why and both empty.
   await page.getByRole("button", { name: "Criar minha conta" }).click();
   const passwordField = page.getByLabel("Senha", { exact: true });
   await expect(passwordField).toHaveAttribute("aria-invalid", "true");
@@ -157,6 +170,8 @@ test("a recovery: a wrong e-mail keeps the password, then the new one is saved a
   await page.goto("/primeiro-acesso");
   await enterCode(page);
   await expect(page.getByRole("heading", { level: 2, name: "Senha nova" })).toBeFocused();
+  // The recovery changes only the password: no name there.
+  await expect(page.getByLabel("Seu nome")).toHaveCount(0);
   await page.getByLabel("E-mail").fill("outra@exemplo.com.br");
   await page.getByLabel("Senha nova").fill(PASSWORD);
   await page.getByLabel("Repita a senha").fill(PASSWORD);
