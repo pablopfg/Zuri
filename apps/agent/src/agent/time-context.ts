@@ -32,6 +32,8 @@ const MONTHS = ["January", "February", "March", "April", "May", "June", "July", 
 export const CALENDAR_DAYS_AHEAD = 13;
 /** Most hints one message adds: a long message must not grow the prompt without end. */
 export const MAX_DATE_HINTS = 8;
+/** Matches of one pattern looked at, at most: past this a message is a pasted text, not a request. */
+const MAX_SCANNED = 64;
 /** Largest amount a relative hint resolves ("daqui a 400 dias"): more is a typo or not a date. */
 const MAX_AMOUNT = 999;
 
@@ -228,19 +230,75 @@ const WEEKDAY_WORDS: Record<string, number> = {
 
 const NUMBER = `(\\d{1,4}|${Object.keys(NUMBER_WORDS).join("|")})`;
 const UNIT = `(${Object.keys(UNITS).join("|")})`;
-const WEEKDAY = `(${Object.keys(WEEKDAY_WORDS).join("|")})(?: feira)?`;
+/** One more part of a duration: "e 30 minutos", "and a half". */
+const MORE = `(?:\\s+(?:e|and)\\s+(?:(meia|a half|half)|${NUMBER}\\s+${UNIT}))?`;
+const DURATION = `${NUMBER}\\s+${UNIT}${MORE}`;
 
-/** "in 2 hours", "daqui a 3 dias", "em 15 min", "dentro de duas semanas", "2 weeks from now". */
-const AHEAD = new RegExp(`\\b(?:daqui a|daqui|em|dentro de|in|within)\\s+${NUMBER}\\s+${UNIT}\\b|\\b${NUMBER}\\s+${UNIT}\\s+from now\\b`, "g");
-/** "há 2 dias", "2 days ago". */
-const BEHIND = new RegExp(`\\b(?:ha|faz)\\s+${NUMBER}\\s+${UNIT}\\b|\\b${NUMBER}\\s+${UNIT}\\s+ago\\b`, "g");
-/** "sexta que vem", "próxima segunda", "next friday", "sábado passado", "last monday", "quarta". */
+/** "in 2 hours", "daqui a 1 hora e 30 minutos", "em 15 min", "dentro de duas semanas". Groups: prefix, then DURATION. */
+const AHEAD = new RegExp(`\\b(daqui a|daqui|em|dentro de|in|within)\\s+${DURATION}\\b`, "g");
+/** "2 weeks from now". */
+const FROM_NOW = new RegExp(`\\b()${DURATION}\\s+from now\\b`, "g");
+/** "há 2 dias", "faz uma semana". */
+const BEHIND = new RegExp(`\\b(ha|faz)\\s+${DURATION}\\b`, "g");
+/** "2 days ago". */
+const AGO = new RegExp(`\\b()${DURATION}\\s+ago\\b`, "g");
+
+const WEEKDAY = `(${Object.keys(WEEKDAY_WORDS).join("|")})( feira)?`;
+/** Weekday names that are also ordinals in Portuguese ("pela segunda vez", "a quarta parte"). */
+const ORDINAL_NAMES: ReadonlySet<string> = new Set(["segunda", "quarta", "quinta", "sexta"]);
+/**
+ * "na sexta", "sexta que vem", "próxima segunda", "esta quinta", "next friday",
+ * "sábado passado", "última sexta do mês". Groups: preposition, prefix, name,
+ * "feira", suffix.
+ */
 const WEEKDAY_PHRASE = new RegExp(
-  `\\b(?:(proxima|proximo|next|this|essa|esta|nesta|nessa|last|ultima|ultimo)\\s+)?${WEEKDAY}(?:\\s+(que vem|passada|passado))?\\b`,
+  `\\b(?:(na|no|ate|para|pra|toda|todas|cada|desde|on|by|until|every)\\s+)?(?:(proxima|proximo|next|this|essa|esta|nesta|nessa|last|ultima|ultimo)\\s+)?${WEEKDAY}(?:\\s+(que vem|passada|passado|do mes|deste mes|of the month|of this month))?\\b`,
   "g",
 );
 
-function amount(word: string): number | null {
+const MONTH_WORDS: Record<string, number> = {
+  janeiro: 1,
+  fevereiro: 2,
+  marco: 3,
+  abril: 4,
+  maio: 5,
+  junho: 6,
+  julho: 7,
+  agosto: 8,
+  setembro: 9,
+  outubro: 10,
+  novembro: 11,
+  dezembro: 12,
+  january: 1,
+  february: 2,
+  march: 3,
+  april: 4,
+  may: 5,
+  june: 6,
+  july: 7,
+  august: 8,
+  september: 9,
+  october: 10,
+  november: 11,
+  december: 12,
+};
+const MONTH = `(${Object.keys(MONTH_WORDS).join("|")})`;
+const DAY_NUMBER = "(\\d{1,2}|primeiro)(?:º|o|st|nd|rd|th)?";
+/** "15 de março", "1º de dezembro de 2027", "15 march", "15th of march". Groups: day, month, year. */
+const DAY_MONTH = new RegExp(`\\b${DAY_NUMBER}\\s+(?:de\\s+|of\\s+)?${MONTH}(?:\\s+(?:de\\s+)?(\\d{4}))?\\b`, "g");
+/** "march 15", "december 1st 2027". Groups: month, day, year. */
+const MONTH_DAY = new RegExp(`\\b${MONTH}\\s+${DAY_NUMBER}(?:\\s+(\\d{4}))?\\b`, "g");
+/** "dia 15": the day of this month, or of the next one when it has passed. */
+const DAY_ONLY = /\bdia (\d{1,2})\b(?! de)/g;
+/** Numbers with slashes and a year, on the text before folding: "15/03/2027", "15/03/27". */
+const SLASH_DATE = /(?<![\d/])(\d{1,2})\/(\d{1,2})\/(\d{4}|\d{2})(?![\d/])/g;
+/** Without a year only after a word that introduces a date ("até 15/03", "on 3/15"): "1/2 xícara" is a fraction. */
+const SHORT_SLASH_DATE = /(?:^|[\s(])(?:dia|em|no|na|at[ée]|para|pra|de|desde|on|by|until|for|from|due)\s+(\d{1,2})\/(\d{1,2})(?![\d/])/gi;
+/** "2026-11-05". */
+const ISO_DATE = /(?<![\d-])(\d{4})-(\d{2})-(\d{2})(?![\d-])/g;
+
+function amount(word: string | undefined): number | null {
+  if (word === undefined) return null;
   const n = /^\d+$/.test(word) ? Number(word) : (NUMBER_WORDS[word] ?? null);
   return n !== null && n >= 1 && n <= MAX_AMOUNT ? n : null;
 }
@@ -252,41 +310,120 @@ function localMinute(time: number, timeZone: string): string {
   return `${shortDay(day)} ${pad(p.hour)}:${pad(p.minute)}`;
 }
 
-function shift(n: number, unit: Unit, sign: 1 | -1, nowMs: number, today: Day, timeZone: string): string {
-  const label = `${sign > 0 ? "in" : ""} ${n} ${unit}${n === 1 ? "" : "s"}${sign < 0 ? " ago" : ""}`.trim();
-  switch (unit) {
-    case "minute":
-    case "hour": {
-      const ms = n * (unit === "hour" ? HOUR_MS : 60_000);
-      return `"${label}" = ${localMinute(nowMs + sign * ms, timeZone)}`;
-    }
-    case "day":
-      return `"${label}" = ${shortDay(addDays(today, sign * n))}`;
-    case "week":
-      return `"${label}" = ${shortDay(addDays(today, sign * n * 7))}`;
-    case "month":
-      return `"${label}" = ${shortDay(addMonths(today, sign * n))}`;
-  }
+type Duration = Partial<Record<Unit, number>>;
+
+/** "1 hour 30 minutes", "2 days". */
+function durationLabel(d: Duration): string {
+  return (["month", "week", "day", "hour", "minute"] as const)
+    .filter((unit) => d[unit])
+    .map((unit) => `${d[unit]} ${unit}${d[unit] === 1 ? "" : "s"}`)
+    .join(" ");
 }
 
-function weekdayHint(prefix: string | undefined, name: string, suffix: string | undefined, today: Day): string {
+/**
+ * Where a duration lands from now. Months, weeks and days move the calendar
+ * (same wall time, whatever daylight saving does); hours and minutes move the
+ * clock. Ahead, a time is rounded up to the next whole minute, exactly as
+ * create_reminder does with in_minutes, so the hint and the reminder agree.
+ */
+function landing(d: Duration, sign: 1 | -1, now: Date, timeZone: string): string {
+  const p = zonedParts(now, timeZone);
+  let day: Day = { year: p.year, month: p.month, day: p.day };
+  if (d.month) day = addMonths(day, sign * d.month);
+  day = addDays(day, sign * ((d.week ?? 0) * 7 + (d.day ?? 0)));
+  const clock = (d.hour ?? 0) * HOUR_MS + (d.minute ?? 0) * 60_000;
+  if (!clock) return shortDay(day);
+  const moved = d.month || d.week || d.day ? (zonedTimeToUtc({ ...day, hour: p.hour, minute: p.minute }, timeZone) as Date).getTime() : now.getTime();
+  return localMinute(sign > 0 ? moved + clock + 59_000 : moved - clock, timeZone);
+}
+
+/** The duration a match names, or null when an amount is out of range ("em a dias" is not one). */
+function durationOf(m: RegExpMatchArray): Duration | null {
+  const [, prefix, n1, u1, half, n2, u2] = m;
+  const english = prefix === "in" || prefix === "within" || prefix === "";
+  const article = (word: string | undefined) => (word === "a" || word === "an") && !english;
+  const first = amount(n1);
+  const unit = UNITS[u1 ?? ""];
+  if (first === null || !unit || article(n1)) return null;
+  const d: Duration = { [unit]: first };
+  if (half) {
+    // "uma hora e meia", "an hour and a half": only hours have a half here.
+    if (unit !== "hour") return null;
+    d.minute = 30;
+  } else if (n2 !== undefined) {
+    const second = amount(n2);
+    const unit2 = UNITS[u2 ?? ""];
+    if (second === null || !unit2 || unit2 === unit || article(n2)) return null;
+    d[unit2] = second;
+  }
+  return d;
+}
+
+function weekdayHint(m: RegExpMatchArray, today: Day): string | null {
+  const [, preposition, prefix, name = "", feira, suffix] = m;
+  // "pela segunda vez", "a quarta parte": an ordinal, not a day.
+  if (ORDINAL_NAMES.has(name) && !preposition && !prefix && !feira && !suffix) return null;
   const target = WEEKDAY_WORDS[name] as number;
   const english = WEEKDAYS[target] as string;
   const todayWeekday = weekday(today);
-  const past = suffix === "passada" || suffix === "passado" || prefix === "last" || prefix === "ultima" || prefix === "ultimo";
-  if (past) {
+  const last = prefix === "last" || prefix === "ultima" || prefix === "ultimo";
+  if (suffix === "do mes" || suffix === "deste mes" || suffix === "of the month" || suffix === "of this month") {
+    if (!last) return null;
+    const end = addDays(addMonths({ ...today, day: 1 }, 1), -1);
+    const back = (weekday(end) - target + 7) % 7;
+    return `"the last ${english} of the month" = ${shortDay(addDays(end, -back))}`;
+  }
+  if (last || suffix === "passada" || suffix === "passado") {
     const back = (todayWeekday - target + 7) % 7 || 7;
     return `"last ${english}" = ${shortDay(addDays(today, -back))}`;
   }
-  const ahead = (target - todayWeekday + 7) % 7 || 7;
-  const first = addDays(today, ahead);
-  const next = suffix === "que vem" || prefix === "proxima" || prefix === "proximo" || prefix === "next";
-  if (next) {
+  const ahead = (target - todayWeekday + 7) % 7;
+  if (prefix === "this" || prefix === "esta" || prefix === "essa" || prefix === "nesta" || prefix === "nessa") {
+    // "esta sexta" said on a Friday is today.
+    return `"this ${english}" = ${shortDay(addDays(today, ahead))}${ahead === 0 ? " (today)" : ""}`;
+  }
+  const first = addDays(today, ahead || 7);
+  if (suffix === "que vem" || prefix === "proxima" || prefix === "proximo" || prefix === "next") {
     // "sexta que vem" is the coming Friday for some people and the one after for others.
     return `"next ${english}" = ${shortDay(first)} (if the owner means the week after: ${shortDay(addDays(first, 7))})`;
   }
-  const todayToo = ahead === 7 ? ` (today is also a ${english})` : "";
-  return `"${english}" = ${shortDay(first)}${todayToo}`;
+  return `"${english}" = ${shortDay(first)}${ahead === 0 ? ` (today is also a ${english})` : ""}`;
+}
+
+/**
+ * A day the owner wrote with numbers or a month's name. Without a year it is
+ * the next one from today (today included); a day that does not exist says so.
+ */
+function absoluteHint(day: number, month: number, year: number | undefined, today: Day): string {
+  const label = `"${pad(day)}/${pad(month)}${year === undefined ? "" : `/${year}`}"`;
+  const exists = (y: number) => month >= 1 && month <= 12 && day >= 1 && day <= new Date(Date.UTC(y, month, 0)).getUTCDate();
+  if (year !== undefined) {
+    if (year < MIN_YEAR || year > MAX_YEAR || !exists(year)) return `${label} is not a real date`;
+    return `${label} = ${shortDay({ year, month, day })}`;
+  }
+  let y = today.year;
+  const passed = month < today.month || (month === today.month && day < today.day);
+  if (passed) y++;
+  // 29/02 waits for the next leap year.
+  for (let i = 0; i < 8 && !exists(y); i++) y++;
+  if (!exists(y)) return `${label} is not a real date`;
+  return `${label} = ${shortDay({ year: y, month, day })} (no year given: the next one)`;
+}
+
+const MIN_YEAR = 2000;
+const MAX_YEAR = 2199;
+
+/** "dia 15": this month's, or next month's once it has passed; a month without that day is skipped. */
+function dayOnlyHint(day: number, today: Day): string | null {
+  if (day < 1 || day > 31) return null;
+  let first: Day = { ...today, day: 1 };
+  if (day < today.day) first = addMonths(first, 1);
+  for (let i = 0; i < 3; i++) {
+    const last = new Date(Date.UTC(first.year, first.month, 0)).getUTCDate();
+    if (day <= last) return `"day ${day}" = ${shortDay({ ...first, day })}`;
+    first = addMonths(first, 1);
+  }
+  return null;
 }
 
 /** Monday to Sunday of the week `weeks` after the current one. */
@@ -306,9 +443,9 @@ function monthRange(today: Day, months: number): string {
  * owner's zone. Fixed phrases only: an unknown phrase gives no hint, and the
  * rules tell the model to work from the calendar.
  */
-export function relativeDateHints(message: string, now: Date, timeZone: string): string[] {
-  const text = ` ${fold(message.slice(0, 4_000))} `;
-  const nowMs = now.getTime();
+export function relativeDateHints(message: string, now: Date, timeZone: string, locale: "pt-BR" | "en" = "pt-BR"): string[] {
+  const raw = message.slice(0, 4_000);
+  const text = ` ${fold(raw)} `;
   const p = zonedParts(now, timeZone);
   const today: Day = { year: p.year, month: p.month, day: p.day };
   const hints: string[] = [];
@@ -329,7 +466,7 @@ export function relativeDateHints(message: string, now: Date, timeZone: string):
   take(/\b(?:hoje|today|tonight)\b/g, `"today" = ${shortDay(today)}`);
   take(/\b(?:amanha|tomorrow)\b/g, `"tomorrow" = ${shortDay(addDays(today, 1))}`);
   take(/\b(?:ontem|yesterday)\b/g, `"yesterday" = ${shortDay(addDays(today, -1))}`);
-  take(/\b(?:daqui a|daqui|em|dentro de|in|within) (?:meia hora|half an hour)\b/g, `"in half an hour" = ${localMinute(nowMs + 30 * 60_000, timeZone)}`);
+  take(/\b(?:daqui a|daqui|em|dentro de|in|within) (?:meia hora|half an hour)\b/g, `"in half an hour" = ${landing({ minute: 30 }, 1, now, timeZone)} (in_minutes: 30)`);
   take(/\b(?:semana que vem|proxima semana|next week)\b/g, `"next week" = ${weekRange(today, 1)}`);
   take(/\b(?:semana passada|last week)\b/g, `"last week" = ${weekRange(today, -1)}`);
   take(/\b(?:esta semana|essa semana|nesta semana|nessa semana|this week)\b/g, `"this week" = ${weekRange(today, 0)}`);
@@ -339,18 +476,62 @@ export function relativeDateHints(message: string, now: Date, timeZone: string):
   take(/\b(?:este mes|esse mes|neste mes|this month)\b/g, `"this month" = ${monthRange(today, 0)}`);
   take(/\b(?:ano que vem|proximo ano|next year)\b/g, `"next year" = ${today.year + 1}`);
 
-  for (const m of rest.matchAll(AHEAD)) {
-    const n = amount(m[1] ?? m[3] ?? "");
-    const unit = UNITS[m[2] ?? m[4] ?? ""];
-    if (n !== null && unit) add(shift(n, unit, 1, nowMs, today, timeZone));
-  }
-  for (const m of rest.matchAll(BEHIND)) {
-    const n = amount(m[1] ?? m[3] ?? "");
-    const unit = UNITS[m[2] ?? m[4] ?? ""];
-    if (n !== null && unit) add(shift(n, unit, -1, nowMs, today, timeZone));
+  // A phrase seen once is worked out once: a pasted text may repeat one hundreds of times,
+  // and each hour or minute hint reads the zone (CPU limits of the Free plan).
+  const seen = new Set<string>();
+  const once = (key: string) => !seen.has(key) && seen.add(key) !== undefined;
+  const full = () => hints.length >= MAX_DATE_HINTS;
+  for (const [pattern, sign] of [
+    [AHEAD, 1],
+    [FROM_NOW, 1],
+    [BEHIND, -1],
+    [AGO, -1],
+  ] as const) {
+    let scanned = 0;
+    for (const m of rest.matchAll(pattern)) {
+      if (full() || ++scanned > MAX_SCANNED) break;
+      if (!once(`${sign}${m[0]}`)) continue;
+      const d = durationOf(m);
+      if (!d) continue;
+      const label = durationLabel(d);
+      const minutes = (d.hour ?? 0) * 60 + (d.minute ?? 0);
+      const reminder = sign > 0 && minutes && !d.day && !d.week && !d.month ? ` (in_minutes: ${minutes})` : "";
+      add(`"${sign > 0 ? `in ${label}` : `${label} ago`}" = ${landing(d, sign, now, timeZone)}${reminder}`);
+    }
   }
   for (const m of rest.matchAll(WEEKDAY_PHRASE)) {
-    add(weekdayHint(m[1], m[2] as string, m[3], today));
+    if (full()) break;
+    if (!once(m[0])) continue;
+    const hint = weekdayHint(m, today);
+    if (hint) add(hint);
+  }
+  for (const m of text.matchAll(DAY_MONTH)) {
+    if (full()) break;
+    if (once(m[0])) add(absoluteHint(m[1] === "primeiro" ? 1 : Number(m[1]), MONTH_WORDS[m[2] ?? ""] ?? 0, m[3] ? Number(m[3]) : undefined, today));
+  }
+  for (const m of text.matchAll(MONTH_DAY)) {
+    if (full()) break;
+    if (once(m[0])) add(absoluteHint(m[2] === "primeiro" ? 1 : Number(m[2]), MONTH_WORDS[m[1] ?? ""] ?? 0, m[3] ? Number(m[3]) : undefined, today));
+  }
+  for (const m of text.matchAll(DAY_ONLY)) {
+    if (full()) break;
+    const hint = once(m[0]) ? dayOnlyHint(Number(m[1]), today) : null;
+    if (hint) add(hint);
+  }
+  for (const pattern of [SLASH_DATE, SHORT_SLASH_DATE]) {
+    for (const m of raw.matchAll(pattern)) {
+      if (full()) break;
+      if (!once(`${m[1]}/${m[2]}/${m[3] ?? ""}`)) continue;
+      // pt-BR writes day/month; English, month/day.
+      const [first, second] = [Number(m[1]), Number(m[2])];
+      const [day, month] = locale === "en" ? [second, first] : [first, second];
+      const year = m[3] === undefined ? undefined : m[3].length === 2 ? 2000 + Number(m[3]) : Number(m[3]);
+      add(absoluteHint(day, month, year, today));
+    }
+  }
+  for (const m of raw.matchAll(ISO_DATE)) {
+    if (full()) break;
+    if (once(m[0])) add(absoluteHint(Number(m[3]), Number(m[2]), Number(m[1]), today));
   }
   return hints;
 }
@@ -367,10 +548,32 @@ export interface ClockInput {
   timeZone: string;
   /** The owner's latest message (or a routine's instruction): its relative dates are resolved here. */
   message?: string | undefined;
+  /** The settings' language: it decides whether 03/04 is 3 April (pt-BR) or March 4 (en). */
+  locale?: "pt-BR" | "en" | undefined;
+  /** When the message before the latest one in this conversation was written (UTC ISO), if any. */
+  previousMessageAt?: string | null | undefined;
 }
+
+/** Below this gap the conversation is still "now": no line about older messages. */
+export const CONVERSATION_GAP_MS = 3 * HOUR_MS;
+
+/**
+ * The last section made, by its inputs: a turn builds its prompt two or three
+ * times (budget, summary, answer) with the same clock and message, and the
+ * daylight-saving search is the costly part (CPU limits of the Free plan).
+ */
+let lastClock: { key: string; text: string } | null = null;
 
 /** The clock section of the system prompt. */
 export function clockSection(input: ClockInput): string {
+  const key = [input.now.getTime(), input.timeZone, input.locale, input.previousMessageAt, input.message].join("\u0000");
+  if (lastClock?.key === key) return lastClock.text;
+  const text = buildClockSection(input);
+  lastClock = { key, text };
+  return text;
+}
+
+function buildClockSection(input: ClockInput): string {
   const { now, timeZone } = input;
   const p = zonedParts(now, timeZone);
   const today: Day = { year: p.year, month: p.month, day: p.day };
@@ -392,7 +595,26 @@ export function clockSection(input: ClockInput): string {
   ];
   const change = offsetChangeLine(now, today, timeZone);
   if (change) lines.push(`- ${change}`);
-  const hints = input.message ? relativeDateHints(input.message, now, timeZone) : [];
+  const gap = gapLine(input.previousMessageAt, now, timeZone);
+  if (gap) lines.push(`- ${gap}`);
+  const hints = input.message ? relativeDateHints(input.message, now, timeZone, input.locale) : [];
   if (hints.length) lines.push(`- Dates in the owner's latest message, resolved by the server: ${hints.join("; ")}.`);
   return lines.join("\n");
+}
+
+/**
+ * A conversation picked up again hours or days later: the older messages'
+ * "today" and "tomorrow" meant their own day. The history carries no dates,
+ * so without this line the model reads them against today.
+ */
+function gapLine(previous: string | null | undefined, now: Date, timeZone: string): string | null {
+  const at = previous ? Date.parse(previous) : Number.NaN;
+  if (!Number.isFinite(at) || now.getTime() - at < CONVERSATION_GAP_MS) return null;
+  const p = zonedParts(new Date(at), timeZone);
+  const then: Day = { year: p.year, month: p.month, day: p.day };
+  const q = zonedParts(now, timeZone);
+  const days = Math.round((Date.UTC(q.year, q.month - 1, q.day) - Date.UTC(then.year, then.month - 1, then.day)) / 86_400_000);
+  const hours = Math.floor((now.getTime() - at) / HOUR_MS);
+  const ago = days >= 1 ? `${days} day${days === 1 ? "" : "s"} ago` : `${hours} hours ago`;
+  return `The previous message in this conversation was on ${shortDay(then)} ${pad(p.hour)}:${pad(p.minute)} (${ago}): "today", "tomorrow" and the like in older messages meant that day, not today.`;
 }

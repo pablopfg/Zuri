@@ -533,14 +533,14 @@ describe("the history", () => {
 
 // ---------- What a run does ----------
 
-function executorFor(world: ChatWorld, steps: Step[] = [], settings: Partial<Settings> = {}) {
+function executorFor(world: ChatWorld, steps: Step[] = [], settings: Partial<Settings> = {}, locale: "pt-BR" | "en" = "pt-BR") {
   const provider = new ScriptedProvider(steps);
   const runner = () =>
     new AgentRunner({
       tools: world.services(),
       conversations: world.conversations,
       settings: () => ({ ...world.settings, ...settings }),
-      locale: () => "pt-BR",
+      locale: () => locale,
       ai: () => world.ai(provider),
       agentName: "Zuri",
       clock: () => world.clock.now,
@@ -605,6 +605,20 @@ describe("running each kind", () => {
       expect(system).toContain("scheduled run of a routine the owner approved");
       expect(provider.transcript.requests[0]?.messages).toEqual([{ role: "user", content: "O que está atrasado?" }]);
       expect(world.automations.aiRunsToday()).toBe(1);
+    });
+  });
+
+  it("a routine in English settings answers in English, whatever language its instruction is in", async () => {
+    await withChatWorld(async (world) => {
+      const a = await world.automations.create(reminder({ kind: "agent_prompt", message: "O que tenho para amanhã?" }), "app");
+      const { provider, execute } = executorFor(world, [() => ({ text: "Nothing due tomorrow." })], {}, "en");
+      await world.automations.runNow(a.id, execute);
+      const system = provider.transcript.requests[0]?.system ?? "";
+      expect(system).toContain("Write every answer in English (en)");
+      expect(system).not.toContain("Brazilian Portuguese");
+      expect(system.split("\n\n").at(-1)).toContain("Reminder: answer only in English (en)");
+      // The instruction's "amanhã" is resolved against the run's own day.
+      expect(system).toContain('"tomorrow" = Sun 2026-11-01');
     });
   });
 

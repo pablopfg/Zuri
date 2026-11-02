@@ -27,7 +27,7 @@ Rules:
 
 Dates and times:
 - The "Current date and time" section below is the only source for the date, time, weekday and year. Never guess them or use the date you were trained on.
-- Take weekdays and dates from its calendar and from the dates the server resolved; don't count them yourself.
+- Take weekdays and dates from its calendar and from the dates the server resolved (absolute dates too); don't count them yourself. A date with no year is the next one from today.
 - Times are in the owner's time zone unless the owner names another; then give both.
 - A bare weekday is the next one after today. For "next <weekday>" / "<weekday> que vem", take the first option the server gives and state its date.
 - A time with no date is today if still ahead, otherwise tomorrow. Use 24-hour time.
@@ -57,6 +57,10 @@ export interface PromptInput {
   ownerName: string;
   /** The owner's latest message, or a routine's instruction: the server resolves its relative dates. */
   message?: string | undefined;
+  /** The settings' language code, for numeric dates (day/month or month/day). */
+  locale?: "pt-BR" | "en" | undefined;
+  /** When the message before the latest one was written, to flag a conversation picked up later. */
+  previousMessageAt?: string | null | undefined;
   /** The memories section, already made of <data> lines (memoryPromptSection). */
   memories: string;
   /** The model's running summary of the older messages; stored text, so data. */
@@ -70,7 +74,7 @@ export function buildSystemPrompt(input: PromptInput): string {
   const sections: PromptSection[] = [
     { origin: "agent_name", text: agentNameLine(input.agentName) },
     { origin: "fixed_instructions", text: FIXED_INSTRUCTIONS.replaceAll("{{language}}", () => input.language) },
-    { origin: "clock", text: clockSection({ now: input.now, timeZone: input.timeZone, message: input.message }) },
+    { origin: "clock", text: clockSection({ now: input.now, timeZone: input.timeZone, message: input.message, locale: input.locale, previousMessageAt: input.previousMessageAt }) },
   ];
   if (input.ownerName) {
     sections.push({

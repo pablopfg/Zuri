@@ -31,14 +31,22 @@ pelo servidor a cada chamada ao modelo, no fuso das Configurações
 - **Troca de relógio à frente**: quando o fuso muda o deslocamento nesse
   período, a linha diz o dia, a hora local antes e depois e o sentido
   ("local 02:00 becomes 01:00").
+- **Conversa retomada depois**: quando a mensagem anterior da conversa tem 3
+  horas ou mais, uma linha diz quando ela foi escrita ("2 days ago") e lembra
+  que o "hoje" e o "amanhã" das mensagens antigas eram daquele dia. O
+  histórico vai ao modelo sem data em cada mensagem.
 - **Datas da mensagem resolvidas pelo servidor**: "hoje", "amanhã",
-  "depois de amanhã", "ontem", "anteontem", dias da semana (com "que vem",
-  "próxima", "passada"), "daqui a / em / dentro de N minutos, horas, dias,
-  semanas ou meses", "há N …", "meia hora", "semana que vem", "fim de semana",
-  "mês que vem", "ano que vem" e os equivalentes em inglês. Cada dica é
-  escrita só com palavras fixas e números, nunca copiando o texto do dono,
-  então não leva instrução escondida. No máximo 8 por mensagem; quantidade
-  acima de 999 é ignorada.
+  "depois de amanhã", "ontem", "anteontem", dias da semana (com "na", "até",
+  "toda", "esta", "que vem", "próxima", "passada", "última … do mês"),
+  "daqui a / em / dentro de N minutos, horas, dias, semanas ou meses" (também
+  em duas partes, como "1 hora e 30 minutos" e "uma hora e meia"), "há N …",
+  "meia hora", "semana que vem", "fim de semana", "mês que vem", "ano que vem",
+  datas por extenso ("1º de dezembro", "15 de março de 2027", "December 25"),
+  "dia 15" e datas com barra ("até 15/03", "05/11/2026"; dia/mês em pt-BR e
+  mês/dia em inglês), além dos equivalentes em inglês. Cada dica é escrita só
+  com palavras fixas e números, nunca copiando o texto do dono, então não leva
+  instrução escondida. No máximo 8 por mensagem; quantidade acima de 999 é
+  ignorada; cada expressão repetida é calculada uma vez só.
 
 As instruções fixas mandam usar só essa seção como fonte de data e hora, tirar
 o dia da semana do calendário, tratar tudo no fuso do dono (ou dar os dois
@@ -56,6 +64,14 @@ soma) e perguntar quando a data for ambígua de verdade.
 | "Daqui a N horas/minutos" | Soma no relógio (instantes), então atravessa a troca do horário de verão certo |
 | "Em N dias/semanas" | Soma no calendário: mesmo horário de parede, qualquer que seja a troca |
 | "Em N meses" | Mesmo dia do mês; num mês mais curto, o último dia (31/01 + 1 mês = 28 ou 29/02) |
+| "Esta sexta" dita numa sexta | Hoje |
+| "Última sexta do mês" | A última sexta do mês corrente |
+| "Segunda", "quarta", "quinta", "sexta" sem "feira", preposição ou modificador | Nenhuma dica: pode ser ordinal ("pela segunda vez") |
+| Data sem ano ("15 de março", "até 15/03") | A próxima a partir de hoje, hoje incluído; 29/02 espera o próximo ano bissexto |
+| "Dia 15" | O deste mês; se já passou, o do mês seguinte; mês sem dia 31 pula para o próximo que tem |
+| Barra sem ano e sem palavra antes ("1/2 xícara") | Nenhuma dica: é fração |
+| Data que não existe ("31 de abril", "29/02/2027") | A dica diz que não é uma data real |
+| Hora com minuto quebrado | Arredonda para o minuto seguinte, igual ao `in_minutes` do lembrete, para a dica e o lembrete baterem |
 | Semana | Segunda a domingo |
 | Fim de semana | O sábado e o domingo que vêm; num fim de semana, o atual |
 
@@ -64,8 +80,8 @@ soma) e perguntar quando a data for ambígua de verdade.
 - As ferramentas recebem datas locais (`YYYY-MM-DD` ou `YYYY-MM-DDTHH:MM`) e
   o servidor converte para o instante em UTC no fuso do dono
   (`localDueToInstant`), recusando datas que não existem (30/02, 25:00).
-- `create_task` e `update_task` devolvem uma nota quando o prazo já passou
-  (`pastDueNote`): é o sinal de um ano ou dia da semana errado, e a regra manda
+- `create_task`, `update_task` e `propose_task_plan` devolvem uma nota quando
+  o prazo já passou (`pastDueNote` e `past_due`): é o sinal de um ano ou dia da semana errado, e a regra manda
   a Zuri avisar o dono.
 - Lembrete único no passado é recusado pelo serviço de automações (etapa 10).
 
@@ -93,5 +109,8 @@ A seção do relógio e as regras somam cerca de 2.000 caracteres (uns 520
 tokens) a cada chamada ao modelo: cerca de 3 Neurons a mais por chamada no
 modelo padrão (`glm-4.7-flash`, 5.500 Neurons por milhão de tokens de
 entrada). A resposta típica passa de uns 48 para uns 51 Neurons. Montar a
-seção leva menos de 1 ms de CPU (as trocas de relógio são achadas dia a dia e
-depois ao minuto, em cerca de 11 passos).
+seção leva cerca de 1 ms de CPU (as trocas de relógio são achadas dia a dia e
+depois ao minuto, em cerca de 11 passos) e é feita uma vez por turno, mesmo
+que o prompt seja montado duas ou três vezes. Um texto colado que repete a
+mesma expressão centenas de vezes continua em cerca de 1 ms: cada expressão é
+calculada uma vez e a leitura para quando as 8 dicas enchem.

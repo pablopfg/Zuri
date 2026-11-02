@@ -464,6 +464,18 @@ describe("destructive tools: a proposal the owner approves", () => {
     });
   });
 
+  it("a proposed plan with a past due date carries the same warning as create_task", async () => {
+    await withChatWorld(async (world) => {
+      const run = executor(world, conversation(world));
+      const result = payload(
+        await run.execute("propose_task_plan", { title: "Viagem", tasks: [{ title: "Comprar passagem", due: "2025-11-03" }, { title: "Fazer a mala", due: "2026-11-05" }, { title: "Sem data" }] }, "1"),
+      );
+      expect(result.past_due).toBe("These due dates are already past: 2025-11-03. Tell the owner, and propose the plan again with the right dates if it was a mistake.");
+      const fine = executor(world, conversation(world));
+      expect(payload(await fine.execute("propose_task_plan", { title: "Casa", tasks: [{ title: "Pintar", due: "2026-11-05" }, { title: "Limpar" }] }, "2")).past_due).toBeUndefined();
+    });
+  });
+
   it("a proposal needs a chat conversation, and the item must exist when proposed", async () => {
     await withChatWorld(async (world) => {
       const task = world.productivity.tasks.create({ title: "Algo" });

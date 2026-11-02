@@ -138,6 +138,9 @@ export class AgentRunner {
           now: new Date(this.deps.clock?.() ?? Date.now()),
           ownerName: settings.ownerName,
           message: input.message,
+          locale,
+          // The message before this one: a conversation picked up days later says so (time-context.ts).
+          previousMessageAt: history.filter((item) => item.id !== userMessage.id).at(-1)?.created_at ?? null,
           memories,
           summary,
         });
@@ -263,6 +266,7 @@ export class AgentRunner {
       // question of asking for the password to change it (docs/seguranca.md).
       ownerName: "",
       message: input.prompt,
+      locale,
       memories,
       summary: null,
       routine: scheduledInstructions(input.name, input.quiet),
