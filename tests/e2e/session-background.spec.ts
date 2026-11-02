@@ -50,7 +50,7 @@ test("a tab in front for a while does sign out every tab when its count runs out
   await page.clock.install();
   await page.goto("/");
   await signIn(page);
-  await expect(page.getByRole("heading", { level: 1, name: "Olá!" })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: /^(Bom dia|Boa tarde|Boa noite)/ })).toBeVisible();
 
   // The control case of the test above: same jump, tab visible the whole time.
   const logout = page.waitForResponse((r) => r.url().endsWith("/api/auth/logout"));

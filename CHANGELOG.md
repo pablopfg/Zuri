@@ -9,6 +9,18 @@ o [SemVer](https://semver.org/lang/pt-BR/). Cada PR escreve a sua entrada em
 
 ### Adicionado
 
+- Avaliação de AI Gateway, Hyperdrive e Vectorize em
+  `docs/planos/ai-gateway-hyperdrive-vectorize.md`, com os limites do plano
+  Free conferidos em 02/11/2026. Nenhum dos três entra agora: o Hyperdrive e o
+  Vectorize ficam de fora, e o AI Gateway volta a ser avaliado só se os
+  modelos pagos forem aprovados. A etapa 17 ganhou regras para a busca por
+  significado caber nas cotas.
+- Cumprimento no Início: bom dia, boa tarde ou boa noite pelo horário do seu
+  fuso (o das configurações, não o do aparelho), com o seu nome e uma frase
+  curta que muda a cada dia. A frase troca sozinha quando o período vira,
+  mesmo com a tela aberta, e de madrugada tem frases próprias.
+- Campo "Seu nome" em Configurações > Conta. Aceita apelido, até 40
+  caracteres; em branco, o cumprimento sai sem nome.
 - Primeiro acesso protegido por um código de instalação (servidor). Enquanto
   não existe dono, `GET /api/setup`, `POST /api/setup/code` e
   `POST /api/setup/owner` criam o dono uma vez só. O código é um segredo de 32
@@ -165,6 +177,8 @@ o [SemVer](https://semver.org/lang/pt-BR/). Cada PR escreve a sua entrada em
 
 ### Alterado
 
+- A agente agora é "a Zuri": textos da interface, mensagens do servidor,
+  README, manifesto do app e banner passam a tratá-la no feminino.
 - Os logs do servidor têm agora um formato único (`level`, `event`, `code`,
   `route`, `requestId`, `error`, `secrets`), com o `cf-ray` da requisição para
   achar o erro no painel da Cloudflare. Tudo passa por um só módulo, que

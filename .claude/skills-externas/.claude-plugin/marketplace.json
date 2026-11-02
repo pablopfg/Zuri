@@ -54,6 +54,35 @@
         "repo": "blader/humanizer",
         "sha": "0ef9fe5bc3572734fd3ae6c448fe00a30cd5dcf0"
       }
+    },
+    {
+      "name": "frontend-design",
+      "description": "frontend-design da Anthropic: direção visual intencional para tela nova ou redesenho, sem cara de modelo pronto.",
+      "source": {
+        "source": "git-subdir",
+        "url": "anthropics/skills",
+        "path": "skills/frontend-design",
+        "sha": "ca45fc496a3436251f191354091d557da31c15b5"
+      },
+      "skills": [
+        "./"
+      ]
+    },
+    {
+      "name": "ponytail",
+      "description": "ponytail: a menor mudança completa (sem abstração, opção ou dependência que ninguém pediu) e revisão de excesso de código. Só as skills, sem os hooks do pacote.",
+      "source": {
+        "source": "git-subdir",
+        "url": "DietrichGebert/ponytail",
+        "path": "skills",
+        "sha": "96608e078b2d5ea607c5c3b8b5a54d1c1fba6846"
+      },
+      "skills": [
+        "./ponytail",
+        "./ponytail-review",
+        "./ponytail-audit",
+        "./ponytail-debt"
+      ]
     }
   ]
 }

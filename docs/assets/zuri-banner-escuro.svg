@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 400" width="1280" height="400" role="img" aria-labelledby="t d">
   <title id="t">Zuri</title>
-  <desc id="d">Símbolo do Zuri, um i cujo pingo é uma luz verde, ao lado do nome e da frase: seu assistente pessoal de IA, na sua conta Cloudflare.</desc>
+  <desc id="d">Símbolo da Zuri, um i cujo pingo é uma luz verde, ao lado do nome e da frase: sua assistente pessoal de IA, na sua conta Cloudflare.</desc>
   <defs>
     <radialGradient id="glow" cx="0.5" cy="0.5" r="0.5">
       <stop offset="0" stop-color="#22c55e" stop-opacity=".28"/>
@@ -27,7 +27,7 @@
   </g>
   <g font-family="system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif">
     <text x="440" y="200" font-size="104" font-weight="700" letter-spacing="-3" fill="#e8ecf3">Zuri</text>
-    <text x="444" y="252" font-size="28" fill="#a3acbd">Seu assistente pessoal de IA, na sua conta Cloudflare.</text>
+    <text x="444" y="252" font-size="28" fill="#a3acbd">Sua assistente pessoal de IA, na sua conta Cloudflare.</text>
     <g font-size="18" font-weight="600">
       <rect x="444" y="282" width="176" height="36" rx="18" fill="#121826" stroke="#263043"/>
       <circle cx="466" cy="300" r="5" fill="#22c55e"/>

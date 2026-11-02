@@ -2,7 +2,7 @@
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/zuri-banner-escuro.svg">
-  <img src="docs/assets/zuri-banner-claro.svg" alt="Zuri: o símbolo, um i cujo pingo é uma luz verde, ao lado do nome e da frase 'Seu assistente pessoal de IA, na sua conta Cloudflare'" width="100%">
+  <img src="docs/assets/zuri-banner-claro.svg" alt="Zuri: o símbolo, um i cujo pingo é uma luz verde, ao lado do nome e da frase 'Sua assistente pessoal de IA, na sua conta Cloudflare'" width="100%">
 </picture>
 
 <br>
@@ -28,7 +28,7 @@ de um Durable Object e conversa com você pelo navegador e, em breve, pelo Teleg
 
 ## Sumário
 
-- [Por que o Zuri](#-por-que-o-zuri)
+- [Por que a Zuri](#-por-que-a-zuri)
 - [Telas](#-telas)
 - [O que já funciona](#-o-que-já-funciona)
 - [O que vem a seguir](#-o-que-vem-a-seguir)
@@ -44,9 +44,9 @@ de um Durable Object e conversa com você pelo navegador e, em breve, pelo Teleg
 - [In English](#-in-english)
 - [Créditos e licença](#-créditos-e-licença)
 
-## 💡 Por que o Zuri
+## 💡 Por que a Zuri
 
-Cada pessoa publica o próprio Zuri na própria conta Cloudflare, e ele atende só ela. Conversas, memórias e tarefas não passam pelo servidor de outra empresa.
+Cada pessoa publica a própria Zuri na própria conta Cloudflare, e ela atende só essa pessoa. Conversas, memórias e tarefas não passam pelo servidor de outra empresa.
 
 - **Seus dados ficam com você.** Tudo mora no SQLite de um Durable Object da sua conta. Não há banco externo nem servidor de terceiros.
 - **Custo zero.** Foi desenhado para caber no plano Free da Cloudflare, com contadores e tetos para a IA não passar da cota.
@@ -70,9 +70,9 @@ As capturas abaixo acompanham o tema do seu GitHub (claro ou escuro) e saem da `
     <td width="50%" valign="top">
       <picture>
         <source media="(prefers-color-scheme: dark)" srcset="docs/capturas/inicio-computador-escuro.png">
-        <img src="docs/capturas/inicio-computador-claro.png" alt="Início da Zuri no computador: barra lateral com Início, Conversa, Tarefas, Notas, Memória e Acessos, e cartões de Segurança e Sessão">
+        <img src="docs/capturas/inicio-computador-claro.png" alt="Início da Zuri no computador: cumprimento pelo horário com o nome do dono, barra lateral com Início, Conversa, Tarefas, Notas, Memória e Acessos, e cartões de Segurança e Sessão">
       </picture>
-      <p align="center"><b>Início</b>: segurança da conta e sessão num relance</p>
+      <p align="center"><b>Início</b>: cumprimento pelo horário, segurança da conta e sessão num relance</p>
     </td>
     <td width="50%" valign="top">
       <picture>
@@ -95,7 +95,7 @@ As capturas abaixo acompanham o tema do seu GitHub (claro ou escuro) e saem da `
         <source media="(prefers-color-scheme: dark)" srcset="docs/capturas/memoria-computador-escuro.png">
         <img src="docs/capturas/memoria-computador-claro.png" alt="Tela de memória com o formulário 'Guardar uma memória', as abas Todas, Atuais, Incertas e Passadas e a lista de fatos">
       </picture>
-      <p align="center"><b>Memória</b>: o que o Zuri sabe, com histórico</p>
+      <p align="center"><b>Memória</b>: o que a Zuri sabe, com histórico</p>
     </td>
   </tr>
   <tr>
@@ -154,6 +154,7 @@ O que está na `develop` hoje, etapa por etapa. "extra" marca melhorias feitas f
 | 🗝️ | **Primeiro acesso seguro** | O dono se cadastra uma vez só, com um código de instalação gravado como segredo (vale 1 hora; erros pausam e bloqueiam só a rede de quem tenta), e liga o 2FA antes de tudo. Um código novo só recupera o acesso. Servidor pronto; a tela vem a seguir. | extra |
 | 📱 | **2FA e passkeys** | Aplicativo autenticador (TOTP), 10 códigos de recuperação e passkeys no segundo passo. Ligar o 2FA e criar uma passkey pedem a senha na hora. Alerta a cada 3 códigos errados seguidos; com 30 erros em 24 h, o segundo passo fica suspenso para redes desconhecidas. | 4 |
 | 🧭 | **Interface web (PWA)** | Barra lateral recolhível, navegação inferior no celular, tema claro, escuro ou do sistema, instalável no celular e no computador. | 5 |
+| 👋 | **Cumprimento no Início** | Bom dia, boa tarde ou boa noite pelo seu fuso, com o seu nome (Configurações > Conta) e uma frase curta da Zuri que muda a cada dia. | extra |
 | ⌨️ | **Paleta de comandos** | Ctrl/⌘ K (ou o botão Buscar) abre a busca de tarefas, notas e memórias e o caminho para qualquer página ou seção das configurações, tudo pelo teclado. | extra |
 | 👀 | **Acessos** | Cada tentativa de entrar, com IP, cidade, país, rede, navegador e resultado, filtrável por período e tipo. | extra |
 | ✅ | **Tarefas e projetos** | Hoje, próximas, atrasadas e concluídas, com prioridade, prazo no seu fuso e projetos. | 6 |
@@ -213,7 +214,7 @@ Mais detalhes em [docs/arquitetura.md](docs/arquitetura.md).
 
 - **Dono único.** Não há cadastro nem contas de outras pessoas.
 - **Login forte.** Senha de 15 caracteres ou mais, Turnstile validado no Worker antes da senha, 2FA, passkeys, códigos de recuperação e defesa contra ataque lento ao segundo passo.
-- **Você vê quem tentou.** A página Acessos registra cada tentativa. O IP fica no banco do Zuri e não vai para os logs.
+- **Você vê quem tentou.** A página Acessos registra cada tentativa. O IP fica no banco da Zuri e não vai para os logs.
 - **Agente com limites.** Sem shell, execução de código, HTTP livre, credenciais ou deploy. Ação destrutiva vira proposta e só roda com a sua aprovação.
 - **Conteúdo é dado, nunca instrução.** Notas, memórias, mensagens e resultados de ferramentas entram no modelo em blocos `<data>` neutralizados. Os cenários de injeção de prompt são testados com um modelo que obedece ao texto injetado, e mesmo assim nada é apagado sem você.
 - **Segredos só no Worker.** Nada sensível no navegador, no repositório ou nos logs. A CSP da interface é testada na CI.
@@ -223,7 +224,7 @@ Detalhes em [docs/seguranca.md](docs/seguranca.md). Para relatar uma vulnerabili
 
 ## 💸 Plano Free, sem surpresa na fatura
 
-| Recurso | Plano Free | Como o Zuri usa |
+| Recurso | Plano Free | Como a Zuri usa |
 | --- | :---: | --- |
 | Workers, Durable Objects com SQLite | ✅ | Tudo roda aqui, com orçamento por rota medido nos testes |
 | Workers AI | ✅ | Teto único de 9.000 Neurons por dia (a cota é 10.000), zerado às 00:00 UTC |
@@ -231,7 +232,7 @@ Detalhes em [docs/seguranca.md](docs/seguranca.md). Para relatar uma vulnerabili
 | Modelos pagos (Anthropic, OpenAI) | ⚠️ | Desligados. Só com a sua aprovação e um teto diário em US$ |
 | KV, D1, R2, Vectorize, Queues, Workers Paid | ⚠️ | Não usados. Qualquer recurso que gere cobrança exige aprovação explícita |
 
-O orçamento de cada cota está em [docs/arquitetura/orcamento-free-tier.md](docs/arquitetura/orcamento-free-tier.md).
+O orçamento de cada cota está em [docs/arquitetura/orcamento-free-tier.md](docs/arquitetura/orcamento-free-tier.md). AI Gateway, Hyperdrive e Vectorize foram avaliados e ficaram de fora; os motivos estão em [docs/planos/ai-gateway-hyperdrive-vectorize.md](docs/planos/ai-gateway-hyperdrive-vectorize.md).
 
 ## 🗺️ Mapa das etapas
 
@@ -343,7 +344,7 @@ Leia o [CONTRIBUTING.md](CONTRIBUTING.md) e o [AGENTS.md](AGENTS.md). Em resumo:
 
 ## 🙌 Créditos e licença
 
-O Zuri é inspirado no [Talorys](https://github.com/pablopfg/talorys), assistente pessoal de IA na Cloudflare, e acrescenta o bot de administração no Telegram. Trechos reaproveitados mantêm o aviso de copyright em [NOTICE.md](NOTICE.md).
+A Zuri é inspirada no [Talorys](https://github.com/pablopfg/talorys), assistente pessoal de IA na Cloudflare, e acrescenta o bot de administração no Telegram. Trechos reaproveitados mantêm o aviso de copyright em [NOTICE.md](NOTICE.md).
 
 Licença [MIT](LICENSE).
 
@@ -351,5 +352,5 @@ Licença [MIT](LICENSE).
 <br>
 <img src="docs/assets/zuri-logo.svg" alt="" width="40" height="40">
 <br>
-<sub>A luz verde quer dizer que o Zuri está trabalhando.</sub>
+<sub>A luz verde quer dizer que a Zuri está trabalhando.</sub>
 </div>
