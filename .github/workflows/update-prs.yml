@@ -29,7 +29,7 @@ jobs:
   update:
     # A dispatch from another branch would run that branch's copy with write access.
     if: github.ref == 'refs/heads/develop'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 20
     # contents: push the merge commit to the PR branch; pull-requests: the comment;
     # actions: approve the held pull_request runs and rerun a stale merge-order.
@@ -68,7 +68,7 @@ jobs:
     needs: update
     # A step stuck past timeout-minutes ends the job as cancelled: that is a failure here too.
     if: always() && github.ref == 'refs/heads/develop' && (needs.update.result == 'failure' || needs.update.result == 'cancelled')
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     timeout-minutes: 5
     # issues: create the issue, its labels and the repeat comment; actions: read the failed steps.
     permissions:
