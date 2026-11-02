@@ -126,6 +126,7 @@ export class AgentRunner {
           language: LANGUAGE[locale],
           timeZone: settings.timeZone,
           now: new Date(this.deps.clock?.() ?? Date.now()),
+          ownerName: settings.ownerName,
           memories,
           summary,
         });

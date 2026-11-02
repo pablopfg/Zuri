@@ -63,7 +63,7 @@ As capturas abaixo acompanham o tema do seu GitHub (claro ou escuro) e saem da `
     <img src="docs/capturas/conversa-computador-claro.png" alt="Tela Conversa: o dono pede ajuda para organizar a mudança e o agente responde com um plano de quatro tarefas, com prioridades e prazos, e os botões Criar 4 tarefas, Editar e Descartar" width="85%">
   </picture>
 </p>
-<p align="center"><b>Conversa</b>: o agente propõe, você confere e confirma</p>
+<p align="center"><b>Conversa</b>: a Zuri propõe, você confere e confirma</p>
 
 <table>
   <tr>
@@ -161,7 +161,7 @@ O que está na `develop` hoje, etapa por etapa. "extra" marca melhorias feitas f
 | 📝 | **Notas** | Markdown seguro, busca de texto completo (com ou sem acento) e lixeira de 30 dias. | 6 |
 | 🧠 | **Memória** | Fatos que você guarda, edita e apaga. O que muda vira histórico (atual, incerto ou passado), e conflitos vão para uma fila de revisão. | 7 |
 | 📊 | **IA com medição** | Workers AI com contador por chamada e um teto único de 9.000 Neurons por dia, com aviso claro ao chegar nele. | 8 |
-| 💬 | **Conversa com ferramentas** | Respostas em tempo real. O agente cria e organiza tarefas, notas e memórias; o que apaga ou reescreve vira um cartão para você aprovar, e planos de tarefas só viram tarefas depois da sua confirmação. Também aceita voz. | 9 |
+| 💬 | **Conversa com ferramentas** | Respostas em tempo real, num tom simpático e natural, chamando você pelo nome. A Zuri cria e organiza tarefas, notas e memórias; o que apaga ou reescreve vira um cartão para você aprovar, e planos de tarefas só viram tarefas depois da sua confirmação. Também aceita voz. | 9 |
 
 ## 🔭 O que vem a seguir
 
