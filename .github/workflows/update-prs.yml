@@ -1,0 +1,53 @@
+name: Update PRs
+
+# When develop moves, brings it into every open pull request into develop and
+# resolves the conflicts that are only two additions at the same place
+# (scripts/atualizar-prs.ts). Any other conflict gets one comment on the pull
+# request. It never merges, never force-pushes and never pushes to develop or
+# main. A push made with GITHUB_TOKEN starts no pull_request run, so the script
+# dispatches ci.yml and codeql.yml on the branch: the required checks run on
+# the new commit, the same jobs as always. docs/agente/merge-de-prs.md.
+on:
+  push:
+    branches: [develop]
+  workflow_dispatch:
+
+permissions: {}
+
+# One run at a time; a newer push to develop replaces the run still waiting.
+concurrency:
+  group: update-prs
+  cancel-in-progress: false
+
+jobs:
+  update:
+    # A dispatch from another branch would run that branch's copy with write access.
+    if: github.ref == 'refs/heads/develop'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    # contents: push the merge commit to the PR branch; pull-requests: the comment;
+    # actions: dispatch the CI on that commit.
+    permissions:
+      contents: write
+      pull-requests: write
+      actions: write
+    steps:
+      # The script runs from develop, never from a pull request branch.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: develop
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+      - name: Update the open pull requests
+        env:
+          GH_TOKEN: ${{ github.token }}
+          # Nothing from a PR branch runs: no LFS download, no hooks.
+          GIT_LFS_SKIP_SMUDGE: "1"
+        run: |
+          git config core.hooksPath /dev/null
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          node scripts/atualizar-prs.ts

@@ -3,6 +3,7 @@ paths:
   - "docs/**"
   - "README.md"
   - "CHANGELOG.md"
+  - "changelog/**"
 ---
 
 # Documentação
@@ -13,4 +14,5 @@ paths:
 - O `README.md` anda junto com o código: quando e como atualizar está em `.claude/rules/readme.md`. Tire o aviso "em construção" na etapa 25.
 - Identidade visual Sinal: `docs/assets/zuri-logo.svg` e os banners `docs/assets/zuri-banner-{claro,escuro}.svg` usam as mesmas cores de `apps/web/src/styles.css`. Trocou a identidade, troque os três.
 - Imagens do README têm texto alternativo descritivo em pt-BR. As capturas do README ficam em `docs/capturas/` e saem de `scripts/capturas-do-readme.ts` (app em pt-BR, claro e escuro). As capturas de cada PR ficam em `docs/assets/etapa-NN/`.
-- Changelog à mão em "Não lançado"; o release copia a seção para a versão.
+- Changelog à mão, um arquivo por PR em `changelog/nao-lancado/<assunto>.md` (grupos `### Adicionado`, `### Alterado`, `### Corrigido`, `### Segurança`, `### Atualização`). Dois PRs nunca editam as mesmas linhas. O release roda `node scripts/changelog.ts --gravar`, que junta os arquivos em "Não lançado", e copia a seção para a versão.
+- Listas que crescem a cada PR (tabelas, seções de memória) recebem item novo numa linha nova, sem reescrever a linha vizinha: assim o conflito é só de acréscimo e sai sozinho (`docs/agente/merge-de-prs.md`).

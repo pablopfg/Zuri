@@ -2,8 +2,11 @@
 
 Todas as mudanças visíveis do Zuri ficam aqui, em pt-BR. O formato segue o
 [Keep a Changelog](https://keepachangelog.com/pt-BR/1.1.0/) e as versões seguem
-o [SemVer](https://semver.org/lang/pt-BR/). Cada PR escreve a sua entrada em
-"Não lançado"; a release copia a seção para a versão.
+o [SemVer](https://semver.org/lang/pt-BR/). Cada PR escreve a sua entrada num
+arquivo próprio em [`changelog/nao-lancado/`](changelog/nao-lancado/), para
+dois PRs nunca mexerem nas mesmas linhas. O release junta esses arquivos em
+"Não lançado" (`node scripts/changelog.ts --gravar`) e copia a seção para a
+versão.
 
 ## Não lançado
 

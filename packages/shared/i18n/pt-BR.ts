@@ -124,23 +124,32 @@ export const ptBRCore = {
   "web.nav.chat": "Conversa",
 } as const;
 
+/** The intersection of every part's type, so each key stays a literal key. */
+type Joined<T extends readonly object[]> = T extends readonly [infer Head, ...infer Rest extends readonly object[]]
+  ? Head & Joined<Rest>
+  : unknown;
+
 /** Joins catalog parts. Marked pure so a bundle that never uses the whole catalog drops the call. */
-function join<A extends object, B extends object, C extends object, D extends object, E extends object, F extends object, G extends object, H extends object, I extends object, J extends object, K extends object, L extends object>(
-  a: A,
-  b: B,
-  c: C,
-  d: D,
-  e: E,
-  f: F,
-  g: G,
-  h: H,
-  i: I,
-  j: J,
-  k: K,
-  l: L,
-): A & B & C & D & E & F & G & H & I & J & K & L {
-  return { ...a, ...b, ...c, ...d, ...e, ...f, ...g, ...h, ...i, ...j, ...k, ...l };
+function join<const T extends readonly object[]>(...parts: T): Joined<T> {
+  return Object.assign({}, ...parts) as Joined<T>;
 }
 
-/** The whole pt-BR catalog: what the server, the tests and the lint use. */
-export const ptBR = /* @__PURE__ */ join(ptBRCore, ptBRMemory, ptBRProductivity, ptBRSecurity, ptBRAi, ptBRChat, ptBRSettings, ptBRServer, ptBRPalette, ptBRGreeting, ptBRSetup, ptBRNotices);
+/**
+ * The whole pt-BR catalog: what the server, the tests and the lint use. One
+ * part per line: a screen that adds its part adds one line at the end, so two
+ * pull requests never edit the same line.
+ */
+export const ptBR = /* @__PURE__ */ join(
+  ptBRCore,
+  ptBRMemory,
+  ptBRProductivity,
+  ptBRSecurity,
+  ptBRAi,
+  ptBRChat,
+  ptBRSettings,
+  ptBRServer,
+  ptBRPalette,
+  ptBRGreeting,
+  ptBRSetup,
+  ptBRNotices,
+);

@@ -25,7 +25,8 @@ sigam as regras abaixo.
    documentação.
 2. Escreva o teste junto com o código. Bug corrigido vem com o teste que
    falhava antes.
-3. Atualize o `CHANGELOG.md` e, quando couber, o `README.md` (veja abaixo).
+3. Escreva o changelog num arquivo novo em `changelog/nao-lancado/<assunto>.md`
+   e, quando couber, atualize o `README.md` (veja abaixo).
 4. Rode antes de abrir o PR:
 
    ```bash
@@ -78,7 +79,8 @@ A regra completa está em [`.claude/rules/capturas.md`](.claude/rules/capturas.m
 - Código, identificadores, comentários e mensagens de teste em inglês.
   Documentação, changelog e PRs em pt-BR.
 - Todo texto visível sai do catálogo `packages/shared/i18n`, em pt-BR e en.
-- Mudança visível entra no `CHANGELOG.md`, em "Não lançado".
+- Mudança visível ganha um arquivo em `changelog/nao-lancado/`, com os grupos
+  do `CHANGELOG.md` (`### Adicionado`, `### Corrigido`…). O release junta tudo.
 - Dependência nova só com motivo claro, com versão exata.
 - Nada de domínio real, e-mail, id do Telegram, token ou chave no repositório.
   Use `exemplo.com.br` nos exemplos.
