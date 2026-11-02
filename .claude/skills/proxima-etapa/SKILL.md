@@ -15,7 +15,7 @@ lê só `progresso.md`, `decisoes.md` e o trecho da especificação dela.
 - [ ] `revisao-qa` e `auditoria-seguranca` rodaram nesta etapa; nenhum achado
       alto ou médio aberto; relatórios no corpo do PR.
 - [ ] Matriz de rastreabilidade completa (todo critério de aceite com teste).
-- [ ] `CHANGELOG.md` e docs atualizados; `progresso.md` atualizado neste PR.
+- [ ] Changelog em `changelog/nao-lancado/` e docs atualizados; `progresso.md` atualizado neste PR.
 - [ ] `README.md` atualizado neste PR: etapa marcada ✅ no mapa, 🚧 na próxima, selo e "O que já funciona" (`.claude/rules/readme.md`).
 - [ ] Etapa com telas: capturas no corpo do PR (computador e celular, claro e escuro) e em `docs/capturas/pr/<assunto>/` (`.claude/rules/capturas.md`).
 - [ ] Nenhuma decisão de produto pendente.
@@ -29,7 +29,7 @@ pare e chame o Pablo (passo 4).
 
 Leia a linha "Avanço" em `progresso.md`:
 
-- **mescla sozinho**: mescle o PR na `develop` (squash). Nunca na `main`, nunca
+- **mescla sozinho**: ligue o auto-merge do PR por squash (`docs/agente/merge-de-prs.md`); o GitHub mescla na `develop` quando a CI fica verde com a branch em dia. Espere o evento de mesclagem antes do passo 3. Nunca na `main`, nunca
   release, nunca deploy.
 - **Pablo mescla**: avise o Pablo que o PR está pronto e espere o evento de
   mesclagem antes do passo 3.

@@ -1,6 +1,6 @@
 import { execFileSync } from "node:child_process";
 import { describe, expect, it } from "vitest";
-import { loadWorkflow, REQUIRED_CI_JOBS, readText, triggers, workflowFiles } from "./helpers.ts";
+import { loadWorkflow, REQUIRED_CI_JOBS, REQUIRED_CODEQL_CHECKS, readText, triggers, workflowFiles } from "./helpers.ts";
 
 const files = workflowFiles();
 const all = files.map((path) => ({ path, wf: loadWorkflow(path), text: readText(path) }));
@@ -72,10 +72,13 @@ describe("GitHub Actions workflows", () => {
     }
   });
 
-  it("runs CI only on pull requests, with read-only contents", () => {
+  it("runs CI only on pull requests (or dispatched on a PR branch), with read-only contents", () => {
     const ci = loadWorkflow(".github/workflows/ci.yml");
-    expect(triggers(ci)).toEqual(["pull_request"]);
+    expect(triggers(ci)).toEqual(["pull_request", "workflow_dispatch"]);
+    expect(ci.on).toEqual({ pull_request: null, workflow_dispatch: null });
     expect(ci.permissions).toEqual({ contents: "read" });
+    // Dispatched runs have no PR number: each branch gets its own group instead of cancelling the others.
+    expect(readText(".github/workflows/ci.yml")).toContain(`group: ci-\${{ github.event.pull_request.number || github.ref }}`);
   });
 
   it("has one CI job per required check", () => {
@@ -95,7 +98,7 @@ describe("GitHub Actions workflows", () => {
 
   it("runs CodeQL on pull requests and weekly, with the extended queries", () => {
     const codeql = loadWorkflow(".github/workflows/codeql.yml");
-    expect(triggers(codeql).sort()).toEqual(["pull_request", "schedule"]);
+    expect(triggers(codeql).sort()).toEqual(["pull_request", "schedule", "workflow_dispatch"]);
     const text = readText(".github/workflows/codeql.yml");
     expect(text).toContain("queries: security-extended");
     expect(text).toMatch(/language: \[javascript-typescript, actions\]/);
@@ -108,6 +111,45 @@ describe("GitHub Actions workflows", () => {
     const script = policy.jobs["source-branch"]?.steps?.[0]?.run ?? "";
     expect(script).toContain('"$HEAD_REF" != "develop"');
     expect(script).toContain('"$HEAD_REPO" != "$BASE_REPO"');
+  });
+});
+
+describe("update-prs workflow", () => {
+  const wf = loadWorkflow(".github/workflows/update-prs.yml");
+  const job = wf.jobs.update;
+
+  it("runs only when develop moves, or by hand", () => {
+    expect(wf.on).toEqual({ push: { branches: ["develop"] }, workflow_dispatch: null });
+  });
+
+  it("has no permission at the top and only what it needs in the job", () => {
+    expect(wf.permissions).toEqual({});
+    expect(job?.permissions).toEqual({ contents: "write", "pull-requests": "write", actions: "write" });
+    expect(job?.environment).toBeUndefined();
+    expect(readText(".github/workflows/update-prs.yml")).not.toMatch(/secrets\./);
+  });
+
+  it("runs the script from develop, never from a pull request branch", () => {
+    const checkout = job?.steps?.find((step) => step.uses?.startsWith("actions/checkout@"));
+    expect(checkout?.with?.ref).toBe("develop");
+    const run = job?.steps?.map((step) => step.run ?? "").join("\n") ?? "";
+    expect(run).toContain("node scripts/atualizar-prs.ts");
+    expect(run).not.toMatch(/npm (ci|install)/);
+  });
+
+  it("dispatches every workflow that reports a required check", async () => {
+    const { DISPATCHED_WORKFLOWS } = await import("../../scripts/atualizar-prs.ts");
+    const required = new Set([...REQUIRED_CI_JOBS, ...REQUIRED_CODEQL_CHECKS]);
+    const reporting = workflowFiles()
+      .filter((path) => {
+        const w = loadWorkflow(path);
+        return Object.entries(w.jobs).some(([id, j]) => required.has(j.name?.replace(`\${{ matrix.language }}`, "javascript-typescript") ?? id));
+      })
+      .map((path) => path.replace(".github/workflows/", ""));
+    expect([...DISPATCHED_WORKFLOWS].sort()).toEqual(reporting.sort());
+    for (const name of DISPATCHED_WORKFLOWS) {
+      expect(triggers(loadWorkflow(`.github/workflows/${name}`))).toContain("workflow_dispatch");
+    }
   });
 });
 

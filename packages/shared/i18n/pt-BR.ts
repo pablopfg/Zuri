@@ -6,11 +6,11 @@ import { ptBRChat } from "./pt-BR-chat.ts";
 import { ptBRSecurity } from "./pt-BR-security.ts";
 import { ptBRServer } from "./pt-BR-server.ts";
 import { ptBRSettings } from "./pt-BR-settings.ts";
-import { ptBRAutomations } from "./pt-BR-automations.ts";
-import { ptBRMarkdown } from "./pt-BR-markdown.ts";
 import { ptBRGreeting } from "./pt-BR-greeting.ts";
 import { ptBRNotices } from "./pt-BR-notices.ts";
 import { ptBRSetup } from "./pt-BR-setup.ts";
+import { ptBRAutomations } from "./pt-BR-automations.ts";
+import { ptBRMarkdown } from "./pt-BR-markdown.ts";
 
 // Default and fallback catalog. Every key must also exist in en.ts and be used in the code (npm run lint).
 // The texts of the lazy screens live in their own files (pt-BR-memory.ts, pt-BR-productivity.ts,
@@ -121,25 +121,34 @@ export const ptBRCore = {
   "web.nav.automations": "Automações",
 } as const;
 
+/** The intersection of every part's type, so each key stays a literal key. */
+type Joined<T extends readonly object[]> = T extends readonly [infer Head, ...infer Rest extends readonly object[]]
+  ? Head & Joined<Rest>
+  : unknown;
+
 /** Joins catalog parts. Marked pure so a bundle that never uses the whole catalog drops the call. */
-function join<A extends object, B extends object, C extends object, D extends object, E extends object, F extends object, G extends object, H extends object, I extends object, J extends object, K extends object, L extends object, M extends object, N extends object>(
-  a: A,
-  b: B,
-  c: C,
-  d: D,
-  e: E,
-  f: F,
-  g: G,
-  h: H,
-  i: I,
-  j: J,
-  k: K,
-  l: L,
-  m: M,
-  n: N,
-): A & B & C & D & E & F & G & H & I & J & K & L & M & N {
-  return { ...a, ...b, ...c, ...d, ...e, ...f, ...g, ...h, ...i, ...j, ...k, ...l, ...m, ...n };
+function join<const T extends readonly object[]>(...parts: T): Joined<T> {
+  return Object.assign({}, ...parts) as Joined<T>;
 }
 
-/** The whole pt-BR catalog: what the server, the tests and the lint use. */
-export const ptBR = /* @__PURE__ */ join(ptBRCore, ptBRMemory, ptBRProductivity, ptBRSecurity, ptBRAi, ptBRChat, ptBRSettings, ptBRServer, ptBRPalette, ptBRGreeting, ptBRAutomations, ptBRMarkdown, ptBRSetup, ptBRNotices);
+/**
+ * The whole pt-BR catalog: what the server, the tests and the lint use. One
+ * part per line: a screen that adds its part adds one line at the end, so two
+ * pull requests never edit the same line.
+ */
+export const ptBR = /* @__PURE__ */ join(
+  ptBRCore,
+  ptBRMemory,
+  ptBRProductivity,
+  ptBRSecurity,
+  ptBRAi,
+  ptBRChat,
+  ptBRSettings,
+  ptBRServer,
+  ptBRPalette,
+  ptBRGreeting,
+  ptBRSetup,
+  ptBRNotices,
+  ptBRAutomations,
+  ptBRMarkdown,
+);
