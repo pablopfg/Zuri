@@ -9,6 +9,12 @@ o [SemVer](https://semver.org/lang/pt-BR/). Cada PR escreve a sua entrada em
 
 ### Adicionado
 
+- Plano para a troca automática de provedor de IA e para proteger os dados
+  enviados aos modelos, em `docs/planos/troca-de-provedores-e-protecao-de-dados.md`.
+  A troca fica no próprio Zuri, com um disjuntor por provedor, em vez do AI
+  Gateway. O plano também lista dez medidas de proteção, entre elas um teste
+  com valores canário e a pseudonimização antes de qualquer provedor externo.
+  Os prompts das etapas 17, 21 e 25 passaram a citar o plano.
 - Avaliação de AI Gateway, Hyperdrive e Vectorize em
   `docs/planos/ai-gateway-hyperdrive-vectorize.md`, com os limites do plano
   Free conferidos em 02/11/2026. Nenhum dos três entra agora: o Hyperdrive e o
