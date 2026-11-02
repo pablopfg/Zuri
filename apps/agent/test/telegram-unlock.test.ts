@@ -324,7 +324,9 @@ describe("/destravar", () => {
     await addPasskey();
     const both = await askUnlock();
     expect(buttons(both.question).map((b) => b.text)).toEqual(["Confirmar com passkey", "Receber código por e-mail"]);
-    expect(buttons(both.question)[0]?.url).toMatch(new RegExp(`^${ORIGIN}/aprovar#[A-Za-z0-9_-]{43}$`));
+    const url = buttons(both.question)[0]?.url ?? "";
+    expect(url.startsWith(`${ORIGIN}/aprovar#`)).toBe(true);
+    expect(url.slice(`${ORIGIN}/aprovar#`.length)).toMatch(/^[A-Za-z0-9_-]{43}$/);
     // One open at a time; the token is stored only as an HMAC.
     const rows = await inOwner((agent) => agent.store.db.all<{ status: string; page_token_hmac: string | null }>(`SELECT status, page_token_hmac FROM zur_telegram_approvals ORDER BY created_at`));
     expect(rows.map((r) => r.status)).toEqual(["expired", "open"]);
