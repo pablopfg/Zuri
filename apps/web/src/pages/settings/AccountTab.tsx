@@ -1,4 +1,4 @@
-import { isLocale, type Locale, LOCALES, normalizeOwnerName } from "@zuri/shared";
+import { isLocale, LOCALES, normalizeOwnerName } from "@zuri/shared";
 import { type FormEvent, useEffect, useMemo, useState } from "react";
 import { ChangePasswordForm } from "../../components/ChangePasswordForm.tsx";
 import { ThemeSwitcher } from "../../components/ThemeSwitcher.tsx";
