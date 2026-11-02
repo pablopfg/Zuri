@@ -462,6 +462,29 @@ describe("changing an automation", () => {
   });
 });
 
+describe("an automation's priority (step 11d)", () => {
+  it("starts normal, takes low or high, changes on its own, and never takes critical", async () => {
+    await withChatWorld(async (world) => {
+      const a = await world.automations.create(reminder(), "app");
+      expect(a.priority).toBe("normal");
+      expect((await world.automations.create(reminder({ name: "Baixa", priority: "low" }), "app")).priority).toBe("low");
+      expect((await world.automations.update(a.id, { priority: "high" })).priority).toBe("high");
+      // Another change keeps it.
+      expect((await world.automations.update(a.id, { name: "Remédio da noite" })).priority).toBe("high");
+      const critical = await refusal(world.automations.create({ ...reminder(), priority: "critical" as "high" }, "app"));
+      expect(critical.details).toEqual({ fields: ["priority"] });
+      expect((await refusal(world.automations.update(a.id, { priority: "critical" as "high" }))).details).toEqual({ fields: ["priority"] });
+      expect(world.db.one<{ priority: string }>(`SELECT priority FROM zur_automations WHERE id = ?`, a.id)?.priority).toBe("high");
+
+      // Deleting it drops what the priority that learns kept for it, and nothing else.
+      const at = new Date(world.clock.now).toISOString();
+      world.db.run(`INSERT INTO zur_alert_learning (key, shift, label, changed_at) VALUES (?, -1, 'x', ?), ('digest.daily', 1, '', ?)`, `automation:${a.id}`, at, at);
+      await world.automations.delete(a.id);
+      expect(world.db.all<{ key: string }>(`SELECT key FROM zur_alert_learning`)).toEqual([{ key: "digest.daily" }]);
+    });
+  });
+});
+
 describe("the history", () => {
   it("pages 30 at a time with a cursor, newest first, and can show one automation's runs", async () => {
     await withChatWorld(async (world) => {
