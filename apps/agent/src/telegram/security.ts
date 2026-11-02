@@ -134,7 +134,7 @@ export class TelegramSecurity {
   }
 
   #pauseAsk(): Out {
-    const routines = this.#aiRoutines().length;
+    const routines = this.deps.automations.activeAgentRoutines();
     if (routines === 0) return { text: this.#t("telegram.seg.pausar.vazio") };
     return this.#ask(this.#t("telegram.seg.pausar.pergunta", { n: routines }), "routines_pause", "telegram.seg.pausar.botao");
   }
@@ -199,24 +199,11 @@ export class TelegramSecurity {
     }
   }
 
-  /** Every active routine with AI (sentinels included) paused; one alert for all of them. */
+  /** Every active routine with AI (sentinels included) paused at once; one alert for all of them. */
   async #pauseAll(): Promise<number> {
-    let paused = 0;
-    for (const routine of this.#aiRoutines()) {
-      try {
-        await this.deps.automations.update(routine.id, { paused: true });
-        paused++;
-      } catch (error) {
-        // One that changed meanwhile (deleted, already paused) doesn't stop the others.
-        log("warn", "telegram_command_failed", { error, kind: "routines_pause" });
-      }
-    }
+    const paused = await this.deps.automations.pauseAgentRoutines();
     if (paused > 0) this.deps.auth.events.record("telegram_routines_paused", null, { reason: String(paused), alert: true });
     return paused;
-  }
-
-  #aiRoutines() {
-    return this.deps.automations.list().automations.filter((item) => item.kind === "agent_prompt" && item.status === "active");
   }
 
   #device(userAgent: string): string {

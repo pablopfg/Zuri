@@ -274,6 +274,25 @@ export class AutomationService {
   }
 
   /**
+   * /pausar_rotinas (step 16b): every active routine with AI (sentinels
+   * included) paused in one statement, and the alarm set again once. Returns
+   * how many. Reminders and the task summary keep running.
+   */
+  async pauseAgentRoutines(): Promise<number> {
+    const paused = this.db.all<{ id: string }>(
+      `UPDATE zur_automations SET status = 'paused', next_run = NULL, updated_at = ? WHERE kind = 'agent_prompt' AND status = 'active' RETURNING id`,
+      new Date(this.now()).toISOString(),
+    ).length;
+    if (paused > 0) await this.rearm();
+    return paused;
+  }
+
+  /** How many routines with AI are active (for /pausar_rotinas' question). */
+  activeAgentRoutines(): number {
+    return this.db.one<{ n: number }>(`SELECT count(*) AS n FROM zur_automations WHERE kind = 'agent_prompt' AND status = 'active'`)?.n ?? 0;
+  }
+
+  /**
    * The owner approves a routine the agent proposed: it becomes active with its
    * first run. Only the version the owner read (`updatedAt`): if it changed
    * since, the approval is refused and the screen shows the new text.
