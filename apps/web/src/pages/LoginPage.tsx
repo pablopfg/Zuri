@@ -12,7 +12,7 @@ import { useSession } from "../hooks/session.tsx";
 import { useSetupStatus } from "../hooks/setup.ts";
 import { ApiError, api, errorMessage } from "../lib/api.ts";
 import { useI18n } from "../lib/i18n.tsx";
-import { FIRST_ACCESS_PATH, safeNext } from "../lib/next.ts";
+import { FIRST_ACCESS_PATH, RECOVERY_PATH, safeNext } from "../lib/next.ts";
 
 type Step = { kind: "password" } | { kind: "code"; passkey: boolean; recovery: boolean };
 
@@ -295,6 +295,19 @@ export function LoginPage() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
             />
+            <p className="!mt-1 text-right text-sm">
+              <a
+                href={RECOVERY_PATH}
+                onClick={(e) => {
+                  if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+                  e.preventDefault();
+                  navigate(RECOVERY_PATH);
+                }}
+                className="inline-flex min-h-11 items-center font-medium text-accent-text underline-offset-4 hover:underline"
+              >
+                {t("web.login.forgot")}
+              </a>
+            </p>
             {optionsPending && humanNudge && (
               <p className="text-sm leading-6 text-danger" role="alert">
                 {t("web.login.humanLoading")}

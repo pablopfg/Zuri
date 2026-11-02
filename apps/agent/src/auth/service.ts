@@ -785,12 +785,12 @@ export class AuthService {
     const matches = await this.checkEmail(input.email);
     const mail = this.deps.recoveryMail;
     if (!matches || !this.ownerExists() || !mail?.available()) {
-      this.events.record("recovery_requested", client, { reason: matches ? "unavailable" : "email" });
+      this.events.record("recovery_requested", client, { reason: matches ? "email_off" : "wrong_email" });
       return;
     }
     const link = await this.#recovery.issue();
     const sent = await mail.send(link.token, link.expiresAt);
-    this.events.record("recovery_requested", client, { reason: sent ? "sent" : "failed" });
+    this.events.record("recovery_requested", client, { reason: sent ? "link_sent" : "link_failed" });
   }
 
   /** Whether a link still works, and whether its form needs a code. Every refusal is the same "expired". */

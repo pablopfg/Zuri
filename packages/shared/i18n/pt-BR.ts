@@ -69,6 +69,7 @@ export const ptBRCore = {
   "web.login.back": "Voltar",
   "web.login.useRecovery": "Usar um código de recuperação",
   "web.login.useApp": "Usar o código do aplicativo",
+  "web.login.forgot": "Esqueci minha senha",
   "web.guard.title": "Sua sessão vai terminar",
   "web.guard.idle": "Por falta de uso, a sessão termina em {time}. Quer continuar?",
   "web.guard.max": "A sessão chegou ao tempo máximo e termina em {time}. Depois disso, entre de novo.",

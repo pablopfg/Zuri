@@ -19,7 +19,12 @@ beforeEach(async () => {
   // E-mail on: a fake send_email binding and a sender, as the deploy would set them.
   await inOwner((agent) => {
     const env = (agent as unknown as { env: Record<string, unknown> }).env;
-    env.SEND_EMAIL = { send: async (message: { to: string; subject: string; text: string }) => (mails.push(message), { messageId: "m" }) };
+    env.SEND_EMAIL = {
+      send: async (message: { to: string; subject: string; text: string }) => {
+        mails.push(message);
+        return { messageId: "m" };
+      },
+    };
     env.ALERT_EMAIL_FROM = "zuri@exemplo.com.br";
   });
   const real = globalThis.fetch;

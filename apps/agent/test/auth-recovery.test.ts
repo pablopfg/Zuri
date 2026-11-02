@@ -61,7 +61,7 @@ describe("asking for a recovery link", () => {
         expect(box.sent).toHaveLength(1);
         expect(box.sent[0]?.token).toMatch(/^[A-Za-z0-9_-]{43}$/);
         expect(box.sent[0]?.expiresAt).toBe(h.clock.now() + RECOVERY_LIMITS.ttlMs);
-        expect(h.events().filter((e) => e.kind === "recovery_requested").map((e) => e.reason)).toEqual(["email", "sent"]);
+        expect(h.events().filter((e) => e.kind === "recovery_requested").map((e) => e.reason)).toEqual(["wrong_email", "link_sent"]);
         // The database never holds a token that works.
         expect(JSON.stringify(h.state.get("recovery_link"))).not.toContain(box.sent[0]?.token ?? "x");
       },
@@ -77,7 +77,7 @@ describe("asking for a recovery link", () => {
         expect(await h.auth.recoveryStatus()).toEqual({ available: false });
         await h.auth.requestRecovery({ email: TEST_EMAIL }, client(NET));
         expect(box.sent).toHaveLength(0);
-        expect(h.events().at(-1)).toMatchObject({ kind: "recovery_requested", reason: "unavailable" });
+        expect(h.events().at(-1)).toMatchObject({ kind: "recovery_requested", reason: "email_off" });
       },
       { recoveryMail: box.mail },
     );

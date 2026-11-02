@@ -35,6 +35,8 @@ export const KIND_LABEL: Record<AuthEventKind, MessageKey> = {
   setup_locked: "web.activity.kind.setup_locked",
   owner_created: "web.activity.kind.owner_created",
   access_recovered: "web.activity.kind.access_recovered",
+  recovery_requested: "web.activity.kind.recovery_requested",
+  password_recovered: "web.activity.kind.password_recovered",
 };
 
 /** The filter groups, as the access log's select names them. */
@@ -58,6 +60,11 @@ const REASON_LABEL: Record<string, MessageKey> = {
   passkey: "web.accessLog.reason.passkey",
   idle: "web.accessLog.reason.idle",
   daily_cap: "web.accessLog.reason.daily_cap",
+  recovery: "web.accessLog.reason.recovery",
+  wrong_email: "web.accessLog.reason.wrong_email",
+  email_off: "web.accessLog.reason.email_off",
+  link_sent: "web.accessLog.reason.link_sent",
+  link_failed: "web.accessLog.reason.link_failed",
 };
 
 /** The reasons of a row the owner can read, in order. */

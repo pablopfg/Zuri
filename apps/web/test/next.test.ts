@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { loginPath, safeNext } from "../src/lib/next.ts";
+import { RECOVERY_PATH as SERVER_RECOVERY_PATH } from "@zuri/shared";
+import { loginPath, RECOVERY_PATH, safeNext } from "../src/lib/next.ts";
+
+describe("RECOVERY_PATH", () => {
+  it("is the path the server puts in the e-mail's link", () => {
+    expect(RECOVERY_PATH).toBe(SERVER_RECOVERY_PATH);
+  });
+});
 
 describe("safeNext", () => {
   it.each([
