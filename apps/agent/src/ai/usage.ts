@@ -3,6 +3,7 @@ import {
   CHAT_MODELS,
   type ChatModel,
   chatNeurons,
+  EMBEDDING_NEURONS_PER_MILLION,
   isChatModel,
   type ModelUsage,
   neuronsToUsd,
@@ -56,6 +57,11 @@ export function stepNeurons(usage: StepUsage): number {
 
 export function audioNeurons(seconds: number): number {
   return (seconds / 60) * TRANSCRIPTION_NEURONS_PER_MINUTE;
+}
+
+/** Neurons of `tokens` sent to the embedding model (step 17). */
+export function embeddingNeurons(tokens: number): number {
+  return (tokens * EMBEDDING_NEURONS_PER_MILLION) / 1_000_000;
 }
 
 const recordModelSql = `INSERT INTO zur_model_usage_daily
@@ -160,6 +166,40 @@ export class UsageMeter {
       estimate,
     );
     return { day, kind: "transcription", model: call.model, billable, neurons: estimate, audioSeconds: seconds, done: false };
+  }
+
+  /**
+   * Counts one embedding call of about `tokens` input tokens against the Neuron
+   * cap (step 17). `ceiling` lowers the cap for this call: the background
+   * indexing passes half of it, so the chat always keeps the rest. Embeddings
+   * are not chat requests: they never count in the requests per day.
+   */
+  reserveEmbedding(call: { model: string; billable: boolean; tokens: number }, limits: AiLimits, ceiling = limits.neuronsPerDay): Reservation {
+    const estimate = call.billable ? embeddingNeurons(call.tokens) : 0;
+    const day = this.today();
+    const row = this.row(day);
+    const cap = Math.min(ceiling, limits.neuronsPerDay);
+    if ((row?.neurons ?? 0) + estimate > cap) throw this.limitReached("neurons", limits.neuronsPerDay);
+    if (!row) this.startDay(day);
+    this.db.run(
+      `INSERT INTO zur_usage_daily (day, neurons) VALUES (?, ?)
+       ON CONFLICT (day) DO UPDATE SET neurons = neurons + excluded.neurons`,
+      day,
+      estimate,
+    );
+    return { day, kind: "embedding", model: call.model, billable: call.billable, neurons: estimate, audioSeconds: 0, done: false };
+  }
+
+  /** Settles an embedding call that reached the model: `tokens` sent, estimated (the model reports none). */
+  settleEmbedding(reservation: Reservation, tokens: number): void {
+    if (reservation.done) return;
+    reservation.done = true;
+    const neurons = reservation.billable ? embeddingNeurons(tokens) : 0;
+    const cost = neuronsToUsd(neurons);
+    this.db.transaction(() => {
+      this.adjust(reservation.day, neurons - reservation.neurons, cost);
+      this.db.run(recordModelSql, reservation.day, reservation.model, reservation.kind, reservation.billable ? 1 : 0, 0, tokens, 0, 0, 0, neurons, cost);
+    });
   }
 
   /** Replaces a chat reservation with what the step used, on the day it was reserved. */

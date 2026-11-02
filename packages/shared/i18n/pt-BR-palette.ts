@@ -6,6 +6,7 @@ export const ptBRPalette = {
   "web.palette.results": "Resultados",
   "web.palette.groupGo": "Ir para",
   "web.palette.groupCreate": "Criar",
+  "web.palette.groupMeaning": "Pelo significado",
   "web.palette.newTask": "Nova tarefa",
   "web.palette.newNote": "Nova nota",
   "web.palette.settingsSection": "Configurações › {section}",

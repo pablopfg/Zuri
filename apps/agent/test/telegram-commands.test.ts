@@ -5,6 +5,7 @@ import type { ZuriAgent } from "../src/agent/zuri-agent.ts";
 import type { RaiseInput } from "../src/alerts/service.ts";
 import { MockAIProvider, type RecordedPrompt } from "../src/ai/mock.ts";
 import { telegramWebhookSecret } from "../src/gates/telegram.ts";
+import { MockEmbedder } from "../src/semantic/embedder.ts";
 import startCode from "./fixtures/telegram/start-code.json?raw";
 import { call, CSRF, HUMAN_TOKEN, ORIGIN, TEST_EMAIL, TEST_PASSWORD, testEnv } from "./helpers.ts";
 
@@ -256,6 +257,35 @@ describe("reading", () => {
     const memory = out.split("Memórias\n")[1] ?? "";
     expect([...memory.replace(/^• /, "")].length).toBe(100);
     expect(memory.endsWith("…")).toBe(true);
+  });
+
+  it("/buscar with the search by meaning on (step 17): finds “carro” in a memory about an “automóvel”, at one embedding", async () => {
+    await linkOwner();
+    await inOwner((agent) => {
+      agent.store.memories.create({ content: "Meu automóvel é azul" });
+      agent.store.automations.create({ name: "Seguro do automóvel", kind: "reminder", message: "Pagar", schedule: { type: "daily", time: "09:00" } }, "app");
+    });
+    // Off (the default): the words alone, as before.
+    expect(await command("/buscar carro")).toBe("Não achei nada com “carro”.");
+    const embedder = new MockEmbedder();
+    try {
+      await inOwner(async (agent) => {
+        agent.testEmbedder = embedder;
+        agent.store.semantic.enable();
+        await agent.store.semantic.tick();
+      });
+      const indexing = embedder.calls.length;
+      const out = await command("/buscar carro");
+      expect(out).toBe("Resultados para “carro”\n\nMemórias\n• Meu automóvel é azul\n\nAutomações\n• Seguro do automóvel");
+      expect(embedder.calls.slice(indexing)).toEqual([["carro"]]);
+      // /uso has the search by meaning's line while it is on (and none while off, above in "/uso, /status…").
+      expect(await command("/uso")).toMatch(/\nBusca por significado: 1 de 500 perguntas e \d+ de 2\.000 itens preparados$/);
+    } finally {
+      await inOwner((agent) => {
+        agent.store.semantic.disable();
+        agent.testEmbedder = null;
+      });
+    }
   });
 
   it("/rotinas lists the active ones with Pausar; the button pauses once", async () => {

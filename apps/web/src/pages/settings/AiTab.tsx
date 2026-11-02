@@ -12,21 +12,24 @@ import {
   modelLabel,
   NO_FALLBACK_MODEL,
   ptBRAi,
+  type SemanticStatus,
+  semanticStatusSchema,
   type Settings,
   type SettingsUpdate,
   TYPICAL_TURN_TOKENS,
   type UsageKind,
   type UsageReport,
 } from "@zuri/shared";
-import { Bot, ExternalLink, FlaskConical } from "lucide-react";
-import { type FormEvent, useEffect, useState } from "react";
+import { Bot, ExternalLink, FlaskConical, RefreshCw } from "lucide-react";
+import { type FormEvent, useEffect, useId, useState } from "react";
+import { Switch } from "../../components/Switch.tsx";
 import { Button, Card, cn, ErrorNotice, Notice, SelectField, Spinner, TextField } from "../../components/ui.tsx";
 import { useSettings, useSettingsMutation } from "../../hooks/settings.ts";
 import { USAGE_KEY, useUsage } from "../../hooks/usage.ts";
-import { errorMessage } from "../../lib/api.ts";
+import { api, errorMessage } from "../../lib/api.ts";
 import { addMessages, useI18n } from "../../lib/i18n.tsx";
 import { useToast } from "../../components/Toaster.tsx";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 // This tab's pt-BR texts arrive with it, not in the first bundle (rule P11).
 addMessages(ptBRAi);
@@ -55,6 +58,7 @@ export function AiTab() {
     <>
       <UsageCard />
       <LimitsCard />
+      <SemanticCard />
     </>
   );
 }
@@ -442,4 +446,125 @@ export function invalid(field: LimitField, text: string): boolean {
   const value = Number(text);
   const range = AI_LIMIT_RANGES[field];
   return value < range.min || value > range.max;
+}
+
+export const SEMANTIC_KEY = ["semantic"] as const;
+/**
+ * The search by meaning (step 17): off by default. On, the card shows how much
+ * is ready, what still waits and why it may be paused; "Preparar tudo de novo"
+ * asks first. The words never name the machinery (no "vectors", no "index").
+ */
+function SemanticCard() {
+  const { t } = useI18n();
+  const status = useQuery({
+    queryKey: SEMANTIC_KEY,
+    // No polling (rule P11): the count moves when the owner comes back to the tab or opens the card again.
+    queryFn: async ({ signal }): Promise<SemanticStatus> => semanticStatusSchema.parse(await api<unknown>("/semantic", { signal })),
+  });
+  return (
+    <Card title={t("web.ai.semantic.title")} description={t("web.ai.semantic.description")}>
+      {status.isPending ? (
+        <Spinner />
+      ) : status.isError ? (
+        <ErrorNotice error={status.error} onRetry={() => void status.refetch()} />
+      ) : (
+        <SemanticBody status={status.data} />
+      )}
+    </Card>
+  );
+}
+
+function SemanticBody({ status }: { status: SemanticStatus }) {
+  const { t, plural, locale, timeZone } = useI18n();
+  const number = useNumber();
+  const qc = useQueryClient();
+  const toast = useToast();
+  const hint = useId();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<unknown>(null);
+  const [confirming, setConfirming] = useState(false);
+
+  async function send(path: string, init: { method: "PATCH" | "POST"; body?: unknown }, message: string) {
+    setBusy(true);
+    setError(null);
+    try {
+      qc.setQueryData(SEMANTIC_KEY, semanticStatusSchema.parse(await api<unknown>(path, init)));
+      toast(message);
+      setConfirming(false);
+      // The usage report shows what the preparing spends; the palette learns at once whether to search by meaning.
+      void qc.invalidateQueries({ queryKey: USAGE_KEY });
+      void qc.invalidateQueries({ queryKey: ["palette", "semantic"] });
+    } catch (failure) {
+      setError(failure);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const share = status.total > 0 ? Math.min(1, status.ready / status.total) : 1;
+  const state = status.paused === "lockdown"
+    ? t("web.ai.semantic.pausedLockdown")
+    : status.paused === "limit"
+      ? t("web.ai.semantic.pausedLimit", { time: status.resumesAt ? formatDateTimeParts(status.resumesAt, locale, timeZone).time : "" })
+      : status.waiting > 0
+        ? plural("web.ai.semantic.preparing", status.waiting)
+        : t("web.ai.semantic.done");
+
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between sm:gap-4">
+        <p id={hint} className="text-sm leading-6 text-fg-muted">
+          {t("web.ai.semantic.offHint")}
+        </p>
+        <div className="shrink-0">
+          <Switch
+            label={t("web.ai.semantic.switch")}
+            checked={status.enabled}
+            busy={busy}
+            describedBy={hint}
+            onChange={(on) =>
+              void send("/semantic", { method: "PATCH", body: { enabled: on } }, t(on ? "web.ai.semantic.on" : "web.ai.semantic.off"))
+            }
+          />
+        </div>
+      </div>
+      {status.enabled && (
+        <div className="space-y-3 rounded-xl border border-border p-4">
+          <p className="text-lg font-semibold tabular-nums">{t("web.ai.semantic.ready", { ready: number(status.ready), total: number(status.total) })}</p>
+          {/* The native meter speaks to screen readers; the bar below is only for the eye. */}
+          <meter className="sr-only" min={0} max={Math.max(status.total, 1)} value={Math.min(status.ready, Math.max(status.total, 1))} aria-label={t("web.ai.semantic.progress")} />
+          <div aria-hidden className="h-2 overflow-hidden rounded-full bg-raised">
+            <div className="h-full rounded-full bg-accent transition-[width]" style={{ width: `${Math.round(share * 100)}%` }} />
+          </div>
+          <p role="status" className="text-sm text-fg-muted">
+            {state}
+          </p>
+          <p className="text-xs text-fg-muted tabular-nums">{t("web.ai.semantic.today", { today: number(status.today), limit: number(status.limitPerDay) })}</p>
+          {confirming ? (
+            <div className="space-y-3 rounded-xl border border-warning/40 bg-warning-soft p-3">
+              <p className="text-sm">{plural("web.ai.semantic.redoConfirm", status.total)}</p>
+              <div className="flex flex-wrap gap-2">
+                <Button loading={busy} onClick={() => void send("/semantic/reindex", { method: "POST" }, t("web.ai.semantic.redone"))}>
+                  {t("web.ai.semantic.redoYes")}
+                </Button>
+                <Button variant="secondary" onClick={() => setConfirming(false)}>
+                  {t("web.ai.semantic.cancel")}
+                </Button>
+              </div>
+            </div>
+          ) : (
+            <Button variant="secondary" onClick={() => setConfirming(true)}>
+              <RefreshCw className="h-4 w-4" aria-hidden />
+              {t("web.ai.semantic.redo")}
+            </Button>
+          )}
+        </div>
+      )}
+      {error !== null && (
+        <p role="alert" className="text-sm text-danger">
+          {errorMessage(error)}
+        </p>
+      )}
+    </div>
+  );
 }

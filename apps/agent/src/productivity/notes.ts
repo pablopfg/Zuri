@@ -110,6 +110,14 @@ export class NoteRepository {
     return toNote(this.row(id));
   }
 
+  /** The summaries of `ids` that exist, in no particular order (the search by meaning, step 17): never the whole text. */
+  summaries(ids: string[]): NoteSummary[] {
+    const part = ids.slice(0, 90);
+    if (part.length === 0) return [];
+    const rows = this.db.all<SummaryRow>(`SELECT ${SUMMARY} FROM zur_notes n WHERE n.id IN (${part.map(() => "?").join(", ")})`, ...part);
+    return rows.map(toSummary);
+  }
+
   private row(id: string): NoteRow {
     const row = this.db.one<NoteRow>(`SELECT * FROM zur_notes WHERE id = ?`, id);
     if (!row) throw new AppError("NOT_FOUND", "error.noteNotFound");

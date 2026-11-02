@@ -16,6 +16,7 @@ import {
   type UsageReport,
   zonedParts,
   zonedTimeToUtc,
+  SEMANTIC_LIMITS,
 } from "@zuri/shared";
 import type { AlertService } from "../alerts/service.ts";
 import type { AutomationService } from "../automations/service.ts";
@@ -24,6 +25,8 @@ import { AppError } from "../http/errors.ts";
 import { log } from "../log.ts";
 import type { MemoryService } from "../memory/service.ts";
 import type { Productivity } from "../productivity/index.ts";
+import { hybridSearch } from "../semantic/hybrid.ts";
+import type { SemanticSearch } from "../semantic/service.ts";
 import type { CommandAction, CommandButtons } from "./callbacks.ts";
 import { CATEGORY_NAME, disarm, PRIORITY_NAME } from "./channel.ts";
 import { extractWhen, parseWhen, type When } from "./dates.ts";
@@ -95,6 +98,8 @@ export interface CommandDeps {
   productivity: Productivity;
   memories: MemoryService;
   automations: AutomationService;
+  /** The search by meaning (step 17): with it on, /buscar costs one embedding. */
+  semantic?: SemanticSearch;
   alerts(): AlertService;
   usage(): UsageReport;
   diagnostics(): DiagnosticsReport;
@@ -146,7 +151,7 @@ export class TelegramCommands {
         case "nota":
           return [this.#note(args)];
         case "buscar":
-          return [this.#search(args)];
+          return [await this.#search(args)];
         case "memoria":
           return [this.#remember(args)];
         case "rotinas":
@@ -234,16 +239,25 @@ export class TelegramCommands {
     return { text: `${title}\n\n${lines.join("\n")}\n\n${this.#t("telegram.cmd.tarefas.rodape")}`, keyboard };
   }
 
-  /** /buscar <termo>: up to 5 tasks, notes and memories, each a 100-character excerpt. */
-  #search(args: string): Out {
+  /**
+   * /buscar <termo>: up to 5 tasks, notes and memories, each a 100-character
+   * excerpt. With the search by meaning on (step 17), also what means the same,
+   * and automations; that costs one embedding.
+   */
+  async #search(args: string): Promise<Out> {
     const term = args.trim();
     if (!term) return this.#argument("telegram.cmd.buscar.exemplo");
     if ([...term].length > SEARCH_MAX) return { text: this.#t("telegram.cmd.buscar.longo", { max: SEARCH_MAX }) };
-    const tasks = this.deps.productivity.tasks.list({ q: term, limit: BLOCK_MAX + 1 });
-    const notes = this.deps.productivity.notes.list({ q: term, limit: BLOCK_MAX + 1 });
-    const memories = this.deps.memories.list({ q: term, status: "current", limit: BLOCK_MAX + 1 }).memories;
+    const words = {
+      tasks: this.deps.productivity.tasks.list({ q: term, limit: BLOCK_MAX + 1 }),
+      notes: this.deps.productivity.notes.list({ q: term, limit: BLOCK_MAX + 1 }),
+      memories: this.deps.memories.list({ q: term, status: "current", limit: BLOCK_MAX + 1 }).memories,
+    };
+    const found = await hybridSearch(this.deps, term, words, BLOCK_MAX + 1);
+    const { tasks, notes, memories } = found ?? words;
+    const automations = found?.automations ?? [];
     const shownTerm = this.#line(term);
-    if (tasks.length + notes.length + memories.length === 0) return { text: this.#t("telegram.cmd.buscar.vazio", { termo: shownTerm }) };
+    if (tasks.length + notes.length + memories.length + automations.length === 0) return { text: this.#t("telegram.cmd.buscar.vazio", { termo: shownTerm }) };
     const blocks = [this.#t("telegram.cmd.buscar.titulo", { termo: shownTerm })];
     const block = (key: MessageKey, lines: string[]) => {
       if (lines.length === 0) return;
@@ -262,6 +276,10 @@ export class TelegramCommands {
     block(
       "telegram.cmd.buscar.memorias",
       memories.map((memory) => `• ${this.#line(memory.content, SNIPPET_MAX)}`),
+    );
+    block(
+      "telegram.cmd.buscar.automacoes",
+      automations.map((automation) => `• ${this.#line(automation.name, SNIPPET_MAX)}`),
     );
     return { text: blocks.join("\n\n") };
   }
@@ -320,8 +338,20 @@ export class TelegramCommands {
         audio: number.format(Math.ceil(report.today.audioSeconds / 60)),
         audioMax: number.format(Math.floor(report.limits.audioSecondsPerDay / 60)),
         custo: money.format(report.today.costUsd),
-      }),
+      }) + this.#meaningUsage(number),
     };
+  }
+
+  /** The search by meaning's line of /uso (step 17), only while it is on. */
+  #meaningUsage(number: Intl.NumberFormat): string {
+    const today = this.deps.semantic?.usage();
+    if (!today) return "";
+    return `\n${this.#t("telegram.cmd.uso.significado", {
+      buscas: number.format(today.queries),
+      buscasMax: number.format(SEMANTIC_LIMITS.queriesPerDay),
+      itens: number.format(today.indexed),
+      itensMax: number.format(SEMANTIC_LIMITS.indexPerDay),
+    })}`;
   }
 
   /** /status: version, health, failures in 24 h and whether the AI can answer now. */

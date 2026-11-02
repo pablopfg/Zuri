@@ -7,6 +7,9 @@ import { MeteredAI } from "../src/ai/metered.ts";
 import { MockAIProvider } from "../src/ai/mock.ts";
 import { MockTranscriber } from "../src/ai/transcription.ts";
 import { telegramWebhookSecret } from "../src/gates/telegram.ts";
+import { MockEmbedder } from "../src/semantic/embedder.ts";
+import { VectorStore } from "../src/semantic/store.ts";
+import { unit } from "../src/semantic/vectors.ts";
 import { CSRF, call, HUMAN_TOKEN, ORIGIN, TEST_EMAIL, TEST_PASSWORD, testEnv } from "./helpers.ts";
 
 // What each route costs in the units the Free plan bills: rows read and rows
@@ -587,5 +590,61 @@ describe("the Free plan budget of each route", () => {
       agent.store.db.run(`DELETE FROM zur_notices`);
       agent.store.db.run(`DELETE FROM zur_settings WHERE key LIKE 'lockdown_%'`);
     });
+  });
+  it("search by meaning (step 17): the state, on, off, reindex and a search over every memory read about one row per block", async () => {
+    await runInDurableObject(owner(), (agent: ZuriAgent) => {
+      agent.testEmbedder = new MockEmbedder();
+    });
+    try {
+      const on = await cost("PATCH", "/semantic", { enabled: true });
+      expect(on.status).toBe(200);
+      // The tables, 12 triggers, the state and the alarm.
+      expect(on.written).toBeLessThanOrEqual(30);
+      // Creating tables and triggers reads the schema table once per statement.
+      expect(on.read).toBeLessThanOrEqual(300);
+      // Every memory with a vector (2,000 in 32 blocks of 64), and a long queue of changes.
+      const blocks = await runInDurableObject(owner(), (agent: ZuriAgent) => {
+        const { db } = agent.store;
+        const ids = db.all<{ id: string }>(`SELECT id FROM zur_memories`).map((row) => row.id);
+        const store = new VectorStore(db);
+        db.transaction(() => {
+          for (let i = 0; i < ids.length; i += 64) {
+            store.put(
+              "memory",
+              "mock-embedding",
+              256,
+              ids.slice(i, i + 64).map((id, n) => ({ id, hash: `h${i + n}`, vector: unit(Array.from({ length: 256 }, (_, d) => Math.sin(i + n + d)) ) })),
+            );
+          }
+          for (let i = 0; i < 1500; i++) db.run(`INSERT INTO zur_semantic_queue (kind, item_id) VALUES ('task', ?)`, `queued-${i}`);
+        });
+        return db.one<{ n: number }>(`SELECT count(*) AS n FROM zur_semantic_vectors`)?.n ?? 0;
+      });
+      expect(blocks).toBe(Math.ceil(MEMORIES / 64));
+      // The card's state: counters, and the queue counted only up to a cap.
+      const state = await cost("GET", "/semantic");
+      expect(state.status).toBe(200);
+      expect(state.read).toBeLessThanOrEqual(215);
+      expect(state.written).toBe(0);
+      // A search: one row per block, the items it shows and the day's count of questions.
+      const search = await cost("GET", "/search/semantic?q=tema7&limit=10");
+      expect(search.status).toBe(200);
+      expect(search.read).toBeLessThanOrEqual(blocks + 60);
+      // The day's count of questions, and the embedding's usage rows.
+      expect(search.written).toBeLessThanOrEqual(6);
+      const reindex = await cost("POST", "/semantic/reindex");
+      expect(reindex.status).toBe(200);
+      expect(reindex.read).toBeLessThanOrEqual(230);
+      expect(reindex.written).toBeLessThanOrEqual(4);
+      const off = await cost("PATCH", "/semantic", { enabled: false });
+      expect(off.status).toBe(200);
+      // The triggers and the queue go (each queued row is one write), the vectors stay.
+      expect(off.written).toBeLessThanOrEqual(1500 + 40);
+    } finally {
+      await runInDurableObject(owner(), (agent: ZuriAgent) => {
+        agent.store.semantic.disable();
+        agent.testEmbedder = null;
+      });
+    }
   });
 });

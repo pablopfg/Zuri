@@ -69,7 +69,7 @@ export function describeForModel(schedule: Schedule): string {
   }
 }
 
-function presentAutomation(automation: Automation, ctx: ToolContext) {
+export function presentAutomation(automation: Automation, ctx: ToolContext) {
   return {
     id: automation.id,
     name: automation.name,
