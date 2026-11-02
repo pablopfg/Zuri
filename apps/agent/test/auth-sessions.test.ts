@@ -223,6 +223,25 @@ describe("changing the password", () => {
     });
   });
 
+  it("refuses a password built on the owner's name, set in the settings or the first access", async () => {
+    const leaning = "Bartolomeu Quixaba 7";
+    await withAuth("change-owner-name", async ({ auth, settings }) => {
+      settings.update({ ownerName: "Bartolomeu Quixaba" });
+      const row = await signedIn(auth);
+      const error = await auth.changePassword(row, { currentPassword: TEST_PASSWORD, newPassword: leaning }, client(NET)).catch((e: AppError) => e);
+      expect((error as AppError).details).toEqual({ fields: ["newPassword"], problem: "predictable" });
+      // Naming yourself never forces a change of the password already in use.
+      settings.update({ ownerName: TEST_PASSWORD.slice(0, 20) });
+      expect(await outcome(auth.login(right(), client(NET), noCookies))).toBe("ok");
+      expect(auth.passwordChangeRequired()).toBe(false);
+    });
+    // Without the name the same password is fine: the refusal above comes from the name.
+    await withAuth("change-owner-name-control", async ({ auth }) => {
+      const row = await signedIn(auth);
+      await auth.changePassword(row, { currentPassword: TEST_PASSWORD, newPassword: leaning }, client(NET));
+    });
+  });
+
   it("accepts exactly 15 good characters", async () => {
     await withAuth("change-15", async ({ auth }) => {
       const row = await signedIn(auth);

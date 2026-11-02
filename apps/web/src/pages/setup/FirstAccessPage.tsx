@@ -1,9 +1,12 @@
 import { useQuery } from "@tanstack/react-query";
 import {
   isLocale,
+  isOwnerName,
   LOCALES,
   LOGIN_OPTIONS_PATH,
   loginOptionsSchema,
+  normalizeOwnerName,
+  OWNER_NAME_MAX,
   PASSWORD_MIN_LENGTH,
   ptBRSetup,
   SETUP_CODE_MAX_LENGTH,
@@ -11,7 +14,7 @@ import {
   sessionStateSchema,
   setupTicketSchema,
 } from "@zuri/shared";
-import { KeyRound, LockKeyhole, Mail, RotateCw } from "lucide-react";
+import { KeyRound, LockKeyhole, Mail, RotateCw, UserRound } from "lucide-react";
 import { type FormEvent, type MouseEvent, useEffect, useMemo, useRef, useState } from "react";
 import { Logo } from "../../components/Logo.tsx";
 import { TurnstileWidget } from "../../components/TurnstileWidget.tsx";
@@ -50,6 +53,7 @@ export function FirstAccessPage({ go }: { go: (path: string) => void }) {
 
   const [step, setStep] = useState<Step>({ kind: "code" });
   const [code, setCode] = useState("");
+  const [ownerName, setOwnerName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [repeat, setRepeat] = useState("");
@@ -61,6 +65,8 @@ export function FirstAccessPage({ go }: { go: (path: string) => void }) {
   const [error, setError] = useState<string | null>(null);
   // A refusal of the password itself (too short, breached) shows on its field.
   const [passwordError, setPasswordError] = useState<string | null>(null);
+  // The server refused the name (its rules are the same; this covers a version mismatch).
+  const [nameRefused, setNameRefused] = useState(false);
   const [retryAt, setRetryAt] = useState<number | null>(null);
   const [now, setNow] = useState(Date.now());
 
@@ -84,6 +90,7 @@ export function FirstAccessPage({ go }: { go: (path: string) => void }) {
   const [humanInteractive, setHumanInteractive] = useState(false);
 
   const codeRef = useRef<HTMLInputElement>(null);
+  const nameRef = useRef<HTMLInputElement>(null);
   const emailRef = useRef<HTMLInputElement>(null);
   const passwordRef = useRef<HTMLInputElement>(null);
   const repeatRef = useRef<HTMLInputElement>(null);
@@ -189,11 +196,12 @@ export function FirstAccessPage({ go }: { go: (path: string) => void }) {
   async function submitForm(e: FormEvent) {
     e.preventDefault();
     if (pending || waitSeconds > 0 || step.kind !== "form") return;
-    if (!email.trim() || !password || password !== repeat) {
+    const nameWrong = step.ticket.mode === "setup" && !isOwnerName(normalizeOwnerName(ownerName));
+    if (nameWrong || !email.trim() || !password || password !== repeat) {
       setAttempted(true);
       setError(null);
       // The first field with something to fix takes the focus.
-      (!email.trim() ? emailRef : !password ? passwordRef : repeatRef).current?.focus();
+      (nameWrong ? nameRef : !email.trim() ? emailRef : !password ? passwordRef : repeatRef).current?.focus();
       return;
     }
     setAttempted(false);
@@ -203,7 +211,7 @@ export function FirstAccessPage({ go }: { go: (path: string) => void }) {
     try {
       if (step.ticket.mode === "setup") {
         const state = sessionStateSchema.parse(
-          await api<unknown>("/setup/owner", { method: "POST", body: { email: email.trim(), password, language, timeZone: zone } }),
+          await api<unknown>("/setup/owner", { method: "POST", body: { email: email.trim(), password, language, timeZone: zone, ownerName } }),
         );
         adoptSettings({ language, timeZone: zone });
         signedIn(state);
@@ -222,6 +230,12 @@ export function FirstAccessPage({ go }: { go: (path: string) => void }) {
         return;
       }
       const fields = err instanceof ApiError ? ((err.details as RefusalDetails).fields ?? []) : [];
+      if (fields.includes("ownerName")) {
+        // The server's rules for the name are the screen's; its field says what to fix.
+        setNameRefused(true);
+        requestAnimationFrame(() => nameRef.current?.focus());
+        return;
+      }
       if (fields.includes("password")) {
         // The password itself was refused: its field says why, and both empty for a new one.
         setPassword("");
@@ -239,6 +253,10 @@ export function FirstAccessPage({ go }: { go: (path: string) => void }) {
     }
   }
 
+  const nameInvalid =
+    step.kind === "form" && step.ticket.mode === "setup" && (nameRefused || (attempted && !isOwnerName(normalizeOwnerName(ownerName))))
+      ? t("web.setup.ownerNameInvalid", { max: OWNER_NAME_MAX })
+      : null;
   const emailMissing = attempted && step.kind === "form" && !email.trim();
   const passwordMissing = attempted && step.kind === "form" && !password;
   const mismatch = repeat.length > 0 && password !== repeat ? t("web.setup.mismatch") : null;
@@ -337,6 +355,22 @@ export function FirstAccessPage({ go }: { go: (path: string) => void }) {
                 </h2>
                 <p className="text-sm leading-6 text-fg-muted">{t(step.ticket.mode === "setup" ? "web.setup.detailsLead" : "web.setup.recoverLead")}</p>
               </div>
+              {step.ticket.mode === "setup" && (
+                <TextField
+                  ref={nameRef}
+                  label={t("web.setup.ownerName")}
+                  hint={t("web.setup.ownerNameHint", { max: OWNER_NAME_MAX })}
+                  autoComplete="nickname"
+                  spellCheck={false}
+                  icon={<UserRound aria-hidden />}
+                  error={nameInvalid}
+                  value={ownerName}
+                  onChange={(e) => {
+                    setOwnerName(e.target.value);
+                    setNameRefused(false);
+                  }}
+                />
+              )}
               <TextField
                 ref={emailRef}
                 label={t("web.setup.email")}

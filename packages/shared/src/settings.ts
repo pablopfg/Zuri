@@ -46,7 +46,7 @@ export function isOwnerName(name: string): boolean {
  * means no name. The name is shown on screen and will reach the agent's
  * prompt (always inside a <data> line), so it must read as plain text.
  */
-const ownerName = /* @__PURE__ */ z.string().max(OWNER_NAME_MAX * 10).transform(normalizeOwnerName).refine(isOwnerName);
+export const ownerNameSchema = /* @__PURE__ */ z.string().max(OWNER_NAME_MAX * 10).transform(normalizeOwnerName).refine(isOwnerName);
 
 const range = (r: { min: number; max: number }) => z.number().int().min(r.min).max(r.max);
 
@@ -70,7 +70,7 @@ export const settingsSchema = /* @__PURE__ */ z
     aiMaxContextTokens: range(AI_LIMIT_RANGES.aiMaxContextTokens),
     aiScheduledRunsPerDay: range(AI_LIMIT_RANGES.aiScheduledRunsPerDay),
     /** How the owner likes to be called; "" until they say. */
-    ownerName,
+    ownerName: ownerNameSchema,
   })
   .strict();
 
