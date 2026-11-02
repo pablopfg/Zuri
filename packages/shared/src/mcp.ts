@@ -143,7 +143,8 @@ export const mcpServerUpdateSchema = /* @__PURE__ */ z
     authType: z.enum(MCP_AUTH_CHOICES).optional(),
     token: token.optional(),
   })
-  .strict();
+  .strict()
+  .refine((patch) => Object.keys(patch).length > 0);
 export type McpServerUpdate = z.input<typeof mcpServerUpdateSchema>;
 
 export const mcpToolUpdateSchema = /* @__PURE__ */ z
@@ -157,5 +158,6 @@ export const mcpToolUpdateSchema = /* @__PURE__ */ z
       .refine((value) => !hasControlCharacter(value, true))
       .optional(),
   })
-  .strict();
+  .strict()
+  .refine((patch) => Object.keys(patch).length > 0);
 export type McpToolUpdate = z.input<typeof mcpToolUpdateSchema>;

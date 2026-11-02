@@ -42,8 +42,12 @@ export class SubrequestMeter implements FetchMeter {
 
 interface Opened {
   client: Client;
+  transport: StreamableHTTPClientTransport;
   key: string;
 }
+
+/** The longest the polite goodbye (DELETE of the session) may take. */
+export const CLOSE_TIMEOUT_MS = 5_000;
 
 /**
  * The MCP sessions of one turn (or one owner action): opened on first use,
@@ -84,7 +88,7 @@ export class McpTurn {
         await client.close().catch(() => undefined);
         throw error instanceof McpBudgetSpent ? error : classifyMcpError(error);
       }
-      return { client, key };
+      return { client, transport, key };
     })();
     this.#sessions.set(serverId, opening);
     try {
@@ -120,7 +124,20 @@ export class McpTurn {
     if (!cached) return;
     this.#sessions.delete(serverId);
     const opened = await cached.catch(() => null);
-    await opened?.client.close().catch(() => undefined);
+    if (!opened) return;
+    // Tell the server the session ended (a DELETE), when the turn still has a subrequest for it; never waits long.
+    if (opened.transport.sessionId && this.meter.room(1)) {
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      await Promise.race([
+        opened.transport.terminateSession(),
+        new Promise((resolve) => {
+          timer = setTimeout(resolve, CLOSE_TIMEOUT_MS);
+        }),
+      ])
+        .catch(() => undefined)
+        .finally(() => clearTimeout(timer));
+    }
+    await opened.client.close().catch(() => undefined);
   }
 
   /** Ends every session of the turn. */

@@ -11,6 +11,7 @@ import { MockEmbedder } from "../src/semantic/embedder.ts";
 import { VectorStore } from "../src/semantic/store.ts";
 import { unit } from "../src/semantic/vectors.ts";
 import { CSRF, call, HUMAN_TOKEN, ORIGIN, TEST_EMAIL, TEST_PASSWORD, testEnv } from "./helpers.ts";
+import { mcpFixture } from "./mcp-fixture.ts";
 
 // What each route costs in the units the Free plan bills: rows read and rows
 // written in the object's SQLite (docs/arquitetura/orcamento-free-tier.md). A
@@ -644,6 +645,51 @@ describe("the Free plan budget of each route", () => {
       await runInDurableObject(owner(), (agent: ZuriAgent) => {
         agent.store.semantic.disable();
         agent.testEmbedder = null;
+      });
+    }
+  });
+  it("remote MCP (step 18): the list, a connection with 100 tools, a tool switch and a turn's tool list read and write about one row per tool", async () => {
+    const fixture = mcpFixture({ tools: Array.from({ length: 100 }, (_, i) => ({ name: `tool_${i}`, description: `Tool ${i}.` })) });
+    await runInDurableObject(owner(), (agent: ZuriAgent) => {
+      agent.store.mcp.network = fixture.network;
+      for (let i = 0; i < 9; i++) agent.store.mcp.repo.create({ name: `Outro ${i}`, url: `https://s${i}.exemplo.com.br/mcp`, authType: "none" });
+    });
+    try {
+      const added = await cost("POST", "/mcp/servers", { name: "Grande", url: "https://grande.exemplo.com.br/mcp" });
+      expect(added.status).toBe(201);
+      // The server, its 100 tools (row and unique index each) and the security event with its notice.
+      expect(added.written).toBeLessThanOrEqual(3 * 100 + 40);
+      expect(added.read).toBeLessThanOrEqual(260);
+      const serverId = await runInDurableObject(owner(), (agent: ZuriAgent) => agent.store.db.one<{ id: string }>(`SELECT id FROM zur_mcp_servers WHERE slug = 'grande'`)?.id ?? "");
+      const list = await cost("GET", "/mcp");
+      // Ten servers and the tools counted once, whatever servers have none.
+      expect(list.read).toBeLessThanOrEqual(150);
+      expect(list.written).toBe(0);
+
+      const tools = await cost("GET", `/mcp/servers/${serverId}/tools`);
+      expect(tools.read).toBeLessThanOrEqual(2 * 100 + 20);
+      expect(tools.written).toBe(0);
+      const again = await cost("POST", `/mcp/servers/${serverId}/connect`);
+      // Connecting again to an unchanged server rewrites none of its tools.
+      expect(again.status).toBe(200);
+      expect(again.written).toBeLessThanOrEqual(10);
+      expect(again.read).toBeLessThanOrEqual(650);
+      for (let i = 0; i < 10; i++) await cost("PATCH", `/mcp/servers/${serverId}/tools/mcp_grande_tool_${i}`, { enabled: true });
+      const toggle = await cost("PATCH", `/mcp/servers/${serverId}/tools/mcp_grande_tool_0`, { enabled: false });
+      expect(toggle.read).toBeLessThanOrEqual(20);
+      expect(toggle.written).toBeLessThanOrEqual(3);
+      const turn = await runInDurableObject(owner(), (agent: ZuriAgent) => {
+        const before = agent.store.db.usage.rowsRead;
+        const offered = agent.store.mcp.turnTools().length;
+        return { offered, read: agent.store.db.usage.rowsRead - before };
+      });
+      // A chat turn's list: the tools on (an index) and the servers, never the whole catalog.
+      expect(turn.offered).toBe(9);
+      expect(turn.read).toBeLessThanOrEqual(60);
+    } finally {
+      await runInDurableObject(owner(), (agent: ZuriAgent) => {
+        agent.store.db.run(`DELETE FROM zur_mcp_tools`);
+        agent.store.db.run(`DELETE FROM zur_mcp_servers`);
       });
     }
   });

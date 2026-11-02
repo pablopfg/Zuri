@@ -262,7 +262,7 @@ function ServerCard({ server, credentials }: { server: McpServerInfo; credential
         </div>
         <div className="shrink-0">
           <Switch
-            label={t("web.integrations.serverSwitch")}
+            label={t("web.integrations.serverSwitch", { name: server.name })}
             checked={server.enabled}
             busy={busy === "toggle"}
             onChange={(on) =>
@@ -397,7 +397,7 @@ function ToolRow({ server, tool }: { server: McpServerInfo; tool: McpToolInfo })
         {usable && (
           <div className="shrink-0">
             <Switch
-              label={t("web.integrations.tool.switch")}
+              label={t("web.integrations.tool.switch", { name: tool.title ?? tool.name })}
               checked={tool.enabled && !tool.needsReview}
               busy={busy}
               {...(tool.description ? { describedBy: descId } : {})}

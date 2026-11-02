@@ -47,6 +47,7 @@ import { Productivity } from "../productivity/index.ts";
 import { log } from "../log.ts";
 import { MockEmbedder, type Embedder, WorkersAIEmbedder } from "../semantic/embedder.ts";
 import { SemanticSearch } from "../semantic/service.ts";
+import { developmentMcpNetwork } from "../mcp/dev-mcp.ts";
 import { McpService } from "../mcp/service.ts";
 import { ALL_TOOLS } from "../tools/index.ts";
 import type { ToolContext } from "../tools/registry.ts";
@@ -512,6 +513,7 @@ export class ZuriAgent extends Agent<WorkerEnv> {
         development: () => this.development(),
         lockdown: () => auth.lockdown.active(),
       });
+      if (this.development()) mcp.network = developmentMcpNetwork(mcp.network);
       // The owner's conversation in the bot (step 14): the same runner, meter and turns as the app.
       const telegramConversation = new TelegramConversation({
         db,

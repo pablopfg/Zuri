@@ -12,6 +12,7 @@ import { TaskPlanService } from "../src/chat/plans.ts";
 import { Database } from "../src/db/database.ts";
 import { InternalState } from "../src/db/internal-state.ts";
 import { migrate } from "../src/db/migrations.ts";
+import { McpService } from "../src/mcp/service.ts";
 import { MemoryService } from "../src/memory/service.ts";
 import { Productivity } from "../src/productivity/index.ts";
 import type { ToolContext } from "../src/tools/registry.ts";
@@ -34,6 +35,10 @@ export interface ChatWorld {
   alarm: FakeAlarm;
   clock: { now: number };
   settings: Settings;
+  /** The MCP servers (step 18), with no network until a test gives it a fixture's. */
+  mcp: McpService;
+  /** Plays the account's lockdown for the MCP service. */
+  mcpLockdown: { active: boolean };
   /** The tools' context for a conversation (the chat), or for a scheduled run. */
   ctx(conversationId: string | null, mode?: ToolContext["mode"]): ToolContext;
   services(): Omit<ToolContext, "conversationId" | "mode" | "timeZone">;
@@ -94,7 +99,9 @@ export function withChatWorld<T>(fn: (world: ChatWorld) => T | Promise<T>): Prom
     const settings: Settings = { ...DEFAULT_SETTINGS, timeZone: TIME_ZONE };
     const alarm = new FakeAlarm();
     const automations = new AutomationService(db, productivity.storage, new InternalState(db), { timeZone: () => TIME_ZONE, alarm, clock: tick });
-    const services = () => ({ db, productivity, memories, conversations, plans, actions, automations });
+    const mcpLockdown = { active: false };
+    const mcp = new McpService({ db, credentialKey: testEnv.MCP_CREDENTIAL_KEY, development: () => false, lockdown: () => mcpLockdown.active, clock: tick });
+    const services = () => ({ db, productivity, memories, conversations, plans, actions, automations, mcpService: mcp });
     const world: ChatWorld = {
       db,
       productivity,
@@ -107,6 +114,8 @@ export function withChatWorld<T>(fn: (world: ChatWorld) => T | Promise<T>): Prom
       alarm,
       clock,
       settings,
+      mcp,
+      mcpLockdown,
       services,
       ctx: (conversationId, mode = "chat") => ({ ...services(), timeZone: TIME_ZONE, mode, conversationId }),
       ai: (provider) =>
@@ -176,7 +185,9 @@ export class ScriptedProvider implements AIProvider {
         for (const call of planned.calls ?? []) {
           const id = `call_${++callNumber}`;
           yield { type: "tool-start", id, name: call.name, input: call.input };
-          const tool = req.tools.find((item) => item.name === call.name);
+          // A tool left out of the step's active list can't be called, as with the real SDK.
+          const active = req.activeTools?.();
+          const tool = active && !active.includes(call.name) ? undefined : req.tools.find((item) => item.name === call.name);
           let output: unknown = null;
           let error: string | undefined;
           if (!tool) error = `Tool "${call.name}" is not available.`;

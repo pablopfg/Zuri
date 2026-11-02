@@ -237,7 +237,9 @@ export class McpRepository {
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
            ON CONFLICT(server_id, name) DO UPDATE SET title = excluded.title, description = excluded.description,
              input_schema = excluded.input_schema, annotations = excluded.annotations, schema_hash = excluded.schema_hash,
-             status = excluded.status, problem = excluded.problem, updated_at = excluded.updated_at`,
+             status = excluded.status, problem = excluded.problem, updated_at = excluded.updated_at
+           WHERE zur_mcp_tools.schema_hash IS NOT excluded.schema_hash OR zur_mcp_tools.input_schema IS NOT excluded.input_schema
+             OR zur_mcp_tools.status IS NOT excluded.status OR zur_mcp_tools.problem IS NOT excluded.problem`,
           server.id,
           entry.name,
           exposed,

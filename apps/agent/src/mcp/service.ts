@@ -105,7 +105,9 @@ export class McpService {
 
   overview(): McpOverview {
     const counts = this.repo.toolCounts();
-    return { credentialsAvailable: this.credentials.available, servers: this.repo.list().map((server) => this.present(server, counts.get(server.id))) };
+    // A server with no tools has no row in the counts: zero, never a second count per server.
+    const none = { total: 0, enabled: 0, review: 0 };
+    return { credentialsAvailable: this.credentials.available, servers: this.repo.list().map((server) => this.present(server, counts.get(server.id) ?? none)) };
   }
 
   present(server: ServerRow, counts?: { total: number; enabled: number; review: number }): McpServerInfo {
