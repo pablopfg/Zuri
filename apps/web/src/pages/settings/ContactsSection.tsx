@@ -116,7 +116,9 @@ export function ContactsSection() {
             {data.status === "syncing" && !data.lastSyncAt
               ? t("web.contacts.card.syncing")
               : data.lastSyncAt
-                ? t("web.contacts.card.synced", { when: dateTime(data.lastSyncAt), count: plural("web.contacts.card.count", data.contacts) })
+                ? data.contacts > 0
+                  ? t("web.contacts.card.synced", { when: dateTime(data.lastSyncAt), count: plural("web.contacts.card.count", data.contacts) })
+                  : t("web.contacts.card.syncedEmpty", { when: dateTime(data.lastSyncAt) })
                 : t("web.contacts.card.never")}
           </p>
           {data.problem && (

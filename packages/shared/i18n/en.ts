@@ -2058,6 +2058,7 @@ export const en: Messages = {
   "web.contacts.card.connected": "Contacts on. Zuri is reading your labels.",
   "web.contacts.card.syncing": "Syncing…",
   "web.contacts.card.synced": "Synced on {when} · {count}",
+  "web.contacts.card.syncedEmpty": "Synced on {when} · no contacts copied yet",
   "web.contacts.card.never": "Not synced yet.",
   "web.contacts.card.count.one": "{count} contact",
   "web.contacts.card.count.other": "{count} contacts",

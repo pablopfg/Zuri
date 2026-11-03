@@ -187,6 +187,12 @@ function addDays(date: string, days: number): string {
 
 export class GoogleContacts {
   private readonly clock: () => number;
+  /**
+   * The contacts are off and stay so until enable(), the only way back on: the
+   * alarm's rearm and every chat turn ask, so an installation without contacts
+   * reads their row once per object's life, not once per question.
+   */
+  private knownOff = false;
 
   constructor(private readonly deps: ContactsDeps) {
     this.clock = deps.clock ?? Date.now;
@@ -205,9 +211,18 @@ export class GoogleContacts {
     return this.row() as SyncRow;
   }
 
+  /** The sync's row while the contacts are on; null (and remembered) while off. */
+  private onRow(): SyncRow | null {
+    if (this.knownOff) return null;
+    const row = this.row();
+    if (row?.enabled === 1) return row;
+    this.knownOff = true;
+    return null;
+  }
+
   /** The Google account allows the contacts and the owner turned them on. */
   enabled(): boolean {
-    return this.row()?.enabled === 1 && this.deps.google.connected() && this.deps.google.granted(CONTACTS_SCOPE);
+    return this.onRow() !== null && this.deps.google.connected() && this.deps.google.granted(CONTACTS_SCOPE);
   }
 
   /** Contacts in the copy, kept on the sync's row: counting the table would read every contact. */
@@ -260,6 +275,7 @@ export class GoogleContacts {
   /** The owner allowed the contacts on Google's page: the first read starts on the next wake. */
   enable(): void {
     const now = this.clock();
+    this.knownOff = false;
     this.ensureRow();
     this.db.run(
       `UPDATE zur_contact_sync SET enabled = 1, status = 'syncing', problem = NULL, full_needed = 1, page_token = NULL, page_mode = NULL,
@@ -350,16 +366,16 @@ export class GoogleContacts {
    * next notice. Nothing while the contacts are off or the account needs the owner.
    */
   nextDue(): number | null {
-    const row = this.row();
-    if (!row || row.enabled !== 1 || !this.deps.google.connected()) return null;
+    const row = this.onRow();
+    if (!row || !this.deps.google.connected()) return null;
     const due = [row.next_sync, row.next_reminder].filter((at): at is number => typeof at === "number");
     return due.length ? Math.min(...due) : null;
   }
 
   /** From the alarm: the sync when it is due, then the notice of the day. */
   async tick(): Promise<void> {
-    const row = this.row();
-    if (!row || row.enabled !== 1 || !this.deps.google.connected()) return;
+    const row = this.onRow();
+    if (!row || !this.deps.google.connected()) return;
     const now = this.clock();
     if (row.next_sync !== null && row.next_sync <= now) await this.sync("alarm");
     if (row.next_reminder !== null && row.next_reminder <= now) this.remind();

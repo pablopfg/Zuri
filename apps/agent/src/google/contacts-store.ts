@@ -16,7 +16,7 @@ export function forgetContacts(db: Database): void {
   db.run(
     `UPDATE zur_contact_sync SET enabled = 0, status = 'off', problem = NULL, people_sync_token = NULL, page_token = NULL, page_mode = NULL,
        full_needed = 1, full_started = NULL, first_done = 0, running_since = NULL, next_sync = NULL, last_ok_at = NULL, failures = 0,
-       problem_noticed_at = NULL, next_reminder = NULL
+       problem_noticed_at = NULL, next_reminder = NULL, copied = 0
      WHERE id = 1`,
   );
 }

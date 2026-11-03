@@ -238,6 +238,7 @@ export const ptBRSettings = {
   "web.contacts.card.connected": "Contatos ligados. A Zuri já está lendo as suas etiquetas.",
   "web.contacts.card.syncing": "Sincronizando…",
   "web.contacts.card.synced": "Sincronizado em {when} · {count}",
+  "web.contacts.card.syncedEmpty": "Sincronizado em {when} · nenhum contato copiado ainda",
   "web.contacts.card.never": "Ainda não sincronizado.",
   "web.contacts.card.count.one": "{count} contato",
   "web.contacts.card.count.other": "{count} contatos",

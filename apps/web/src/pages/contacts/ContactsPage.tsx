@@ -93,7 +93,7 @@ export function ContactsPage() {
   return (
     <div className="space-y-6">
       {header}
-      <div role="search" className="grid gap-3 sm:grid-cols-[1fr_16rem]">
+      <search className="grid gap-3 sm:grid-cols-[1fr_16rem]">
         <TextField
           label={t("web.contacts.search")}
           className="[&>label]:sr-only"
@@ -112,7 +112,7 @@ export function ContactsPage() {
             </option>
           ))}
         </SelectField>
-      </div>
+      </search>
       {list.isPending ? (
         <Loading rows={4} />
       ) : list.isError && contacts.length === 0 ? (

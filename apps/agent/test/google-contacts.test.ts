@@ -565,9 +565,13 @@ describe("turning off and disconnecting", () => {
       await turnOn(world);
       world.contacts.disable();
       for (const table of ["zur_contacts", "zur_contact_keys", "zur_contact_memberships", "zur_contact_dates", "zur_contact_labels"]) expect(world.db.one(`SELECT count(*) AS n FROM ${table}`)).toEqual({ n: 0 });
-      expect(sync(world)).toMatchObject({ enabled: 0, people_sync_token: null, page_token: null });
+      expect(sync(world)).toMatchObject({ enabled: 0, people_sync_token: null, page_token: null, copied: 0 });
       expect(world.google.connected()).toBe(true);
       expect(world.contacts.nextDue()).toBeNull();
+      // Turned on again, the copy starts from nothing (the count of the old one doesn't come back).
+      world.contacts.enable();
+      expect(world.contacts.count()).toBe(0);
+      expect(world.contacts.status().contacts).toBe(0);
     }));
 
   it("disconnecting Google revokes the token and forgets the copy", () =>

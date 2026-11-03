@@ -58,6 +58,7 @@ Cada linha é um requisito. A coluna da direita aponta onde o agente estuda a re
 | Canais | Push (Web Push, máx. 3 aparelhos, remoção após 7 dias sem acesso), e-mail pelo Email Routing, Telegram | `push/`, `alerts/email.ts`, `telegram/` |
 | Integrações | Servidores MCP remotos (sem auth, bearer, OAuth), ferramentas desligadas por padrão, aprovação para o que altera | `mcp/`, `docs/mcp.md` |
 | Google Agenda | Leitura e escrita de eventos, rotinas do dia com a agenda | `calendar/`, `docs/google-calendar.md` |
+| Google Contatos | Cópia só leitura dos contatos das etiquetas escolhidas, busca, avisos de aniversário e datas | `google/contacts.ts`, `docs/google-contatos.md` |
 | Google Contatos | Cópia só leitura dos contatos das etiquetas escolhidas, busca na conversa, aniversários e datas nas automações, fonte de dados dos workflows (novo no Zuri, etapa 19b) | `docs/planos/google-contatos.md` |
 | Acesso remoto | Tokens pessoais com escopo `read` ou `write`, 90 dias, só hash; eventos de entrada do n8n | `remote/`, `docs/remote-access.md` |
 | Workflows | Monitor de sites com Cloudflare Workflows (passos duráveis e novas tentativas) | `workflows/` |
@@ -295,13 +296,13 @@ Chat: `@cf/zai-org/glm-4.7-flash`. Transcrição: `@cf/openai/whisper-large-v3-t
 
 ### Prompt de sistema
 
-Ordem: nome do agente (uma linha) → instruções fixas → relógio do dono → nome do dono → memórias → resumo → lembrete do idioma → histórico. O relógio (data e hora atuais no fuso das Configurações, em forma humana e ISO com deslocamento, horário de verão, calendário de duas semanas, troca de relógio à frente e as datas relativas da mensagem já resolvidas pelo servidor) e a regra de idioma (só o idioma das Configurações, outro só a pedido explícito do dono, pedido vindo de `<data>` ignorado) estão em `docs/arquitetura/orientacao-temporal-e-idioma.md`. Todo conteúdo guardado entra como `<data source="memory|note|task|tool|mcp|telegram_forward|calendar|remote_event|settings" id="...">…</data>`, um item por linha; dentro do bloco, `<` e `>` viram `‹` e `›`. O nome do dono (`ownerName`) é conteúdo guardado: entra como `<data source="settings" id="ownerName">`, nunca interpolado nas instruções fixas (`docs/seguranca.md`, "Conteúdo guardado no prompt"). As instruções fixas descrevem a personalidade da agente: feminina, simpática e natural, sem tom robótico (decisão do Pablo, 31/10/2026). Referência: `apps/agent/src/agent/{runner.ts,prompt.ts}`. Cada cenário da seção "Prompt injection e segurança das ferramentas" de `docs/seguranca.md` vira um teste com o mock.
+Ordem: nome do agente (uma linha) → instruções fixas → relógio do dono → nome do dono → memórias → resumo → lembrete do idioma → histórico. O relógio (data e hora atuais no fuso das Configurações, em forma humana e ISO com deslocamento, horário de verão, calendário de duas semanas, troca de relógio à frente e as datas relativas da mensagem já resolvidas pelo servidor) e a regra de idioma (só o idioma das Configurações, outro só a pedido explícito do dono, pedido vindo de `<data>` ignorado) estão em `docs/arquitetura/orientacao-temporal-e-idioma.md`. Todo conteúdo guardado entra como `<data source="memory|note|task|tool|mcp|telegram_forward|calendar|contact|remote_event|settings" id="...">…</data>`, um item por linha; dentro do bloco, `<` e `>` viram `‹` e `›`. O nome do dono (`ownerName`) é conteúdo guardado: entra como `<data source="settings" id="ownerName">`, nunca interpolado nas instruções fixas (`docs/seguranca.md`, "Conteúdo guardado no prompt"). As instruções fixas descrevem a personalidade da agente: feminina, simpática e natural, sem tom robótico (decisão do Pablo, 31/10/2026). Referência: `apps/agent/src/agent/{runner.ts,prompt.ts}`. Cada cenário da seção "Prompt injection e segurança das ferramentas" de `docs/seguranca.md` vira um teste com o mock.
 
 ### Classes de ferramentas
 
 | Classe | Ferramentas | Comportamento |
 | --- | --- | --- |
-| `read` | `list_tasks`, `list_projects`, `read_note`, `search_notes`, `search_memories`, `search`, `list_automations`, `list_calendar_events` | Roda direto; única classe da Zuri em execuções agendadas (mais `notify_owner` e as ferramentas MCP liberadas para rotinas) |
+| `read` | `list_tasks`, `list_projects`, `read_note`, `search_notes`, `search_memories`, `search`, `list_automations`, `list_calendar_events`, `search_contacts`, `get_contact` | Roda direto; única classe da Zuri em execuções agendadas (mais `notify_owner` e as ferramentas MCP liberadas para rotinas) |
 | `write` | `create_task`, `update_task`, `complete_task` (máx. 3 por turno), `create_project`, `create_note`, `update_note` (só renomeia ou acrescenta), `remember`, `update_memory`, `create_reminder`, `create_automation`, `create_calendar_event`, `update_calendar_event`, `propose_task_plan` (1 por turno), `propose_ai_routine` | Roda direto no chat; nunca em execuções agendadas |
 | `destructive` | `delete_task`, `delete_note`, `replace_task_description`, `replace_note_content`, `forget_memory`, `cancel_automation`, `delete_calendar_event`, `change_shared_calendar_event` e ferramentas MCP que apagam ou sobrescrevem, na classificação da Zuri confirmada pelo dono (as outras seguem o nível que o dono escolheu) | Vira proposta; só roda com aprovação |
 
@@ -358,7 +359,7 @@ Aceito: "hoje", "amanhã", "depois de amanhã", dias da semana com ou sem "-feir
 - **Cartão do Telegram:** não configurado (sem token), pronto para conectar, aguardando `/start`, aguardando confirmação no app, vinculado, webhook com erro (último erro de `getWebhookInfo`), suspenso.
 - **Página `/aprovar`:** estados listados na seção do bot.
 - **Sair do bloqueio:** origem do bloqueio, hora, botão Sair (2FA ou código de recuperação), botão Não fui eu: desvincular o Telegram.
-- **Configurações:** Conta (nome, e-mail, senha, idioma, fuso), Segurança (2FA, passkeys, sessões, acessos, acesso remoto, bloqueio), IA (modelos, limites, busca semântica, memória), Avisos (push, Telegram, e-mail, categorias, prioridades), Integrações (MCP, Google Agenda), Dados (backup, armazenamento, lixeira).
+- **Configurações:** Conta (nome, e-mail, senha, idioma, fuso), Segurança (2FA, passkeys, sessões, acessos, acesso remoto, bloqueio), IA (modelos, limites, busca semântica, memória), Avisos (push, Telegram, e-mail, categorias, prioridades), Integrações (MCP, Google Agenda e Contatos), Dados (backup, armazenamento, lixeira).
 
 Cada estado tem chave de i18n e teste e2e.
 
