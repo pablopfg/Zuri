@@ -19,6 +19,65 @@ funciona: [docs/agente/versionamento.md](docs/agente/versionamento.md).
 
 O que já entrou na `develop` e ainda não ganhou número fica em [`changelog/nao-lancado/`](changelog/nao-lancado/) por alguns minutos, até o workflow de versão escrever a seção.
 
+## [0.24.1] - 2026-11-02
+
+Mesclada às 22:24 (UTC-3) · commit [`027e6a4`](https://github.com/pablopfg/Zuri/commit/027e6a41e57239132287cd747ed4ce4346e0e5b9) · PR [#110](https://github.com/pablopfg/Zuri/pull/110) · Abre folga de quase 1 kB no JS inicial
+
+### Alterado
+
+- A Zuri abre um pouco mais leve: o primeiro carregamento ficou quase 1 kB
+  menor. A confirmação de senha antes de uma mudança sensível, o aviso de duas
+  etapas desligadas, as regras da busca rápida e os nomes das seções e do tema
+  das Configurações agora chegam só quando aparecem. Nada muda na tela.
+
+## [0.24.0] - 2026-11-02
+
+Mesclada às 21:43 (UTC-3) · commit [`4148055`](https://github.com/pablopfg/Zuri/commit/41480558a5c04484df6a672a1f7032434b40c684) · PR [#105](https://github.com/pablopfg/Zuri/pull/105) · Adiciona servidores MCP remotos (etapa 18a)
+
+### Adicionado
+
+- Serviços externos (MCP) em Configurações › Integrações. Você adiciona o
+  endereço de um servidor MCP, sem login ou com um token de acesso, e a Zuri lê
+  a lista de ferramentas dele. Cada ferramenta começa desligada; você liga as
+  que quiser e escreve uma dica de quando usar.
+- Na conversa, a Zuri usa as ferramentas ligadas quando o pedido combina com
+  elas. Com **Perguntar sempre** (o padrão), cada chamada vira um cartão com os
+  dados exatos que vão para o serviço e só roda se você aprovar. A resposta do
+  serviço aparece no cartão.
+- **Usar sem perguntar**, só para ferramentas que o serviço marca como de
+  consulta. As que escrevem sempre perguntam. Mesmo assim a Zuri pergunta
+  quando a chamada leva muitos dados ou quando outro serviço já respondeu na
+  mesma conversa.
+- Com muitas ferramentas ligadas, a Zuri oferece ao modelo só as que combinam
+  com o pedido e procura as outras quando precisa.
+- O cartão do servidor mostra se ele está conectado, o motivo de um problema
+  e quantas ferramentas estão ligadas. **Reconectar** lê a lista de novo.
+
+### Segurança
+
+- A Zuri só conecta a endereços `https` públicos. Endereços de rede
+  particular ou de metadados são recusados, inclusive quando um nome público
+  aponta para eles, e ela nunca segue redirecionamentos.
+- Adicionar um servidor, trocar endereço ou token e ligar **Usar sem
+  perguntar** pedem a senha digitada agora. Servidor novo, endereço trocado e
+  token trocado geram aviso de segurança.
+- O token fica cifrado e nunca volta para a tela, o registro ou o modelo.
+  Trocar o endereço descarta o token e desliga as ferramentas.
+- O texto que vem do serviço (nome, descrição) chega à Zuri sem marcas que
+  imitem as dela. Se o serviço mudar a descrição de uma ferramenta, ela sai de
+  uso até você ligar de novo. Uma aprovação só roda se nada mudou desde o cartão.
+- No modo de bloqueio e nas rotinas agendadas nenhuma ferramenta externa é
+  usada. Aprovações de chamadas externas acontecem só no app.
+
+### Atualização
+
+- O banco ganha a migration 18 (tabelas dos servidores e das ferramentas MCP
+  e a resposta das chamadas aprovadas). Ela roda sozinha na primeira
+  requisição e só acrescenta.
+- Segredo novo e opcional `MCP_CREDENTIAL_KEY` (32 caracteres ou mais), só
+  para servidores com token de acesso. Passo a passo em
+  `docs/configuracao-cloudflare.md`.
+
 ## [0.23.2] - 2026-11-02
 
 Mesclada às 20:52 (UTC-3) · commit [`a4bd02f`](https://github.com/pablopfg/Zuri/commit/a4bd02f5dc8bb76e2b3e0c6b8fce00bcd728dfd6) · PR [#103](https://github.com/pablopfg/Zuri/pull/103) · User-agent sem regex polinomial
@@ -1687,7 +1746,9 @@ Mesclada às 22:15 (UTC-3) · commit [`360a79e`](https://github.com/pablopfg/Zur
   `npm audit`), CodeQL, Dependabot e rulesets para a `develop` e a `main`.
 - `LICENSE` (MIT), `NOTICE.md`, `SECURITY.md` e `CONTRIBUTING.md`.
 
-[Não lançado]: https://github.com/pablopfg/Zuri/compare/v0.23.2...develop
+[Não lançado]: https://github.com/pablopfg/Zuri/compare/v0.24.1...develop
+[0.24.1]: https://github.com/pablopfg/Zuri/releases/tag/v0.24.1
+[0.24.0]: https://github.com/pablopfg/Zuri/releases/tag/v0.24.0
 [0.23.2]: https://github.com/pablopfg/Zuri/releases/tag/v0.23.2
 [0.23.1]: https://github.com/pablopfg/Zuri/releases/tag/v0.23.1
 [0.23.0]: https://github.com/pablopfg/Zuri/releases/tag/v0.23.0
