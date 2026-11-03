@@ -1001,6 +1001,89 @@ export const MIGRATIONS: readonly Migration[] = [
       ...areaTriggers("calendar", "zur_google_calendars", "OF name, access_role, color, is_primary, mode, changed"),
     ],
   },
+  {
+    version: 23,
+    name: "google_contacts",
+    statements: [
+      // The owner's labels at Google (step 19b); selected = copied into Zuri.
+      `CREATE TABLE IF NOT EXISTS zur_contact_labels (
+        resource_name TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        member_count INTEGER NOT NULL DEFAULT 0,
+        selected INTEGER NOT NULL DEFAULT 0,
+        updated_at INTEGER NOT NULL
+      )`,
+      // The read-only copy of the contacts in the chosen labels. Never in the backup nor in a log.
+      `CREATE TABLE IF NOT EXISTS zur_contacts (
+        id TEXT PRIMARY KEY,
+        resource_name TEXT NOT NULL UNIQUE,
+        etag TEXT NOT NULL,
+        display_name TEXT NOT NULL,
+        search_name TEXT NOT NULL,
+        birthday_md TEXT,
+        data TEXT NOT NULL,
+        google_updated_at TEXT,
+        synced_at INTEGER NOT NULL
+      )`,
+      `CREATE INDEX IF NOT EXISTS zur_contacts_name ON zur_contacts (search_name, id)`,
+      `CREATE INDEX IF NOT EXISTS zur_contacts_birthday ON zur_contacts (birthday_md) WHERE birthday_md IS NOT NULL`,
+      // Phones (E.164) and e-mails (lower case): a contact found by its number in one index read.
+      `CREATE TABLE IF NOT EXISTS zur_contact_keys (
+        kind TEXT NOT NULL,
+        value TEXT NOT NULL,
+        contact_id TEXT NOT NULL,
+        PRIMARY KEY (kind, value, contact_id)
+      ) WITHOUT ROWID`,
+      `CREATE INDEX IF NOT EXISTS zur_contact_keys_contact ON zur_contact_keys (contact_id)`,
+      // Each contact's labels (Google's resource names).
+      `CREATE TABLE IF NOT EXISTS zur_contact_memberships (
+        label TEXT NOT NULL,
+        contact_id TEXT NOT NULL,
+        PRIMARY KEY (label, contact_id)
+      ) WITHOUT ROWID`,
+      `CREATE INDEX IF NOT EXISTS zur_contact_memberships_contact ON zur_contact_memberships (contact_id)`,
+      // Special dates ("MM-DD"), for the notice of the day, read by index.
+      `CREATE TABLE IF NOT EXISTS zur_contact_dates (
+        md TEXT NOT NULL,
+        contact_id TEXT NOT NULL,
+        label TEXT NOT NULL,
+        PRIMARY KEY (md, contact_id, label)
+      ) WITHOUT ROWID`,
+      `CREATE INDEX IF NOT EXISTS zur_contact_dates_contact ON zur_contact_dates (contact_id)`,
+      // One row: the sync's tokens, the page in progress, the lock, the counters and the owner's choices.
+      // Google's sync tokens are not access secrets, but they stay out of logs and of the backup too.
+      `CREATE TABLE IF NOT EXISTS zur_contact_sync (
+        id INTEGER PRIMARY KEY CHECK (id = 1),
+        enabled INTEGER NOT NULL DEFAULT 0,
+        status TEXT NOT NULL DEFAULT 'off',
+        problem TEXT,
+        people_sync_token TEXT,
+        page_token TEXT,
+        page_mode TEXT,
+        full_needed INTEGER NOT NULL DEFAULT 1,
+        full_started INTEGER,
+        first_done INTEGER NOT NULL DEFAULT 0,
+        running_since INTEGER,
+        next_sync INTEGER,
+        last_ok_at INTEGER,
+        failures INTEGER NOT NULL DEFAULT 0,
+        problem_noticed_at INTEGER,
+        birthdays INTEGER NOT NULL DEFAULT 1,
+        dates INTEGER NOT NULL DEFAULT 0,
+        reminder_time TEXT NOT NULL DEFAULT '08:00',
+        days_ahead INTEGER NOT NULL DEFAULT 0,
+        date_match TEXT NOT NULL DEFAULT '',
+        next_reminder INTEGER,
+        on_added TEXT NOT NULL DEFAULT 'notice',
+        copied INTEGER NOT NULL DEFAULT 0
+      )`,
+      // The Integrations card and the Contacts screen follow this number; the contacts themselves move it
+      // only through the sync's row (a trigger per contact would double a full read's writes).
+      `ALTER TABLE zur_area_versions ADD COLUMN contacts INTEGER NOT NULL DEFAULT 0`,
+      ...areaTriggers("contacts", "zur_contact_labels", "OF name, member_count, selected"),
+      ...areaTriggers("contacts", "zur_contact_sync", "OF enabled, status, problem, last_ok_at, birthdays, dates, reminder_time, days_ahead, date_match, on_added, copied"),
+    ],
+  },
 ];
 
 /** The three triggers that move an area's number when a row of `table` is added, changed or removed. Frozen: migration 21 is built from it. */

@@ -1,11 +1,12 @@
-import { GOOGLE_CALLBACK_PATH, toBase64Url } from "@zuri/shared";
+import { CONTACTS_SCOPE, GOOGLE_CALLBACK_PATH, toBase64Url } from "@zuri/shared";
 import type { GoogleNetwork } from "./service.ts";
 
 /**
  * A simulated Google (step 19) for local development, the e2e tests and the
  * unit tests: the token endpoint (PKCE, client and redirect checked), the
  * revocation, the calendar list and the events with etags, `If-Match` and push
- * channels. Nothing here reaches the internet. Google's consent page itself is
+ * channels, and the People API's contacts and labels with sync tokens (step
+ * 19b). Nothing here reaches the internet. Google's consent page itself is
  * the browser's: in the e2e a route answers it with a redirect carrying the
  * code `dev.<PKCE challenge>`, which stands for the owner's approval.
  */
@@ -35,7 +36,36 @@ export interface DevEvent {
   recurringEventId?: string;
 }
 
+/** A person as the People API sends it (step 19b); `version` orders the changes for the sync tokens. */
+export interface DevPerson {
+  resourceName: string;
+  etag: string;
+  [field: string]: unknown;
+}
+
+export interface DevGroup {
+  resourceName: string;
+  name: string;
+  groupType: "USER_CONTACT_GROUP" | "SYSTEM_CONTACT_GROUP";
+  memberCount?: number;
+}
+
+export interface DevPeople {
+  persons: Map<string, { person: DevPerson; version: number; deleted: boolean }>;
+  groups: DevGroup[];
+  /** Every sync token handed out is refused as expired (more than 7 days old). */
+  expired: boolean;
+  /** Makes every People API call answer this status and body, or null. */
+  failure: { status: number; body: unknown } | null;
+  /** Answers in place of a page (a malformed one), or null. */
+  raw: unknown | null;
+  add(person: { resourceName: string; etag?: string; [field: string]: unknown }): DevPerson;
+  update(resourceName: string, patch: Record<string, unknown>): void;
+  remove(resourceName: string): void;
+}
+
 export interface DevGoogle {
+  people: DevPeople;
   clientId: string;
   clientSecret: string;
   calendars: DevCalendar[];
@@ -63,14 +93,43 @@ async function s256(verifier: string): Promise<string> {
   return toBase64Url(new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier))));
 }
 
-const GOOGLE_HOSTS = new Set(["oauth2.googleapis.com", "www.googleapis.com"]);
-const SCOPES = ["https://www.googleapis.com/auth/calendar.calendarlist.readonly", "https://www.googleapis.com/auth/calendar.events"];
+const GOOGLE_HOSTS = new Set(["oauth2.googleapis.com", "www.googleapis.com", "people.googleapis.com"]);
+// What the consent page grants by default: the calendar and, joined to it, the contacts (step 19b).
+const SCOPES = ["https://www.googleapis.com/auth/calendar.calendarlist.readonly", "https://www.googleapis.com/auth/calendar.events", CONTACTS_SCOPE];
 
 export function devGoogle(options: { clientId?: string | undefined; clientSecret?: string | undefined; calendars?: DevCalendar[]; clock?: () => number } = {}): DevGoogle {
   const clock = options.clock ?? Date.now;
   let version = 1;
   const nextEtag = () => `"${version++}"`;
+  let changes = 1;
+  const people: DevPeople = {
+    persons: new Map(),
+    groups: [],
+    expired: false,
+    failure: null,
+    raw: null,
+    add(person) {
+      const version = changes++;
+      const stored: DevPerson = { ...person, etag: person.etag ?? `%E${version}` };
+      people.persons.set(person.resourceName, { person: stored, version, deleted: false });
+      return stored;
+    },
+    update(resourceName, patch) {
+      const entry = people.persons.get(resourceName);
+      if (!entry) return;
+      const version = changes++;
+      entry.person = { ...entry.person, ...patch, resourceName, etag: `%E${version}` };
+      entry.version = version;
+    },
+    remove(resourceName) {
+      const entry = people.persons.get(resourceName);
+      if (!entry) return;
+      entry.deleted = true;
+      entry.version = changes++;
+    },
+  };
   const google: DevGoogle = {
+    people,
     clientId: options.clientId ?? "dev-client.apps.googleusercontent.com",
     clientSecret: options.clientSecret ?? "dev-secret",
     calendars: options.calendars ?? [
@@ -101,6 +160,7 @@ export function devGoogle(options: { clientId?: string | undefined; clientSecret
       if (url.hostname === "oauth2.googleapis.com") return token(url, body);
       const auth = request.headers.get("authorization") ?? "";
       if (!auth.startsWith("Bearer ") || !google.accessTokens.has(auth.slice(7))) return json({ error: { code: 401 } }, 401);
+      if (url.hostname === "people.googleapis.com") return peopleApi(url, request.method);
       return api(url, request.method, body, request.headers);
     },
   };
@@ -238,6 +298,48 @@ export function devGoogle(options: { clientId?: string | undefined; clientSecret
     return json({ error: { code: 405 } }, 405);
   }
 
+  /**
+   * people.connections.list and contactGroups.list: pages by offset, sync
+   * tokens by version ("sync.<n>": what changed after change n, deleted ones
+   * included), the same fields on every page as Google requires.
+   */
+  function peopleApi(url: URL, method: string): Response {
+    if (method !== "GET") return json({ error: { code: 405 } }, 405);
+    if (people.failure) return json(people.failure.body, people.failure.status);
+    if (google.grant && !google.grant.includes(CONTACTS_SCOPE)) {
+      return json({ error: { code: 403, status: "PERMISSION_DENIED", details: [{ reason: "ACCESS_TOKEN_SCOPE_INSUFFICIENT" }] } }, 403);
+    }
+    if (url.pathname === "/v1/contactGroups") {
+      return json({ contactGroups: people.groups.map((group) => ({ ...group, formattedName: group.name })), totalItems: people.groups.length });
+    }
+    if (url.pathname !== "/v1/people/me/connections") return json({ error: { code: 404 } }, 404);
+    if (people.raw !== null) return json(people.raw);
+    if (!url.searchParams.get("personFields")) return json({ error: { code: 400 } }, 400);
+    const syncToken = url.searchParams.get("syncToken");
+    let since = 0;
+    if (syncToken !== null) {
+      const match = /^sync\.(\d+)$/.exec(syncToken);
+      if (!match || people.expired) {
+        return json({ error: { code: 400, status: "FAILED_PRECONDITION", details: [{ "@type": "type.googleapis.com/google.rpc.ErrorInfo", reason: "EXPIRED_SYNC_TOKEN" }] } }, 400);
+      }
+      since = Number(match[1]);
+    }
+    const all = [...people.persons.values()]
+      .filter((entry) => (syncToken === null ? !entry.deleted : entry.version > since))
+      .sort((a, b) => a.version - b.version);
+    const size = Math.min(1000, Math.max(1, Number(url.searchParams.get("pageSize") ?? "100")));
+    const offset = Number(/^p\.(\d+)$/.exec(url.searchParams.get("pageToken") ?? "")?.[1] ?? "0");
+    const page = all.slice(offset, offset + size).map((entry) => (entry.deleted ? { resourceName: entry.person.resourceName, etag: entry.person.etag, metadata: { deleted: true } } : entry.person));
+    const more = offset + size < all.length;
+    const last = changes - 1;
+    return json({
+      connections: page,
+      totalItems: all.length,
+      ...(more ? { nextPageToken: `p.${offset + size}` } : {}),
+      ...(!more && (syncToken !== null || url.searchParams.get("requestSyncToken") === "true") ? { nextSyncToken: `sync.${last}` } : {}),
+    });
+  }
+
   return google;
 }
 
@@ -275,6 +377,39 @@ function seed(google: DevGoogle): void {
   add("trabalho@exemplo.com.br", "Revisão do projeto", { dateTime: at(2, 10) }, { dateTime: at(2, 11) });
   add("consultorio@exemplo.com.br", "Atendimento", { dateTime: at(0, 16) }, { dateTime: at(0, 17) });
   add("consultorio@exemplo.com.br", "Atendimento", { dateTime: at(1, 8) }, { dateTime: at(1, 9) });
+  seedContacts(google, m, d);
+}
+
+/** Sample labels and contacts (step 19b): one birthday today, one special date next week, names with accents. */
+function seedContacts(google: DevGoogle, month: number, day: number): void {
+  google.people.groups.push(
+    { resourceName: "contactGroups/clientes", name: "Clientes", groupType: "USER_CONTACT_GROUP", memberCount: 4 },
+    { resourceName: "contactGroups/familia", name: "Família", groupType: "USER_CONTACT_GROUP", memberCount: 2 },
+    { resourceName: "contactGroups/fornecedores", name: "Fornecedores", groupType: "USER_CONTACT_GROUP", memberCount: 1 },
+    { resourceName: "contactGroups/myContacts", name: "myContacts", groupType: "SYSTEM_CONTACT_GROUP", memberCount: 7 },
+  );
+  const member = (...labels: string[]) => labels.map((label) => ({ contactGroupMembership: { contactGroupResourceName: `contactGroups/${label}` } }));
+  const person = (id: string, name: string, extra: Record<string, unknown>, ...labels: string[]) =>
+    google.people.add({ resourceName: `people/${id}`, names: [{ displayName: name }], memberships: member(...labels, "myContacts"), ...extra });
+  person(
+    "c1001",
+    "Ana Souza",
+    {
+      phoneNumbers: [{ value: "(11) 99999-0001", canonicalForm: "+5511999990001", formattedType: "Celular" }],
+      emailAddresses: [{ value: "ana@exemplo.com.br", formattedType: "Trabalho" }],
+      birthdays: [{ date: { month, day } }],
+      organizations: [{ name: "Padaria Central", title: "Gerente" }],
+      biographies: [{ value: "Prefere contato por mensagem à tarde." }],
+      userDefined: [{ key: "Plano", value: "Mensal" }],
+    },
+    "clientes",
+  );
+  person("c1002", "Bruno Lima", { phoneNumbers: [{ value: "(21) 98888-0002", canonicalForm: "+5521988880002" }], events: [{ date: { month: 12, day: 15 }, formattedType: "Retorno" }] }, "clientes");
+  person("c1003", "Conceição Alves", { phoneNumbers: [{ value: "(31) 97777-0003" }], birthdays: [{ date: { year: 1980, month: 3, day: 9 } }] }, "familia");
+  person("c1004", "Diego Martins", { emailAddresses: [{ value: "diego@exemplo.com.br" }] }, "clientes", "fornecedores");
+  person("c1005", "Elisa Rocha", { phoneNumbers: [{ value: "+55 11 96666-0005" }], biographies: [{ value: "Cliente desde 2022." }] }, "clientes");
+  person("c1006", "Fábio Nunes", { phoneNumbers: [{ value: "(41) 95555-0006" }] }, "familia");
+  person("c1007", "Gabriela Teixeira", { emailAddresses: [{ value: "gabi@exemplo.com.br" }] });
 }
 
 let development: DevGoogle | null = null;

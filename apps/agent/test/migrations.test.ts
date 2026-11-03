@@ -103,6 +103,7 @@ describe("the migration list", () => {
       20: "ce26f4d3a58b5dea0ce27583268c335af2846eedf66ce2bc575b33993b4a59e9",
       21: "77a1bb6400daf53af88998aec9180efc8546f0550afebf3cf4ad0519e695b8a3",
       22: "710250c6a5ac9b1b789ba436657e0013925b1c44b409bde00a784c5e0778159a",
+      23: "5a2aa2b2a2bed010c38ab88ef70332d8f0e26857c4e03d98f8b2fc043509fb60",
     };
     for (const m of MIGRATIONS) {
       const digest = createHash("sha256").update(statementText(m).replace(/\r\n/g, "\n")).digest("hex");
@@ -118,7 +119,7 @@ describe("migrate", () => {
       expect(zurObjects(db)).toEqual([]);
 
       expect(migrate(db)).toBe(LATEST_SCHEMA_VERSION);
-      expect(schemaVersion(db)).toBe(22);
+      expect(schemaVersion(db)).toBe(23);
       // FTS5 keeps shadow tables of its own (zur_notes_fts_data and others): only ours are listed.
       expect(zurObjects(db).filter((name) => !/^table:zur_(notes|memories)_fts_/.test(name))).toEqual([
         "table:zur_activity",
@@ -141,6 +142,12 @@ describe("migrate", () => {
         "trigger:zur_area_calendar_google_calendars_delete",
         "trigger:zur_area_calendar_google_calendars_insert",
         "trigger:zur_area_calendar_google_calendars_update",
+        "trigger:zur_area_contacts_contact_labels_delete",
+        "trigger:zur_area_contacts_contact_labels_insert",
+        "trigger:zur_area_contacts_contact_labels_update",
+        "trigger:zur_area_contacts_contact_sync_delete",
+        "trigger:zur_area_contacts_contact_sync_insert",
+        "trigger:zur_area_contacts_contact_sync_update",
         "trigger:zur_area_conversations_conversations_delete",
         "trigger:zur_area_conversations_conversations_insert",
         "trigger:zur_area_conversations_conversations_update",
@@ -178,6 +185,17 @@ describe("migrate", () => {
         "table:zur_automations",
         "index:zur_automations_created",
         "index:zur_automations_due",
+        "table:zur_contact_dates",
+        "index:zur_contact_dates_contact",
+        "table:zur_contact_keys",
+        "index:zur_contact_keys_contact",
+        "table:zur_contact_labels",
+        "table:zur_contact_memberships",
+        "index:zur_contact_memberships_contact",
+        "table:zur_contact_sync",
+        "table:zur_contacts",
+        "index:zur_contacts_birthday",
+        "index:zur_contacts_name",
         "table:zur_conversations",
         "index:zur_conversations_updated",
         "table:zur_counts",
@@ -526,7 +544,7 @@ describe("migrate", () => {
     await withEmptyDatabase("from-21", (db) => {
       expect(migrate(db, MIGRATIONS.slice(0, 21))).toBe(21);
       db.run(`UPDATE zur_area_versions SET tasks = 5`);
-      expect(migrate(db)).toBe(22);
+      expect(migrate(db, MIGRATIONS.slice(0, 22))).toBe(22);
       expect(db.one(`SELECT tasks, calendar FROM zur_area_versions`)).toEqual({ tasks: 5, calendar: 0 });
       db.run(`INSERT INTO zur_google_account (id, email, refresh_token, scopes, connected_at, checked_at) VALUES (1, 'dono@exemplo.com.br', 'selado', 's', 'x', 'x')`);
       db.run(`INSERT INTO zur_google_calendars (id, name, access_role, updated_at) VALUES ('c1', 'Casa', 'owner', 'x')`);
@@ -543,6 +561,41 @@ describe("migrate", () => {
       expect(() => db.run(`INSERT INTO zur_google_account (id, email, refresh_token, scopes, connected_at, checked_at) VALUES (2, 'b', 'c', 's', 'x', 'x')`)).toThrow();
       db.run(`INSERT INTO zur_google_calendars (id, name, access_role, updated_at, watch_id) VALUES ('c2', 'Outra', 'reader', 'x', 'w2')`);
       expect(() => db.run(`UPDATE zur_google_calendars SET watch_id = 'w' WHERE id = 'c2'`)).toThrow();
+    });
+  });
+
+  it("upgrades a database at version 22 to 23: the contacts' copy, out of the area unless the sync's row or a label moves", async () => {
+    await withEmptyDatabase("from-22", (db) => {
+      expect(migrate(db, MIGRATIONS.slice(0, 22))).toBe(22);
+      db.run(`UPDATE zur_area_versions SET calendar = 4`);
+      db.run(`INSERT INTO zur_tasks (id, title, created_at, updated_at) VALUES ('t1', 'Ligar', 'x', 'x')`);
+      expect(migrate(db)).toBe(23);
+      expect(db.one(`SELECT calendar, contacts FROM zur_area_versions`)).toEqual({ calendar: 4, contacts: 0 });
+      expect(db.all(`SELECT id FROM zur_tasks`)).toEqual([{ id: "t1" }]);
+      db.run(`INSERT INTO zur_contact_sync (id) VALUES (1)`);
+      // Starts off, with the birthdays at 08:00 and a notice for a contact who joins a label.
+      expect(db.one(`SELECT enabled, status, full_needed, birthdays, dates, reminder_time, days_ahead, on_added, copied FROM zur_contact_sync`)).toEqual({
+        enabled: 0,
+        status: "off",
+        full_needed: 1,
+        birthdays: 1,
+        dates: 0,
+        reminder_time: "08:00",
+        days_ahead: 0,
+        on_added: "notice",
+        copied: 0,
+      });
+      expect(() => db.run(`INSERT INTO zur_contact_sync (id) VALUES (2)`)).toThrow();
+      db.run(`INSERT INTO zur_contact_labels (resource_name, name, updated_at) VALUES ('contactGroups/a', 'Clientes', 1)`);
+      expect(db.one(`SELECT contacts FROM zur_area_versions`)).toEqual({ contacts: 2 });
+      // A contact, its keys and dates move nothing (a full read would double its writes); the sync's row does.
+      db.run(`INSERT INTO zur_contacts (id, resource_name, etag, display_name, search_name, data, synced_at) VALUES ('c', 'people/c1', 'e', 'Ana', 'ana', '{}', 1)`);
+      db.run(`INSERT INTO zur_contact_keys (kind, value, contact_id) VALUES ('phone', '+5511999990000', 'c')`);
+      db.run(`UPDATE zur_contact_sync SET running_since = 5, page_token = 'p'`);
+      expect(db.one(`SELECT contacts FROM zur_area_versions`)).toEqual({ contacts: 2 });
+      db.run(`UPDATE zur_contact_sync SET last_ok_at = 9, copied = 1`);
+      expect(db.one(`SELECT contacts FROM zur_area_versions`)).toEqual({ contacts: 3 });
+      expect(() => db.run(`INSERT INTO zur_contacts (id, resource_name, etag, display_name, search_name, data, synced_at) VALUES ('d', 'people/c1', 'e', 'B', 'b', '{}', 1)`)).toThrow();
     });
   });
 

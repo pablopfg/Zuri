@@ -23,6 +23,7 @@ import {
   Shield,
   ShieldCheck,
   User,
+  Users,
 } from "lucide-react";
 import { type KeyboardEvent, useEffect, useId, useMemo, useRef, useState } from "react";
 import { api } from "../lib/api.ts";
@@ -103,6 +104,7 @@ export function CommandPalette({ onClose, navigate }: { onClose: () => void; nav
       { id: "tasks", group: go, label: t("web.nav.tasks"), icon: ListTodo, to: "/tarefas" },
       { id: "notes", group: go, label: t("web.nav.notes"), icon: NotebookPen, to: "/notas" },
       { id: "agenda", group: go, label: t("web.nav.agenda"), icon: CalendarDays, to: "/agenda" },
+      { id: "contacts", group: go, label: t("web.nav.contacts"), icon: Users, to: "/contatos" },
       { id: "automations", group: go, label: t("web.nav.automations"), icon: Clock, to: "/automacoes" },
       { id: "memory", group: go, label: t("web.nav.memory"), icon: Brain, to: "/memoria" },
       { id: "access", group: go, label: t("web.nav.accessLog"), icon: ShieldCheck, to: "/acessos" },

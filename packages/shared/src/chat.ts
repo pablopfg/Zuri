@@ -62,6 +62,8 @@ export const TOOL_NAMES = [
   "update_calendar_event",
   "delete_calendar_event",
   "change_shared_calendar_event",
+  "search_contacts",
+  "get_contact",
 ] as const;
 export type ToolName = (typeof TOOL_NAMES)[number];
 /** A remote MCP tool as the model calls it (step 18): never one of TOOL_NAMES. */

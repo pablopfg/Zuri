@@ -182,13 +182,14 @@ O que está na `develop` hoje, etapa por etapa. "extra" marca melhorias feitas f
 | 🔎 | **Busca pelo significado** | Opcional, em Configurações > IA. Ligada, a busca acha "carro" na memória sobre o "automóvel": a paleta ganha o grupo "Pelo significado", a Zuri lembra das memórias certas na conversa e `/buscar` também acha rotinas. Tudo fica no banco da sua Zuri, com o modelo grátis do Workers AI e no máximo 2.000 textos por dia, sem passar de metade do teto de IA. Desligada, nada muda. | 17 |
 | 🔌 | **Serviços externos (MCP)** | Em Configurações > Integrações, você adiciona servidores MCP (sem login, com um token guardado cifrado ou entrando com a conta do serviço por OAuth) e liga, uma por uma, as ferramentas que a Zuri pode usar. Cada chamada vira um cartão com os dados exatos que vão para o serviço, e o cartão também se aprova pelo bot do Telegram. Você escolhe, ferramenta por ferramenta, se ela roda sem perguntar na conversa ou também nas rotinas, e pode liberar uma ferramenta só para uma rotina; as que o serviço marca como destrutivas sempre perguntam. Com a busca pelo significado ligada, a Zuri acha a ferramenta certa mesmo sem palavra em comum. Só endereços públicos, nunca redirecionamento, e nada externo no modo de bloqueio. | 18 |
 | 📅 | **Google Agenda** | Em Configurações > Integrações, você conecta a sua conta do Google pelo seu próprio app OAuth, de graça, e escolhe agenda por agenda: fechada (padrão), só ler, ou ler e editar. A tela **Agenda** mostra os eventos por dia, semana ou mês, cria, edita e apaga eventos nas agendas abertas para edição e acompanha o Google na hora: o que muda lá aparece aqui sem recarregar. Na conversa, a Zuri consulta, cria e muda eventos; apagar, ou mudar evento com convidados, vira cartão para aprovar. `/hoje` no Telegram mostra a agenda do dia, e Automações ganha os modelos Briefing da manhã e Fechamento do dia. Ninguém é convidado nem avisado pela Zuri, e os tokens ficam cifrados. | 19 |
+| 👥 | **Google Contatos** | No cartão Google Agenda e Contatos, você liga os contatos com a mesma conta e escolhe quais etiquetas a Zuri copia, só para leitura, até 5.000 contatos, atualizados de hora em hora. A tela **Contatos** busca por nome, pedaço do telefone ou e-mail e mostra os detalhes de cada um. A Zuri avisa dos aniversários do dia e, se você quiser, das datas especiais, e na conversa e nas rotinas consulta os contatos. Ela nunca muda nada no Google nem manda mensagem a ninguém, e os contatos ficam fora do log. | 19b |
 | 🎯 | **Prioridade que aprende** | O tipo de aviso que você quase sempre deixa de lado desce um nível, e o que você abre logo sobe, no máximo um nível por semana e sempre com "Desfazer". Lembretes e segurança nunca mudam, e cada automação tem a sua prioridade. | 11 |
 
 ## 🔭 O que vem a seguir
 
 | | Funcionalidade | O que faz | Etapa |
 | :---: | --- | --- | :---: |
-| 🔌 | **Integrações** | Google Contatos por etiqueta, acesso remoto para o n8n e monitor de sites, todos opcionais. | 19b–22 |
+| 🔌 | **Integrações** | Acesso remoto para o n8n e monitor de sites, todos opcionais. | 20–22 |
 | 💾 | **Backup e instalação** | Backup e importação, guia de instalação só pelo navegador e auditoria final. | 23–25 |
 
 ## 🧭 Como funciona
@@ -355,6 +356,7 @@ scripts/        Lint de i18n, ícones, tamanho do pacote e capturas do README
 | [Busca por significado](docs/semantic-recall.md) | Busca semântica opcional, limites e custo |
 | [Serviços externos (MCP)](docs/mcp.md) | Servidores MCP, login OAuth, aprovação das chamadas (no app e no bot), limites e proteções |
 | [Google Agenda](docs/google-agenda.md) | Conectar a conta, o que cada agenda permite, a tela Agenda em tempo real e como criar o cliente OAuth do Google |
+| [Google Contatos](docs/google-contatos.md) | Ligar os contatos, escolher as etiquetas, a tela Contatos, os avisos de aniversário e o que muda no cliente OAuth |
 | [Avisos e Diagnóstico](docs/avisos.md) | Central de avisos, insistência, resumo do dia, vigias e registro de falhas |
 | [Configurar a Cloudflare](docs/configuracao-cloudflare.md) | Segredos, Turnstile, primeiro acesso e recuperação |
 | [Configurar o GitHub](docs/configuracao-github.md) | Rulesets e proteção das branches |

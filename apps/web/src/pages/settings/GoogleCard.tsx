@@ -7,7 +7,9 @@ import { useToast } from "../../components/Toaster.tsx";
 import { Button, Card, Dialog, ErrorNotice, Loading, Notice, SelectField } from "../../components/ui.tsx";
 import { GOOGLE_STATUS_KEY } from "../../lib/agenda.ts";
 import { api, errorMessage } from "../../lib/api.ts";
+import { CONTACTS_STATUS_KEY } from "../../lib/contacts.ts";
 import { useI18n } from "../../lib/i18n.tsx";
+import { ContactsSection } from "./ContactsSection.tsx";
 
 
 type T = ReturnType<typeof useI18n>["t"];
@@ -52,14 +54,17 @@ function useGoogleReturn(): boolean {
     if (code !== null) body.code = code.slice(0, 2_048);
     if (error !== null) body.error = error.slice(0, 200);
     setFinishing(true);
-    api<GoogleStatus & { replaced?: boolean }>("/google/callback", { method: "POST", body })
-      .then(async ({ replaced, ...status }) => {
+    api<GoogleStatus & { replaced?: boolean; purpose?: "calendar" | "contacts" }>("/google/callback", { method: "POST", body })
+      .then(async ({ replaced, purpose, ...status }) => {
         // The first reading may still be on its way (this page just opened), with the state from before. One still
         // on its way is joined, not restarted, by invalidateQueries: cancel it, then read again.
         await qc.cancelQueries({ queryKey: GOOGLE_STATUS_KEY, exact: true });
         qc.setQueryData(GOOGLE_STATUS_KEY, status);
         void qc.invalidateQueries({ queryKey: GOOGLE_STATUS_KEY, exact: true });
-        toast(t(replaced ? "web.google.replaced" : "web.google.connected"));
+        // The contacts (step 19b) joined the same grant: their card reads again, the same way.
+        await qc.cancelQueries({ queryKey: CONTACTS_STATUS_KEY, exact: true });
+        void qc.invalidateQueries({ queryKey: ["contacts"] });
+        toast(t(replaced ? "web.google.replaced" : purpose === "contacts" ? "web.contacts.card.connected" : "web.google.connected"));
       })
       .catch((failure: unknown) => toast(errorMessage(failure)))
       .finally(() => setFinishing(false));
@@ -112,6 +117,7 @@ export function GoogleCard() {
       await api("/google", { method: "DELETE" });
       setConfirming(false);
       await qc.invalidateQueries({ queryKey: ["calendar"] });
+      await qc.invalidateQueries({ queryKey: ["contacts"] });
       toast(t("web.google.disconnected"));
     } catch (failure) {
       toast(errorMessage(failure));
@@ -185,7 +191,8 @@ export function GoogleCard() {
                   </ul>
                 )}
               </section>
-              <div className="flex justify-end">
+              <ContactsSection />
+              <div className="flex justify-end border-t border-border pt-4">
                 <Button variant="danger" onClick={() => setConfirming(true)}>
                   {t("web.google.disconnect")}
                 </Button>

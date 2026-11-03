@@ -38,8 +38,15 @@ etapas ficam detalhadas; as mais antigas viram uma linha na tabela.
 | 18a | mesclada (03/11/2026) | #105 | Servidores MCP remotos (sem login ou token fixo): fetch protegido contra SSRF, token cifrado, catálogo revisado pelo dono, triagem por turno com `find_tools`, cartão com os dados exatos, tela Configurações › Integrações |
 | 18b | mesclada (03/11/2026) | #111 | Login OAuth nos servidores MCP (PKCE, registro dinâmico, botão **Entrar no serviço**), triagem das ferramentas pelo significado, aprovação de chamadas externas pelo bot e pela página `/aprovar` |
 | 19 | mesclada (03/11/2026) | #136 | Google Agenda: OAuth próprio do dono, agendas fechada/só ler/ler e editar, 5 ferramentas (apagar e mudar evento com convidados são propostas), `/hoje` com agenda, modelos de rotina, tela **Agenda** (dia, semana, mês) em tempo real por push do Google |
+| 19b | em revisão (03/11/2026) | — | Google Contatos: cópia só leitura das etiquetas escolhidas (até 5.000, de hora em hora com `syncToken`), tela **Contatos**, avisos de aniversário e datas especiais, `search_contacts` e `get_contact` |
 
 ## Últimas etapas (detalhe)
+
+### Etapa 19b · Google Contatos
+- Entregou: `apps/agent/src/google/contacts.ts` (`GoogleContacts`: etiquetas, sincronização com trava no banco e `mine(stamp)`, páginas de 1.000 até 10 por despertar, `syncToken` com recomeço único quando vence, teto 5.000, backoff 30 min → 6 h, avisos de aniversário/datas/entrada em etiqueta, busca por nome, pedaço do telefone e e-mail), `contacts-store.ts` (`forgetContacts`), `GoogleCalendar.begin(session, "contacts")` com `include_granted_scopes`, `people()` e erros `expired`/`api_disabled`/`contacts_scope`, People API simulada em `dev-google.ts`, rotas `/api/google/contacts*` e `/api/contacts*` em `api/google.ts`, `tools/contacts.ts` (2 ferramentas `read`, `<data source="contact">`), `ContactsSection.tsx` no cartão do Google, tela `pages/contacts/ContactsPage.tsx` (textos em `pt-BR-contacts.ts`), área `contacts` em `zur_area_versions`. Doc: `docs/google-contatos.md`. Plano: `docs/planos/google-contatos.md`.
+- Migrations: 23 (`google_contacts`). A próxima livre é a 24.
+- Decisões técnicas: os avisos de aniversário e datas moram no módulo dos contatos (o `CHECK` de `zur_automations.kind` não aceita tipo novo sem recriar a tabela); desligar os contatos apaga a cópia sem revogar (o revoke do Google derruba a agenda junto), desconectar o Google revoga e apaga; 29/02 avisa em 28/02 nos anos comuns; exportar CSV ficou fora.
+- Para as próximas: o backup (23) deixa de fora `zur_contact_*` (a cópia se refaz do Google); a 22c usa `GoogleContacts.search` para os nós de contatos.
 
 ### Etapa 19 · Google Agenda
 - Entregou: `apps/agent/src/google/` (`service.ts` `GoogleCalendar`: OAuth PKCE com cliente confidencial, tokens cifrados com `McpCredentials(MCP_CREDENTIAL_KEY, "google-v1")`, agendas, eventos com `If-Match`, canais de push `events.watch` renovados no alarme com prazo em memória; `events.ts`; `errors.ts`; `dev-google.ts` Google simulado no local), `gates/google-push.ts` (token HMAC do `SESSION_SECRET`, exceção do Access), rotas em `api/google.ts`, `tools/calendar.ts` (5 ferramentas, `change_shared_calendar_event` destrutiva; `commitAsync` e `TargetGone` no registry; `offered(ctx)`), `/hoje` com agenda, modelos de rotina em `AutomationsPage.tsx`, tela `pages/agenda/AgendaPage.tsx` e `lib/agenda.ts`, cartão `pages/settings/GoogleCard.tsx`. Doc: `docs/google-agenda.md`. Plano: `docs/planos/etapa-19-google-agenda.md` (seção 15: tela Agenda, pedido do Pablo).
@@ -96,6 +103,6 @@ etapas ficam detalhadas; as mais antigas viram uma linha na tabela.
 
 ## Próxima etapa
 
-- Número e nome: 19b · Google Contatos
-- Dependências mescladas: 19 (Google Agenda)
-- Precisa de algo do Pablo antes: nada novo; o cliente OAuth do Google já existe (ganha o escopo `contacts.readonly`). Plano: `docs/planos/google-contatos.md`
+- Número e nome: 19c · Avaliações do Google Business Profile
+- Dependências mescladas: 19 (Google Agenda), 19b (Google Contatos)
+- Precisa de algo do Pablo antes: as respostas às perguntas do plano `docs/planos/google-business-profile.md` (PR #138) e o pedido de acesso à Business Profile API no Google.
