@@ -274,5 +274,5 @@ Decisões técnicas desta PR:
 - O texto que chega do Início ou da busca segue o limite da conversa (`CHAT_MESSAGE_MAX`, 8.000 caracteres, não os 4.000 da seção 6): até ele, vai direto; acima, espera no campo da conversa com o contador.
 - O tema no menu da conta troca entre claro e escuro desta máquina, como em Configurações › Conta.
 - O texto "Avisos, canais" ficou "O sino do app sempre recebe tudo. Cada canal mostra se está ligado.", e "Ideias para começar" nomeia as sugestões do Início.
-- JS inicial: de 138.181 B para 138.935 B (teto 139.100 B). O corpo do Início vem sob demanda para caber.
+- JS inicial: 138.992 B depois de trazer a develop 0.25.6 (teto 139.100 B). O corpo do Início vem sob demanda para caber.
 

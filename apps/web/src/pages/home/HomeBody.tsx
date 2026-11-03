@@ -160,7 +160,7 @@ function NextDaysCard() {
         <div className="space-y-3">
           {[...days].map(([label, items]) => (
             <div key={label}>
-              <h3 className="text-xs font-semibold capitalize text-fg-muted">{label}</h3>
+              <h3 className="text-xs font-semibold text-fg-muted first-letter:uppercase">{label}</h3>
               <TaskLines tasks={items} now={now} />
             </div>
           ))}
