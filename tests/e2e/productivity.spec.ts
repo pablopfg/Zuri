@@ -100,7 +100,8 @@ test("a task: create with a deadline and a project, edit, complete, delete and r
 test("a note: write Markdown, preview it safely, search, delete and restore @mobile", async ({ page }) => {
   // Wide screens keep the list beside the editor; phones take turns between them.
   const narrow = test.info().project.name === "mobile";
-  const title = `Receita de bolo ${test.info().project.name}`;
+  // One title per run, so --repeat-each (how a flaky step is proven fixed) never finds an earlier copy.
+  const title = `Receita ${test.info().repeatEachIndex} de bolo ${test.info().project.name}`;
   await openSignedIn(page, "/notas");
   await expect(page.getByRole("heading", { level: 1, name: "Notas" })).toBeVisible();
   // The header's "+" (the empty list may offer a second "Nova nota" below it).
@@ -129,10 +130,22 @@ test("a note: write Markdown, preview it safely, search, delete and restore @mob
 
   // Leaving with unsaved text asks first; staying keeps the text.
   await page.getByLabel("Texto da nota").pressSequentially("\n- canela");
+  // Regression (#146): the modal must never stay open with its content gone. That state
+  // reads as closed (no dialog by that name) while the page behind is still inert, so
+  // the Ctrl+S below would go nowhere.
+  await page.evaluate(() => {
+    const w = window as unknown as { emptyModal?: boolean };
+    w.emptyModal = false;
+    for (const d of document.querySelectorAll("dialog"))
+      new MutationObserver(() => {
+        if (d.open && d.childElementCount === 0) w.emptyModal = true;
+      }).observe(d, { childList: true, attributes: true });
+  });
   await page.getByRole("link", { name: narrow ? "Todas as notas" : "Nova nota" }).click();
   const leave = page.getByRole("dialog", { name: "Sair sem salvar?" });
   await leave.getByRole("button", { name: "Continuar editando" }).click();
   await expect(leave).toBeHidden();
+  expect(await page.evaluate(() => (window as unknown as { emptyModal?: boolean }).emptyModal)).toBe(false);
   await expect(page.getByLabel("Texto da nota")).toHaveValue(/- canela/);
   if (!narrow) {
     // Clicking the note already open stays put, and leaving for another one still asks.
