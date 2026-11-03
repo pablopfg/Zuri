@@ -37,9 +37,15 @@
   /* The sign-in card rising into place (motion-safe only, where used). */
   --animate-rise: rise 0.45s cubic-bezier(0.2, 0.8, 0.2, 1) both;
 
+  /*
+   * Starts faint, never at 0: Chrome skips text first painted fully transparent
+   * when it picks the Largest Contentful Paint, and a screen that rises as a
+   * whole (first access, sign-in) then had no candidate at all (Lighthouse's
+   * NO_LCP). 0.01 looks the same and keeps the screen's own text measurable.
+   */
   @keyframes rise {
     from {
-      opacity: 0;
+      opacity: 0.01;
       transform: translateY(12px);
     }
     to {
