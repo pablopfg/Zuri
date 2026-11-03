@@ -885,7 +885,9 @@ Etapa 12, fundação. O bot obedece a uma conta só, no chat privado
 - **Conversa pelo bot (etapa 14).** Nasce desligada; desligada, o bot não
   chama `getFile` nem pergunta nada. O texto que o próprio dono escreve é a
   mensagem do turno, como no app. Texto de terceiros (mensagem encaminhada,
-  `quote`, resposta à mensagem de outra pessoa, voz encaminhada) fica à parte
+  `quote`, resposta à mensagem de outra pessoa, voz encaminhada, inclusive a
+  grande que só se processa depois do toque em **Processar mesmo assim**,
+  SEC-A5-01) fica à parte
   na mensagem (`zur_messages.quoted`) e entra no prompt só como
   `<data source="telegram_forward">`, neutralizado; um `/comando` encaminhado
   não roda. A resposta sai em HTML com `<`, `>` e `&` escapados antes de

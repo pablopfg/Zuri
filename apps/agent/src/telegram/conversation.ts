@@ -161,7 +161,7 @@ export class TelegramConversation {
         return null;
       }
       if (audio.duration > TELEGRAM_LIMITS.audioSoftSeconds || (audio.size ?? 0) > TELEGRAM_LIMITS.audioSoftBytes) {
-        await this.#ask(client, incoming.chatId, audio);
+        await this.#ask(client, incoming.chatId, audio, incoming.forwardedAudio);
         return null;
       }
       return this.#start(client, incoming);
@@ -211,7 +211,7 @@ export class TelegramConversation {
   }
 
   /** Over the limit, under the hard cap: one question per chat, with the two buttons. */
-  async #ask(client: TelegramClient, chatId: number, audio: IncomingAudio): Promise<void> {
+  async #ask(client: TelegramClient, chatId: number, audio: IncomingAudio, thirdParty: boolean): Promise<void> {
     const locale = this.deps.locale();
     const id = randomId();
     const at = this.#now();
@@ -225,7 +225,9 @@ export class TelegramConversation {
         id,
         chatId,
         audio.fileId,
-        audio.kind,
+        // SEC-A5-01: a forwarded voice note is saved as "audio", someone else's speech, so the tap
+        // that processes it later still sends it as <data> and never as the owner's word.
+        thirdParty ? "audio" : audio.kind,
         audio.size,
         Math.ceil(audio.duration),
         neurons,
@@ -340,7 +342,7 @@ export class TelegramConversation {
       text: "",
       quoted: [],
       audio: { kind: row.kind, fileId: row.file_id, duration: row.duration_s, size: row.size_bytes, confirmed: true },
-      // The size the question showed: a larger download is cut off.
+      // The size the question showed: a larger download is cut off. Someone else's speech was saved as "audio".
       forwardedAudio: false,
     });
   }
@@ -354,7 +356,7 @@ export class TelegramConversation {
       let text = incoming.text;
       let quoted = incoming.quoted;
       if (incoming.audio) {
-        const heard = await this.#transcribe(client, incoming.chatId, incoming.audio, controller.signal);
+        const heard = await this.#transcribe(client, incoming.chatId, incoming.audio, incoming.forwardedAudio, controller.signal);
         if (heard === null) return;
         // Only the owner's own voice note is their word: a forwarded voice or an audio file (a saved
         // recording, a podcast) is someone else's speech, so it goes as <data>.
@@ -376,7 +378,7 @@ export class TelegramConversation {
    * the download; a download that fails gives them back. Null when the owner
    * was already told why there is nothing to answer.
    */
-  async #transcribe(client: TelegramClient, chatId: number, audio: IncomingAudio, signal: AbortSignal): Promise<string | null> {
+  async #transcribe(client: TelegramClient, chatId: number, audio: IncomingAudio, forwarded: boolean, signal: AbortSignal): Promise<string | null> {
     const locale = this.deps.locale();
     if (!this.deps.audioLock.take()) {
       await this.#say(client, chatId, "telegram.chat.voiceBusy");
@@ -410,7 +412,7 @@ export class TelegramConversation {
           if (hard) {
             this.deps.links.audit("large_file", audio.kind, `refused_${hard.cap}`);
             await this.#send(client, chatId, hard.text);
-          } else await this.#ask(client, chatId, sized);
+          } else await this.#ask(client, chatId, sized, forwarded);
           return null;
         }
         if (reported !== null && reported > cap) throw new TelegramFileTooLargeError();
