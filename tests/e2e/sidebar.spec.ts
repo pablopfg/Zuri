@@ -23,7 +23,7 @@ test("the sidebar holds Nova conversa, the six places and the account; settings 
   const aside = sidebar(page);
   await expect(aside.getByRole("link", { name: "Nova conversa" })).toHaveAttribute("href", "/conversa");
   const nav = aside.getByRole("navigation", { name: "Navegação principal" });
-  await expect(nav.getByRole("link")).toHaveText(["Início", "Conversa", "Tarefas", "Notas", "Memória", "Automações"]);
+  await expect(nav.getByRole("link")).toHaveText(["Início", "Conversa", /^Tarefas( \d+)?$/, "Notas", "Memória", "Automações"]);
   await expect(aside.getByRole("link", { name: "Configurações" })).toHaveCount(0);
   await expect(aside.getByRole("button", { name: "Sair" })).toHaveCount(0);
   // The bell lives in the top bar now.

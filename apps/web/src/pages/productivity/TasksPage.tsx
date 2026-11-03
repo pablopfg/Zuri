@@ -294,7 +294,8 @@ function TaskRow({ task, projects, glow, onOpen }: { task: Task; projects: Proje
     setPending(true);
     setError(null);
     // The mark changes at once (in this same click) in every list that shows the task; a refusal puts the lists back as they were.
-    void qc.cancelQueries({ queryKey: TASKS_KEY });
+    // A fetch in flight would land after the mark and undo it.
+    await qc.cancelQueries({ queryKey: TASKS_KEY });
     const before = qc.getQueriesData({ queryKey: TASKS_KEY });
     qc.setQueriesData<{ tasks: Task[] }>({ queryKey: TASKS_KEY }, (list) =>
       list?.tasks ? { ...list, tasks: list.tasks.map((item) => (item.id === task.id ? { ...item, status } : item)) } : list,

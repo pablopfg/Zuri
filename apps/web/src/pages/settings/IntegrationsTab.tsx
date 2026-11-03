@@ -137,6 +137,7 @@ function useSignInCallback(): boolean {
   const { t } = useI18n();
   const toast = useToast();
   const update = useServerUpdate();
+  const qc = useQueryClient();
   const started = useRef(false);
   const [finishing, setFinishing] = useState(false);
   useEffect(() => {
@@ -155,11 +156,13 @@ function useSignInCallback(): boolean {
     api<{ server: McpServerInfo; signedIn: boolean }>("/mcp/oauth/callback", { method: "POST", body })
       .then((result) => {
         update(result.server);
+        // The list may still be on its way (this page just opened), with the state from before the sign-in: read it again.
+        void qc.invalidateQueries({ queryKey: MCP_KEY, exact: true });
         toast(result.signedIn ? t("web.integrations.signedIn") : t("web.integrations.signinFailed"));
       })
       .catch((failure: unknown) => toast(errorMessage(failure)))
       .finally(() => setFinishing(false));
-  }, [t, toast, update]);
+  }, [t, toast, update, qc]);
   return finishing;
 }
 

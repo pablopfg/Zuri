@@ -4,6 +4,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import type { ZuriAgent } from "../src/agent/zuri-agent.ts";
 import { readAreaVersions } from "../src/db/area-versions.ts";
 import { Database } from "../src/db/database.ts";
+import { InternalState } from "../src/db/internal-state.ts";
 import { call, CSRF, HUMAN_TOKEN, ORIGIN, TEST_EMAIL, TEST_PASSWORD, testEnv } from "./helpers.ts";
 
 // Nova UI, PR 2: every change to a screen area moves its number, whoever made it,
@@ -215,4 +216,23 @@ describe("in a lockdown", () => {
     const beat = await json<Record<string, unknown>>(await api("POST", "/auth/heartbeat", { active: false }));
     expect(beat.versions).toBeDefined();
   });
+});
+
+describe("before the screens open", () => {
+  // The same gates as the screens: with the password to change or the second step to set up, there is nothing to refresh.
+  for (const key of ["auth_password_change_required", "setup_second_step_required"] as const) {
+    it(`the numbers are left out while ${key} is set`, async () => {
+      await inOwner((db) => new InternalState(db).set(key, true));
+      try {
+        const beat = await json<Record<string, unknown>>(await api("POST", "/auth/heartbeat", { active: false }));
+        expect(beat.versions).toBeUndefined();
+        const session = await json<Record<string, unknown>>(await api("GET", "/auth/session"));
+        expect(session.versions).toBeUndefined();
+      } finally {
+        await inOwner((db) => new InternalState(db).delete(key));
+      }
+      const beat = await json<Record<string, unknown>>(await api("POST", "/auth/heartbeat", { active: false }));
+      expect(beat.versions).toBeDefined();
+    });
+  }
 });

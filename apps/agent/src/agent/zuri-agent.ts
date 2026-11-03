@@ -306,7 +306,8 @@ export class ZuriAgent extends Agent<WorkerEnv> {
       ai: () => this.ai(),
       agentName: this.env.AGENT_NAME,
       onFailure: (failure) => this.store.diagnostics.record(failure),
-      versions: () => readAreaVersions(this.store.db),
+      // A lockdown that starts mid-turn sends no numbers either (same gate as the session answers).
+      versions: () => (this.store.auth.lockdown.active() ? {} : readAreaVersions(this.store.db)),
     });
   }
 

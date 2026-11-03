@@ -206,7 +206,8 @@ function NoteEditor({ note, onDirty }: { note?: Note; onDirty: (dirty: boolean) 
   // The version this editor started from (or last saved). A newer one from elsewhere never replaces what is typed.
   const [base, setBase] = useState(note?.updatedAt ?? "");
   const dirty = title !== saved.title || content !== saved.content || projectId !== saved.projectId;
-  const newer = note !== undefined && note.updatedAt !== base ? note : null;
+  // Later only (ISO times compare as text): an answer that left before a save and lands after it is older, never "new".
+  const newer = note !== undefined && note.updatedAt > base ? note : null;
 
   // Untouched, the editor simply shows the new version; with changes, it asks (below).
   // biome-ignore lint/correctness/useExhaustiveDependencies: only a newer version from elsewhere matters here.

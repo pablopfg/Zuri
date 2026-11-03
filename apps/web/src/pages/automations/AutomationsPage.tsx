@@ -363,7 +363,8 @@ function RunHistory() {
   const { t, dateTime } = useI18n();
   const runs = useAutomationRuns();
   const items = runs.data?.pages.flatMap((page) => page.runs) ?? [];
-  const flash = useFlash(runs.data ? items : undefined, (run) => run.id, (run) => `${run.status}|${run.finishedAt ?? ""}`);
+  // "Carregar mais" is the owner asking for older runs: a new page starts a new base, so it never glows whole.
+  const flash = useFlash(runs.data ? items : undefined, (run) => run.id, (run) => `${run.status}|${run.finishedAt ?? ""}`, String(runs.data?.pages.length ?? 0));
   const tone = { running: "accent", success: "success", quiet: "neutral", skipped: "warning", error: "danger" } as const;
   return (
     <Card title={t("web.automations.history.title")} description={t("web.automations.history.description")}>

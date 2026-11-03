@@ -21,6 +21,12 @@
   feito fora da tela, e as abas com contagem passam a ser lidas com o número
   ("Hoje 3").
 
+### Corrigido
+
+- Ao voltar da página de login de um serviço externo (MCP), o cartão às vezes
+  continuava em "Falta entrar" até recarregar. Agora a lista é lida de novo
+  depois da volta.
+
 ### Atualização
 
 - Migration 21: a tabela `zur_area_versions` (uma linha com um número por área
