@@ -43,6 +43,8 @@ Branch de sub-PR de uma etapa usa o número da etapa e um sufixo depois do hífe
 
 Os selos CI e CodeQL apontam para a `develop` (`?branch=develop`): os dois workflows também rodam a cada push na `develop` para isso.
 
+O selo de versão (pedido do Pablo, 03/11/2026) é dinâmico: o shields.io lê a tag mais nova das releases e pré-releases que o workflow `Versão` publica (`include_prereleases&sort=semver`), então segue cada merge sozinho, inclusive na fase 0.x de desenvolvimento, e fica laranja enquanto for pré-release. Não troque por um selo fixo. O `scripts/readme.ts` só confere que ele continua no README (`VERSION_BADGE`): se ele sumir, o workflow `README` falha e o teste `tests/repo/readme.test.ts` também.
+
 ## Como escrever
 
 - Mantenha o desenho: banner Sinal com `<picture>` claro/escuro, selos, sumário, tabelas com ícone, capturas que seguem o tema, Mermaid, seção curta "In English".
