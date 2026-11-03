@@ -1,6 +1,6 @@
 # Plano · Nova moldura da interface (cinco propostas)
 
-Situação: esperando o Pablo
+Situação: moldura escolhida em 03/11/2026 (A, sem projetos, recentes em Conversa); esperando o Pablo escolher o modelo visual
 Origem: pedido do Pablo em 03/11/2026, com a barra lateral do ChatGPT como referência
 Dependências: nenhuma para escolher. A implementação espera a etapa 18 sair da `AppShell` (outra thread mexe no app agora).
 
@@ -111,6 +111,44 @@ Lateral de 240 px com linhas mais baixas (34 px) e seções em grupos que abrem 
 ### Recomendação
 
 A, com duas peças de outras: a busca com "Perguntar à Zuri" da C e a barra de baixo do celular da B no lugar da gaveta. Fica o que o Pablo pediu (lateral do ChatGPT no computador) e o celular não perde a troca de seção em um toque. Para caber no teto, Recentes e o menu da conta entram sob demanda; mesmo assim deve passar uns 0,8 kB do teto, e isso precisa do OK do Pablo.
+
+### Rodada 2 · sete modelos visuais da proposta A
+
+O Pablo escolheu a A em 03/11/2026, com duas mudanças: sem o grupo Projetos e com as conversas recentes dentro da tela Conversa (lista à esquerda, agrupada por Hoje, Ontem, Esta semana e Mais antigas, com busca própria). No celular, a lista abre primeiro e a conversa abre por cima, com botão de voltar.
+
+Protótipo: `docs/planos/propostas-ui/modelos.html` (a barra do topo troca o modelo e o tema). Capturas em `docs/capturas/pr/propostas-ui/modelos/`, incluindo `mosaico-claro.png` e `mosaico-escuro.png` com os sete lado a lado.
+
+O que mudou em relação à A da primeira rodada, em todos os modelos:
+
+- Ícones próprios, desenhados na mesma grade de 24 px, com espessura de traço por modelo e versão preenchida (duotom) em um deles. Saem os ícones da lucide na moldura.
+- Um logo por modelo, todos com a mesma ideia de símbolo simples num quadro, para funcionar de 16 px (aba do navegador) a 512 px (ícone do app).
+- "Nova conversa" virou o botão cheio da lateral; a conta no rodapé mostra nome e "Conta e ajustes"; Configurações sai da lista e fica no menu da conta, como no ChatGPT.
+- Início: data num selo, saudação maior, campo para falar com a Zuri com sugestões prontas, "Para hoje" com etiqueta do projeto, "Vem aí" como linha do tempo.
+- Paletas montadas como nas Radix Colors e no sistema de cores da Atlassian: um cinza puxado para o matiz do destaque e um par claro/escuro escolhido junto, nunca um tema invertido do outro. Um único destaque por modelo; vermelho só para atraso e erro.
+
+| Nº | Modelo | Destaque (claro / escuro) | Neutro | Fonte | Raio | Ícones | Lateral | Logo |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | Sinal | verde `#2a7e3b` / `#46a758` | grafite | Geist | 12 px | traço 1,75 | clara | o "i" com o sinal verde de hoje |
+| 2 | Lagoa | verde-água `#008573` / `#12a594` | sálvia | Figtree | 16 px | traço 1,5 | tingida de verde-água | Z com o traço de cima em onda |
+| 3 | Ameixa | ameixa `#953ea3` / `#ab4aba` | cinza lilás | Plus Jakarta Sans | 14 px | duotom | flutuante | lua crescente com um ponto |
+| 4 | Mel | âmbar `#ffc53d` (texto escuro) | areia | Manrope | 10 px | traço 2,2 | clara | Z num favo |
+| 5 | Íris | índigo `#5b5bd6` | grafite | Onest | 10 px | traço 1,75 | escura nos dois temas | brilho de quatro pontas |
+| 6 | Pitanga | vermelho `#d13415` / `#ec6142` | areia | Sora | 8 px | traço 2, pontas retas | flutuante | Z num balão de fala |
+| 7 | Céu | azul `#0d74ce` / `#3b9eff` | cinza azulado | Albert Sans | 18 px | traço 1,75 | tingida de azul | planeta com órbita |
+
+Leitura crítica:
+
+- **Sinal** é a escolha segura: mantém a marca e o README, e é a que menos muda para quem já usa.
+- **Lagoa** é a mais calma para uso longo; o verde-água não briga com o vermelho de atraso.
+- **Ameixa** é a mais marcante; a lateral flutuante custa uns 10 px de largura e um pouco de sombra a mais para desenhar.
+- **Mel** tem a melhor leitura no escuro, mas o amarelo pede texto escuro em todo botão cheio, e isso precisa de cuidado em cada tela nova.
+- **Íris** tem a cara mais "de IA" e a lateral escura separa bem menu e conteúdo; é também a mais parecida com outros produtos.
+- **Pitanga** é a mais quente e enérgica; o vermelho como destaque fica perto do vermelho de erro, então "Venceu ontem" e o botão principal ficam parecidos.
+- **Céu** é a mais leve e arejada; azul é o destaque mais comum em apps, então diferencia menos a Zuri.
+
+Fontes: cada modelo usa uma fonte do Google Fonts no protótipo. No app, a escolhida vira um arquivo `woff2` servido pela própria Zuri (nada de chamada ao Google, regra 7), com subconjunto latino e só dois pesos: cerca de 25 a 35 kB por peso, fora do JS (não conta no teto de 139,1 kB, mas pesa na primeira carga e no Lighthouse). Manter a fonte do sistema é a alternativa sem custo.
+
+Acessibilidade: axe-core 4.10.3 sem violações em 280 páginas (7 modelos × 2 temas × computador e celular × 5 telas). O contraste mínimo de texto ficou em 4,5:1 em todas as combinações.
 
 ### Textos visíveis
 
@@ -225,9 +263,10 @@ Protótipo é HTML estático em `docs/`, fora do pacote servido. Auditoria em mo
 
 | Data | Pergunta | Resposta |
 | --- | --- | --- |
-| 03/11/2026 | Qual proposta (ou mistura)? Recomendação: A + busca da C + barra de baixo da B | aguardando |
-| 03/11/2026 | Aceita passar o teto de JS em até ~1 kB para ter Recentes na lateral? Recomendação: sim, com Recentes sob demanda | aguardando |
+| 03/11/2026 | Qual proposta (ou mistura)? Recomendação: A + busca da C + barra de baixo da B | A, sem projetos e com recentes dentro de Conversa |
+| 03/11/2026 | Qual dos sete modelos visuais? Recomendação: 2, Lagoa (calma para uso longo, contraste bom nos dois temas e sem confusão com o vermelho de atraso) | aguardando |
+| 03/11/2026 | Aceita passar o teto de JS em até ~1 kB para ter Recentes na lateral? | Não se aplica mais: as recentes ficam na tela Conversa, que já carrega sob demanda. Os ícones próprios entram como SVG na moldura no lugar dos da lucide; o tamanho exato sai na implementação. |
 
 ### Perguntas abertas
 
-- As duas acima.
+- Modelo visual e teto de JS (acima).
