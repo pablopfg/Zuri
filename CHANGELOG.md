@@ -19,6 +19,19 @@ funciona: [docs/agente/versionamento.md](docs/agente/versionamento.md).
 
 O que já entrou na `develop` e ainda não ganhou número fica em [`changelog/nao-lancado/`](changelog/nao-lancado/) por alguns minutos, até o workflow de versão escrever a seção.
 
+## [0.26.2] - 2026-11-03
+
+Mesclada às 11:49 (UTC-3) · commit [`ffb703d`](https://github.com/pablopfg/Zuri/commit/ffb703d02c5a7e6f5f85d08a8c1e5a345051fd2f) · PR [#142](https://github.com/pablopfg/Zuri/pull/142) · PRs não ficam atrás da develop depois do merge do bot
+
+### Corrigido
+
+- PRs verdes não ficam mais paradas atrás da `develop` depois que entra a PR
+  automática do README ou a de versão. O merge feito pelo próprio GitHub
+  Actions não dispara nenhum workflow, e o agendamento de 15 minutos quase
+  nunca rodava. Agora o workflow novo `Seguir merge` espera essas PRs entrarem
+  e chama em seguida o `Update PRs`, o `Branches` e o outro workflow
+  automático (README ou Versão).
+
 ## [0.26.1] - 2026-11-03
 
 Mesclada às 11:12 (UTC-3) · commit [`44f5b87`](https://github.com/pablopfg/Zuri/commit/44f5b87ea6751801976b6ea10d698fb1c2954c4f) · PR [#141](https://github.com/pablopfg/Zuri/pull/141) · Etapa 19 mesclada
@@ -2076,7 +2089,8 @@ Mesclada às 22:15 (UTC-3) · commit [`360a79e`](https://github.com/pablopfg/Zur
   `npm audit`), CodeQL, Dependabot e rulesets para a `develop` e a `main`.
 - `LICENSE` (MIT), `NOTICE.md`, `SECURITY.md` e `CONTRIBUTING.md`.
 
-[Não lançado]: https://github.com/pablopfg/Zuri/compare/v0.26.1...develop
+[Não lançado]: https://github.com/pablopfg/Zuri/compare/v0.26.2...develop
+[0.26.2]: https://github.com/pablopfg/Zuri/releases/tag/v0.26.2
 [0.26.1]: https://github.com/pablopfg/Zuri/releases/tag/v0.26.1
 [0.26.0]: https://github.com/pablopfg/Zuri/releases/tag/v0.26.0
 [0.25.13]: https://github.com/pablopfg/Zuri/releases/tag/v0.25.13
