@@ -352,3 +352,10 @@ acrescente aqui cada armadilha nova que encontrar (sem dados pessoais).
   com `LanternError: NO_LCP` (nota 0, "failing: none") em parte das execuções.
   O `rise` começa em 0.01 (teste em `apps/web/test/motion.test.ts`); não volte
   para 0 nem crie outra entrada de tela que comece invisível (03/11/2026).
+- `<dialog>` modal aberto e fechado num `useEffect` com o conteúdo condicional
+  (`{open && …}`): quando o `open` muda num render não urgente (o `useBlocker`
+  do React Router roda numa transição), o React tira o conteúdo e só depois
+  roda o efeito. Nesse intervalo o modal está aberto e vazio: o Playwright o vê
+  como fechado (sem nome), mas a página de trás segue inerte e engole teclas
+  (#146, `Ctrl+S` das notas no celular). Abra e feche no `useLayoutEffect`,
+  como o `Dialog` de `ui.tsx` (03/11/2026).
