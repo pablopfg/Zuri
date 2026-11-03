@@ -187,7 +187,7 @@ O que está na `develop` hoje, etapa por etapa. "extra" marca melhorias feitas f
 
 | | Funcionalidade | O que faz | Etapa |
 | :---: | --- | --- | :---: |
-| 🔌 | **Integrações** | Google Agenda, Google Contatos por etiqueta, acesso remoto para o n8n e monitor de sites, todos opcionais. | 19–22 |
+| 🔌 | **Integrações** | Google Agenda, Google Contatos por etiqueta, avaliações do perfil da empresa no Google (aviso das negativas à equipe e respostas às positivas com aprovação), acesso remoto para o n8n e monitor de sites, todos opcionais. | 19–22 |
 | 💾 | **Backup e instalação** | Backup e importação, guia de instalação só pelo navegador e auditoria final. | 23–25 |
 
 ## 🧭 Como funciona
@@ -283,6 +283,8 @@ O orçamento de cada cota está em [docs/arquitetura/orcamento-free-tier.md](doc
 | | 18b | Login OAuth nos servidores MCP | ✅ |
 | | 19 | Google Agenda | ⬜ |
 | | 19b | Google Contatos | ⬜ |
+| | 19c | Avaliações do Google com aprovação | ⬜ |
+| | 19d | Resposta automática das avaliações | ⬜ |
 | | 20 | Acesso remoto e eventos | ⬜ |
 | | 21 | Modelos pagos ⚠️ | ⬜ |
 | | 22 | Workflows (monitor de sites) | ⬜ |
