@@ -1,6 +1,6 @@
 # Plano · Avaliações do Google (Business Profile)
 
-Situação: esperando o Pablo (perguntas da seção 14; o resto segue as recomendações)
+Situação: aprovado em 03/11/2026 (respostas da seção 14)
 Origem: pedido do Pablo em 03/11/2026
 Dependências: 10 (automações e alarme único), 11 (central de avisos), 13 (avisos
 no Telegram e grupo com tópicos), 16a (aprovações pelo bot), 19 (conexão Google,
@@ -597,18 +597,17 @@ mesma avaliação em duas páginas. Cobertura nos pisos de sempre (agente 99%).
 - Avaliações só com nota e positivas usam as frases-modelo sem IA (zero
   Neurons, sem risco de injeção).
 - Negativas ganham rascunho para a equipe, sempre com aprovação (seção 14,
-  pergunta 3, recomendação).
+  pergunta 3, aprovada).
 
 ## 14. Entrevista com o Pablo
 
 | Data | Pergunta | Resposta |
 | --- | --- | --- |
-| 03/11/2026 | 1. Limiar e começo: positiva = 4 e 5 estrelas sem queixa no texto; 3 estrelas ou menos vão para a equipe. Começa em "Perguntar sempre" e o automático (19d) só para positivas, liberado depois de 10 aprovações sem edição. Recomendação: sim. Alternativas: só 5 estrelas como positiva; ou 3 estrelas também positiva. | aguardando |
-| 03/11/2026 | 2. Quem recebe o aviso da negativa: o grupo da equipe no Telegram (tópico "Avaliações", aviso discreto, texto pelo botão, sem botão de aprovar) ou só o seu privado. Recomendação: o grupo, se você vincular um; senão o privado. | aguardando |
-| 03/11/2026 | 3. Nas negativas, a Zuri prepara um rascunho de resposta cuidadosa para você aprovar (nunca sai sozinho) ou não escreve nada e deixa tudo com a equipe. Recomendação: prepara o rascunho, só com aprovação. | aguardando |
+| 03/11/2026 | 1. Limiar e começo: positiva = 4 e 5 estrelas sem queixa no texto; 3 estrelas ou menos vão para a equipe. Começa em "Perguntar sempre" e o automático (19d) só para positivas, liberado depois de 10 aprovações sem edição. Recomendação: sim. Alternativas: só 5 estrelas como positiva; ou 3 estrelas também positiva. | Sim (Pablo, 03/11/2026 14:02) |
+| 03/11/2026 | 2. Quem recebe o aviso da negativa: o grupo da equipe no Telegram (tópico "Avaliações", aviso discreto, texto pelo botão, sem botão de aprovar) ou só o seu privado. Recomendação: o grupo, se você vincular um; senão o privado. | Sim (Pablo, 03/11/2026 14:02) |
+| 03/11/2026 | 3. Nas negativas, a Zuri prepara um rascunho de resposta cuidadosa para você aprovar (nunca sai sozinho) ou não escreve nada e deixa tudo com a equipe. Recomendação: prepara o rascunho, só com aprovação. | Sim (Pablo, 03/11/2026 14:02) |
 
 ### Perguntas abertas
 
-- Avaliações com 3 estrelas: dependem da pergunta 1.
 - Notificação na hora pelo Pub/Sub ⚠️: fora até o Pablo pedir (seção 8).
 - Mais de 3 locais: pendência se o Pablo tiver mais perfis.
