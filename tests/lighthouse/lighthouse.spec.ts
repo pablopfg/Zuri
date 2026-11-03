@@ -80,10 +80,11 @@ for (const page of PAGES) {
     // The landing URL proves the page measured is the one asked (not the sign-in after a lost session).
     expect(new URL(lhr.finalDisplayedUrl).pathname).toBe(page.path);
     for (const [id, floor] of Object.entries(FLOORS)) {
-      // The audits that cost points, so a failure says what to fix.
+      // The audits that cost points, so a failure says what to fix. An audit that errored
+      // (score null, as LCP with NO_LCP) costs them all: it is listed with its error.
       const failing = (lhr.categories[id]?.auditRefs ?? [])
-        .filter((ref) => ref.weight > 0 && (lhr.audits[ref.id]?.score ?? 1) < 1)
-        .map((ref) => ref.id);
+        .filter((ref) => ref.weight > 0 && (lhr.audits[ref.id]?.errorMessage || (lhr.audits[ref.id]?.score ?? 1) < 1))
+        .map((ref) => (lhr.audits[ref.id]?.errorMessage ? `${ref.id} (${lhr.audits[ref.id]?.errorMessage})` : ref.id));
       expect(scores[id], `${page.name} ${id} (failing: ${failing.join(", ") || "none"})`).toBeGreaterThanOrEqual(floor);
     }
   });
