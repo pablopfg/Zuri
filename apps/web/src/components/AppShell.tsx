@@ -23,6 +23,7 @@ import { lazy, type ReactNode, Suspense, useEffect, useId, useRef, useState } fr
 import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router";
 import { useMfaStatus } from "../hooks/mfa.ts";
 import { SETTINGS_KEY, useSession } from "../hooks/session.tsx";
+import { useTaskCounts } from "../hooks/task-counts.ts";
 import { api } from "../lib/api.ts";
 import { useI18n } from "../lib/i18n.tsx";
 import { newChatShortcutLabel, shellShortcut } from "../lib/shortcut.ts";
@@ -187,10 +188,12 @@ function Sidebar({ collapsed, onToggle, onClose, onSearch }: { collapsed: boolea
   // Escape hides the rail's names until the pointer or focus moves (WCAG 1.4.13).
   const [tipsHidden, setTipsHidden] = useState(false);
   // Only the home link needs `end` (it would match every address otherwise).
-  const sections: { to: string; label: string; icon: typeof House; end?: boolean }[] = [
+  // Today's tasks beside Tarefas; kept fresh by the areas' numbers (lib/versions.ts).
+  const today = useTaskCounts().data?.counts.today;
+  const sections: { to: string; label: string; icon: typeof House; end?: boolean; count?: number | undefined }[] = [
     { to: "/", label: t("web.nav.home"), icon: House, end: true },
     { to: "/conversa", label: t("web.nav.chat"), icon: MessageCircle },
-    { to: "/tarefas", label: t("web.nav.tasks"), icon: ListTodo },
+    { to: "/tarefas", label: t("web.nav.tasks"), icon: ListTodo, count: today },
     { to: "/notas", label: t("web.nav.notes"), icon: NotebookPen },
     { to: "/memoria", label: t("web.nav.memory"), icon: Brain },
     { to: "/automacoes", label: t("web.nav.automations"), icon: Clock },
@@ -262,12 +265,14 @@ function Sidebar({ collapsed, onToggle, onClose, onSearch }: { collapsed: boolea
       </div>
       <nav aria-label={t("web.nav.main")} className="flex-1 overflow-y-auto px-3 py-2">
         <ul className="space-y-1">
-          {sections.map(({ to, label, icon: Icon, end }) => (
+          {sections.map(({ to, label, icon: Icon, end, count }) => (
             <li key={to}>
               <Tip label={tip(label)} hidden={tipsHidden}>
                 <NavLink to={to} end={!!end} className={sideLink} onClick={onClose}>
                   <Icon className="h-5 w-5 shrink-0" aria-hidden />
                   <Label text={label} hidden={collapsed} />
+                  {/* Read with the name, like a mail app's inbox: "Tarefas 3". */}
+                  {!!count && <span className={collapsed ? "sr-only" : "ml-auto text-xs"}> {count}</span>}
                 </NavLink>
               </Tip>
             </li>

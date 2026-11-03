@@ -101,6 +101,7 @@ describe("the migration list", () => {
       18: "6e59b3b8d2eb9f8dbc3195ea0aa951c60139ebc0fc34400bf6c85e010f96b3fb",
       19: "15098917e96439840fa87c1d6e7eb725ce5f2c971a4e9b5334d625f8e52f6897",
       20: "ce26f4d3a58b5dea0ce27583268c335af2846eedf66ce2bc575b33993b4a59e9",
+      21: "77a1bb6400daf53af88998aec9180efc8546f0550afebf3cf4ad0519e695b8a3",
     };
     for (const m of MIGRATIONS) {
       const digest = createHash("sha256").update(statementText(m).replace(/\r\n/g, "\n")).digest("hex");
@@ -116,7 +117,7 @@ describe("migrate", () => {
       expect(zurObjects(db)).toEqual([]);
 
       expect(migrate(db)).toBe(LATEST_SCHEMA_VERSION);
-      expect(schemaVersion(db)).toBe(20);
+      expect(schemaVersion(db)).toBe(21);
       // FTS5 keeps shadow tables of its own (zur_notes_fts_data and others): only ours are listed.
       expect(zurObjects(db).filter((name) => !/^table:zur_(notes|memories)_fts_/.test(name))).toEqual([
         "table:zur_activity",
@@ -127,6 +128,34 @@ describe("migrate", () => {
         "table:zur_alert_keys",
         "index:zur_alert_keys_until",
         "table:zur_alert_learning",
+        "trigger:zur_area_automations_automation_runs_delete",
+        "trigger:zur_area_automations_automation_runs_insert",
+        "trigger:zur_area_automations_automation_runs_update",
+        "trigger:zur_area_automations_automations_delete",
+        "trigger:zur_area_automations_automations_insert",
+        "trigger:zur_area_automations_automations_update",
+        "trigger:zur_area_conversations_conversations_delete",
+        "trigger:zur_area_conversations_conversations_insert",
+        "trigger:zur_area_conversations_conversations_update",
+        "trigger:zur_area_memories_memories_delete",
+        "trigger:zur_area_memories_memories_insert",
+        "trigger:zur_area_memories_memories_update",
+        "trigger:zur_area_memories_memory_reviews_delete",
+        "trigger:zur_area_memories_memory_reviews_insert",
+        "trigger:zur_area_memories_memory_reviews_update",
+        "trigger:zur_area_notes_notes_delete",
+        "trigger:zur_area_notes_notes_insert",
+        "trigger:zur_area_notes_notes_update",
+        "trigger:zur_area_projects_projects_delete",
+        "trigger:zur_area_projects_projects_insert",
+        "trigger:zur_area_projects_projects_update",
+        "trigger:zur_area_tasks_tasks_delete",
+        "trigger:zur_area_tasks_tasks_insert",
+        "trigger:zur_area_tasks_tasks_update",
+        "trigger:zur_area_trash_trash_delete",
+        "trigger:zur_area_trash_trash_insert",
+        "trigger:zur_area_trash_trash_update",
+        "table:zur_area_versions",
         "table:zur_auth_events",
         "index:zur_auth_events_alert",
         "index:zur_auth_events_at",
@@ -167,6 +196,9 @@ describe("migrate", () => {
         "trigger:zur_counts_projects_delete",
         "trigger:zur_counts_projects_insert",
         "trigger:zur_counts_tasks_delete",
+        "trigger:zur_counts_tasks_done_delete",
+        "trigger:zur_counts_tasks_done_insert",
+        "trigger:zur_counts_tasks_done_update",
         "trigger:zur_counts_tasks_insert",
         "trigger:zur_counts_trash_delete",
         "trigger:zur_counts_trash_insert",
@@ -480,6 +512,27 @@ describe("migrate", () => {
     });
   });
 
+  it("upgrades a database at version 20 to 21: the areas' numbers start at zero, the done tasks counted, every change moves its area", async () => {
+    await withEmptyDatabase("from-20", (db) => {
+      expect(migrate(db, MIGRATIONS.slice(0, 20))).toBe(20);
+      db.run(`INSERT INTO zur_tasks (id, title, status, created_at, updated_at) VALUES ('t1', 'Feita', 'done', 'x', 'x'), ('t2', 'Aberta', 'todo', 'x', 'x')`);
+      expect(migrate(db)).toBe(21);
+      expect(db.one(`SELECT * FROM zur_area_versions`)).toEqual({ id: 1, tasks: 0, projects: 0, notes: 0, trash: 0, memories: 0, automations: 0, conversations: 0 });
+      expect(db.one(`SELECT n FROM zur_counts WHERE kind = 'tasks_done'`)).toEqual({ n: 1 });
+      expect(db.all(`SELECT id, status FROM zur_tasks ORDER BY id`)).toEqual([
+        { id: "t1", status: "done" },
+        { id: "t2", status: "todo" },
+      ]);
+      db.run(`UPDATE zur_tasks SET status = 'done' WHERE id = 't2'`);
+      db.run(`UPDATE zur_tasks SET title = 'Feita!' WHERE id = 't1'`);
+      db.run(`DELETE FROM zur_tasks WHERE id = 't1'`);
+      expect(db.one(`SELECT tasks, notes FROM zur_area_versions`)).toEqual({ tasks: 3, notes: 0 });
+      expect(db.one(`SELECT n FROM zur_counts WHERE kind = 'tasks_done'`)).toEqual({ n: 1 });
+      // One row only: a second one is refused, so the heartbeat always reads exactly one.
+      expect(() => db.run(`INSERT INTO zur_area_versions (id) VALUES (2)`)).toThrow();
+    });
+  });
+
   it("upgrades a database at version 19 to 20: autonomy per tool and per routine, the owner's levels and routines kept", async () => {
     await withEmptyDatabase("from-19", (db) => {
       expect(migrate(db, MIGRATIONS.slice(0, 19))).toBe(19);
@@ -489,7 +542,7 @@ describe("migrate", () => {
       db.run(`INSERT INTO zur_mcp_tools (server_id, name, exposed_name, input_schema, annotations, schema_hash, status, enabled, policy, hint, created_at, updated_at) VALUES ('s1', 'send', 'mcp_docs_send', '{}', '{"readOnlyHint":false}', 'h', 'available', 1, 'auto', '', 'x', 'x')`);
       db.run(`INSERT INTO zur_mcp_tools (server_id, name, exposed_name, input_schema, annotations, schema_hash, status, enabled, policy, hint, created_at, updated_at) VALUES ('s1', 'odd', 'mcp_docs_odd', '{}', 'not json', 'h', 'available', 1, 'auto', '', 'x', 'x')`);
       db.run(`INSERT INTO zur_automations (id, name, kind, message, schedule, status, created_at, updated_at) VALUES ('a1', 'Revisão', 'agent_prompt', 'Resuma', '{}', 'active', 'x', 'x')`);
-      expect(migrate(db)).toBe(20);
+      expect(migrate(db, MIGRATIONS.slice(0, 20))).toBe(20);
       // "Without asking" stays in the chat only: nothing reaches a routine without the owner choosing it.
       expect(db.all(`SELECT name, policy, routines, kind FROM zur_mcp_tools ORDER BY name`)).toEqual([
         { name: "odd", policy: "approve", routines: 0, kind: null },

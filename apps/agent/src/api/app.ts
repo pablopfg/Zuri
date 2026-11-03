@@ -22,6 +22,7 @@ import {
   recoveryCheckSchema,
   recoveryCompleteSchema,
   recoveryRequestSchema,
+  type AreaVersions,
   type SetupTicket,
   type UsageReport,
 } from "@zuri/shared";
@@ -88,6 +89,8 @@ export interface ApiDeps {
   semantic?(): SemanticDeps;
   /** The remote MCP servers (step 18). Absent only in tests of other routes. */
   mcp?(): McpRouteDeps;
+  /** The number of each screen area, sent with the session check and the heartbeat (nova UI, PR 2). Absent only in tests of other routes. */
+  versions?(): AreaVersions;
   /** True when a password secret is set, so the health check can answer without opening the database. */
   passwordSecretSet(): boolean;
   /** True when a usable SETUP_CODE is set: the first access can still be done. Absent is false. */
@@ -175,7 +178,8 @@ export function createApi(deps: ApiDeps) {
 
   /** A finished sign-in: the session and device cookies, and the second-step cookie gone. */
   const signedInResponse = (c: Context<ApiEnv>, signed: SignedIn) => {
-    const response = Response.json(deps.auth().state(signed.session));
+    // The areas' numbers too: the screens opened right after signing in start from them (nova UI, PR 2).
+    const response = Response.json({ ...deps.auth().state(signed.session), ...versions(deps) });
     response.headers.append("set-cookie", sessionCookie(c.req.raw, signed.token));
     response.headers.append("set-cookie", deviceCookie(c.req.raw, signed.deviceToken));
     if (readMfaCookie(c.req.raw) !== null) response.headers.append("set-cookie", mfaCookie(c.req.raw, null));
@@ -343,12 +347,12 @@ export function createApi(deps: ApiDeps) {
     const notices = deps.notices?.();
     const browser = notices ? await notices.auth.browserId(readDeviceCookie(c.req.raw)) : null;
     if (notices && browser) notices.push.seen(browser);
-    return Response.json({ ...state, ...unread(deps) });
+    return Response.json({ ...state, ...unread(deps), ...versions(deps) });
   });
 
   app.post("/auth/heartbeat", async (c) => {
     const { active } = await readJson(c.req.raw, heartbeatRequestSchema, 1024);
-    return Response.json({ ...deps.auth().heartbeat(c.get("session"), active), ...unread(deps) });
+    return Response.json({ ...deps.auth().heartbeat(c.get("session"), active), ...unread(deps), ...versions(deps) });
   });
 
   app.post("/auth/logout", async (c) => {
@@ -375,7 +379,7 @@ export function createApi(deps: ApiDeps) {
     const input = await readJson(c.req.raw, changePasswordRequestSchema, 8 * 1024);
     const auth = deps.auth();
     const next = await auth.changePassword(c.get("session"), input, client(c));
-    const response = Response.json(auth.state(next.session));
+    const response = Response.json({ ...auth.state(next.session), ...versions(deps) });
     response.headers.append("set-cookie", sessionCookie(c.req.raw, next.token));
     return response;
   });
@@ -490,6 +494,15 @@ export function createApi(deps: ApiDeps) {
 const SESSION_FIELDS = Object.keys(SESSION_TIMEOUT_RANGES);
 
 /** The bell's count, when the notice center is there. */
+/** The areas' numbers ride on the same answers as the bell: the screens learn of a change made elsewhere without a request of their own. */
+function versions(deps: ApiDeps): { versions?: AreaVersions } {
+  if (!deps.versions) return {};
+  // Only while the screens can open: in a lockdown, or before the password or the second step is set, there is nothing to refresh.
+  const auth = deps.auth();
+  if (auth.lockdown.active() || auth.passwordChangeRequired() || auth.secondStepRequired()) return {};
+  return { versions: deps.versions() };
+}
+
 function unread(deps: ApiDeps): { unreadNotices?: number } {
   const notices = deps.notices?.();
   return notices ? { unreadNotices: notices.alerts.unreadCount() } : {};

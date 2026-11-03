@@ -178,6 +178,8 @@ export const sessionStateSchema = /* @__PURE__ */ mini.strictObject({
   deadlines: sessionDeadlinesSchema,
   /** Notices not read yet (step 11): the bell's count, sent with the session check and the heartbeat. */
   unreadNotices: mini.optional(mini.number()),
+  /** A number per screen area (AreaVersions) that goes up with each change: the open screens fetch again only what moved. Checked by the interface where it is used (lib/versions.ts, cleanVersions), so the first load carries no parser for it. */
+  versions: mini.optional(mini.unknown()),
 });
 
 export type LoginRequest = z.infer<typeof loginRequestSchema>;

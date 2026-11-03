@@ -4,6 +4,7 @@ import {
   AUTOMATION_LIMITS,
   AUTOMATION_PRIORITIES,
   type Automation,
+  type AutomationList,
   type AutomationKind,
   type AutomationPriority,
   type AutomationRun,
@@ -24,6 +25,7 @@ import { SETTINGS_KEY } from "../../hooks/session.tsx";
 import { api, errorMessage } from "../../lib/api.ts";
 import { automationAnchor, describeSchedule, draftOf, emptyDraft, type ScheduleDraft, scheduleOf } from "../../lib/automations.ts";
 import { addMessages, useI18n } from "../../lib/i18n.tsx";
+import { FlashStatus, flashClass, useFlash } from "../../lib/lists.tsx";
 import { DAY_SHORT, FREQUENCY_LABEL, KIND_HINT, KIND_LABEL, MESSAGE_LABEL, NAME_PLACEHOLDER, PRIORITY_HINT, PRIORITY_LABEL, PROBLEM_LABEL, RUN_STATUS_LABEL, STATUS_LABEL, TRIGGER_LABEL } from "./labels.ts";
 
 // This screen's pt-BR texts travel with its code, not in the first bundle (rule P11).
@@ -75,6 +77,7 @@ export function AutomationsPage() {
   const pending = all.filter((a) => a.status === "pending_approval");
   const others = all.filter((a) => a.status !== "pending_approval");
   const counts = list.data?.counts;
+  const flash = useFlash(list.data?.automations, (automation) => automation.id, (automation) => `${automation.updatedAt}|${automation.status}|${automation.lastRunAt ?? ""}`);
 
   return (
     <>
@@ -111,11 +114,18 @@ export function AutomationsPage() {
               </div>
               <ul className="divide-y divide-border overflow-hidden rounded-2xl border border-border bg-surface">
                 {others.map((automation) => (
-                  <AutomationRow key={automation.id} automation={automation} onEdit={() => setEditing({ mode: "edit", automation })} onDelete={() => setRemoving(automation)} />
+                  <AutomationRow
+                    key={automation.id}
+                    automation={automation}
+                    glow={flashClass(flash.glowing, automation.id)}
+                    onEdit={() => setEditing({ mode: "edit", automation })}
+                    onDelete={() => setRemoving(automation)}
+                  />
                 ))}
               </ul>
             </section>
           )}
+          <FlashStatus count={flash.remote} />
           <RunHistory />
         </>
       )}
@@ -188,19 +198,32 @@ function useAutomationAction() {
   return { busy, act, runText };
 }
 
-function AutomationRow({ automation, onEdit, onDelete }: { automation: Automation; onEdit: () => void; onDelete: () => void }) {
+function AutomationRow({ automation, glow, onEdit, onDelete }: { automation: Automation; glow: string; onEdit: () => void; onDelete: () => void }) {
   const { t, dateTime, timeZone } = useI18n();
   const { busy, act, runText } = useAutomationAction();
   const Icon = KIND_ICON[automation.kind];
   const titleId = useId();
   const paused = automation.status === "paused" || automation.status === "completed";
+  const qc = useQueryClient();
   const setPaused = (value: boolean) =>
     act("pause", async () => {
-      await api(`/automations/${automation.id}`, { method: "PATCH", body: { paused: value } });
+      // Paused or running again at once; a refusal puts the list back as it was (act refreshes it after).
+      const key = [...AUTOMATIONS_KEY, "list"];
+      await qc.cancelQueries({ queryKey: key });
+      const before = qc.getQueryData<AutomationList>(key);
+      qc.setQueryData<AutomationList>(key, (list) =>
+        list ? { ...list, automations: list.automations.map((item) => (item.id === automation.id ? { ...item, status: value ? "paused" : "active" } : item)) } : list,
+      );
+      try {
+        await api(`/automations/${automation.id}`, { method: "PATCH", body: { paused: value } });
+      } catch (error) {
+        qc.setQueryData(key, before);
+        throw error;
+      }
       return t(value ? "web.automations.paused" : "web.automations.resumed");
     });
   return (
-    <li id={automationAnchor(automation.id)} aria-labelledby={titleId} className="flex scroll-mt-24 flex-col gap-2 p-4 sm:flex-row sm:items-center sm:gap-3">
+    <li id={automationAnchor(automation.id)} aria-labelledby={titleId} className={cn("flex scroll-mt-24 flex-col gap-2 p-4 sm:flex-row sm:items-center sm:gap-3", glow)}>
       {/* On a phone the icon and the text share a line, and the actions take the next one. */}
       <div className="flex min-w-0 flex-1 items-start gap-3 sm:items-center">
         <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-accent-soft text-accent-text" aria-hidden>
@@ -340,6 +363,7 @@ function RunHistory() {
   const { t, dateTime } = useI18n();
   const runs = useAutomationRuns();
   const items = runs.data?.pages.flatMap((page) => page.runs) ?? [];
+  const flash = useFlash(runs.data ? items : undefined, (run) => run.id, (run) => `${run.status}|${run.finishedAt ?? ""}`);
   const tone = { running: "accent", success: "success", quiet: "neutral", skipped: "warning", error: "danger" } as const;
   return (
     <Card title={t("web.automations.history.title")} description={t("web.automations.history.description")}>
@@ -356,7 +380,7 @@ function RunHistory() {
         <div className="space-y-3">
           <ol className="divide-y divide-border">
             {items.map((run) => (
-              <li key={run.id} className="space-y-1.5 py-3 first:pt-0 last:pb-0">
+              <li key={run.id} className={cn("space-y-1.5 py-3 first:pt-0 last:pb-0", flashClass(flash.glowing, run.id))}>
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="font-medium">{run.automationName}</span>
                   <Badge tone={tone[run.status]}>{t(RUN_STATUS_LABEL[run.status])}</Badge>

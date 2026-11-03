@@ -17,8 +17,9 @@ import { type FormEvent, useEffect, useId, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router";
 import { Button, cn, Dialog, EmptyState, ErrorNotice, fieldClass, PageHeader, SelectField, Loading, TextAreaField, TextField } from "../../components/ui.tsx";
 import { PROJECTS_KEY, TASKS_KEY, useProjects, useTasks } from "../../hooks/productivity.ts";
+import { useTaskCounts } from "../../hooks/task-counts.ts";
 import { api, errorMessage } from "../../lib/api.ts";
-import { useDebounced } from "../../lib/debounce.ts";
+import { FlashStatus, flashClass, useDebounced, useFlash } from "../../lib/lists.tsx";
 import { dueFromInputs, dueInputs, formatDue, quickAddDue } from "../../lib/due.ts";
 import { useI18n } from "../../lib/i18n.tsx";
 import { ProjectsDialog } from "./ProjectsDialog.tsx";
@@ -32,7 +33,10 @@ export function TasksPage() {
   const [query, setQuery] = useState("");
   const q = useDebounced(query.trim());
   const tasks = useTasks({ view, projectId, q });
+  const counts = useTaskCounts().data?.counts;
   const projects = useProjects();
+  // The rows that changed glow for a moment; a list the owner just switched to never does.
+  const flash = useFlash(tasks.isPlaceholderData ? undefined : tasks.data?.tasks, (task) => task.id, (task) => `${task.updatedAt}|${task.status}`, `${view}|${projectId}|${q}`);
   const [editing, setEditing] = useState<Task | null>(null);
   const [projectsOpen, setProjectsOpen] = useState(false);
   const [trashed, setTrashed] = useState<TrashItem | null>(null);
@@ -90,7 +94,7 @@ export function TasksPage() {
               view === item ? "bg-surface text-fg shadow-sm ring-1 ring-border-strong" : "text-fg-muted hover:text-fg",
             )}
           >
-            {t(VIEW_LABEL[item])}
+            {t(VIEW_LABEL[item])} {counts && <span className="tabular-nums text-fg-muted">{counts[item]}</span>}
           </button>
         ))}
       </fieldset>
@@ -133,10 +137,11 @@ export function TasksPage() {
           ) : (
             <ul className="divide-y divide-border overflow-hidden rounded-2xl border border-border bg-surface">
               {tasks.data.tasks.map((task) => (
-                <TaskRow key={task.id} task={task} projects={projectList} onOpen={() => setEditing(task)} />
+                <TaskRow key={task.id} task={task} projects={projectList} glow={flashClass(flash.glowing, task.id)} onOpen={() => setEditing(task)} />
               ))}
             </ul>
           )}
+          <FlashStatus count={flash.remote} />
         </section>
       </div>
 
@@ -274,7 +279,7 @@ function NewTask({ projects, forToday, focusSignal }: { projects: Project[]; for
   );
 }
 
-function TaskRow({ task, projects, onOpen }: { task: Task; projects: Project[]; onOpen: () => void }) {
+function TaskRow({ task, projects, glow, onOpen }: { task: Task; projects: Project[]; glow: string; onOpen: () => void }) {
   const { t, locale, timeZone, dateTime } = useI18n();
   const qc = useQueryClient();
   const [pending, setPending] = useState(false);
@@ -285,21 +290,29 @@ function TaskRow({ task, projects, onOpen }: { task: Task; projects: Project[]; 
   const flagged = !done && (task.priority === "high" || task.priority === "urgent");
 
   async function toggle() {
+    const status = done ? "todo" : "done";
     setPending(true);
     setError(null);
+    // The mark changes at once (in this same click) in every list that shows the task; a refusal puts the lists back as they were.
+    void qc.cancelQueries({ queryKey: TASKS_KEY });
+    const before = qc.getQueriesData({ queryKey: TASKS_KEY });
+    qc.setQueriesData<{ tasks: Task[] }>({ queryKey: TASKS_KEY }, (list) =>
+      list?.tasks ? { ...list, tasks: list.tasks.map((item) => (item.id === task.id ? { ...item, status } : item)) } : list,
+    );
     try {
-      await api(`/tasks/${task.id}`, { method: "PATCH", body: { status: done ? "todo" : "done" } });
-      await qc.invalidateQueries({ queryKey: TASKS_KEY });
+      await api(`/tasks/${task.id}`, { method: "PATCH", body: { status } });
     } catch (err) {
+      for (const [key, data] of before) qc.setQueryData(key, data);
       setError(errorMessage(err));
     } finally {
       setPending(false);
+      void qc.invalidateQueries({ queryKey: TASKS_KEY });
     }
   }
 
   const Mark = done ? CheckCircle2 : task.status === "in_progress" ? CircleDot : Circle;
   return (
-    <li className="flex items-start gap-1 px-2 py-1.5 transition-colors hover:bg-raised/60">
+    <li className={cn("flex items-start gap-1 px-2 py-1.5 transition-colors hover:bg-raised/60", glow)}>
       {/* A real checkbox, drawn as a 44 px round mark: the icon shows the state, the input takes the touch. */}
       <span className={cn("relative flex h-11 w-11 shrink-0 items-center justify-center", done ? "text-accent-text" : "text-fg-muted")}>
         <input

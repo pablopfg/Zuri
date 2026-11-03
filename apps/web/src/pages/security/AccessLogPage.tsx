@@ -12,7 +12,7 @@ import { useSearchParams } from "react-router";
 import { deviceText, GROUP_LABEL, groupOf, KIND_LABEL, placeText, reasonLabels } from "../../components/security/activity.ts";
 import { Button, Card, cn, EmptyState, ErrorNotice, PageHeader, SelectField, Loading, TextField } from "../../components/ui.tsx";
 import { api } from "../../lib/api.ts";
-import { useDebounced } from "../../lib/debounce.ts";
+import { useDebounced } from "../../lib/lists.tsx";
 import { useI18n } from "../../lib/i18n.tsx";
 
 const DEFAULT_PERIOD: AuthActivityPeriod = 7;

@@ -202,4 +202,5 @@ export const ptBRSettings = {
   "web.integrations.tool.routinesFreed.other": "Liberada sem perguntar em {count} rotinas.",
   "web.integrations.tool.hint": "Quando usar (opcional)",
   "web.integrations.tool.hintHelp": "Uma dica sua para a Zuri, até {max} caracteres. Ex.: “preços de passagens aéreas”.",
+  "web.account.signOutHint": "Encerra esta sessão. As outras abas deste navegador saem junto.",
 } as const;

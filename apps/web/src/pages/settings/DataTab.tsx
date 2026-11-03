@@ -3,12 +3,14 @@ import { TRASH_RETENTION_DAYS, type TrashItem } from "@zuri/shared";
 import { Database, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { Button, Card, Dialog, EmptyState, ErrorNotice, Notice, Loading } from "../../components/ui.tsx";
-import { useTrash } from "../../hooks/productivity.ts";
+import { TRASH_KEY, useTrash } from "../../hooks/productivity.ts";
 import { api, errorMessage } from "../../lib/api.ts";
 import { useI18n } from "../../lib/i18n.tsx";
 import { useToast } from "../../components/Toaster.tsx";
 import { refreshAfterTrash, TRASH_KIND_LABEL } from "../productivity/shared.tsx";
 import { LaterTab } from "./LaterTab.tsx";
+
+type TrashList = { items: TrashItem[]; total: number };
 
 /** Settings › Data: the trash now; backup and storage arrive in step 23. */
 export function DataTab() {
@@ -44,9 +46,18 @@ function TrashCard() {
     }
   }
 
+  // The item leaves the trash at once; a refusal puts it back as it was.
   const restore = (item: TrashItem) =>
     void run(item.id, async () => {
-      await api(`/trash/${item.id}/restore`, { method: "POST" });
+      await qc.cancelQueries({ queryKey: TRASH_KEY });
+      const before = qc.getQueryData<TrashList>(TRASH_KEY);
+      qc.setQueryData<TrashList>(TRASH_KEY, (list) => (list ? { items: list.items.filter((other) => other.id !== item.id), total: Math.max(0, list.total - 1) } : list));
+      try {
+        await api(`/trash/${item.id}/restore`, { method: "POST" });
+      } catch (err) {
+        qc.setQueryData(TRASH_KEY, before);
+        throw err;
+      }
       return t("web.trash.restored", { title: item.title });
     });
 

@@ -34,6 +34,9 @@ export function SessionGuard({ session }: { session: SessionState }) {
 
   useEffect(() => setDeadlines(toLocal(session.deadlines)), [session.deadlines]);
 
+  // The areas' numbers ride on the session check and the heartbeat: what moved is fetched again, nothing else (lib/versions.ts, loaded after the first screen).
+  useEffect(() => void import("../lib/versions.ts").then((m) => m.seen(qc, session.versions)), [session.versions, qc]);
+
   const beat = useCallback(
     async (active: boolean) => {
       lastBeat.current = Date.now();

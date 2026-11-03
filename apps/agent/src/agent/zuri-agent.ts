@@ -6,6 +6,7 @@ import { breachCheckFor } from "../auth/dev-breach.ts";
 import { MockTranscriber, type Transcriber, WorkersAITranscriber } from "../ai/transcription.ts";
 import type { AiLimits } from "../ai/usage.ts";
 import { createApi } from "../api/app.ts";
+import { readAreaVersions } from "../db/area-versions.ts";
 import { SSE_PING_MS } from "../api/chat.ts";
 import { AuthService } from "../auth/service.ts";
 import { automationExecutor } from "../automations/executor.ts";
@@ -153,6 +154,7 @@ export class ZuriAgent extends Agent<WorkerEnv> {
       },
     }),
     aiUsage: () => this.store.usage.report(this.aiLimits(), this.development() ? "mock" : "workers-ai", this.store.settings.field("aiModel")),
+    versions: () => readAreaVersions(this.store.db),
     passwordSecretSet: () => this.passwordSecretSet(),
     setupCodeSet: () => isUsableSetupCode(this.env.SETUP_CODE),
     origin: () => this.publicUrl().origin,
@@ -304,6 +306,7 @@ export class ZuriAgent extends Agent<WorkerEnv> {
       ai: () => this.ai(),
       agentName: this.env.AGENT_NAME,
       onFailure: (failure) => this.store.diagnostics.record(failure),
+      versions: () => readAreaVersions(this.store.db),
     });
   }
 

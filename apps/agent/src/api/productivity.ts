@@ -50,6 +50,8 @@ export function registerProductivityRoutes(app: Hono<ApiEnv>, productivity: () =
     return Response.json({ task: productivity().tasks.create(input) }, { status: 201 });
   });
 
+  app.get("/tasks/counts", () => Response.json({ counts: productivity().tasks.counts() }));
+
   app.get("/tasks/:id", (c) => Response.json({ task: productivity().tasks.get(recordId(c.req.param("id"))) }));
 
   app.patch("/tasks/:id", async (c) => {
