@@ -107,5 +107,5 @@ test("New task from the palette lands in the new-task field, ready to type", asy
   await palette.getByRole("combobox").fill("nova tarefa");
   await page.keyboard.press("Enter");
   await expect(page).toHaveURL(/\/tarefas$/);
-  await expect(page.getByRole("textbox", { name: /^Adicionar uma tarefa/ })).toBeFocused();
+  await expect(page.getByRole("textbox", { name: /^Adicionar tarefa/ })).toBeFocused();
 });

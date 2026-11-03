@@ -1,3 +1,4 @@
+import { CHAT_MESSAGE_MAX } from "@zuri/shared";
 import { expect, type Page, test } from "./fixtures.ts";
 import { CSRF, expectAccessible, signIn, tooSmallControls } from "./ui-helpers.ts";
 
@@ -262,18 +263,18 @@ test("a question from the palette inside an open conversation starts a new one t
   }
 });
 
-test("from the home page, 4,000 characters are sent and 4,001 wait in the composer", async ({ page }) => {
+test("from the home page, a message at the chat's limit is sent and one character more waits in the composer", async ({ page }) => {
   await openHome(page);
   let posts = 0;
   page.on("request", (r) => r.url().endsWith("/api/chat") && r.method() === "POST" && posts++);
   const field = page.getByRole("textbox", { name: "Escreva para a Zuri" });
-  await field.fill("a".repeat(4_001));
+  await field.fill("a".repeat(CHAT_MESSAGE_MAX + 1));
   await field.press("Enter");
   await expect(page).toHaveURL(/\/conversa$/);
-  await expect(page.getByRole("textbox", { name: "Mensagem" })).toHaveValue("a".repeat(4_001));
+  await expect(page.getByRole("textbox", { name: "Mensagem" })).toHaveValue("a".repeat(CHAT_MESSAGE_MAX + 1));
   expect(posts).toBe(0);
   await page.goto("/");
-  await field.fill("b".repeat(4_000));
+  await field.fill("b".repeat(CHAT_MESSAGE_MAX));
   const sent = page.waitForResponse((r) => r.url().endsWith("/api/chat") && r.request().method() === "POST");
   await field.press("Enter");
   expect((await sent).status()).toBe(200);

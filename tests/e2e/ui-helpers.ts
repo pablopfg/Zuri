@@ -76,7 +76,7 @@ export async function openSidebar(page: Page) {
 /** Opens the account menu at the foot of the sidebar (Configurações, Acessos, tema, Sair). */
 export async function openAccountMenu(page: Page) {
   const sidebar = await openSidebar(page);
-  await sidebar.getByRole("button", { name: /^Menu da conta de / }).click();
+  await sidebar.getByRole("button", { name: /^Menu da conta:/ }).click();
   return sidebar;
 }
 

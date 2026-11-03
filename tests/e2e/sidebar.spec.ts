@@ -30,7 +30,7 @@ test("the sidebar holds Nova conversa, the six places and the account; settings 
   await expect(page.getByRole("banner").getByRole("button", { name: /^Abrir avisos/ })).toBeVisible();
 
   const menu = await openAccountMenu(page);
-  const account = menu.getByRole("button", { name: /^Menu da conta de / });
+  const account = menu.getByRole("button", { name: /^Menu da conta:/ });
   await expect(account).toHaveAttribute("aria-expanded", "true");
   for (const name of ["Configurações", "Acessos"]) await expect(menu.getByRole("link", { name, exact: true })).toBeVisible();
   await expect(menu.getByRole("button", { name: "Sair", exact: true })).toBeVisible();
@@ -88,7 +88,7 @@ test("collapsing keeps every control named, remembers the choice and expands aga
   await expect(aside.getByRole("link", { name: "Início" })).toBeVisible();
   await expect(aside.getByRole("link", { name: "Nova conversa" })).toBeVisible();
   await expect(aside.getByRole("button", { name: "Buscar" })).toBeVisible();
-  await expect(aside.getByRole("button", { name: /^Menu da conta de / })).toBeVisible();
+  await expect(aside.getByRole("button", { name: /^Menu da conta:/ })).toBeVisible();
   await expect(aside.getByRole("link", { name: "Início" }).getByText("Início", { exact: true })).toHaveClass(/sr-only/);
   await expect(page.locator("main")).toBeInViewport();
   // The account menu opens beside the rail, whole.

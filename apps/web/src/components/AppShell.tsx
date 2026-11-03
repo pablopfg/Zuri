@@ -150,6 +150,9 @@ export function AppShell() {
             <span className="truncate text-base font-bold tracking-tight">{t("app.name")}</span>
           </Link>
           <div className="ml-auto flex items-center">
+            <button type="button" onClick={openSearch} aria-label={t("web.search.open")} aria-haspopup="dialog" className={cn(iconButton, "md:hidden")}>
+              <Search className="h-5 w-5" aria-hidden />
+            </button>
             <NotificationCenter navigate={navigate} />
             <Link to={NEW_CHAT} aria-label={t("web.nav.newChat")} className={cn(iconButton, "md:hidden")}>
               <Plus className="h-5 w-5" aria-hidden />
@@ -331,13 +334,16 @@ function AccountMenu({ collapsed, tipsHidden, onPick }: { collapsed: boolean; ti
           onClick={() => setOpen(!open)}
           aria-expanded={open}
           aria-controls={id}
-          aria-label={t("web.account.menuOpen", { name })}
           className={cn("flex min-h-12 w-full items-center gap-3 rounded-xl text-left hover:bg-raised", collapsed ? "justify-center px-0" : "px-2")}
         >
           <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent text-sm font-semibold text-accent-fg" aria-hidden>
             {settings.data?.ownerName.trim() ? [...name][0]?.toUpperCase() : <SettingsIcon className="h-4 w-4" />}
           </span>
-          {!collapsed && (
+          {/* The name is the button's visible text; screen readers hear what it opens first. */}
+          <span className="sr-only">{t("web.account.menuOpen")}</span>
+          {collapsed ? (
+            <span className="sr-only">{name}</span>
+          ) : (
             <>
               <span className="min-w-0 flex-1 truncate text-sm font-semibold">{name}</span>
               <ChevronRight className={cn("h-4 w-4 shrink-0 text-fg-muted motion-safe:transition-transform", open && "-rotate-90")} aria-hidden />

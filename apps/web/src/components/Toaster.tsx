@@ -44,7 +44,7 @@ function Toaster() {
         {latest && <p key={latest.id}>{latest.message}</p>}
       </div>
       {/* Above the phone's bottom navigation; at the bottom right on a computer. */}
-      <div className="pointer-events-none fixed inset-x-0 bottom-[calc(4.5rem+env(safe-area-inset-bottom))] z-50 flex flex-col items-center gap-2 px-4 md:inset-x-auto md:right-6 md:bottom-6 md:items-end md:px-0">
+      <div className="pointer-events-none fixed inset-x-0 bottom-[calc(1rem+env(safe-area-inset-bottom))] z-50 flex flex-col items-center gap-2 px-4 md:inset-x-auto md:right-6 md:bottom-6 md:items-end md:px-0">
         {list.map((toast) => (
           <ToastItem key={toast.id} toast={toast} />
         ))}

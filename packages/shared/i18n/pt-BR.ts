@@ -46,7 +46,7 @@ export const ptBRCore = {
   "web.nav.openMenu": "Abrir menu",
   "web.nav.themeDark": "Tema escuro",
   "web.nav.themeLight": "Tema claro",
-  "web.account.menuOpen": "Menu da conta de {name}",
+  "web.account.menuOpen": "Menu da conta:",
   "web.account.menuFallback": "Sua conta",
   "web.login.email": "E-mail",
   "web.login.password": "Senha",

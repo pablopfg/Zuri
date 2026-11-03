@@ -149,7 +149,7 @@ test("the palette opens the form, from another page or on the page itself", asyn
   await expect(page.getByRole("heading", { level: 1, name: /^(Bom dia|Boa tarde|Boa noite)/ })).toBeVisible();
   for (const from of ["home", "automations"]) {
     await page.keyboard.press("Control+k");
-    await page.getByRole("dialog", { name: "Buscar e ir para" }).getByRole("combobox").fill("nova automação");
+    await page.getByRole("dialog", { name: "Buscar e ir para" }).getByRole("combobox").fill("criar automação");
     await page.keyboard.press("Enter");
     const form = page.getByRole("dialog", { name: "Nova automação" });
     await expect(form, from).toBeVisible();

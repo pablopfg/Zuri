@@ -82,7 +82,7 @@ export const en: Messages = {
   "web.nav.openMenu": "Open menu",
   "web.nav.themeDark": "Dark theme",
   "web.nav.themeLight": "Light theme",
-  "web.account.menuOpen": "{name}'s account menu",
+  "web.account.menuOpen": "Account menu:",
   "web.account.menuFallback": "Your account",
   "web.automations.pending.title.one": "Zuri suggested a routine",
   "web.automations.pending.title.other": "Zuri suggested {count} routines",

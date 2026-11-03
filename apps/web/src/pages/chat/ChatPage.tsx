@@ -168,10 +168,14 @@ export function ChatPage() {
   useEffect(() => {
     if (asked.current === location.key || id || typeof ask !== "string" || !ask.trim()) return;
     asked.current = location.key;
+    // Too long for one message: it waits in the composer, where the counter says why. Nothing is
+    // sent, so the address may keep it (a reload just puts it back in the composer).
+    if ([...ask].length > CHAT_MESSAGE_MAX) {
+      setDraft(ask);
+      return;
+    }
     navigate(location.pathname, { replace: true, state: null });
-    // Too long for one message: it waits in the composer, where the counter says why.
-    if ([...ask].length > CHAT_MESSAGE_MAX) setDraft(ask);
-    else void send(ask);
+    void send(ask);
   }, [ask, id, location.key]);
 
   async function stop() {
@@ -305,7 +309,7 @@ function ConversationList({ activeId, onPick }: { activeId: string | undefined; 
           value={query}
           onChange={(event) => setQuery(event.target.value)}
           placeholder={t("web.chat.search")}
-          className="min-w-0 flex-1 bg-transparent text-[15px] text-fg placeholder:text-fg-muted focus:outline-none"
+          className="min-h-11 min-w-0 flex-1 bg-transparent text-[15px] text-fg placeholder:text-fg-muted focus:outline-none"
         />
       </label>
       {list.isPending ? (
@@ -780,7 +784,7 @@ function Composer({
         event.preventDefault();
         if (!empty && !over && !streaming && !blocked) onSend();
       }}
-      className="sticky bottom-[calc(4rem+env(safe-area-inset-bottom))] z-10 space-y-2 rounded-2xl border border-border-strong bg-surface p-2 shadow-lg md:bottom-4"
+      className="sticky bottom-[calc(0.75rem+env(safe-area-inset-bottom))] z-10 space-y-2 rounded-2xl border border-border-strong bg-surface p-2 shadow-lg md:bottom-4"
     >
       {(recording || transcribing || voiceError) && (
         <div aria-live="polite" className="flex items-center justify-between gap-2 px-2 pt-1 text-sm">
