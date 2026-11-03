@@ -119,6 +119,23 @@ export function isSameRelease(git: (args: string[]) => string, current: string, 
   return git(["rev-parse", `${current}^{tree}`]).trim() === git(["rev-parse", `${head}^{tree}`]).trim();
 }
 
+/**
+ * The commit of the release branch on GitHub, or "" when there is none. One fetch, no ls-remote before it:
+ * the Branches workflow deletes the branch once its pull request merges, and it runs on the same push to
+ * develop, so the branch can vanish between two calls (run of v0.25.8). A stale refs/remotes copy never counts.
+ */
+export function fetchReleaseBranch(remote: (args: string[]) => string, git: (args: string[]) => string): string {
+  const tracking = `refs/remotes/origin/${RELEASE_BRANCH}`;
+  const fetched = tryRun(() => remote(["fetch", "--no-tags", "origin", `+refs/heads/${RELEASE_BRANCH}:${tracking}`]));
+  if (fetched.ok) return git(["rev-parse", tracking]).trim();
+  // Asked again instead of reading git's message, which may be translated. Any other failure (network, auth)
+  // stops the run: a blind force push could undo a branch it never saw.
+  if (remote(["ls-remote", "origin", `refs/heads/${RELEASE_BRANCH}`]).trim() !== "") {
+    throw new Error(`git fetch ${RELEASE_BRANCH} failed: ${fetched.out.trim()}`);
+  }
+  return "";
+}
+
 /** Tags on GitHub, by name, with the commit each one points to (annotated tags peeled). */
 export function parseLsRemoteTags(out: string): Map<string, string> {
   const tags = new Map<string, string>();
@@ -245,8 +262,7 @@ function main(root: string): number {
   git(["commit", "-m", title]);
   let head = git(["rev-parse", "HEAD"]).trim();
   // Same base and same files as the branch already there: no push, so its CI keeps running instead of starting over every hour.
-  const current = remote(["ls-remote", "origin", `refs/heads/${RELEASE_BRANCH}`]).split("\t")[0]?.trim() ?? "";
-  if (current) remote(["fetch", "--no-tags", "origin", `+refs/heads/${RELEASE_BRANCH}:refs/remotes/origin/${RELEASE_BRANCH}`]);
+  const current = fetchReleaseBranch(remote, git);
   if (current && existing !== null && isSameRelease(git, current, base, head)) {
     head = current;
     console.log(`#${existing}: already up to date`);

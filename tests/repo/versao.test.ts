@@ -6,7 +6,9 @@ import { APP_VERSION } from "../../packages/shared/src/version.ts";
 import { afterEach, describe, expect, it } from "vitest";
 import {
   FIRST_TAGGED_VERSION,
+  fetchReleaseBranch,
   isSameRelease,
+  RELEASE_BRANCH,
   parseLsRemoteTags,
   previousVersions,
   pullRequestBody,
@@ -613,6 +615,34 @@ describe("computePlan and applyPlan on a real repository", () => {
     expect(isSameRelease(run, first, base, changed)).toBe(false);
     expect(isSameRelease(run, first, changed, again)).toBe(false);
     expect(isSameRelease(run, base, base, again)).toBe(false);
+  });
+
+  it("reads the release branch with one fetch and takes a missing branch as none, even after it existed", () => {
+    const origin = mkdtempSync(join(tmpdir(), "versao-origin-"));
+    const dir = mkdtempSync(join(tmpdir(), "versao-"));
+    dirs.push(origin, dir);
+    git(origin, "init", "-q", "--bare", "-b", "develop");
+    git(dir, "init", "-q", "-b", "develop");
+    git(dir, "remote", "add", "origin", origin);
+    write(dir, "a.txt", "a\n");
+    const base = commit(dir, "base", "2026-10-30T22:15:05-03:00");
+    git(dir, "push", "-q", "origin", "develop");
+    const run = (args: string[]) => git(dir, ...args);
+    expect(fetchReleaseBranch(run, run)).toBe("");
+    git(dir, "push", "-q", "origin", `${base}:refs/heads/${RELEASE_BRANCH}`);
+    expect(fetchReleaseBranch(run, run)).toBe(base);
+    // The Branches workflow deletes it after its pull request merges, possibly mid-run (run of v0.25.8):
+    // the copy left in refs/remotes must not count.
+    // A fetch that fails while the branch is still there is not taken as "no branch".
+    const brokenFetch = (args: string[]) => {
+      if (args[0] === "fetch") throw new Error("fetch failed");
+      return run(args);
+    };
+    expect(() => fetchReleaseBranch(brokenFetch, run)).toThrow(/failed/);
+    git(dir, "push", "-q", "origin", `:refs/heads/${RELEASE_BRANCH}`);
+    expect(fetchReleaseBranch(run, run)).toBe("");
+    git(dir, "remote", "set-url", "origin", join(origin, "nao-existe"));
+    expect(() => fetchReleaseBranch(run, run)).toThrow();
   });
 
   it("stops when the newest section names a commit that is not on the branch", () => {
