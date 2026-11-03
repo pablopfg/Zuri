@@ -19,6 +19,45 @@ funciona: [docs/agente/versionamento.md](docs/agente/versionamento.md).
 
 O que já entrou na `develop` e ainda não ganhou número fica em [`changelog/nao-lancado/`](changelog/nao-lancado/) por alguns minutos, até o workflow de versão escrever a seção.
 
+## [0.25.10] - 2026-11-03
+
+Mesclada às 05:12 (UTC-3) · commit [`ed624d1`](https://github.com/pablopfg/Zuri/commit/ed624d12036fd80445f6505ae52066cb65f1e349) · PR [#130](https://github.com/pablopfg/Zuri/pull/130) · Atualização automática só do trecho que mudou
+
+### Adicionado
+
+- As telas se atualizam sozinhas, só no trecho que mudou: uma tarefa, nota,
+  memória, automação ou conversa nova (ou alterada) aparece sem recarregar a
+  página e acende de verde por 2 segundos. O que a Zuri faz na conversa aparece
+  na hora; o que chega de fora (Telegram, rotinas, outro aparelho) aparece em
+  até 1 minuto com o app aberto, ou na hora ao voltar para a aba.
+- O menu lateral mostra quantas tarefas há para hoje, e as abas de Tarefas
+  mostram quantas há em cada uma (Hoje, Próximas, Atrasadas, Concluídas e
+  Todas).
+- Se uma nota aberta mudar em outro aparelho enquanto você edita, a Zuri avisa
+  e deixa você escolher entre "Ver a versão nova" e "Manter a minha". O que
+  você digitou nunca some sozinho.
+
+### Alterado
+
+- Concluir uma tarefa, pausar ou retomar uma automação e restaurar algo da
+  lixeira mudam a tela no mesmo instante. Se o servidor recusar, a tela volta
+  ao que era e diz o motivo.
+- O leitor de tela ouve uma frase curta quando itens da lista mudam por algo
+  feito fora da tela, e as abas com contagem passam a ser lidas com o número
+  ("Hoje 3").
+
+### Corrigido
+
+- Ao voltar da página de login de um serviço externo (MCP), o cartão às vezes
+  continuava em "Falta entrar" até recarregar. Agora a lista é lida de novo
+  depois da volta.
+
+### Atualização
+
+- Migration 21: a tabela `zur_area_versions` (uma linha com um número por área
+  da tela) e o contador `tasks_done`, mantidos por gatilhos. Nada do que já
+  existe muda.
+
 ## [0.25.9] - 2026-11-03
 
 Mesclada às 04:32 (UTC-3) · commit [`1167c6b`](https://github.com/pablopfg/Zuri/commit/1167c6b4ab52c1c958c2df1f0500ad86185b37f0) · PR [#128](https://github.com/pablopfg/Zuri/pull/128) · Versão não falha quando a branch chore/versao some no meio do run
@@ -1943,7 +1982,8 @@ Mesclada às 22:15 (UTC-3) · commit [`360a79e`](https://github.com/pablopfg/Zur
   `npm audit`), CodeQL, Dependabot e rulesets para a `develop` e a `main`.
 - `LICENSE` (MIT), `NOTICE.md`, `SECURITY.md` e `CONTRIBUTING.md`.
 
-[Não lançado]: https://github.com/pablopfg/Zuri/compare/v0.25.9...develop
+[Não lançado]: https://github.com/pablopfg/Zuri/compare/v0.25.10...develop
+[0.25.10]: https://github.com/pablopfg/Zuri/releases/tag/v0.25.10
 [0.25.9]: https://github.com/pablopfg/Zuri/releases/tag/v0.25.9
 [0.25.8]: https://github.com/pablopfg/Zuri/releases/tag/v0.25.8
 [0.25.7]: https://github.com/pablopfg/Zuri/releases/tag/v0.25.7
