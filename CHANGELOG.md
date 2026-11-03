@@ -19,6 +19,14 @@ funciona: [docs/agente/versionamento.md](docs/agente/versionamento.md).
 
 O que já entrou na `develop` e ainda não ganhou número fica em [`changelog/nao-lancado/`](changelog/nao-lancado/) por alguns minutos, até o workflow de versão escrever a seção.
 
+## [0.25.6] - 2026-11-03
+
+Mesclada às 02:35 (UTC-3) · commit [`d797d64`](https://github.com/pablopfg/Zuri/commit/d797d64ceb7a3682417b39579671921d28cb9967) · PR [#123](https://github.com/pablopfg/Zuri/pull/123) · Registra a 18b e a autonomia por ferramenta mescladas
+
+### Alterado
+
+- Sem mudança visível: registra a 18b e a autonomia por ferramenta mescladas.
+
 ## [0.25.5] - 2026-11-03
 
 Mesclada às 02:06 (UTC-3) · commit [`ee60bcd`](https://github.com/pablopfg/Zuri/commit/ee60bcd42a7230d778d54e63534a33b3be5b3ad5) · PR [#120](https://github.com/pablopfg/Zuri/pull/120) · Autonomia por ferramenta em três níveis e nas rotinas com IA
@@ -1860,7 +1868,8 @@ Mesclada às 22:15 (UTC-3) · commit [`360a79e`](https://github.com/pablopfg/Zur
   `npm audit`), CodeQL, Dependabot e rulesets para a `develop` e a `main`.
 - `LICENSE` (MIT), `NOTICE.md`, `SECURITY.md` e `CONTRIBUTING.md`.
 
-[Não lançado]: https://github.com/pablopfg/Zuri/compare/v0.25.5...develop
+[Não lançado]: https://github.com/pablopfg/Zuri/compare/v0.25.6...develop
+[0.25.6]: https://github.com/pablopfg/Zuri/releases/tag/v0.25.6
 [0.25.5]: https://github.com/pablopfg/Zuri/releases/tag/v0.25.5
 [0.25.4]: https://github.com/pablopfg/Zuri/releases/tag/v0.25.4
 [0.25.3]: https://github.com/pablopfg/Zuri/releases/tag/v0.25.3
