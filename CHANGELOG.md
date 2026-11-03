@@ -19,6 +19,17 @@ funciona: [docs/agente/versionamento.md](docs/agente/versionamento.md).
 
 O que já entrou na `develop` e ainda não ganhou número fica em [`changelog/nao-lancado/`](changelog/nao-lancado/) por alguns minutos, até o workflow de versão escrever a seção.
 
+## [0.23.2] - 2026-11-02
+
+Mesclada às 20:52 (UTC-3) · commit [`a4bd02f`](https://github.com/pablopfg/Zuri/commit/a4bd02f5dc8bb76e2b3e0c6b8fce00bcd728dfd6) · PR [#103](https://github.com/pablopfg/Zuri/pull/103) · User-agent sem regex polinomial
+
+### Segurança
+
+- O reconhecimento do navegador nas listas de acessos e de aparelhos com
+  notificação não fica mais lento com um user-agent montado para isso. Antes,
+  um texto longo começando por `Version/` e cheio de pontos levava segundos
+  para ser lido; agora a leitura é imediata em qualquer tamanho.
+
 ## [0.23.1] - 2026-11-02
 
 Mesclada às 20:09 (UTC-3) · commit [`9e84844`](https://github.com/pablopfg/Zuri/commit/9e8484474cca804d0841991df848810cec808e92) · PR [#102](https://github.com/pablopfg/Zuri/pull/102) · Ícone do cartão da busca semântica sem pedaço novo no JS inicial
@@ -1676,7 +1687,8 @@ Mesclada às 22:15 (UTC-3) · commit [`360a79e`](https://github.com/pablopfg/Zur
   `npm audit`), CodeQL, Dependabot e rulesets para a `develop` e a `main`.
 - `LICENSE` (MIT), `NOTICE.md`, `SECURITY.md` e `CONTRIBUTING.md`.
 
-[Não lançado]: https://github.com/pablopfg/Zuri/compare/v0.23.1...develop
+[Não lançado]: https://github.com/pablopfg/Zuri/compare/v0.23.2...develop
+[0.23.2]: https://github.com/pablopfg/Zuri/releases/tag/v0.23.2
 [0.23.1]: https://github.com/pablopfg/Zuri/releases/tag/v0.23.1
 [0.23.0]: https://github.com/pablopfg/Zuri/releases/tag/v0.23.0
 [0.22.0]: https://github.com/pablopfg/Zuri/releases/tag/v0.22.0
