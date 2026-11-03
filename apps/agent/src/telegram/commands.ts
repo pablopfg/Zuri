@@ -170,7 +170,7 @@ export class TelegramCommands {
         case "uso":
           return [this.#usage()];
         case "status":
-          return [this.#status()];
+          return [this.#status(locked)];
         case "backup":
           return [this.#backup()];
       }
@@ -401,8 +401,8 @@ export class TelegramCommands {
     })}`;
   }
 
-  /** /status: version, health, failures in 24 h and whether the AI can answer now. */
-  #status(): Out {
+  /** /status: version, health, failures in 24 h and whether the AI can answer now. Locked, the flows show counts only. */
+  #status(locked: boolean): Out {
     const report = this.deps.diagnostics();
     const since = new Date(this.#clock() - 24 * HOUR_MS).toISOString();
     const failures = report.entries.filter((entry) => entry.resolvedAt === null && entry.lastAt >= since).length;
@@ -420,10 +420,12 @@ export class TelegramCommands {
       const down = flows.sites.filter((site) => site.state === "down");
       lines.push(this.#t("telegram.cmd.status.sites", { up: flows.sites.filter((site) => site.state === "up").length, n: flows.sites.length }));
       // Host names are the owner's own entries, but still pass the escape like any stored text.
-      for (const site of down.slice(0, 10)) lines.push(this.#t("telegram.cmd.status.siteDown", { host: this.#line(site.host) }));
+      if (!locked) for (const site of down.slice(0, 10)) lines.push(this.#t("telegram.cmd.status.siteDown", { host: this.#line(site.host) }));
     }
     if (flows && flows.failing.length > 0) {
-      lines.push(this.#t("telegram.cmd.status.flowsFailing", { n: flows.failing.length, names: flows.failing.slice(0, 5).map((name) => this.#line(name)).join(", ") }));
+      // A flow's name is the owner's text (it may name a client): behind the read lock, only the count.
+      if (locked) lines.push(this.#t("telegram.cmd.status.flowsFailingLocked", { n: flows.failing.length }));
+      else lines.push(this.#t("telegram.cmd.status.flowsFailing", { n: flows.failing.length, names: flows.failing.slice(0, 5).map((name) => this.#line(name)).join(", ") }));
     }
     return { text: lines.join("\n") };
   }

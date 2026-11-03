@@ -94,18 +94,13 @@ export async function advance(definition: FlowDefinition, start: RunState, deps:
         if (error.problem === "calls_limit" && state.calls < FLOW_LIMITS.callsPerRun) return later(deps.clock() + MINUTE);
         if (error.transient && state.attempt + 1 < FLOW_LIMITS.attempts) {
           state.attempt += 1;
-          return later(deps.clock() + (FLOW_LIMITS.retryMinutes[state.attempt - 1] ?? 15) * MINUTE);
+          return later(deps.clock() + (FLOW_LIMITS.retryMinutes[state.attempt - 1] ?? 5) * MINUTE);
         }
         return stop(error.problem, "error", error.httpStatus);
       }
       if (error instanceof AppError && error.code === "AI_LIMIT_REACHED") return stop("ai_limit", "skipped");
-      if (error instanceof AppError && error.code === "SERVICE_UNAVAILABLE") {
-        if (state.attempt + 1 < FLOW_LIMITS.attempts) {
-          state.attempt += 1;
-          return later(deps.clock() + (FLOW_LIMITS.retryMinutes[state.attempt - 1] ?? 15) * MINUTE);
-        }
-        return stop("ai_unavailable");
-      }
+      // As in the routines (rule P7): the model is never called again on its own.
+      if (error instanceof AppError && error.code === "SERVICE_UNAVAILABLE") return stop("ai_unavailable");
       throw error;
     }
     if (next.length > FLOW_LIMITS.items) return stop("items_limit");
@@ -143,6 +138,16 @@ async function step(node: FlowNode, state: RunState, deps: EngineDeps, wake: Wak
   }
 }
 
+/**
+ * A value in a request path, as one encoded segment. `.` and `..` are refused:
+ * the URL parser would resolve them (encoded or not) and let outside data move
+ * the call to another endpoint under the allowed prefix.
+ */
+function segment(value: string): string {
+  if (/^(?:\.|%2e){1,2}$/i.test(value)) throw new FlowStepError("path_not_allowed");
+  return encodeURIComponent(value);
+}
+
 function takeCall(state: RunState, wake: Wake): void {
   if (state.calls >= FLOW_LIMITS.callsPerRun) throw new FlowStepError("calls_limit");
   if (!wake.meter.room(REQUEST_ROOM)) throw new FlowStepError("calls_limit");
@@ -153,7 +158,7 @@ async function request(node: Extract<FlowNode, { type: "request" }>, state: RunS
   const row = deps.connections.find(node.connection);
   if (!row) throw new FlowStepError("connection_missing");
   const call = async (item: Item) => {
-    const path = fill(node.path, item, {}, encodeURIComponent);
+    const path = fill(node.path, item, {}, segment);
     return deps.connections.call(
       row,
       { method: node.method, path, body: node.body === "item" ? item : undefined },

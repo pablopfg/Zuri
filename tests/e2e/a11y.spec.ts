@@ -50,7 +50,6 @@ for (const scheme of ["light", "dark"] as const) {
         ["/tarefas", "Tarefas"],
         ["/notas", "Notas"],
         ["/automacoes", "Automações"],
-        ["/automacoes/fluxos", "Automações"],
         ["/memoria", "Memória"],
         ["/acessos", "Acessos"],
       ] as const) {
@@ -71,6 +70,16 @@ for (const scheme of ["light", "dark"] as const) {
       await page.goto("/nada-aqui");
       await expect(page.getByRole("heading", { name: "Página não encontrada" })).toBeVisible();
       await expectAccessible(page, "404");
+    });
+
+    // A test of its own, so the long one above keeps its time on a phone.
+    test(`the Flows tab has no serious violation (${scheme}) @mobile`, async ({ page }) => {
+      await page.goto("/automacoes/fluxos");
+      await signIn(page);
+      await expect(page.getByRole("heading", { level: 1, name: "Automações" })).toBeVisible();
+      await expect(page.getByRole("status").filter({ hasText: "Carregando" })).toHaveCount(0);
+      await expectAccessible(page, "/automacoes/fluxos");
+      expect(await tooSmallControls(page)).toEqual([]);
     });
   });
 }

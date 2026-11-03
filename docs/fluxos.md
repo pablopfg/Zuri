@@ -71,8 +71,16 @@ não pode ser apagada.
 ### Histórico e falhas
 
 O **Histórico dos fluxos** mostra as últimas execuções, com o passo em que
-pararam e o motivo. Depois de 5 falhas seguidas o fluxo se desliga e a Zuri
-avisa. No bot, `/status` mostra os sites e os fluxos com falha.
+pararam e o motivo. Uma chamada que falhou por um motivo passageiro (rede,
+excesso de pedidos ou erro do serviço) é tentada de novo 1 e 5 minutos
+depois. Se a IA estiver indisponível, a execução para na hora, sem tentar de
+novo. Depois de 5 falhas seguidas o fluxo se desliga e a Zuri avisa.
+
+Desligar ou mudar um fluxo encerra a execução dele que estava esperando: ela
+não continua com os passos antigos.
+
+No bot, `/status` mostra os sites e os fluxos com falha. Com a leitura
+travada, mostra só as contagens, sem endereços nem nomes de fluxos.
 
 ## Limites
 
@@ -99,7 +107,13 @@ avisa. No bot, `/status` mostra os sites e os fluxos com falha.
   e o tempo têm teto.
 - A credencial nunca vai ao modelo, ao log, ao histórico nem ao backup.
 - O que um serviço responde é dado: não muda os passos do fluxo e entra na IA
-  dentro de `<data source="flow">`.
+  dentro de `<data source="flow">`. Um valor de fora igual a `.` ou `..` num
+  caminho encerra a execução, para não trocar o endereço chamado.
+- Se um serviço devolver na resposta a própria credencial, ela passa a fazer
+  parte dos itens. A Zuri não tem como impedir isso; use credenciais de
+  serviços que não as repetem.
+- **Executar agora** não pede a senha, mesmo com o fluxo desligado (decisão do
+  dono, risco aceito). Criar, mudar e ligar pedem.
 - No modo de bloqueio nada roda (as execuções ficam como **Pulada**) e as
   rotas dos fluxos respondem 423.
 - Dados de contato que passam por um fluxo ficam fora dos logs.

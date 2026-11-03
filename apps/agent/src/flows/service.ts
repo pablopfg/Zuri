@@ -181,8 +181,9 @@ export class FlowService {
       params.push(flow);
     }
     if (beforeAt && beforeId) {
-      where += " AND (started_at < ? OR (started_at = ? AND id < ?))";
-      params.push(beforeAt, beforeAt, beforeId);
+      // A row value: the index seeks straight to the cursor instead of walking from the newest run.
+      where += " AND (started_at, id) < (?, ?)";
+      params.push(beforeAt, beforeId);
     }
     const page = FLOW_LIMITS.runsPage;
     const rows = this.db.all<RunRow>(`SELECT * FROM zur_flow_runs WHERE ${where} ORDER BY started_at DESC, id DESC LIMIT ?`, ...params, page + 1);
@@ -191,13 +192,17 @@ export class FlowService {
     return { runs: shown.map(presentRun), nextCursor: rows.length > page && last ? `${last.started_at}|${last.id}` : null };
   }
 
-  /** Runs started today (UTC, with the Neurons), skipped ones aside: what the cap of 500 counts. */
+  /** Runs started today (UTC, with the Neurons), skipped ones aside: what the cap of 500 counts. One row, kept by triggers. */
   runsToday(): number {
-    return this.db.one<{ n: number }>(`SELECT count(*) AS n FROM zur_flow_runs WHERE started_at >= ? AND status != 'skipped'`, this.dayStart())?.n ?? 0;
+    return this.today()?.runs ?? 0;
   }
 
   neuronsToday(): number {
-    return this.db.one<{ n: number | null }>(`SELECT sum(neurons) AS n FROM zur_flow_runs WHERE started_at >= ?`, this.dayStart())?.n ?? 0;
+    return this.today()?.neurons ?? 0;
+  }
+
+  private today(): { runs: number; neurons: number } | null {
+    return this.db.one<{ runs: number; neurons: number }>(`SELECT runs, neurons FROM zur_flow_days WHERE day = ?`, this.iso().slice(0, 10));
   }
 
   /** For /status in the bot: the monitors' sites and the flows whose last run failed. */
@@ -258,6 +263,8 @@ export class FlowService {
         id,
       );
       if (patch.definition) this.deps.sites.keep(id, sitesOf(definition));
+      // Turned off or changed: a run that waits stops here, never going on with what the owner just undid.
+      if (patch.enabled === false || patch.definition !== undefined) this.closeWaiting(id);
       recordActivity(this.db, "flow.changed", { enabled });
     });
     await this.deps.rearm();
@@ -270,20 +277,27 @@ export class FlowService {
       this.row(id);
       this.db.run(`DELETE FROM zur_flows WHERE id = ?`, id);
       this.deps.sites.forget(id);
-      this.db.run(
-        `UPDATE zur_flow_runs SET status = 'error', problem = 'interrupted', state = NULL, resume_at = NULL, finished_at = ? WHERE flow_id = ? AND status = 'waiting'`,
-        this.iso(),
-        id,
-      );
+      this.closeWaiting(id);
       recordActivity(this.db, "flow.deleted", {});
     });
     await this.deps.rearm();
   }
 
+  /** The flow's runs that wait end as interrupted. */
+  private closeWaiting(flowId: string): void {
+    this.db.run(
+      `UPDATE zur_flow_runs SET status = 'error', problem = 'interrupted', state = NULL, resume_at = NULL, finished_at = ? WHERE flow_id = ? AND status = 'waiting'`,
+      this.iso(),
+      flowId,
+    );
+  }
+
   /** Connections in use can't go: the flows that call them would fail. */
   removeConnection(id: string): void {
-    const users = this.list().flows.filter((flow) => flow.definition.nodes.some((node) => node.type === "request" && node.connection === id));
-    if (users.length > 0) throw new AppError("CONFLICT", "error.flowConnectionInUse", { flows: users.map((flow) => flow.name) });
+    const users = this.db
+      .all<{ name: string; definition: string }>(`SELECT name, definition FROM zur_flows LIMIT ?`, FLOW_LIMITS.flows)
+      .filter((row) => safeDefinition(row.definition).nodes.some((node) => node.type === "request" && node.connection === id));
+    if (users.length > 0) throw new AppError("CONFLICT", "error.flowConnectionInUse", { flows: users.map((row) => row.name) });
     this.deps.connections.remove(id);
   }
 
@@ -303,10 +317,12 @@ export class FlowService {
       }
     }
     const sites = sitesOf(definition);
-    const own = this.deps.publicHost().toLowerCase();
+    // Compared without the final dots a name may carry: `zuri.exemplo.com.br.` is the same host.
+    const bare = (host: string) => host.toLowerCase().replace(/\.+$/, "");
+    const own = bare(this.deps.publicHost());
     for (const site of sites) {
       const url = endpointUrl(site, { development: false });
-      if (!url || url.hostname.toLowerCase() === own) throw new AppError("VALIDATION_FAILED", "error.flowSite", { fields: ["definition.nodes"], site });
+      if (!url || bare(url.hostname) === own) throw new AppError("VALIDATION_FAILED", "error.flowSite", { fields: ["definition.nodes"], site });
     }
     const others = this.db
       .all<{ definition: string }>(`SELECT definition FROM zur_flows WHERE id != ?`, flowId ?? "")
@@ -339,7 +355,8 @@ export class FlowService {
   /** After the object starts: runs left "running" by a crash are closed (never run twice). */
   reconcile(): number {
     let closed = 0;
-    for (const run of this.db.all<{ id: string }>(`SELECT id FROM zur_flow_runs WHERE status = 'running' LIMIT 100`)) {
+    // The IN lets the partial index of open runs answer, so a start never walks the history.
+    for (const run of this.db.all<{ id: string }>(`SELECT id FROM zur_flow_runs WHERE status IN ('running', 'waiting') AND status = 'running' LIMIT 100`)) {
       if (this.#inFlight.has(run.id)) continue;
       this.db.run(`UPDATE zur_flow_runs SET status = 'error', problem = 'interrupted', state = NULL, finished_at = ? WHERE id = ? AND status = 'running'`, this.iso(), run.id);
       closed++;
@@ -546,6 +563,8 @@ export class FlowService {
 
   private async execute(flow: FlowRow, runId: string, definition: FlowDefinition, state: RunState, wake: Wake): Promise<void> {
     this.#inFlight.add(runId);
+    // A resumed run's Neurons are already in the day's sum: only what it spends now counts on top.
+    const kept = state.neurons;
     let outcome: Advance;
     try {
       outcome = await advance(
@@ -560,7 +579,7 @@ export class FlowService {
           ai: this.deps.ai,
           notify: (notice) => this.deps.notify({ kind: "step", flowId: flow.id, flowName: flow.name, ...notice }),
           siteChanged: (change) => this.deps.notify({ kind: "site", flowId: flow.id, flowName: flow.name, change }),
-          neuronsLeft: () => FLOW_LIMITS.neuronsPerDay - this.neuronsToday() - state.neurons,
+          neuronsLeft: () => FLOW_LIMITS.neuronsPerDay - this.neuronsToday() - (state.neurons - kept),
           lockdown: this.deps.lockdown,
           clock: () => this.now(),
         },
@@ -622,7 +641,10 @@ export class FlowService {
         paused ? 1 : 0,
         flow.id,
       );
-      if (paused) recordActivity(this.db, "flow.paused", { failures });
+      if (paused) {
+        this.closeWaiting(flow.id);
+        recordActivity(this.db, "flow.paused", { failures });
+      }
       this.prune();
     });
     if (!flow || result.kind !== "stopped" || result.status !== "error") return;
@@ -635,6 +657,8 @@ export class FlowService {
 
   /** The oldest runs past the history's size go in one batch (the size from its counter, one row); today's stay (the caps count them). */
   private prune(): void {
+    // Past days' caps no longer matter (a look at the primary key: usually nothing to read).
+    this.db.run(`DELETE FROM zur_flow_days WHERE day < ?`, this.iso().slice(0, 10));
     const total = this.db.one<{ n: number }>(`SELECT n FROM zur_counts WHERE kind = 'flow_runs'`)?.n ?? 0;
     if (total <= FLOW_LIMITS.runsKept + FLOW_LIMITS.runsPruneBatch) return;
     this.db.run(

@@ -33,6 +33,9 @@ describe("the site monitor", () => {
         ["GET", "https://a.exemplo.com.br/", "manual", null, null],
         ["GET", "https://b.exemplo.com.br/", "manual", null, null],
       ]);
+      // Each look carries its time limit.
+      for (const sent of world.network.requests) expect(sent.signal.aborted).toBe(false);
+      expect(world.network.requests.every((sent) => sent.signal instanceof AbortSignal)).toBe(true);
       // A 3xx answered: the site is up, and the redirect is never followed.
       expect(sitesOf(world, flow.id).map((site) => [site.host, site.state, site.status])).toEqual([
         ["a.exemplo.com.br", "up", 200],

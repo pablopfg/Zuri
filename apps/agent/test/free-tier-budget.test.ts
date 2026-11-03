@@ -863,14 +863,43 @@ describe("flows (step 22a)", () => {
         await world.flows.tick();
       });
       expect(world.flows.runs({}).runs[0]).toMatchObject({ status: "success", calls: 10 });
-      // Measured 77 and 39: the open-runs index and the history's counter keep the 2,000 runs out of it.
+      // Measured 77 and 46: the open-runs index and the history's counter keep the 2,000 runs out of it (the day's counters add a write per run row).
       expect(run.read).toBeLessThanOrEqual(90);
-      expect(run.written).toBeLessThanOrEqual(45);
+      expect(run.written).toBeLessThanOrEqual(50);
       // A wake with nothing due: two indexed looks, nothing written, and the alarm left as the planning set it.
       const rearms = world.rearms.count;
       const idle = await measure(() => world.flows.tick());
       expect(idle.written).toBe(0);
       expect(idle.read).toBeLessThanOrEqual(2);
       expect(world.rearms.count).toBe(rearms);
+
+      // A full day: 500 runs today. The caps and the tab read the day's counter row, never the day's runs.
+      world.db.transaction(() => {
+        for (let i = 0; i < FLOW_LIMITS.runsPerDay; i++) {
+          world.db.run(
+            `INSERT INTO zur_flow_runs (id, flow_id, flow_name, trigger, status, neurons, started_at, finished_at) VALUES (?, ?, 'Monitor', 'manual', 'success', 1, ?, ?)`,
+            crypto.randomUUID(),
+            monitor.id,
+            new Date(world.clock.now - i).toISOString(),
+            new Date(world.clock.now - i).toISOString(),
+          );
+        }
+      });
+      expect(world.flows.runsToday()).toBeGreaterThanOrEqual(FLOW_LIMITS.runsPerDay);
+      const full = await measure(() => world.flows.list());
+      // Measured 92, as on an empty day.
+      expect(full.read).toBeLessThanOrEqual(100);
+      // A page deep in the history and one filtered by flow: the cursor and the filter seek by index.
+      const deep = world.flows.runs({}).runs;
+      let cursor: string | null = null;
+      for (let i = 0; i < 40; i++) cursor = world.flows.runs(cursor ? { before: cursor } : {}).nextCursor;
+      const far = await measure(() => world.flows.runs({ before: cursor ?? "" }));
+      expect(deep).toHaveLength(FLOW_LIMITS.runsPage);
+      expect(far.read).toBeLessThanOrEqual(40);
+      const filtered = await measure(() => world.flows.runs({ flow: monitor.id, before: cursor ?? "" }));
+      expect(filtered.read).toBeLessThanOrEqual(40);
+      // The object's start: only the open runs are looked at.
+      const start = await measure(() => world.flows.reconcile());
+      expect(start.read).toBeLessThanOrEqual(2);
     }));
 });

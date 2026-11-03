@@ -3,10 +3,12 @@ import { describe, expect, it } from "vitest";
 import { pathAllowed } from "../src/flows/connections.ts";
 import { fill, plain, readPath } from "../src/flows/paths.ts";
 import { AppError } from "../src/http/errors.ts";
+import { McpCredentials } from "../src/mcp/credentials.ts";
 import { QUICK_COMMANDS } from "../src/telegram/commands.ts";
 import { SECURITY_COMMANDS } from "../src/telegram/security.ts";
 import { ALL_TOOLS } from "../src/tools/index.ts";
 import { addConnection, type FlowWorld, withFlowWorld } from "./flow-world.ts";
+import { testEnv } from "./helpers.ts";
 
 // Step 22a: what the flows must never do, attacked one way at a time (docs/qa/pentest.md, A1, A6, A7).
 
@@ -161,6 +163,20 @@ describe("credentials", () => {
       world.db.run(`UPDATE zur_flow_connections SET credential = (SELECT credential FROM zur_flow_connections WHERE id = ?) WHERE id = ?`, a, b);
       const flow = await world.flows.create({ name: "X", definition: manual([get(b, "/v1/a")]) });
       expect((await world.flows.runNow(flow.id)).problem).toBe("credential");
+      expect(world.network.requests).toHaveLength(0);
+    });
+  });
+
+  it("sealed for an MCP server or Google, with the same key and id, don't open", async () => {
+    await withFlowWorld(async (world) => {
+      echo(world);
+      const id = await addConnection(world);
+      for (const info of [undefined, "google-v1"]) {
+        const other = await new McpCredentials(testEnv.MCP_CREDENTIAL_KEY, info).encrypt(id, "segredo-de-outra-area");
+        world.db.run(`UPDATE zur_flow_connections SET credential = ? WHERE id = ?`, other, id);
+        const flow = await world.flows.create({ name: `X ${info ?? "mcp"}`, definition: manual([get(id, "/v1/a")]) });
+        expect((await world.flows.runNow(flow.id)).problem).toBe("credential");
+      }
       expect(world.network.requests).toHaveLength(0);
     });
   });

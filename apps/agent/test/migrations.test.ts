@@ -104,7 +104,7 @@ describe("the migration list", () => {
       21: "77a1bb6400daf53af88998aec9180efc8546f0550afebf3cf4ad0519e695b8a3",
       22: "710250c6a5ac9b1b789ba436657e0013925b1c44b409bde00a784c5e0778159a",
       23: "5a2aa2b2a2bed010c38ab88ef70332d8f0e26857c4e03d98f8b2fc043509fb60",
-      24: "3d7bddca36ec7e09e99bf352e56cc93c3cf74977ca62c80d5e820ace82f1c8a7",
+      24: "02637c24812ac7cc5acd9322e995a05e0859f73f66f5e1f895c58f6f61221746",
     };
     for (const m of MIGRATIONS) {
       const digest = createHash("sha256").update(statementText(m).replace(/\r\n/g, "\n")).digest("hex");
@@ -247,6 +247,9 @@ describe("migrate", () => {
         "table:zur_diagnostics",
         "index:zur_diagnostics_last",
         "table:zur_flow_connections",
+        "table:zur_flow_days",
+        "trigger:zur_flow_days_insert",
+        "trigger:zur_flow_days_update",
         "table:zur_flow_runs",
         "index:zur_flow_runs_flow",
         "index:zur_flow_runs_open",
@@ -649,6 +652,12 @@ describe("migrate", () => {
       expect(() => db.run(`INSERT INTO zur_flow_runs (id, flow_id, flow_name, trigger, status, started_at) VALUES ('r3', 'f', 'M', 'webhook', 'running', 'x')`)).toThrow();
       expect(() => db.run(`INSERT INTO zur_flow_connections (id, name, origin, methods, paths, auth, created_at, updated_at) VALUES ('c', 'CRM', 'o', '[]', '[]', 'basic', 'x', 'x')`)).toThrow();
       expect(() => db.run(`UPDATE zur_flows SET enabled = 2`)).toThrow();
+      // The day's counters: a run counts unless skipped, its Neurons as they grow, a run that ends skipped stops counting.
+      db.run(`INSERT INTO zur_flow_runs (id, flow_id, flow_name, trigger, status, started_at) VALUES ('d1', 'f', 'M', 'manual', 'running', '2026-11-03T10:00:00.000Z'), ('d2', 'f', 'M', 'manual', 'skipped', '2026-11-03T11:00:00.000Z')`);
+      db.run(`UPDATE zur_flow_runs SET neurons = 7.5 WHERE id = 'd1'`);
+      expect(db.one(`SELECT runs, neurons FROM zur_flow_days WHERE day = '2026-11-03'`)).toEqual({ runs: 1, neurons: 7.5 });
+      db.run(`UPDATE zur_flow_runs SET status = 'skipped' WHERE id = 'd1'`);
+      expect(db.one(`SELECT runs, neurons FROM zur_flow_days WHERE day = '2026-11-03'`)).toEqual({ runs: 0, neurons: 7.5 });
       db.run(`DELETE FROM zur_flow_runs`);
       expect(db.one(`SELECT n FROM zur_counts WHERE kind = 'flow_runs'`)).toEqual({ n: 0 });
     });

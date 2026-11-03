@@ -1591,6 +1591,7 @@ export const en: Messages = {
   "telegram.cmd.status.sites": "Monitored sites: {up} of {n} up.",
   "telegram.cmd.status.siteDown": "• Down: {host}",
   "telegram.cmd.status.flowsFailing": "Flows that failed on their last run ({n}): {names}. See Automations › Flows.",
+  "telegram.cmd.status.flowsFailingLocked": "Flows that failed on their last run: {n}. See Automations › Flows.",
   "telegram.cmd.status.mcpSemLogin": "External services waiting for you to sign in: {n}. See Settings › Integrations.",
   "telegram.cmd.backup": "Automatic backup isn't on yet. Once it is, I'll tell you here how old the last one is.",
   "telegram.date.mesmoDia": "Today is already {dia}. Do you mean today or next week? Send it again with the time or with “que vem”.",

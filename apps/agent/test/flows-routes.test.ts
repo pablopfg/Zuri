@@ -113,6 +113,8 @@ describe("/api/flows", () => {
     expect(fast.status).toBe(400);
     const huge = await api("POST", "/flows", { name: "X", definition: monitor, extra: "x".repeat(70 * 1024) });
     expect(huge.status).toBe(400);
+    // Refused for its size, before the schema looks at it.
+    expect(await errorBody(huge)).toMatchObject({ code: "VALIDATION_FAILED", message: "O pedido é grande demais." });
   });
 
   it("runs now and pages the history", async () => {
@@ -160,14 +162,20 @@ describe("/api/flows", () => {
   it("answers 423 to every flow route during a lockdown", async () => {
     const flow = await createFlow();
     await inOwner((agent) => new InternalState(agent.store.db).set("lockdown_until", new Date(Date.now() + 3_600_000).toISOString()));
+    const connection = crypto.randomUUID();
     for (const [method, path, body] of [
       ["GET", "/flows", undefined],
+      ["POST", "/flows", { name: "X", definition: monitor }],
+      ["GET", "/flows/runs", undefined],
       ["POST", `/flows/${flow.id}/run`, undefined],
       ["PATCH", `/flows/${flow.id}`, { enabled: true }],
+      ["DELETE", `/flows/${flow.id}`, undefined],
       ["POST", "/flows/connections", connectionBody],
+      ["PATCH", `/flows/connections/${connection}`, { name: "Y" }],
+      ["DELETE", `/flows/connections/${connection}`, undefined],
     ] as const) {
       const res = await api(method, path, body);
-      expect(res.status).toBe(423);
+      expect(res.status, `${method} ${path}`).toBe(423);
     }
   });
 });

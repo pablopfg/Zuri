@@ -1143,7 +1143,7 @@ export const MIGRATIONS: readonly Migration[] = [
       )`,
       `CREATE UNIQUE INDEX IF NOT EXISTS zur_flow_runs_slot ON zur_flow_runs (flow_id, slot) WHERE slot IS NOT NULL`,
       `CREATE INDEX IF NOT EXISTS zur_flow_runs_started ON zur_flow_runs (started_at, id)`,
-      `CREATE INDEX IF NOT EXISTS zur_flow_runs_flow ON zur_flow_runs (flow_id, started_at)`,
+      `CREATE INDEX IF NOT EXISTS zur_flow_runs_flow ON zur_flow_runs (flow_id, started_at, id)`,
       `CREATE INDEX IF NOT EXISTS zur_flow_runs_resume ON zur_flow_runs (resume_at) WHERE status = 'waiting'`,
       // "Is this flow busy?" reads its open runs only, not its whole history.
       `CREATE INDEX IF NOT EXISTS zur_flow_runs_open ON zur_flow_runs (flow_id) WHERE status IN ('running', 'waiting')`,
@@ -1151,6 +1151,20 @@ export const MIGRATIONS: readonly Migration[] = [
       `INSERT INTO zur_counts (kind, n) VALUES ('flow_runs', 0) ON CONFLICT (kind) DO NOTHING`,
       `CREATE TRIGGER IF NOT EXISTS zur_counts_flow_runs_insert AFTER INSERT ON zur_flow_runs BEGIN UPDATE zur_counts SET n = n + 1 WHERE kind = 'flow_runs'; END`,
       `CREATE TRIGGER IF NOT EXISTS zur_counts_flow_runs_delete AFTER DELETE ON zur_flow_runs BEGIN UPDATE zur_counts SET n = n - 1 WHERE kind = 'flow_runs'; END`,
+      // The caps of the day (500 runs, 3,000 Neurons) read one row: kept by triggers per UTC day of the run's start.
+      `CREATE TABLE IF NOT EXISTS zur_flow_days (
+        day TEXT PRIMARY KEY,
+        runs INTEGER NOT NULL DEFAULT 0,
+        neurons REAL NOT NULL DEFAULT 0
+      )`,
+      `CREATE TRIGGER IF NOT EXISTS zur_flow_days_insert AFTER INSERT ON zur_flow_runs BEGIN
+        INSERT INTO zur_flow_days (day, runs, neurons) VALUES (substr(NEW.started_at, 1, 10), NEW.status != 'skipped', NEW.neurons)
+        ON CONFLICT (day) DO UPDATE SET runs = runs + excluded.runs, neurons = neurons + excluded.neurons;
+      END`,
+      `CREATE TRIGGER IF NOT EXISTS zur_flow_days_update AFTER UPDATE OF status, neurons ON zur_flow_runs BEGIN
+        UPDATE zur_flow_days SET runs = runs + (NEW.status != 'skipped') - (OLD.status != 'skipped'), neurons = neurons + NEW.neurons - OLD.neurons
+        WHERE day = substr(OLD.started_at, 1, 10);
+      END`,
       // What the site monitor last saw of each address: only status and time, never the page.
       `CREATE TABLE IF NOT EXISTS zur_flow_sites (
         flow_id TEXT NOT NULL,

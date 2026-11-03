@@ -35,7 +35,7 @@ export const FLOW_LIMITS = {
   requestTimeoutMs: 10_000,
   /** Tries of a request that failed for a passing reason, and the waits between them. */
   attempts: 3,
-  retryMinutes: [1, 5, 15],
+  retryMinutes: [1, 5],
   /** The monitor's own tries before a site counts as down. */
   siteRetryMinutes: [1, 5],
   runsPerDay: 500,

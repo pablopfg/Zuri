@@ -5,7 +5,7 @@ import { type FlowNetwork, FlowStepError, networkProblem, type WakeMeter } from 
 import { developmentFlowNetwork } from "../src/flows/dev-flows.ts";
 import { AppError } from "../src/http/errors.ts";
 import { McpConnectionError } from "../src/mcp/guarded-fetch.ts";
-import { addConnection, type FlowWorld, NOON, withFlowWorld } from "./flow-world.ts";
+import { addConnection, FlowModel, type FlowWorld, NOON, withFlowWorld } from "./flow-world.ts";
 
 // Step 22a: the edges of the flows' engine, connections and service.
 
@@ -42,6 +42,7 @@ async function refusal(work: Promise<unknown>): Promise<AppError> {
 class FailingModel implements AIProvider {
   readonly id = "mock";
   readonly model = "@cf/zai-org/glm-4.7-flash";
+  readonly billable = false;
   calls = 0;
   constructor(private readonly error: () => Error) {}
   async generate(_req: GenerateRequest): Promise<{ text: string }> {
@@ -235,18 +236,16 @@ describe("engine edges", () => {
     });
   });
 
-  it("tries the model again when it is unavailable, then stops", async () => {
+  it("stops at once when the model is unavailable, never calling it again on its own", async () => {
     await withFlowWorld(async (world) => {
       const model = new FailingModel(() => new AppError("SERVICE_UNAVAILABLE", "error.aiUnavailable"));
       world.model.provider = model;
       const flow = await world.flows.create({ name: "IA fora", definition: manual([{ type: "ai", instruction: "Resuma.", output: "resumo" }]) });
-      expect((await world.flows.runNow(flow.id)).status).toBe("waiting");
-      for (let i = 0; i < FLOW_LIMITS.attempts; i++) {
-        world.clock.now += 60 * MINUTE;
-        await world.flows.tick();
-      }
-      const [run] = (await world.flows.runs({})).runs;
-      expect(run).toMatchObject({ status: "error", problem: "ai_unavailable" });
+      expect(await world.flows.runNow(flow.id)).toMatchObject({ status: "error", problem: "ai_unavailable" });
+      const calls = model.calls;
+      world.clock.now += 60 * MINUTE;
+      await world.flows.tick();
+      expect(model.calls).toBe(calls);
     });
   });
 
@@ -319,6 +318,155 @@ describe("service edges", () => {
       expect(world.flows.reconcile()).toBe(0);
       release(Response.json({ data: [] }));
       expect((await running).status).toBe("success");
+    });
+  });
+});
+
+describe("review fixes", () => {
+  const waitThenPost = (id: string): FlowDefinition =>
+    manual([{ type: "wait", minutes: 30 }, request(id, { method: "POST", path: "/v1/clientes", body: "item", itemsPath: "" })]);
+
+  it("a run that waits ends when its flow is turned off or changed, and nothing goes out after", async () => {
+    await withFlowWorld(async (world) => {
+      serveApi(world, () => Response.json({ ok: true }));
+      const id = await addConnection(world);
+      const off = await world.flows.create({ name: "Desligado", definition: waitThenPost(id) });
+      expect((await world.flows.runNow(off.id)).status).toBe("waiting");
+      await world.flows.update(off.id, { enabled: false });
+      const changed = await world.flows.create({ name: "Mudado", definition: waitThenPost(id) });
+      expect((await world.flows.runNow(changed.id)).status).toBe("waiting");
+      await world.flows.update(changed.id, { definition: manual([notifyFirst("Oi")]) });
+      world.clock.now += 31 * MINUTE;
+      await world.flows.tick();
+      expect(world.network.requests).toHaveLength(0);
+      const runs = (await world.flows.runs({})).runs;
+      expect(runs.map((run) => [run.flowName, run.status, run.problem])).toEqual(
+        expect.arrayContaining([
+          ["Desligado", "error", "interrupted"],
+          ["Mudado", "error", "interrupted"],
+        ]),
+      );
+    });
+  });
+
+  it("renaming a flow keeps its waiting run", async () => {
+    await withFlowWorld(async (world) => {
+      const flow = await world.flows.create({ name: "Espera", definition: manual([{ type: "wait", minutes: 1 }, notifyFirst("Depois")]) });
+      expect((await world.flows.runNow(flow.id)).status).toBe("waiting");
+      await world.flows.update(flow.id, { name: "Espera 2" });
+      world.clock.now += 2 * MINUTE;
+      await world.flows.tick();
+      expect(world.notices.at(-1)).toMatchObject({ title: "Depois" });
+    });
+  });
+
+  it.each([".", "..", "%2e", "%2E%2e", ".%2e"])("refuses the outside value %s as a path segment", async (value) => {
+    await withFlowWorld(async (world) => {
+      serveApi(world, () => Response.json({ data: [{ id: value }] }));
+      const id = await addConnection(world);
+      const flow = await world.flows.create({
+        name: "Pontos",
+        definition: manual([request(id, { path: "/v1/lista" }), request(id, { method: "POST", path: "/v1/clientes/{{id}}/notas", body: "item", each: true, itemsPath: "" })]),
+      });
+      expect(await world.flows.runNow(flow.id)).toMatchObject({ status: "error", problem: "path_not_allowed" });
+      expect(world.network.requests.map((sent) => new URL(sent.url).pathname)).toEqual(["/v1/lista"]);
+    });
+  });
+
+  it("keeps a dot that is part of a value", async () => {
+    await withFlowWorld(async (world) => {
+      const seen: string[] = [];
+      serveApi(world, (sent) => {
+        seen.push(new URL(sent.url).pathname);
+        return Response.json({ data: [{ id: "a.b" }, { id: "..." }] });
+      });
+      const id = await addConnection(world);
+      const flow = await world.flows.create({ name: "Ponto", definition: manual([request(id, { path: "/v1/lista" }), request(id, { path: "/v1/clientes/{{id}}", each: true, itemsPath: "" })]) });
+      expect((await world.flows.runNow(flow.id)).status).toBe("success");
+      expect(seen).toEqual(["/v1/lista", "/v1/clientes/a.b", "/v1/clientes/..."]);
+    });
+  });
+
+  it("never watches Zuri's own host written with a final dot", async () => {
+    await withFlowWorld(async (world) => {
+      for (const site of ["https://zuri.exemplo.com.br./", "https://ZURI.exemplo.com.br../"]) {
+        const error = await refusal(world.flows.create({ name: "Eu", definition: manual([{ type: "monitor", sites: [site] }]) }));
+        expect(error.code).toBe("VALIDATION_FAILED");
+      }
+    });
+  });
+
+  it("drops a refusal's body unread", async () => {
+    await withFlowWorld(async (world) => {
+      let cancelled = false;
+      serveApi(
+        world,
+        () =>
+          new Response(
+            new ReadableStream({
+              pull(controller) {
+                controller.enqueue(new TextEncoder().encode("x".repeat(1_024)));
+              },
+              cancel() {
+                cancelled = true;
+              },
+            }),
+            { status: 404 },
+          ),
+      );
+      const id = await addConnection(world);
+      const flow = await world.flows.create({ name: "Recusa", definition: manual([request(id)]) });
+      expect(await world.flows.runNow(flow.id)).toMatchObject({ status: "error", problem: "http_error", httpStatus: 404 });
+      expect(cancelled).toBe(true);
+    });
+  });
+
+  it("hands its time limit to the request, and names it a timeout when it runs out", async () => {
+    await withFlowWorld(async (world) => {
+      let signal: AbortSignal | null = null;
+      serveApi(
+        world,
+        (sent) =>
+          new Promise<Response>((_, reject) => {
+            signal = sent.signal;
+            sent.signal.addEventListener("abort", () => reject(sent.signal.reason));
+          }),
+      );
+      const id = await addConnection(world, { auth: "none", credential: undefined });
+      const stop = new AbortController();
+      const deps = { network: world.network, development: false, meter: { room: () => true, take: () => undefined }, hosts: new Map(), signal: stop.signal };
+      const call = world.connections.call(world.connections.row(id), { method: "GET", path: "/v1", body: undefined }, deps);
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      expect(signal).not.toBeNull();
+      stop.abort(new DOMException("late", "TimeoutError"));
+      await expect(call).rejects.toMatchObject({ problem: "timeout", transient: true });
+    });
+  });
+
+  it("counts a resumed run's Neurons once against the day", async () => {
+    await withFlowWorld(async (world) => {
+      // A model that reports a large use, well past what a call is estimated at.
+      const heavy = new FlowModel(true);
+      const generate = heavy.generate.bind(heavy);
+      heavy.generate = async (req) => {
+        const { onStepUsage: _usage, ...quiet } = req;
+        const answer = await generate(quiet);
+        req.onStepUsage?.({ model: heavy.model, billable: true, input: { reported: 60_000, estimated: 0 }, output: { reported: 100, estimated: 0 } });
+        return answer;
+      };
+      world.model.provider = heavy;
+      const flow = await world.flows.create({
+        name: "IA duas vezes",
+        definition: manual([{ type: "ai", instruction: "Resuma.", output: "a" }, { type: "wait", minutes: 1 }, { type: "ai", instruction: "Resuma.", output: "b" }]),
+      });
+      expect((await world.flows.runNow(flow.id)).status).toBe("waiting");
+      const spent = world.flows.neuronsToday();
+      expect(spent).toBeGreaterThan(100);
+      // Half of the first call's use left: room for the second, unless the first counted twice.
+      world.db.run(`UPDATE zur_flow_days SET neurons = ?`, FLOW_LIMITS.neuronsPerDay - spent / 2);
+      world.clock.now += 2 * MINUTE;
+      await world.flows.tick();
+      expect((await world.flows.runs({})).runs[0]).toMatchObject({ status: "success" });
     });
   });
 });

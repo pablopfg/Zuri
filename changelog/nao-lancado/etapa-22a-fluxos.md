@@ -16,7 +16,7 @@
 - Histórico das execuções, com o passo e o motivo de cada parada. Depois de 5
   falhas seguidas o fluxo se desliga e avisa.
 - "Criar fluxo" na paleta Ctrl/⌘K. No bot, `/status` mostra os sites
-  monitorados e os fluxos com falha.
+  monitorados e os fluxos com falha (com a leitura travada, só as contagens).
 
 ### Segurança
 
@@ -31,5 +31,8 @@
 - Toda chamada confere o nome por DNS, recusa rede interna, não segue
   redirecionamento e tem teto de tempo e tamanho. O que um serviço responde é
   dado: não muda os passos e entra na IA como `<data source="flow">`.
+- Desligar ou mudar um fluxo encerra a execução dele que estava esperando. Um
+  valor vindo de fora igual a `.` ou `..` não muda o caminho chamado: a
+  execução para.
 - No modo de bloqueio nenhum fluxo roda e as rotas dos fluxos respondem 423.
 - O teste dos logs passa a conferir que números de telefone nunca aparecem neles.

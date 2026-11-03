@@ -235,13 +235,17 @@ export class FlowConnections {
       await response.body?.cancel().catch(() => undefined);
       throw new FlowStepError("redirect");
     }
+    if (response.status >= 400) {
+      // The answer of a refusal is never read: its status is all the run keeps.
+      await response.body?.cancel().catch(() => undefined);
+      throw new FlowStepError("http_error", TRANSIENT_STATUS.has(response.status), response.status);
+    }
     let raw: string;
     try {
       raw = await limitBody(response, FLOW_LIMITS.responseBytes, FLOW_LIMITS.requestTimeoutMs).text();
     } catch (error) {
       throw networkProblem(error);
     }
-    if (response.status >= 400) throw new FlowStepError("http_error", TRANSIENT_STATUS.has(response.status), response.status);
     return { status: response.status, body: readBody(raw, response.status) };
   }
 

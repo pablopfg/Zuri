@@ -63,6 +63,7 @@ export function registerFlowRoutes(app: Hono<ApiEnv>, deps: () => FlowRouteDeps,
     return Response.json({ deleted: true });
   });
 
+  // Running asks for no password, on or off (the owner's decision of 03/11/2026, risk accepted).
   app.post("/flows/:id/run", async (c) => Response.json({ run: await deps().flows.runNow(flowId(c.req.param("id"))) }));
 
   app.post("/flows/connections", async (c) => {

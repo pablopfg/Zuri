@@ -178,7 +178,7 @@ test("the counts ride on numbers only: the heartbeat carries no content", async 
   const beat = await page.request.post("/api/auth/heartbeat", { headers: CSRF, data: { active: false } });
   expect(beat.status()).toBe(200);
   const body = (await beat.json()) as { versions?: Record<string, unknown> };
-  expect(Object.keys(body.versions ?? {}).sort()).toEqual(["automations", "calendar", "contacts", "conversations", "memories", "notes", "projects", "tasks", "trash"]);
+  expect(Object.keys(body.versions ?? {}).sort()).toEqual(["automations", "calendar", "contacts", "conversations", "flows", "memories", "notes", "projects", "tasks", "trash"]);
   for (const value of Object.values(body.versions ?? {})) expect(typeof value).toBe("number");
   const tasks = (await (await page.request.get("/api/tasks/counts", { headers: CSRF })).json()) as { counts: Record<string, number> };
   expect(Object.keys(tasks.counts).sort()).toEqual(["all", "completed", "overdue", "today", "upcoming"]);

@@ -9,6 +9,7 @@ import { InternalState } from "../src/db/internal-state.ts";
 import { AppError } from "../src/http/errors.ts";
 import { TelegramLinks } from "../src/telegram/links.ts";
 import { client, live, noCookies, right, TEST_PASSWORD } from "./auth-harness.ts";
+import { FakeNetwork } from "./flow-world.ts";
 import { HUMAN_TOKEN, TEST_EMAIL, testEnv } from "./helpers.ts";
 
 // D2 of docs/planos/troca-de-provedores-e-protecao-de-dados.md: every
@@ -26,6 +27,8 @@ const STORED_EMAIL = "canario.dono@exemplo.com.br";
 const SETUP_CODE = "CANARIO-codigo-de-instalacao-0123456789abcdef";
 /** Visible content: it must reach the model, which proves the recorder sees the tool results. */
 const VISIBLE = "VISIVEL-7731";
+/** A flow connection's credential (step 22a): it goes only in the request header. */
+const FLOW_CREDENTIAL = "CANARIO-credencial-do-fluxo-0123456789";
 /** The bot's link (step 12): the account's id, @ and name never reach a model. */
 const TELEGRAM_ID = 987650001;
 const TELEGRAM_USERNAME = "CANARIO_telegram_usuario";
@@ -93,6 +96,28 @@ describe("the canary test (D2): nothing sensitive reaches a model", () => {
       // A routine run (no conversation, read tools only).
       await agent.runner().scheduled({ name: "Resumo", prompt: "call list_tasks {}", quiet: false, signal: new AbortController().signal });
 
+      // A flow (step 22a): a connection with its credential, a request and an AI step over the answer.
+      const network = new FakeNetwork();
+      network.handlers.set("api.exemplo.com.br", () => Response.json({ data: [{ nome: `Cliente ${VISIBLE}` }] }));
+      store.flows.network = network;
+      const connection = await store.flows.connections.create(
+        { name: "CRM", origin: "https://api.exemplo.com.br", methods: ["GET"], paths: ["/v1"], auth: "bearer", headerName: null, credential: FLOW_CREDENTIAL },
+        { development: false },
+      );
+      const flow = await store.flows.create({
+        name: "Resumo do CRM",
+        definition: {
+          version: 1,
+          trigger: { type: "manual" },
+          nodes: [
+            { type: "request", connection, method: "GET", path: "/v1/clientes", body: "none", each: false, itemsPath: "data" },
+            { type: "ai", instruction: "Resuma.", output: "resumo" },
+          ],
+        },
+      });
+      expect((await store.flows.runNow(flow.id)).status).toBe("success");
+      expect(network.requests[0]?.headers.get("authorization")).toBe(`Bearer ${FLOW_CREDENTIAL}`);
+
       const sessionRows = store.db.all<Record<string, unknown>>(`SELECT * FROM zur_sessions`);
       const canaries = [
         TEST_EMAIL,
@@ -117,6 +142,7 @@ describe("the canary test (D2): nothing sensitive reaches a model", () => {
         TELEGRAM_USERNAME,
         TELEGRAM_NAME,
         testEnv.TELEGRAM_BOT_TOKEN,
+        FLOW_CREDENTIAL,
       ].filter((value): value is string => typeof value === "string" && value.length > 0);
       expect(canaries.length).toBeGreaterThan(18);
 
@@ -130,6 +156,9 @@ describe("the canary test (D2): nothing sensitive reaches a model", () => {
       const results = JSON.stringify(prompts.flatMap((p) => p.toolResults));
       expect(results).toContain(VISIBLE);
       expect(results).toContain("Bolo de fubá");
+      // The flow's answer reached its AI step as data, inside its own block.
+      expect(everything).toContain(`<data source=\\"flow\\" id=\\"1\\">`);
+      expect(everything).toContain(`Cliente ${VISIBLE}`);
     });
   });
 });

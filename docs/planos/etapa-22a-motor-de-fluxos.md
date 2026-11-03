@@ -62,7 +62,7 @@ Object, dentro do plano grátis.
 | CA11 | Fluxo nasce desligado; ligar, criar e mudar pedem senha recente | prompt da etapa |
 | CA12 | No bloqueio nenhum fluxo roda (execução `skipped`, problema `lockdown`) e as rotas de fluxos respondem 423 | especificação (modo de bloqueio) |
 | CA13 | Tudo o que entra (resposta de conexão, campos) vai ao modelo só em `<data source="flow">` neutralizado e nunca muda a definição | prompt da etapa |
-| CA14 | Falha temporária de requisição tenta de novo em 1, 5 e 15 min (3 tentativas); erro 4xx encerra; a execução guarda o ponto de retomada e um reinício nunca roda o mesmo passo duas vezes | plano |
+| CA14 | Falha temporária de requisição tenta de novo em 1 e 5 min (3 tentativas ao todo); erro 4xx encerra; a execução guarda o ponto de retomada e um reinício nunca roda o mesmo passo duas vezes | plano |
 | CA15 | Histórico das últimas 2.000 execuções com estado, problema, chamadas, itens e Neurons; falha vai ao Diagnóstico | plano (novo) |
 | CA16 | Dados de contato fora dos logs: o lint de logs passa a barrar telefone | prompt da etapa |
 | CA17 | Tela Fluxos com estados vazio, carregando e erro, teclado, leitor de tela, celular, claro e escuro, axe e e2e; ação "Novo fluxo" na paleta | padrão de qualidade (31/10/2026) |
@@ -158,7 +158,7 @@ traduções em `en.ts`; avisos do servidor em `pt-BR-server.ts`. Passados pela
 | Estado guardado de uma execução | 256 KB | `error`, `too_large` |
 | Resposta lida | 256 KB (monitor: 64 KB) | `error`, `too_large` (monitor: lê 64 KB e para, sem erro) |
 | Tempo de uma requisição | 10 s | tentativa nova |
-| Tentativas | 3 (1, 5, 15 min) | `error` com o problema da última |
+| Tentativas | 3 (agora, +1 min, +5 min) | `error` com o problema da última |
 | Execuções por dia (UTC) | 500 | `skipped`, `runs_limit` |
 | Neurons por dia dos fluxos | 3.000 (dentro dos 9.000) | `skipped`, `ai_limit` |
 | Espera | 1 min a 30 dias | 400 |

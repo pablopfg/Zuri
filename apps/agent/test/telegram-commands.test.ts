@@ -389,6 +389,32 @@ describe("reading", () => {
     expect(buttons(lastSent()).map((b) => b.text)).toEqual(["Destravar"]);
   });
 
+  // A flow with a failed run and two monitored sites, one down, for /status.
+  const withStatusFlows = async (fn: () => Promise<void>) => {
+    await inOwner((agent) => {
+      const { db } = agent.store;
+      db.run(`INSERT INTO zur_flows (id, name, definition, enabled, last_run_status, created_at, updated_at) VALUES ('f-status', 'Monitor\nfalso', '{}', 1, 'error', 'x', 'x')`);
+      db.run(`INSERT INTO zur_flow_sites (flow_id, url, state) VALUES ('f-status', 'https://a.exemplo.com.br/', 'up'), ('f-status', 'https://b.exemplo.com.br/', 'down')`);
+    });
+    try {
+      await fn();
+    } finally {
+      await inOwner((agent) => {
+        agent.store.db.run(`DELETE FROM zur_flow_sites`);
+        agent.store.db.run(`DELETE FROM zur_flows`);
+      });
+    }
+  };
+
+  it("/status unlocked: the sites down (defanged, never a link) and the failed flows by name, each on one line", async () => {
+    await linkOwner();
+    await withStatusFlows(async () => {
+      const flows = await command("/status");
+      expect(flows).toContain("Sites monitorados: 1 de 2 no ar.\n• Fora do ar: b[.]exemplo[.]com[.]br");
+      expect(flows).toContain("Fluxos com falha na última execução (1): Monitor falso. Veja em Automações › Fluxos.");
+    });
+  });
+
   it("/uso, /status and /backup answer while reading is locked", async () => {
     await linkOwner();
     await idle(13 * HOUR);
@@ -409,23 +435,15 @@ describe("reading", () => {
     } finally {
       await inOwner((agent) => agent.store.db.run(`DELETE FROM zur_mcp_servers`));
     }
-    // Step 22a: the monitored sites, the ones down (defanged, never a link), and the flows whose last run failed; a name can't break a line.
+    // Step 22a, locked: the flows' counts only, never a site's host or a flow's name.
     expect(status).not.toContain("Sites monitorados");
-    await inOwner((agent) => {
-      const { db } = agent.store;
-      db.run(`INSERT INTO zur_flows (id, name, definition, enabled, last_run_status, created_at, updated_at) VALUES ('f-status', 'Monitor\nfalso', '{}', 1, 'error', 'x', 'x')`);
-      db.run(`INSERT INTO zur_flow_sites (flow_id, url, state) VALUES ('f-status', 'https://a.exemplo.com.br/', 'up'), ('f-status', 'https://b.exemplo.com.br/', 'down')`);
-    });
-    try {
+    await withStatusFlows(async () => {
       const flows = await command("/status");
-      expect(flows).toContain("Sites monitorados: 1 de 2 no ar.\n• Fora do ar: b[.]exemplo[.]com[.]br");
-      expect(flows).toContain("Fluxos com falha na última execução (1): Monitor falso. Veja em Automações › Fluxos.");
-    } finally {
-      await inOwner((agent) => {
-        agent.store.db.run(`DELETE FROM zur_flow_sites`);
-        agent.store.db.run(`DELETE FROM zur_flows`);
-      });
-    }
+      expect(flows).toContain("Sites monitorados: 1 de 2 no ar.");
+      expect(flows).toContain("Fluxos com falha na última execução: 1. Veja em Automações › Fluxos.");
+      expect(flows).not.toContain("exemplo");
+      expect(flows).not.toContain("Monitor");
+    });
     expect(await command("/backup")).toBe("O backup automático ainda não está ligado. Quando estiver, eu conto aqui a idade do último.");
     expect(buttons(lastSent())).toEqual([{ text: "Abrir no app", url: `${ORIGIN}/configuracoes/dados` }]);
     // None of these counted as use: reading stays locked.

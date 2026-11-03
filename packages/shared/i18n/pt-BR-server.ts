@@ -423,6 +423,7 @@ export const ptBRServer = {
   "telegram.cmd.status.sites": "Sites monitorados: {up} de {n} no ar.",
   "telegram.cmd.status.siteDown": "• Fora do ar: {host}",
   "telegram.cmd.status.flowsFailing": "Fluxos com falha na última execução ({n}): {names}. Veja em Automações › Fluxos.",
+  "telegram.cmd.status.flowsFailingLocked": "Fluxos com falha na última execução: {n}. Veja em Automações › Fluxos.",
   "telegram.cmd.status.mcpSemLogin": "Serviços externos esperando você entrar na conta: {n}. Veja em Configurações › Integrações.",
   "telegram.cmd.backup": "O backup automático ainda não está ligado. Quando estiver, eu conto aqui a idade do último.",
   "telegram.date.mesmoDia": "Hoje já é {dia}. É para hoje ou para a semana que vem? Mande de novo com a hora ou com “que vem”.",
