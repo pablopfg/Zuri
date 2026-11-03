@@ -18,12 +18,12 @@ async function openHome(page: Page) {
   await expect(page.getByRole("heading", { level: 1, name: /^(Bom dia|Boa tarde|Boa noite)/ })).toBeVisible();
 }
 
-test("the sidebar holds Nova conversa, the seven places and the account; settings and sign-out moved to the account menu", async ({ page }) => {
+test("the sidebar holds Nova conversa, the eight places and the account; settings and sign-out moved to the account menu", async ({ page }) => {
   await openHome(page);
   const aside = sidebar(page);
   await expect(aside.getByRole("link", { name: "Nova conversa" })).toHaveAttribute("href", "/conversa");
   const nav = aside.getByRole("navigation", { name: "Navegação principal" });
-  await expect(nav.getByRole("link")).toHaveText(["Início", "Conversa", /^Tarefas( \d+)?$/, "Agenda", "Notas", "Memória", "Automações"]);
+  await expect(nav.getByRole("link")).toHaveText(["Início", "Conversa", /^Tarefas( \d+)?$/, "Agenda", "Contatos", "Notas", "Memória", "Automações"]);
   await expect(aside.getByRole("link", { name: "Configurações" })).toHaveCount(0);
   await expect(aside.getByRole("button", { name: "Sair" })).toHaveCount(0);
   // The bell lives in the top bar now.
