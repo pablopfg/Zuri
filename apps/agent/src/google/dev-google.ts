@@ -237,11 +237,11 @@ const pad = (n: number) => String(n).padStart(2, "0");
 
 /** A few sample events around today, for `npm run dev`, the e2e and the screenshots. */
 function seed(google: DevGoogle): void {
-  const now = new Date();
-  // Local dates written for America/Sao_Paulo (UTC-3), the sample owner's zone.
+  // Today in America/Sao_Paulo (UTC-3), the sample owner's zone, so "today" is the owner's day at any hour.
+  const [y, m, d] = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(new Date()).split("-").map(Number) as [number, number, number];
   const day = (offset: number) => {
-    const d = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + offset));
-    return `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}`;
+    const date = new Date(Date.UTC(y, m - 1, d + offset));
+    return `${date.getUTCFullYear()}-${pad(date.getUTCMonth() + 1)}-${pad(date.getUTCDate())}`;
   };
   const at = (offset: number, hour: number, minute = 0) => `${day(offset)}T${pad(hour)}:${pad(minute)}:00-03:00`;
   let n = 0;

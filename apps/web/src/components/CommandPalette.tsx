@@ -5,6 +5,7 @@ import {
   Bell,
   Bot,
   Brain,
+  CalendarDays,
   CalendarPlus,
   Clock,
   CircleCheck,
@@ -41,6 +42,8 @@ addMessages(ptBRSettingsTabs);
  * strings, so that lazy screen needs no shared module (armadilhas.md).
  */
 const NEW_AUTOMATION = "nova-automacao";
+/** The same for the Agenda's "Novo evento" (AgendaPage.tsx, NEW_EVENT). */
+const NEW_EVENT = "novo-evento";
 
 /** How many of each kind the search lists: a shortcut, not the full page. */
 const PER_KIND = 5;
@@ -99,6 +102,7 @@ export function CommandPalette({ onClose, navigate }: { onClose: () => void; nav
       { id: "chat", group: go, label: t("web.nav.chat"), icon: MessageCircle, to: "/conversa" },
       { id: "tasks", group: go, label: t("web.nav.tasks"), icon: ListTodo, to: "/tarefas" },
       { id: "notes", group: go, label: t("web.nav.notes"), icon: NotebookPen, to: "/notas" },
+      { id: "agenda", group: go, label: t("web.nav.agenda"), icon: CalendarDays, to: "/agenda" },
       { id: "automations", group: go, label: t("web.nav.automations"), icon: Clock, to: "/automacoes" },
       { id: "memory", group: go, label: t("web.nav.memory"), icon: Brain, to: "/memoria" },
       { id: "access", group: go, label: t("web.nav.accessLog"), icon: ShieldCheck, to: "/acessos" },
@@ -121,6 +125,15 @@ export function CommandPalette({ onClose, navigate }: { onClose: () => void; nav
         before: () => window.dispatchEvent(new Event(NEW_AUTOMATION)),
       },
       { id: "new-note", group: t("web.palette.groupCreate"), label: t("web.palette.newNote"), icon: FilePlus2, to: "/notas/nova" },
+      {
+        id: "new-event",
+        group: t("web.palette.groupCreate"),
+        label: t("web.palette.newEvent"),
+        icon: CalendarPlus,
+        // As "Nova automação": the Agenda hears the event, or reads the address on arrival (AgendaPage.tsx).
+        to: location.pathname === "/agenda" ? "/agenda" : `/agenda#${NEW_EVENT}`,
+        before: () => window.dispatchEvent(new Event(NEW_EVENT)),
+      },
     ];
   }, [t]);
 

@@ -22,6 +22,7 @@ const SecondStepPage = lazy(() => import("./pages/setup/SecondStepPage.tsx").the
 const FirstAccessPage = lazy(() => import("./pages/setup/FirstAccessPage.tsx").then((m) => ({ default: m.FirstAccessPage })));
 const RecoveryPage = lazy(() => import("./pages/setup/RecoveryPage.tsx").then((m) => ({ default: m.RecoveryPage })));
 const ApprovePage = lazy(() => import("./pages/ApprovePage.tsx").then((m) => ({ default: m.ApprovePage })));
+const AgendaPage = lazy(() => import("./pages/agenda/AgendaPage.tsx").then((m) => ({ default: m.AgendaPage })));
 const NotesPage = lazy(() => import("./pages/productivity/NotesPage.tsx").then((m) => ({ default: m.NotesPage })));
 
 /** While the password must change, the second step must be turned on or a lockdown is on, the server refuses everything else: so does the interface. */
@@ -118,6 +119,14 @@ export function App() {
           element={
             <Suspense fallback={<ScreenLoading />}>
               <NotesPage />
+            </Suspense>
+          }
+        />
+        <Route
+          path="agenda"
+          element={
+            <Suspense fallback={<ScreenLoading />}>
+              <AgendaPage />
             </Suspense>
           }
         />

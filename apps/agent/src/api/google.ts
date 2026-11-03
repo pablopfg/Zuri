@@ -76,9 +76,9 @@ export function registerGoogleRoutes(app: Hono<ApiEnv>, deps: () => GoogleRouteD
     const input = await readJson(c.req.raw, googleCallbackSchema, 8 * 1024);
     const { google, auth } = deps();
     auth.requireRecentAuth(c.get("session"));
-    await owner(() => google.finish(input, c.get("session").id));
+    const { replaced } = await owner(() => google.finish(input, c.get("session").id));
     auth.events.record("google_connected", client(c), { alert: true });
-    return Response.json(google.status());
+    return Response.json({ ...google.status(), replaced });
   });
 
   app.post("/google/refresh", async () => {

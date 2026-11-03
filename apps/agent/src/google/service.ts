@@ -593,7 +593,11 @@ export class GoogleCalendar {
         await res.body?.cancel();
         continue;
       }
-      if (res.ok) return res.status === 204 ? (await res.body?.cancel(), null) : await readJson(res);
+      if (res.ok && res.status === 204) {
+        await res.body?.cancel();
+        return null;
+      }
+      if (res.ok) return await readJson(res);
       await res.body?.cancel();
       throw apiError(res.status);
     }

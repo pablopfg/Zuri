@@ -53,6 +53,8 @@ export default defineConfig({
         ` --var TELEGRAM_BOT_TOKEN:${E2E_TELEGRAM_TOKEN} --var TELEGRAM_ADMIN_ID:${E2E_TELEGRAM_ADMIN}` +
         // A made-up key for the MCP servers' tokens (step 18): the servers on *.exemplo.com.br are simulated (src/mcp/dev-mcp.ts).
         " --var MCP_CREDENTIAL_KEY:e2e-chave-mcp-inventada-0123456789abcdef" +
+        // A made-up Google OAuth client (step 19): over loopback the Worker answers Google itself (src/google/dev-google.ts).
+        " --var GOOGLE_CLIENT_ID:e2e-cliente-inventado.apps.googleusercontent.com --var GOOGLE_CLIENT_SECRET:e2e-segredo-inventado" +
         // A copy of everything the Worker prints, for the check after the run, and
         // all of it back on stderr: Playwright shows only the server's stderr.
         // Appending (the file was just removed): the second server writes to it too,
