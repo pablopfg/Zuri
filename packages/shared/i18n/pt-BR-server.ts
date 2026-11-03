@@ -187,6 +187,7 @@ export const ptBRServer = {
   "notice.security.telegram_unlocked.body": "A leitura pelo bot foi liberada por 12 h, com a sua passkey ou um código no seu e-mail. Se não foi você, desvincule o Telegram em Configurações › Avisos e troque a senha.",
   "notice.security.telegram_approved.title": "Proposta aprovada pelo Telegram",
   "notice.security.telegram_approved.body": "Uma proposta da Zuri foi aprovada pelo bot, com a sua passkey ou um código no seu e-mail. Se não foi você, desvincule o Telegram em Configurações › Avisos e troque a senha.",
+  "auth.lockdown.recovery": "O modo de bloqueio está ligado, então a senha não pode ser trocada por e-mail enquanto ele durar. Entre com a sua senha e um código de recuperação para sair dele.",
   "auth.lockdown.strict": "O modo de bloqueio foi ligado há menos de 1 hora. Por enquanto, só se entra com um código de recuperação: toque em Usar um código de recuperação.",
   "auth.lockdown.active": "O modo de bloqueio está ligado. Saia dele para usar o app.",
   "auth.lockdown.none": "O modo de bloqueio não está ligado.",

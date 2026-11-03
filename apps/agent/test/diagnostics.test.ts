@@ -149,6 +149,24 @@ describe("the failure log", () => {
     });
   });
 
+  it("SEC-A9-01 lets the interface open at most 20 kinds by name; a new name past them counts as Error", async () => {
+    await withDiagnostics(async (w) => {
+      const kinds = DIAGNOSTIC_LIMITS.clientKinds;
+      for (let i = 0; i <= kinds + 5; i++) {
+        // A new hour each time: the hourly cap is not what stops this.
+        w.world.clock.now += 60 * MINUTE;
+        w.diagnostics.recordClient({ name: `Made${i}`, route: "/tarefas" });
+      }
+      const names = w.diagnostics.report().entries.map((e) => e.errorName);
+      expect(names.filter((n) => n.startsWith("Made"))).toHaveLength(kinds);
+      expect(names.filter((n) => n === "Error")).toHaveLength(1);
+      // A name already kept still counts as itself.
+      w.world.clock.now += 60 * MINUTE;
+      w.diagnostics.recordClient({ name: "Made3", route: "/tarefas" });
+      expect(w.diagnostics.report().entries.find((e) => e.errorName === "Made3")?.countTotal).toBe(2);
+    });
+  });
+
   it("folds a flood of the same failure into one write every few seconds, losing no count", async () => {
     await withDiagnostics(async (w) => {
       w.diagnostics.record(failure);

@@ -201,7 +201,22 @@ export class DiagnosticsService {
       throw new AppError("RATE_LIMITED", undefined, { retryAfter: Math.max(1, Math.ceil(((start ?? 0) + HOUR_MS - nowMs) / 1000)) });
     }
     this.state.set("diagnostics_client_window", `${fresh ? nowMs : start}|${used + 1}`);
-    this.record({ source: "interface", code: "CLIENT_ERROR", errorName: input.name, route: screenOf(input.route) });
+    const route = screenOf(input.route);
+    this.record({ source: "interface", code: "CLIENT_ERROR", errorName: this.clientName(input.name, route), route });
+  }
+
+  /**
+   * SEC-A9-01: the name is the page's word, so a page (broken or not) could
+   * make up a new kind on every report, push the server's real failures out
+   * of the 200 kept and raise a "new failure" notice each time. Past 20 kinds
+   * from the interface, a name not seen yet counts as "Error".
+   */
+  private clientName(name: string, route: string | null): string {
+    if (!NAME.test(name)) return "Error";
+    const id = fnv64(`interface:${route ?? "-"}:CLIENT_ERROR:${name}`);
+    if (this.db.one(`SELECT 1 AS found FROM zur_diagnostics WHERE id = ?`, id)) return name;
+    const kinds = this.db.one<{ n: number }>(`SELECT count(*) AS n FROM zur_diagnostics WHERE source = 'interface'`)?.n ?? 0;
+    return kinds < DIAGNOSTIC_LIMITS.clientKinds ? name : "Error";
   }
 
   /** The tab: every kind still kept, the most recent first, and the overall state. */
