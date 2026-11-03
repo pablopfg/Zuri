@@ -492,7 +492,16 @@ main { flex: 1; min-width: 0; overflow-y: auto; }
     const s = sec(S.view);
     return `<div class="page"><div class="pagehead"><div><h1>${s.label}</h1></div></div><div class="empty"><span class="ic">${ic(s.icon)}</span><h2>Esta tela continua igual</h2><p>O protótipo muda só a moldura em volta. O que aparece em ${s.label} hoje fica do mesmo jeito.</p></div></div>`;
   }
-  const content = (v) => ({ inicio: () => home(v), conversa: chat, tarefas: tasks, notas: notes }[S.view] || other)();
+  // Fixed list of screens: S.view comes from the address, so it never picks a function by name.
+  const content = (v) => {
+    switch (S.view) {
+      case "inicio": return home(v);
+      case "conversa": return chat();
+      case "tarefas": return tasks();
+      case "notas": return notes();
+      default: return other();
+    }
+  };
 
   /* ---------- Peças das molduras ---------- */
   const cur = (id) => (S.view === id ? ' aria-current="page"' : "");
@@ -698,11 +707,12 @@ main { flex: 1; min-width: 0; overflow-y: auto; }
   const toasts = () => `<div class="toasts" role="status" aria-live="polite">${S.toasts.map((t) => `<div class="toast"><span>${t.msg}</span>${t.undo ? `<button data-act="undo" data-id="${t.undo}">Desfazer</button>` : ""}</div>`).join("")}</div>`;
 
   /* ---------- Render e eventos ---------- */
+  const SHELLS = new Map([["a", shellA], ["b", shellB], ["c", shellC], ["d", shellD], ["e", shellE]]);
   const app = document.getElementById("app"), layer = document.getElementById("layer");
   const isDark = () => S.theme ? S.theme === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
   function render() {
     const focusKey = document.activeElement && document.activeElement.id;
-    app.innerHTML = { a: shellA, b: shellB, c: shellC, d: shellD, e: shellE }[S.p]();
+    app.innerHTML = (SHELLS.get(S.p) || shellA)();
     layer.innerHTML = (S.palette ? palette() : "") + popover() + toasts();
     document.getElementById("opts-p").innerHTML = Object.entries(P).map(([k, v]) => `<button data-proto="${k}" aria-pressed="${S.p === k}">${v}</button>`).join("");
     document.getElementById("opts-t").innerHTML = `<button data-theme-set="light" aria-pressed="${!isDark()}">Claro</button><button data-theme-set="dark" aria-pressed="${isDark()}">Escuro</button>`;
@@ -720,7 +730,7 @@ main { flex: 1; min-width: 0; overflow-y: auto; }
 
   document.addEventListener("click", (e) => {
     const pr = e.target.closest("[data-proto]");
-    if (pr) { S.p = pr.dataset.proto; S.pop = null; S.drawer = false; history.replaceState(null, "", `#proposta-${S.p}`); render(); return; }
+    if (pr && SHELLS.has(pr.dataset.proto)) { S.p = pr.dataset.proto; S.pop = null; S.drawer = false; history.replaceState(null, "", `#proposta-${S.p}`); render(); return; }
     const th = e.target.closest("[data-theme-set]");
     if (th) { setTheme(th.dataset.themeSet); render(); return; }
     const g = e.target.closest("[data-go]");
@@ -771,7 +781,7 @@ main { flex: 1; min-width: 0; overflow-y: auto; }
   // Endereço: #proposta-a, com -escuro/-claro, -limpo (sem a barra do protótipo) e o nome de uma tela.
   function fromHash() {
     const h = location.hash.slice(1).split("-");
-    const k = h[1]; if (P[k]) S.p = k;
+    const k = h[1]; if (SHELLS.has(k)) S.p = k;
     if (h.includes("escuro")) setTheme("dark"); else if (h.includes("claro")) setTheme("light");
     document.body.classList.toggle("limpo", h.includes("limpo"));
     const v = h.find((x) => sec(x)); if (v) S.view = v;
