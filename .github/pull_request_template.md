@@ -46,7 +46,14 @@ Tela alterada: mostre antes e depois. Sem mudança visível: escreva "Sem mudan�
 
 ## Segurança
 
-<!-- Relatório da skill auditoria-seguranca: achados, severidade, correção e teste de cada um. Escreva "nenhum achado" só se a auditoria rodou. -->
+<!-- Passe de pentest da skill auditoria-seguranca (docs/qa/pentest.md). PR só de docs: "Sem superfície nova: pentest dispensado". Achado alto ou crítico ainda aberto não leva passo a passo aqui. -->
+
+- **Áreas atacadas:** <!-- A1…A13 -->
+- **Atacantes considerados:** <!-- T1…T8 -->
+- **Tentativas:** <!-- ataque → teste (arquivo › nome), resultado -->
+- **Achados:** <!-- SEC-<área>-<nn>, gravidade, correção, prova do vermelho; ou "nenhum achado" só se o passe rodou -->
+- **Revisão independente:** <!-- auditor-seguranca, revisor-cloudflare, /security-review -->
+- **Riscos aceitos pelo Pablo:** <!-- ou "nenhum" -->
 
 ## Custo no plano Free
 

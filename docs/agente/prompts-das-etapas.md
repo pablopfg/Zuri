@@ -5,6 +5,7 @@ Depois que o PR da etapa 0 estiver mesclado, envie um prompt por vez, na ordem.
 - **Mande o próximo só depois de mesclar o PR anterior.** A exceção são as etapas marcadas como *paralela*, que você pode pedir em conversas separadas.
 - **Toda etapa começa pelo plano.** A skill `iniciar-etapa` chama a `planejar`, que escreve `docs/planos/etapa-NN-<assunto>.md` no modelo `docs/planos/modelo-de-plano.md` e, se faltar decisão sua, faz até 3 perguntas por rodada, cada uma com a recomendação do agente. O plano vai no próprio PR.
 - **Copie só o bloco da etapa.** O agente já tem as instruções do projeto e a especificação, e cada prompt aponta a seção certa.
+- **Toda funcionalidade nova termina com um pentest.** A skill `auditoria-seguranca` ataca o que a etapa criou pelo procedimento de `docs/qa/pentest.md`, corrige com teste e registra no PR, mesmo que o bloco não diga. No fim de cada fase roda o passe completo (prompt "Pentest completo" no fim deste arquivo).
 - **Etapa com tela nova ou alterada** sempre traz no PR as capturas de como a tela ficou (computador e celular, claro e escuro), mesmo que o bloco não diga. A regra está em `.claude/rules/capturas.md`.
 - **Responda antes de continuar** quando o prompt disser "▶ Antes, você fornece". Nunca cole token, senha ou id no chat. O agente explica onde colocar cada um: segredo do Worker no painel da Cloudflare ou ambiente `production` do GitHub.
 
@@ -378,6 +379,11 @@ Pause o modo contínuo: termine só o passo atual, faça commit, marque "Situaç
 **Retomar o modo contínuo**
 ```text
 Retome o modo contínuo: marque "Situação: ligado" em .claude/memoria/progresso.md, confira o que estava em "Esperando o Pablo" (já forneci <o quê>) e siga pela próxima etapa numa thread nova.
+```
+
+**Pentest completo** (fim de fase, antes do primeiro deploy ou quando quiser)
+```text
+Rode o passe completo de pentest do Zuri (docs/qa/pentest.md, todas as áreas A1 a A13) na develop atual: um subagente auditor-seguranca por grupo de áreas, em paralelo (até 6), mais revisor-cloudflare, /security-review e cloudflare-security-audit:security-audit no modo completo. Confirme cada achado no código, escreva o ataque como teste SEC-<área>-<nn>, corrija em PRs pequenas para develop (uma por área) e grave o relatório em docs/qa/auditorias/. Achado crítico, alto ou médio: pare e me chame antes de publicar o passo a passo.
 ```
 
 **Revisar um PR antes de mesclar**
