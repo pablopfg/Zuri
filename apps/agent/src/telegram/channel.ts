@@ -55,9 +55,13 @@ export class TelegramChannel implements AlertChannel {
     return this.deps.links.private()?.status === "active" ? "ready" : "no_target";
   }
 
-  /** In the group: the topic's creation, the message and its one retry outside the topic; in private, the message. */
+  /**
+   * In the group: the topic's creation, the message and its one resend outside
+   * the topic; in private, the message. The client repeats each call once after
+   * a 429, so each counts twice.
+   */
   cost({ notice, attempt }: AlertMessage): number {
-    return notice.security || attempt >= ESCALATION.tries || !this.deps.links.group() ? 1 : 3;
+    return notice.security || attempt >= ESCALATION.tries || !this.deps.links.group() ? 2 : 6;
   }
 
   async send({ notice, attempt, origin }: AlertMessage): Promise<SendResult> {

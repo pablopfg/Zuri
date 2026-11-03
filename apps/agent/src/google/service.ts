@@ -109,6 +109,11 @@ export class GoogleMeter {
     return this.#used;
   }
 
+  /** Room for `n` more calls, in its own share and in the wake's count. */
+  room(n: number): boolean {
+    return this.#used + n <= this.budget && (this.wake?.room(n) ?? true);
+  }
+
   take(): void {
     if (this.#used >= this.budget || this.wake?.take() === false) throw new GoogleError("budget");
     this.#used++;
@@ -884,6 +889,13 @@ export class GoogleCalendar {
     let failed = false;
     let spent = false;
     for (const row of rows) {
+      // A renewal opens the new channel and stops the old one: never the first without room for the second
+      // (the watch, the stop and, on the wake's first call, the token's renewal), or both channels would stay
+      // alive until the old one ends.
+      if (!meter.room((row.watch_id ? 2 : 1) + (meter.used === 0 ? 1 : 0))) {
+        spent = true;
+        break;
+      }
       try {
         const old = row.watch_id ? { ...row } : null;
         if (old) this.deps.db.run(`UPDATE zur_google_calendars SET watch_id = NULL, watch_resource = NULL, watch_expires = NULL WHERE id = ?`, row.id);

@@ -214,7 +214,10 @@ Numeradas para o PR poder citar ("segue P2 e P4").
   avisos que ele gera. O que não coube segue no despertar seguinte, um minuto
   depois: a rotina com IA fica pendente sem ser reivindicada, os canais da
   Agenda e a página dos contatos esperam, o fluxo espera e o aviso guarda a
-  tentativa (até 100) e sai primeiro no próximo despertar. Medido em
+  tentativa (até 100; um alerta de segurança toma o lugar da mais antiga) e
+  sai primeiro no próximo despertar. O canal do Telegram conta a nova tentativa
+  que o cliente faz depois de um 429 (2 chamadas no privado, 6 no grupo), e a
+  Agenda só abre um canal novo com lugar para parar o antigo. Medido em
   `apps/agent/test/wake-budget.test.ts`: dez lembretes para três aparelhos e um
   monitor de dez sites, que somavam 48 num despertar, ficam abaixo de 45 e
   terminam nos seguintes sem perder nada.

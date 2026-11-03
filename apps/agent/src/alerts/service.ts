@@ -113,6 +113,8 @@ interface DeferredTry {
   id: string;
   attempt: number;
   insist: boolean;
+  /** A security alert's try: never pushed out of a full list. */
+  security?: boolean;
 }
 const HOUR = 3_600_000;
 const DAY = 24 * HOUR;
@@ -291,7 +293,7 @@ export class AlertService {
     if (wake && sending.length > 0) {
       const calls = sending.reduce((sum, { channel }) => sum + Math.max(1, channel.cost?.(message) ?? 1), 0);
       if (!wake.take(calls, true)) {
-        if (this.defer({ id: row.id, attempt, insist })) return;
+        if (this.defer({ id: row.id, attempt, insist, security: row.category === "security" })) return;
         // The waiting list is full: this try stays in the bell, like a channel's own cap.
         for (const step of sending) step.reason = "channel_limit";
       }
@@ -373,17 +375,26 @@ export class AlertService {
       if (!Array.isArray(parsed)) return [];
       return parsed.filter(
         (entry): entry is DeferredTry =>
-          typeof entry === "object" && entry !== null && typeof entry.id === "string" && Number.isSafeInteger(entry.attempt) && typeof entry.insist === "boolean",
+          typeof entry === "object" &&
+          entry !== null &&
+          typeof entry.id === "string" &&
+          Number.isSafeInteger(entry.attempt) &&
+          typeof entry.insist === "boolean" &&
+          (entry.security === undefined || typeof entry.security === "boolean"),
       );
     } catch {
       return [];
     }
   }
 
-  /** Keeps a try for the next wake; false when the list is full. */
+  /** Keeps a try for the next wake; false when the list is full. A security alert takes the place of the oldest other try. */
   private defer(entry: DeferredTry): boolean {
     const list = this.waiting();
-    if (list.length >= DEFERRED_MAX) return false;
+    if (list.length >= DEFERRED_MAX) {
+      const other = entry.security ? list.findIndex((waiting) => !waiting.security) : -1;
+      if (other < 0) return false;
+      list.splice(other, 1);
+    }
     list.push(entry);
     this.state.set("alert_deferred", JSON.stringify(list));
     return true;
@@ -391,8 +402,10 @@ export class AlertService {
 
   /**
    * The alarm fired: the tries the last wake had no room for go out first, in
-   * the order they came. One that still doesn't fit waits again. An insisting
-   * try the owner answered meanwhile (read, muted, done) is dropped.
+   * the order they came. One that still doesn't fit waits again. A try the
+   * owner answered meanwhile (an insisting one read, muted or done; a first one
+   * read, unless it is a security alert) is dropped; one that fails never keeps
+   * the others from going.
    */
   async resumeDeferred(): Promise<number> {
     const list = this.waiting();
@@ -400,11 +413,15 @@ export class AlertService {
     this.state.delete("alert_deferred");
     let sent = 0;
     for (const entry of list) {
-      const row = this.db.one<NoticeRow>(`SELECT * FROM zur_notices WHERE id = ?`, entry.id);
-      if (!row) continue;
-      if (entry.attempt > 1 && row.escalation !== "active") continue;
-      sent++;
-      await this.deliver(row, entry.attempt, entry.insist);
+      try {
+        const row = this.db.one<NoticeRow>(`SELECT * FROM zur_notices WHERE id = ?`, entry.id);
+        if (!row) continue;
+        if (entry.attempt > 1 ? row.escalation !== "active" : row.read_at !== null && row.category !== "security") continue;
+        sent++;
+        await this.deliver(row, entry.attempt, entry.insist);
+      } catch (error) {
+        log("error", "alert_delivery_failed", { error });
+      }
     }
     return sent;
   }

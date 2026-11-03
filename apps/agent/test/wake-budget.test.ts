@@ -1,11 +1,15 @@
-import { AGENT_INSTANCE_NAME, FLOW_LIMITS, toBase64Url } from "@zuri/shared";
+import { AGENT_INSTANCE_NAME, ESCALATION, FLOW_LIMITS, type Notice, toBase64Url } from "@zuri/shared";
 import { runInDurableObject } from "cloudflare:test";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ZuriAgent } from "../src/agent/zuri-agent.ts";
 import { currentWake, inWake, WAKE_NOTICE_RESERVE, WAKE_SUBREQUESTS, WakeBudget } from "../src/agent/wake-budget.ts";
+import { MockAIProvider } from "../src/ai/mock.ts";
 import { GoogleError, GoogleMeter } from "../src/google/service.ts";
 import { McpBudgetSpent, SubrequestMeter } from "../src/mcp/session.ts";
 import type { PushDevices } from "../src/push/devices.ts";
+import type { TelegramCallbacks } from "../src/telegram/callbacks.ts";
+import { TelegramChannel } from "../src/telegram/channel.ts";
+import type { TelegramLinks } from "../src/telegram/links.ts";
 import { testEnv } from "./helpers.ts";
 
 // Issue #152: the shared alarm runs routines, Google, the contacts, the flows
@@ -33,7 +37,13 @@ const SITES = Array.from({ length: FLOW_LIMITS.sites }, (_, i) => `https://s${i}
 const outbound = { push: 0, dns: 0, sites: 0 };
 const total = () => outbound.push + outbound.dns + outbound.sites;
 
+/** Each test 31 s after the last: the push channel's burst (30 posts in 30 s) lives in the object. */
+let shift = 0;
+
 beforeEach(() => {
+  shift += 31_000;
+  vi.useFakeTimers({ toFake: ["Date"], shouldAdvanceTime: true });
+  vi.setSystemTime(Date.now() + shift);
   outbound.push = 0;
   outbound.dns = 0;
   outbound.sites = 0;
@@ -80,7 +90,6 @@ async function addDevices(n: number): Promise<void> {
 }
 
 describe("the wake's one count of subrequests", () => {
-  // First: the push channel's burst (30 posts in 30 s) lives in the object, and the other tests post too.
   it("keeps a wake with ten reminders to three devices and a monitor of ten sites under 45, and the rest goes on at the next wakes", async () => {
     await addDevices(3);
     await inOwner(async (agent) => {
@@ -108,7 +117,7 @@ describe("the wake's one count of subrequests", () => {
         // The next wake, without waiting the minute: what waits is due now.
         db.run(`UPDATE zur_flow_runs SET resume_at = ? WHERE status = 'waiting'`, new Date(Date.now() - 1_000).toISOString());
       }
-      // Without the one count, the first wake made 30 posts and 20 flow calls: 50.
+      // Without the one count, the first wake made 30 posts and 18 flow calls (6 sites): 48.
       for (const used of wakes) expect(used).toBeLessThan(45);
       expect(wakes.length).toBeGreaterThan(1);
       // Nothing was lost: every reminder reached the three devices, every site was looked at.
@@ -157,9 +166,6 @@ describe("the wake's one count of subrequests", () => {
   });
 
   it("keeps a notice that doesn't fit for the next wake, which sends it first", async () => {
-    // Past the push burst's 30 seconds, which the first test filled.
-    vi.useFakeTimers({ toFake: ["Date"], shouldAdvanceTime: true });
-    vi.setSystemTime(Date.now() + 31_000);
     await addDevices(3);
     await inOwner(async (agent) => {
       const { alerts } = agent.store;
@@ -174,9 +180,10 @@ describe("the wake's one count of subrequests", () => {
       expect(outbound.push).toBe(3);
       // The alarm comes back for it (otherDue keeps it a minute out).
       expect(alerts.nextDue()).not.toBeNull();
-      expect(await alerts.resumeDeferred()).toBe(1);
-      await alerts.settled();
+      // The next wake of the real alarm sends it first.
+      await agent.runAutomations({});
       expect(outbound.push).toBe(6);
+      expect(alerts.nextDue()).toBeNull();
       expect(await alerts.resumeDeferred()).toBe(0);
       const deliveries = agent.store.db.all<{ status: string }>(
         `SELECT d.status FROM zur_alert_deliveries d JOIN zur_notices n ON n.id = d.notice_id WHERE n.body IN ('Primeiro', 'Segundo') AND d.channel = 'push'`,
@@ -185,17 +192,87 @@ describe("the wake's one count of subrequests", () => {
     });
   });
 
-  it("leaves an AI routine due, unclaimed, when the wake has no room for its MCP share", async () => {
+  it("leaves an AI routine due, unclaimed, when the wake has no room for its MCP share, and runs it a minute later", async () => {
+    await addDevices(3);
     await inOwner(async (agent) => {
       const { automations, db } = agent.store;
-      const routine = await automations.create({ name: "Resumo", kind: "agent_prompt", message: "Resuma o dia", schedule: { type: "daily", time: "08:00" } }, "app");
-      const past = new Date(Date.now() - 60_000).toISOString();
-      db.run(`UPDATE zur_automations SET next_run = ? WHERE id = ?`, past, routine.id);
-      const ran = await automations.wake(null, async () => ({ status: "success", result: "x" }), (kind) => kind !== "agent_prompt");
-      expect(ran).toBe(0);
-      expect(db.one<{ next_run: string }>(`SELECT next_run FROM zur_automations WHERE id = ?`, routine.id)?.next_run).toBe(past);
-      expect(db.one<{ n: number }>(`SELECT count(*) AS n FROM zur_automation_runs WHERE automation_id = ?`, routine.id)?.n).toBe(0);
+      agent.testProvider = new MockAIProvider();
+      try {
+        for (let i = 0; i < 8; i++) {
+          await automations.create({ name: `Lembrete ${i}`, kind: "reminder", message: `Lembrete ${i}`, schedule: { type: "daily", time: "08:00" } }, "app");
+        }
+        db.run(`UPDATE zur_automations SET next_run = ?`, new Date(Date.now() - 120_000).toISOString());
+        const routine = await automations.create({ name: "Resumo", kind: "agent_prompt", message: "Resuma o dia", schedule: { type: "daily", time: "08:00" } }, "app");
+        const due = new Date(Date.now() - 60_000).toISOString();
+        db.run(`UPDATE zur_automations SET next_run = ? WHERE id = ?`, due, routine.id);
+        const runs = () => db.one<{ n: number }>(`SELECT count(*) AS n FROM zur_automation_runs WHERE automation_id = ?`, routine.id)?.n;
+        // Eight reminders to three devices take 24 places: 34 - 24 leaves no room for the routine's 12.
+        await agent.runAutomations({});
+        expect(outbound.push).toBe(24);
+        expect(runs()).toBe(0);
+        expect(db.one<{ next_run: string }>(`SELECT next_run FROM zur_automations WHERE id = ?`, routine.id)?.next_run).toBe(due);
+        // The alarm comes back a minute out, not at once.
+        const alarm = String(db.one<{ value: string }>(`SELECT value FROM zur_settings WHERE key = 'automation_alarm'`)?.value ?? "");
+        expect(Date.parse(JSON.parse(alarm).split("|")[0])).toBeGreaterThanOrEqual(Date.now() + 55_000);
+        // The next wake has room: the routine runs, once.
+        await agent.runAutomations({});
+        expect(runs()).toBe(1);
+      } finally {
+        agent.testProvider = null;
+      }
     });
   });
 
+
+  it("keeps at most 100 tries waiting, a security alert pushing out the oldest other one, and drops a first try the owner already read", async () => {
+    await addDevices(3);
+    await inOwner(async (agent) => {
+      const { alerts, db } = agent.store;
+      const waiting = () => JSON.parse(JSON.parse(db.one<{ value: string }>(`SELECT value FROM zur_settings WHERE key = 'alert_deferred'`)?.value ?? '"[]"')) as { id: string }[];
+      const notices: string[] = [];
+      // No room at all: every try waits.
+      await inWake(new WakeBudget(0, 0), async () => {
+        for (let i = 0; i < 100; i++) notices.push(alerts.raise({ kind: "automation.result", category: "reminders", priority: "normal", params: { name: `L${i}` }, body: `L${i}`, source: null })?.id ?? "");
+        expect(waiting()).toHaveLength(100);
+        // The 101st stays in the bell, recorded as the cap.
+        const over = alerts.raise({ kind: "automation.result", category: "reminders", priority: "normal", params: { name: "L100" }, body: "L100", source: null })?.id ?? "";
+        expect(db.one<{ reason: string }>(`SELECT reason FROM zur_alert_deliveries WHERE notice_id = ? AND channel = 'push'`, over)?.reason).toBe("channel_limit");
+        // A security alert takes the oldest other place.
+        const security = alerts.raise({ kind: "security", category: "security", priority: "critical", params: { event: "login_success" } })?.id ?? "";
+        const list = waiting().map((entry) => entry.id);
+        expect(list).toHaveLength(100);
+        expect(list).not.toContain(notices[0]);
+        expect(list.at(-1)).toBe(security);
+        await alerts.settled();
+      });
+      // Read in the app meanwhile: those first tries don't go out; the security alert still does.
+      alerts.markRead();
+      outbound.push = 0;
+      expect(await alerts.resumeDeferred()).toBe(1);
+      await alerts.settled();
+      expect(outbound.push).toBe(3);
+    });
+  });
+
+  it("counts a Telegram notice with the client's one retry after a 429: two calls in private, six in the group", () => {
+    let group: object | null = null;
+    const channel = new TelegramChannel({
+      links: { private: () => null, group: () => group } as unknown as TelegramLinks,
+      callbacks: {} as TelegramCallbacks,
+      configured: () => true,
+      client: () => {
+        throw new Error("unused");
+      },
+      locale: () => "pt-BR",
+      origin: () => "https://zuri.exemplo.com.br",
+      fullText: () => [],
+    });
+    const message = (security: boolean, attempt = 1) => ({ notice: { security } as Notice, attempt });
+    expect(channel.cost(message(false))).toBe(2);
+    group = { chatId: -1, topics: {} };
+    expect(channel.cost(message(false))).toBe(6);
+    // A security alert and the last insisting try go to the private chat.
+    expect(channel.cost(message(true))).toBe(2);
+    expect(channel.cost(message(false, ESCALATION.tries))).toBe(2);
+  });
 });

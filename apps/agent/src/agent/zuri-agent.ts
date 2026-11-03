@@ -340,7 +340,8 @@ export class ZuriAgent extends Agent<WorkerEnv> {
       log("error", "flow_failed", { error });
     }
     await alerts.settled();
-    // Some work found no room in this wake: the alarm comes back for it (a minute out at the soonest).
+    // Some work found no room in this wake: the alarm comes back for it, a minute out (otherDue's floor, and the
+    // automations' own `notBefore` for a routine left due).
     if (budget.short) {
       try {
         await automations.rearm();
