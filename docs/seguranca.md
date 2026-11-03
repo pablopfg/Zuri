@@ -788,6 +788,52 @@ passaria pela conferência. O risco é baixo porque o Worker roda na rede da
 Cloudflare, longe da rede do dono, mas fica registrado para reavaliar quando
 houver outro tipo de saída.
 
+## Google Agenda
+
+A etapa 19 liga a conta Google do dono pelo cliente OAuth dele mesmo
+(`docs/google-agenda.md`). O que protege:
+
+- **Só o dono conecta e abre agendas.** Nenhuma ferramenta do agente conecta
+  conta nem abre agenda. Conectar e abrir uma agenda pedem a senha digitada
+  nos últimos 15 minutos; conectar gera o alerta `google_connected` e abrir
+  para escrita, o `google_calendar_write`. Toda agenda nasce fechada.
+- **OAuth sem atalho.** PKCE S256, `state` aleatório de 256 bits, de uso
+  único, que vence em 10 minutos e só vale na sessão que começou (o hash da
+  sessão vai junto). A volta é sempre `/configuracoes/integracoes` (o endereço
+  cadastrado no Google), o código sai da barra de endereços na hora e a
+  interface só aceita mandar o navegador para `https://accounts.google.com`.
+  Permissão desmarcada não grava nada. Outra conta no lugar apaga as agendas
+  da anterior e devolve o acesso dela ao Google.
+- **Tokens que não saem.** Refresh e access token cifrados com AES-256-GCM
+  numa chave derivada do `MCP_CREDENTIAL_KEY` com `info` próprio
+  (`google-v1`) e dados associados por tipo de token. Nenhuma resposta da API,
+  log ou backup leva token. Desconectar apaga daqui e revoga no Google.
+- **Endereços fixos.** Só `oauth2.googleapis.com` e
+  `www.googleapis.com/calendar/v3`, prazo de 10 s, sem seguir
+  redirecionamento, resposta até 1 MB e um teto de chamadas por turno, por
+  ação da tela e por despertar (regra P9). No bloqueio, nada sai.
+- **Nada a terceiros.** Eventos criados e mudados sem convidados e com
+  `sendUpdates=none`; o corpo mandado ao Google passa por uma lista fixa de
+  campos. Editar e apagar mandam o `etag` visto (`If-Match`): se o evento
+  mudou no Google, nada é sobrescrito nem apagado (`TARGET_CHANGED`).
+- **Apagar pela conversa é proposta.** `delete_calendar_event` vira cartão; o
+  cartão mostra título, agenda e horário lidos do Google, nunca as palavras do
+  modelo. Na aprovação a Zuri confere a conta, a agenda e o modo de novo, e o
+  Google confere a versão. Um evento que a Zuri mudou no mesmo turno não pode
+  ser proposto para apagar.
+- **Rotinas só leem.** Criar e mudar eventos existem só nas conversas do
+  dono (app e bot); uma rotina, sem ninguém olhando, só consulta.
+- **Texto de evento é dado.** Título, local e descrição são escritos por quem
+  cria o evento, inclusive um estranho que convida o dono. Entram no prompt em
+  `<data source="calendar">`, sem caracteres de controle, bidi ou invisíveis.
+- **Aviso de push autenticado.** `/api/google/push` não tem sessão: o Worker
+  confere o token do canal (HMAC-SHA256 do `SESSION_SECRET` sobre o id do
+  canal, comparação em tempo constante) antes de acordar o objeto, e a
+  resposta é sempre 200 vazio, com ou sem token. O aviso só sobe um contador
+  da agenda; nenhum dado do Google entra por ali. Com o Cloudflare Access
+  ligado, só essa rota passa sem login, e só com token certo, sem cookie e sem
+  `Authorization`.
+
 ## Dados apagados
 
 Apagar uma memória (ou esvaziar a lixeira) tira o registro da tabela e do

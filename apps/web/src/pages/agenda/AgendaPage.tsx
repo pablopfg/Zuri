@@ -348,9 +348,9 @@ function EventButton({ event, calendar, onOpen, compact = false }: { event: Agen
       style={{ borderLeftColor: calendar?.color ?? "var(--accent)" }}
     >
       <span className="min-w-0 flex-1">
-        <span className="block truncate font-medium">{title}</span>
+        <span className={cn("block font-medium", compact ? "truncate" : "line-clamp-2 break-words")}>{title}</span>
         {!compact && (
-          <span className="block truncate text-xs text-fg-muted">
+          <span className="line-clamp-2 block break-words text-xs text-fg-muted">
             {when}
             {event.location ? ` · ${event.location}` : ""}
           </span>

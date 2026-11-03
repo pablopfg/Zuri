@@ -63,6 +63,10 @@ custo e nenhum recurso novo da Cloudflare.
 | CA11 | Desconectar apaga tokens e agendas daqui e revoga no Google | plano |
 | CA12 | Acesso revogado ou vencido (`invalid_grant`) marca "Conectar de novo" e avisa uma vez por dia | plano (19b, seção 4) |
 | CA13 | Chamadas só para os endereços fixos do Google, 10 s de prazo, sem seguir redirecionamento, até 1 MB; subrequisições contadas por turno | P9 |
+| CA14 | Tela **Agenda** no menu lateral, com visões dia, semana e mês, filtro por agenda, estados vazio, carregando e erro, teclado, leitor de tela, claro/escuro e celular | pedido do Pablo (03/11) |
+| CA15 | Na tela, criar, editar e apagar eventos só em agendas "Ler e editar"; agendas "Só ler" mostram sem botões; editar e apagar conferem a versão (`etag`/`If-Match`) | pedido do Pablo (03/11) |
+| CA16 | Mudança feita no Google aparece na tela aberta sem recarregar: aviso de push do Google (`events.watch`) com token HMAC conferido no Worker → área `calendar` → canal ao vivo | pedido do Pablo (03/11) |
+| CA17 | A tela não cria, renomeia nem apaga agendas: só eventos; escopos continuam os do CA3 | decisão do Pablo (03/11, "Só eventos") |
 
 ## 4. Escopo
 
@@ -329,3 +333,40 @@ em 03/11/2026), que não bloqueia o código.
 ### Perguntas abertas
 
 Nenhuma.
+
+## 15. Ajuste do Pablo (03/11/2026): tela Agenda em tempo real
+
+Pedido: "um menu dentro da área ligada da Zuri com a visualização da agenda em
+tempo real, com a possibilidade de edição, criação e atualização". Decisão no
+cartão: **Só eventos** (a tela não mexe nas agendas em si).
+
+- **Tela** `/agenda` (lazy, `apps/web/src/pages/agenda/AgendaPage.tsx`), item
+  "Agenda" no menu lateral e na paleta (ir para a Agenda, "Novo evento").
+  Visões dia, semana e mês (semana começa na segunda), filtro das agendas na
+  tela, detalhes do evento num diálogo, formulário de criar e editar, apagar
+  com confirmação no próprio diálogo. Datas no fuso do dono
+  (`apps/web/src/lib/agenda.ts`).
+- **Rotas**: `GET /api/google/events?from&to` (até 43 dias, 250 por agenda,
+  500 no total), `POST`, `PATCH` (com `etag`) e `DELETE` (com `etag`)
+  `/api/google/events`. Todas atrás da sessão, do CSRF e da origem; nenhuma
+  em `WHILE_LOCKDOWN`.
+- **Tempo real**: ao abrir uma agenda, a Zuri pede ao Google um canal de
+  push (`events.watch`) para `/api/google/push`, com um token que é o HMAC do
+  `SESSION_SECRET` sobre o id do canal. O Worker confere o token antes de
+  acordar o objeto (a rota passa pelo Access só com token válido, como o
+  webhook do Telegram) e responde sempre 200 vazio. Um aviso aceito sobe a
+  coluna `changed` da agenda, que move a área `calendar`; o canal ao vivo
+  avisa a tela, que lê a janela de novo. O alarme renova os canais um dia
+  antes do fim (no máximo 4 por despertar), com o próximo prazo guardado em
+  memória para não ler o banco a cada despertar; uma falha espera 1 hora.
+  Sem `PUBLIC_URL` https (desenvolvimento) não há push: a tela relê ao voltar
+  o foco.
+- **Custo**: nenhum recurso novo. Push do Google é grátis; cada aviso custa uma
+  requisição ao Worker e uma escrita.
+- **Teto do JS inicial**: o item do menu (ícone e nome) custa cerca de 140 B
+  na primeira carga; pedido ao Pablo subir o teto em 0,2 kB.
+- **Testes**: `apps/web/test/agenda.test.ts` (datas, semanas, mês, formulário),
+  `apps/agent/test/google-routes.test.ts` (rotas e push),
+  `apps/agent/test/calendar-tools.test.ts` (canais renovados), e2e
+  `tests/e2e/google-agenda.spec.ts` (computador e celular).
+

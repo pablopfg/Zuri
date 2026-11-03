@@ -521,7 +521,7 @@ export const ptBRServer = {
   "notice.security.google_connected.title": "Google Agenda conectada",
   "notice.security.google_connected.body": "Uma conta Google foi conectada nas Integrações. Se não foi você, desconecte, tire a Zuri em myaccount.google.com/connections e troque a senha.",
   "notice.security.google_calendar_write.title": "Agenda liberada para escrita",
-  "notice.security.google_calendar_write.body": "A Zuri passou a poder criar e mudar eventos numa agenda do Google. Se não foi você, volte a agenda para \"Só leitura\" e troque a senha.",
+  "notice.security.google_calendar_write.body": "A Zuri passou a poder criar e mudar eventos numa agenda do Google. Se não foi você, volte a agenda para \"Só ler\" e troque a senha.",
   "notice.google.reconnect.title": "A Google Agenda precisa ser conectada de novo",
   "notice.google.reconnect.body": "O Google não aceitou mais o acesso guardado. Conecte de novo em Configurações › Integrações. Se isso acontece toda semana, o app no Google Cloud ainda está em \"Teste\": publique-o.",
 } as const;

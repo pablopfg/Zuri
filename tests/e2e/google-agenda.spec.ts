@@ -45,7 +45,7 @@ async function connect(page: Page) {
   await expect(card).toBeVisible();
   await routeConsent(page);
   await card.getByRole("button", { name: "Conectar com o Google" }).click();
-  await expect(page.getByRole("status").filter({ hasText: "Google Agenda conectado." })).toBeVisible();
+  await expect(page.getByRole("status").filter({ hasText: "Google Agenda conectada." })).toBeVisible();
   // The code never stays in the address or the history.
   await expect(page).toHaveURL(/\/configuracoes\/integracoes$/);
   await expect(card.getByText(`Conectado como ${PRIMARY}`)).toBeVisible();
