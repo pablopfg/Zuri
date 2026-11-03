@@ -55,6 +55,15 @@ export function plainText(value: unknown, max: number): string {
   return clip(cleaned, max);
 }
 
+/**
+ * Third-party text as the model reads it inside a tool (description, a
+ * field's description): no angle or square brackets, so it can't open a tag
+ * nor fake the bracketed note Zuri adds after it.
+ */
+export function inert(text: string): string {
+  return text.replace(/</g, "‹").replace(/>/g, "›").replace(/\[/g, "(").replace(/\]/g, ")");
+}
+
 function depth(value: unknown, level = 0): number {
   if (value === null || typeof value !== "object" || level > CATALOG_LIMITS.maxSchemaDepth) return level;
   let max = level;
@@ -68,7 +77,8 @@ const SCHEMA_MAPS = new Set(["properties", "$defs", "definitions", "dependentSch
 const DATA_KEYWORDS = new Set(["enum", "const", "default", "examples"]);
 
 /**
- * The schema without regular expressions (`pattern`, `patternProperties`):
+ * The schema without regular expressions (`pattern`, `patternProperties`) and
+ * with its descriptions made inert (they reach the model too):
  * Zod would compile them into RegExps that run inside the Durable Object on
  * every call, and a backtracking pattern could stall the whole app. The server
  * still checks its own input; Zuri checks the shape.
@@ -80,7 +90,8 @@ export function withoutPatterns(node: unknown): unknown {
   const out: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(source)) {
     if (key === "pattern" || key === "patternProperties" || key === "format") continue;
-    if (DATA_KEYWORDS.has(key)) out[key] = value;
+    if ((key === "description" || key === "title") && typeof value === "string") out[key] = inert(value);
+    else if (DATA_KEYWORDS.has(key)) out[key] = value;
     else if (SCHEMA_MAPS.has(key) && value !== null && typeof value === "object" && !Array.isArray(value)) {
       out[key] = Object.fromEntries(Object.entries(value as Record<string, unknown>).map(([name, sub]) => [name, withoutPatterns(sub)]));
     } else out[key] = withoutPatterns(value);

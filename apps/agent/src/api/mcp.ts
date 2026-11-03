@@ -49,7 +49,8 @@ export function registerMcpRoutes(app: Hono<ApiEnv>, deps: () => McpRouteDeps, c
     // Another address or another token is the same as adding a server: the password typed recently, and the alert.
     if (patch.url !== undefined || patch.token !== undefined || patch.authType !== undefined) auth.requireRecentAuth(c.get("session"));
     const { server, urlChanged } = await service.update(id, patch);
-    if (urlChanged) auth.events.record("mcp_server_changed", client(c), { alert: true });
+    // Where the calls go or how they sign in changed: the owner is told, as for a new server.
+    if (urlChanged || patch.token !== undefined || patch.authType !== undefined) auth.events.record("mcp_server_changed", client(c), { alert: true });
     return Response.json({ server });
   });
 

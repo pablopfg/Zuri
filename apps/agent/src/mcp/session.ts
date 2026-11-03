@@ -76,6 +76,9 @@ export class McpTurn {
       await this.close(serverId);
     }
     const opening = (async (): Promise<Opened> => {
+      // The DNS check is two lookups over HTTPS (A and AAAA): counted like any other request.
+      this.meter.take();
+      this.meter.take();
       await verify();
       const client = new Client({ name: "zuri", version: APP_VERSION }, { capabilities: {} });
       const transport = new StreamableHTTPClientTransport(endpoint, {

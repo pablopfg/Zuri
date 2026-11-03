@@ -5,6 +5,7 @@ import type { MeteredAI } from "../ai/metered.ts";
 import { estimateTokens, type ProviderTool } from "../ai/provider.ts";
 import { type ConversationRepository, decodeTools, type Quoted } from "../chat/conversations.ts";
 import { McpTurnTools, recentExternal } from "../mcp/agent.ts";
+import { MCP_SUBREQUEST_BUDGET } from "../mcp/session.ts";
 import { AppError } from "../http/errors.ts";
 import { MAX_RELEVANT_MEMORIES, memoryPromptSection, memoryTokenBudget, selectRelevantMemories } from "../memory/recall.ts";
 import { ALL_TOOLS } from "../tools/index.ts";
@@ -15,6 +16,8 @@ import { log } from "../log.ts";
 
 /** Messages whose external tools stay offered, so a follow-up ("e para sexta?") keeps them. */
 const RECENT_EXTERNAL_MESSAGES = 6;
+/** The MCP share of the subrequests in a Telegram turn: the bot's client keeps the rest of the 50 (rule P9). */
+const MCP_TELEGRAM_BUDGET = 12;
 
 /** Messages read for one prompt, newest first, before the token budget picks. */
 const HISTORY_ROWS = 200;
@@ -137,7 +140,7 @@ export class AgentRunner {
     try {
       const ai = this.deps.ai();
       const registry = this.deps.registry ?? ALL_TOOLS;
-      mcp = this.externalTools(conversation.id, input);
+      mcp = this.safeExternalTools(conversation.id, input);
       const ctx: ToolContext = { ...this.deps.tools, timeZone: settings.timeZone, mode: "chat", conversationId: conversation.id, source, ...(mcp ? { mcp } : {}) };
       executor = new ToolExecutor(mcp ? [...registry, ...mcp.tools] : registry, ctx, { maxToolCalls: settings.aiMaxIterations > 1 ? settings.aiMaxToolCalls : 0 });
       const offered = executor.available();
@@ -276,15 +279,36 @@ export class AgentRunner {
    * The external tools of this turn (step 18): none without the MCP service,
    * with nothing turned on, or during a lockdown (turnTools checks it).
    */
+  /** A broken MCP setup never breaks the chat: the turn goes on with the built-in tools. */
+  private safeExternalTools(conversationId: string, input: TurnInput): McpTurnTools | null {
+    try {
+      return this.externalTools(conversationId, input);
+    } catch (error) {
+      log("error", "mcp_tool_skipped", { error });
+      return null;
+    }
+  }
+
   private externalTools(conversationId: string, input: TurnInput): McpTurnTools | null {
     const service = this.deps.tools.mcpService;
     if (!service) return null;
     const available = service.turnTools();
     if (available.length === 0) return null;
-    const recent = recentExternal(
-      this.deps.conversations.recent(conversationId, 0, RECENT_EXTERNAL_MESSAGES).filter((row) => row.role === "assistant").map((row) => decodeTools(row.tools)),
-    );
-    return new McpTurnTools(service, available, input.message, recent, input.signal);
+    const used = this.deps.conversations
+      .recent(conversationId, 0, RECENT_EXTERNAL_MESSAGES)
+      .filter((row) => row.role === "assistant")
+      .map((row) => decodeTools(row.tools));
+    const recent = recentExternal(used);
+    // Answers already in this conversation (calls that ran on their own, approved ones): data from them
+    // must not reach another server without the owner seeing it, in this turn or a later one.
+    const serverOf = new Map(available.map((t) => [t.tool.exposed_name, t.server.id]));
+    const answered = new Set(this.deps.tools.actions.externalAnswered(conversationId));
+    for (const list of used) for (const tool of list) if (tool.status === "success" && !tool.actionId && serverOf.has(tool.name)) answered.add(serverOf.get(tool.name) ?? "");
+    return new McpTurnTools(service, available, input.message, recent, input.signal, {
+      answered,
+      // The bot's turn also sends its answer through the Telegram API within the same invocation.
+      budget: input.source === "telegram" ? MCP_TELEGRAM_BUDGET : MCP_SUBREQUEST_BUDGET,
+    });
   }
 
   /**

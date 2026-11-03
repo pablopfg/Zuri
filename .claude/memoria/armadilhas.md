@@ -327,3 +327,12 @@ acrescente aqui cada armadilha nova que encontrar (sem dados pessoais).
 - Depois da PR da versão no app (02/11/2026) o JavaScript inicial ficou em
   138.986 bytes, colado no teto de 139 kB. Texto novo no primeiro carregamento
   vai para um `pt-BR-<tela>.ts` com `addMessages` ou tira bytes de outro lugar.
+- Constante de `packages/shared` que a interface importa não pode morar num
+  módulo que monta esquema Zod (nem que só importe `zod-config.ts` ou `line()`
+  de `productivity.ts`): na etapa 18 isso levou 5,9 kB de Zod para o JS
+  inicial, mesmo com a tela lazy. Constantes e tipos num arquivo sem Zod
+  (`mcp.ts`), esquemas em outro (`mcp-schemas.ts`); confira com
+  `node scripts/check-bundle-size.ts` depois do build.
+- `new Request(input, init)` consome o corpo de um `Request` passado como
+  `input`: num fetch de teste que só lê a URL e repassa `input`/`init`, o
+  servidor recebe o corpo vazio. Monte o `Request` uma vez e repasse ele.

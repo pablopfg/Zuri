@@ -693,4 +693,45 @@ describe("the Free plan budget of each route", () => {
       });
     }
   });
+  it("remote MCP (step 18): a chat turn with an external call and an approved one read the turn's window and write a handful of rows", async () => {
+    const fixture = mcpFixture({
+      tools: [
+        { name: "lookup", description: "Looks something up.", annotations: { readOnlyHint: true } },
+        { name: "file_ticket", description: "Files a ticket." },
+      ],
+    });
+    const conversationId = await runInDurableObject(owner(), async (agent: ZuriAgent) => {
+      agent.testProvider = new MockAIProvider();
+      agent.store.mcp.network = fixture.network;
+      const server = await agent.store.mcp.create({ name: "Leve", url: "https://leve.exemplo.com.br/mcp", authType: "none" });
+      agent.store.mcp.updateTool(server.id, "mcp_leve_lookup", { enabled: true, policy: "auto" });
+      agent.store.mcp.updateTool(server.id, "mcp_leve_file_ticket", { enabled: true, policy: "approve" });
+      return agent.store.conversations.create("externo").id;
+    });
+    try {
+      const turn = await cost("POST", "/chat", { conversationId, message: "call mcp_leve_lookup {}" });
+      expect(turn.status).toBe(200);
+      expect(fixture.calls).toEqual([{ name: "lookup", args: {} }]);
+      // A short conversation's window, the tools on, the server and the call's own rows; the same as a turn
+      // with one of the Zuri's own tools.
+      expect(turn.read).toBeLessThanOrEqual(80);
+      expect(turn.written).toBeLessThanOrEqual(30);
+      const proposal = await cost("POST", "/chat", { conversationId, message: "call mcp_leve_file_ticket {}" });
+      expect(proposal.read).toBeLessThanOrEqual(80);
+      expect(proposal.written).toBeLessThanOrEqual(30);
+      const actionId = await runInDurableObject(owner(), (agent: ZuriAgent) => agent.store.db.one<{ id: string }>(`SELECT id FROM zur_pending_actions WHERE substr(tool, 1, 4) = 'mcp_'`)?.id ?? "");
+      const approve = await cost("POST", `/actions/${actionId}/approve`);
+      expect(approve.status).toBe(200);
+      expect(fixture.calls).toHaveLength(2);
+      // The proposal, the tool and the server to recheck the hash, then the result on the proposal's row.
+      expect(approve.read).toBeLessThanOrEqual(25);
+      expect(approve.written).toBeLessThanOrEqual(12);
+    } finally {
+      await runInDurableObject(owner(), (agent: ZuriAgent) => {
+        agent.testProvider = null;
+        for (const table of ["zur_pending_actions", "zur_mcp_tools", "zur_mcp_servers"]) agent.store.db.run(`DELETE FROM ${table}`);
+        agent.store.conversations.delete(conversationId);
+      });
+    }
+  });
 });

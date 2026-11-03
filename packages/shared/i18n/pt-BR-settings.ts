@@ -167,6 +167,7 @@ export const ptBRSettings = {
   "web.integrations.tool.approve": "Perguntar sempre",
   "web.integrations.tool.auto": "Usar sem perguntar",
   "web.integrations.tool.approveHint": "Cada chamada aparece no chat com os dados exatos e só roda se você aprovar.",
+  "web.integrations.tool.approveOnly": "O serviço não marca esta ferramenta como só de consulta, então cada chamada pede sua aprovação no chat.",
   "web.integrations.tool.autoHint": "Só para ferramentas que apenas consultam. A Zuri ainda pergunta quando a chamada leva muitos dados ou junta dois serviços.",
   "web.integrations.tool.hint": "Quando usar (opcional)",
   "web.integrations.tool.hintHelp": "Uma dica sua para a Zuri, até {max} caracteres. Ex.: “preços de passagens aéreas”.",

@@ -593,7 +593,9 @@ limite real está no servidor:
 | Prompt com segredos | `chat-runner.test.ts`, "never carries the deployment's secrets" |
 | Ferramenta que sai dos dados do dono | `chat-tools.test.ts`, "offers nothing that reaches outside the owner's data" |
 | Resposta de serviço MCP com `</data>` e ordens | `mcp-chat.test.ts`, "returns its answer as third-party data" |
-| Dados de um serviço levados a outro sem o dono ver | `mcp-chat.test.ts`, "asks first when a call carries a lot, or follows another server's answer" |
+| Dados de um serviço levados a outro sem o dono ver | `mcp-chat.test.ts`, "asks first when a call carries a lot, or follows another server's answer", "…from an earlier turn" |
+| "Usar sem perguntar" numa ferramenta que escreve | `mcp-routes.test.ts`, "refuses 'run without asking' for a tool that does not say it only reads"; `mcp-chat.test.ts`, "never runs on its own a tool its server doesn't declare read-only" |
+| Descrição de ferramenta com `</data>` ou link | `mcp-units.test.ts`, "makes third-party text inert"; `mcp-chat.test.ts`, "gives the model the server's text with no tag or bracket of its own" |
 | Definição de ferramenta MCP trocada depois da aprovação | `mcp-chat.test.ts`, "refuses an approval when the tool, its definition or the server changed" |
 
 Nos testes, o modelo roteirizado obedece ao texto injetado de propósito. O
@@ -619,7 +621,10 @@ então o servidor externo é tratado como não confiável em tudo:
   ou liga ferramenta. Adicionar, trocar endereço, acesso ou token pede a senha
   digitada agora e gera aviso de segurança (`mcp_server_added`,
   `mcp_server_changed`). Toda ferramenta nasce desligada e em "Perguntar
-  sempre"; "Usar sem perguntar" também pede a senha digitada agora.
+  sempre"; "Usar sem perguntar" também pede a senha digitada agora e só vale
+  para ferramenta que o servidor marca como de consulta (`readOnlyHint`). Uma
+  ferramenta que escreve sempre pergunta, mesmo com a linha mexida no banco: o
+  executor confere a marca de novo.
 - **Sem SSRF.** Só `https` na porta padrão, sem usuário e senha no endereço,
   sem nome de rede particular (`localhost`, `.local`, `.internal`…) e sem IP
   particular, reservado ou de metadados, inclusive IPv4 embutido em IPv6. Antes
@@ -628,17 +633,23 @@ então o servidor externo é tratado como não confiável em tudo:
   redirecionamento e não manda cookie. O token vai só para essa origem.
 - **Sem travar o Durable Object.** Corpo cortado em 2 MB e 35 s, prazos de 10,
   15 e 30 s, sessão fechada no fim do turno, sem a stream `GET` do servidor e
-  no máximo 24 subrequisições por turno. O schema do servidor perde `pattern`,
+  no máximo 24 subrequisições por turno (12 no Telegram), contando as
+  consultas de DNS. `find_tools` só libera o que cabe nas 6 vagas e nos 2.000
+  tokens do turno. O schema do servidor perde `pattern`,
   `patternProperties` e `format` antes de virar Zod, para nenhuma expressão
   regular de terceiros rodar no objeto (ReDoS); tamanho e profundidade têm
   teto.
-- **Texto de terceiros é dado.** Nome, título e descrição viram uma linha sem
-  caracteres invisíveis e vão ao modelo marcados como texto de terceiros. A
+- **Texto de terceiros é dado.** Nome, título e descrição (também as do
+  schema) viram uma linha sem caracteres invisíveis, com `<`, `>` e colchetes
+  trocados por sinais inertes, e vão ao modelo marcados como texto de
+  terceiros. A
   resposta entra em `<data source="mcp">` e não muda regra nenhuma. A
   descrição mudou? A ferramenta sai de uso até o dono religar (hash revisado).
 - **Os dados não passeiam.** Mesmo em "Usar sem perguntar", a chamada vira
   cartão quando leva mais de 1.000 caracteres, quando o turno passaria de 4.000
-  enviados ou quando outro servidor já respondeu no turno. O cartão mostra os
+  enviados ou quando outro servidor já respondeu na conversa, neste turno ou
+  num anterior (as aprovações com resposta e as chamadas automáticas recentes
+  contam). O cartão mostra os
   argumentos exatos; a aprovação fica presa ao hash do servidor, do token
   cifrado, da definição, da política e dos argumentos, roda uma vez e nunca é
   repetida. Aprovações externas não passam pelo Telegram.
@@ -650,7 +661,15 @@ então o servidor externo é tratado como não confiável em tudo:
   volta à interface, ao log nem ao prompt. Trocar de endereço descarta o token.
 - **Erros sem texto do servidor.** Falhas viram um código (`auth`, `timeout`,
   `private_address`…) que a interface traduz; o texto do servidor nunca é
-  guardado nem logado. Três falhas seguidas pausam o servidor por 15 minutos.
+  guardado nem logado. Falha passageira (tempo, tamanho, fora do ar) não
+  desconecta; três falhas seguidas pausam o servidor por 15 minutos.
+
+Para a etapa 22, que deve trazer mais saídas de rede: o DNS é conferido antes
+de cada conexão, mas o `fetch` da Cloudflare resolve o nome de novo. Um
+servidor que troca a resposta do DNS entre as duas consultas (DNS rebinding)
+passaria pela conferência. O risco é baixo porque o Worker roda na rede da
+Cloudflare, longe da rede do dono, mas fica registrado para reavaliar quando
+houver outro tipo de saída.
 
 ## Dados apagados
 

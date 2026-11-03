@@ -410,13 +410,21 @@ function ToolRow({ server, tool }: { server: McpServerInfo; tool: McpToolInfo })
         <div className="grid gap-3 sm:grid-cols-2">
           <SelectField
             label={t("web.integrations.tool.policy")}
-            hint={tool.policy === "auto" ? t("web.integrations.tool.autoHint") : t("web.integrations.tool.approveHint")}
+            hint={
+              tool.policy === "auto"
+                ? t("web.integrations.tool.autoHint")
+                : tool.hints.readOnly === true
+                  ? t("web.integrations.tool.approveHint")
+                  : t("web.integrations.tool.approveOnly")
+            }
             value={tool.policy}
             onChange={(e) => void save({ policy: e.target.value === "auto" ? "auto" : "approve" })}
             disabled={busy}
           >
             <option value="approve">{t("web.integrations.tool.approve")}</option>
-            <option value="auto">{t("web.integrations.tool.auto")}</option>
+            <option value="auto" disabled={tool.hints.readOnly !== true}>
+              {t("web.integrations.tool.auto")}
+            </option>
           </SelectField>
           <TextField
             label={t("web.integrations.tool.hint")}

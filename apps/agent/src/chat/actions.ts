@@ -123,6 +123,19 @@ export class PendingActionRepository {
     return claimed.length === 1;
   }
 
+  /**
+   * The servers (ids) whose approved answers this conversation holds: they
+   * come back into the prompt, so a later call to another server asks first.
+   */
+  externalAnswered(conversationId: string): string[] {
+    return this.db
+      .all<{ target_id: string }>(
+        `SELECT target_id FROM zur_pending_actions WHERE conversation_id = ? AND result IS NOT NULL AND substr(tool, 1, 4) = 'mcp_' ORDER BY created_at DESC LIMIT 50`,
+        conversationId,
+      )
+      .map((row) => row.target_id.split("/")[0] ?? "");
+  }
+
   /** An approved external call that ran: what the server answered stays with it (step 18). */
   complete(id: string, result: string): void {
     this.db.run(`UPDATE zur_pending_actions SET result = ? WHERE id = ?`, result, id);
@@ -171,7 +184,7 @@ export function present(row: ActionRow, at: string): PendingAction {
   return action;
 }
 
-/** Longest argument text a card shows: the whole call, as the server will get it. */
+/** Past this, the card shows the arguments compact (as sent) rather than indented. */
 const ARGS_PREVIEW_MAX = 4_000;
 
 /** The full text a rewrite would write: what the owner reads before approving. */
@@ -179,8 +192,11 @@ function previewOf(row: ActionRow): string | undefined {
   if (row.tool.startsWith("mcp_")) {
     try {
       const payload = JSON.parse(row.payload ?? "null") as { args?: unknown } | null;
-      const text = JSON.stringify(payload?.args ?? {}, null, 2);
-      return text.length > ARGS_PREVIEW_MAX ? `${text.slice(0, ARGS_PREVIEW_MAX)}…` : text;
+      // Never cut: the executor already refused more than 4,000 characters, compact. When the indented form
+      // is longer than that (many short items), the compact one goes instead, whole.
+      const args = payload?.args ?? {};
+      const text = JSON.stringify(args, null, 2);
+      return text.length > ARGS_PREVIEW_MAX ? JSON.stringify(args) : text;
     } catch {
       return undefined;
     }

@@ -4,6 +4,7 @@ import {
   type McpAuthType,
   type McpOverview,
   type McpServerInfo,
+  type McpServerProblem,
   type McpToolInfo,
   type McpToolPolicy,
   sha256Hex,
@@ -13,11 +14,11 @@ import type { Database } from "../db/database.ts";
 import { AppError } from "../http/errors.ts";
 import { log } from "../log.ts";
 import { stableStringify } from "../tools/stable.ts";
-import { CATALOG_LIMITS, type CallResult, type CatalogEntry, checkTool, clip, resultText, toZod } from "./catalog.ts";
+import { CATALOG_LIMITS, type CallResult, type CatalogEntry, checkTool, clip, parseHints, resultText, toZod } from "./catalog.ts";
 import { McpCredentials } from "./credentials.ts";
 import { classifyMcpError, type FetchAuth, McpConnectionError } from "./guarded-fetch.ts";
 import { isUsable, McpRepository, presentTool, type ServerRow, type ToolRow } from "./repository.ts";
-import { McpBudgetSpent, McpTurn } from "./session.ts";
+import { McpBudgetSpent, McpTurn, type SubrequestMeter } from "./session.ts";
 import { type TriageTool, toolCost } from "./triage.ts";
 import { assertPublicHost, dohResolver, endpointUrl, McpEndpointError, type Resolver } from "./url.ts";
 
@@ -74,6 +75,20 @@ const host = (url: string) => {
 };
 
 /** "tool · server": how the owner sees an external tool in the chat. */
+/**
+ * Only a tool its server declares read-only may run without asking: the spec's
+ * rule 3 (a tool that changes something never runs in the agent's turn). The
+ * declaration is part of what the owner reviewed (the hash), so it can't flip
+ * after the owner turned the tool on.
+ */
+export const readOnly = (tool: ToolRow) => parseHints(tool.annotations).readOnly === true;
+
+/** The policy that really applies: "auto" on a tool that may write still asks. */
+export const effectivePolicy = (tool: ToolRow): McpToolPolicy => (tool.policy === "auto" && readOnly(tool) ? "auto" : "approve");
+
+/** Failures of a server that otherwise works: it stays listed, and three in a row pause it. */
+const TRANSIENT: ReadonlySet<McpServerProblem> = new Set(["timeout", "too_large", "unavailable", "protocol"]);
+
 export const toolLabel = (server: ServerRow, tool: ToolRow) => `${tool.title || tool.name} · ${server.name}`;
 
 /**
@@ -97,8 +112,8 @@ export class McpService {
   }
 
   /** A turn's (or one owner action's) sessions, closed with `closeAll`. */
-  newTurn(): McpTurn {
-    return new McpTurn(() => this.network.fetch);
+  newTurn(meter?: SubrequestMeter): McpTurn {
+    return new McpTurn(() => this.network.fetch, meter);
   }
 
   // ---------- The owner's side ----------
@@ -266,6 +281,7 @@ export class McpService {
   updateTool(serverId: string, toolId: string, patch: { enabled?: boolean | undefined; policy?: McpToolPolicy | undefined; hint?: string | undefined }): McpToolInfo {
     const tool = this.storedTool(serverId, toolId);
     if (patch.enabled === true && tool.status !== "available") throw new AppError("CONFLICT", "error.mcpToolUnavailable");
+    if (patch.policy === "auto" && !readOnly(tool)) throw new AppError("CONFLICT", "error.mcpToolNotReadOnly");
     if (patch.enabled === true && tool.enabled !== 1) {
       const on = this.repo.enabledTools().filter((t) => t.status === "available").length;
       if (on >= MCP_LIMITS.maxEnabledTools) throw new AppError("CONFLICT", "error.mcpToolLimit");
@@ -354,7 +370,7 @@ export class McpService {
   snapshot(targetId: string): unknown {
     const [serverId = "", ...rest] = targetId.split("/");
     const server = this.repo.get(serverId);
-    const tool = server ? (this.repo.tools(server.id).find((t) => t.name === rest.join("/")) ?? null) : null;
+    const tool = server ? this.repo.toolByName(server.id, rest.join("/")) : null;
     if (!server || !tool || server.enabled !== 1 || !isUsable(tool)) return null;
     return { server: server.id, url: server.url, auth: server.auth_type, credential: server.credential, tool: tool.name, schema: tool.schema_hash, policy: tool.policy };
   }
@@ -378,10 +394,10 @@ export class McpService {
   ): Promise<CallOutcome> {
     if (this.deps.lockdown()) throw new McpToolError("External tools are paused while the account is locked down.");
     const server = this.repo.get(target.serverId);
-    const tool = server ? (this.repo.tools(server.id).find((t) => t.name === target.toolName) ?? null) : null;
+    const tool = server ? this.repo.toolByName(server.id, target.toolName) : null;
     if (!server || !tool || server.enabled !== 1 || !isUsable(tool)) throw new McpToolError("This external tool is turned off.");
     // The list of a turn is built once: a tool switched to asking first meanwhile must not run on its own.
-    if (opts.unattended && tool.policy !== "auto") throw new McpToolError("The owner changed this tool to ask first; it no longer runs without approval.");
+    if (opts.unattended && effectivePolicy(tool) !== "auto") throw new McpToolError("The owner changed this tool to ask first; it no longer runs without approval.");
     try {
       const where = this.target(server);
       const client = await turn.client(server.id, where.url, await this.fetchAuth(server), () => where.verify(opts.signal), opts.signal);
@@ -394,7 +410,7 @@ export class McpService {
       const { problem } = classifyMcpError(error);
       log("warn", "mcp_call_failed", { kind: problem });
       // A call that timed out leaves the server listed; three failures in a row pause it all the same.
-      this.repo.failed(server.id, problem, { pauseAfter: PAUSE_AFTER, pauseMs: PAUSE_MS, keepConnected: problem === "timeout" || problem === "too_large" });
+      this.repo.failed(server.id, problem, { pauseAfter: PAUSE_AFTER, pauseMs: PAUSE_MS, keepConnected: TRANSIENT.has(problem) });
       throw new McpToolError(
         problem === "timeout" || problem === "unavailable" || problem === "protocol" || problem === "too_large"
           ? "The external server failed to answer. The call may or may not have run there: tell the owner, do not retry."

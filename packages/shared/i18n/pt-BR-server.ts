@@ -478,6 +478,7 @@ export const ptBRServer = {
   "error.mcpTokenNeeded": "Informe o token deste servidor.",
   "error.mcpServerOff": "Ligue o servidor antes de conectar.",
   "error.mcpToolUnavailable": "Esta ferramenta não pode ser ligada: o serviço não oferece mais ou ela é incompatível.",
+  "error.mcpToolNotReadOnly": "Só ferramentas de consulta podem ser usadas sem perguntar.",
   "error.mcpToolLimit": "Você já tem o máximo de ferramentas ligadas. Desligue uma antes.",
   "notice.security.mcp_server_added.title": "Serviço externo adicionado",
   "notice.security.mcp_server_added.body": "Um servidor MCP novo foi adicionado nas Integrações. Se não foi você, remova-o e troque a senha.",

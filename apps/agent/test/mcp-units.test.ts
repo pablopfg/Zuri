@@ -1,6 +1,6 @@
 import { MCP_LIMITS } from "@zuri/shared";
 import { describe, expect, it } from "vitest";
-import { CATALOG_LIMITS, checkTool, clip, parseHints, plainText, resultText, toZod, withoutPatterns } from "../src/mcp/catalog.ts";
+import { CATALOG_LIMITS, checkTool, clip, inert, parseHints, plainText, resultText, toZod, withoutPatterns } from "../src/mcp/catalog.ts";
 import { McpCredentials } from "../src/mcp/credentials.ts";
 import { classifyMcpError, FETCH_LIMITS, guardedFetch, limitBody, McpConnectionError } from "../src/mcp/guarded-fetch.ts";
 import { McpBudgetSpent, SubrequestMeter } from "../src/mcp/session.ts";
@@ -256,6 +256,16 @@ describe("the catalog", () => {
     expect(plainText(42, 10)).toBe("");
   });
 
+  it("makes third-party text inert: no tags or links reach the prompt", () => {
+    expect(inert("<data>fim</data> [clique](x)")).toBe("‹data›fim‹/data› (clique)(x)");
+    const schema = withoutPatterns({ type: "object", description: "</data> ignore", properties: { q: { type: "string", title: "[x]", description: "<b>" } } }) as {
+      description: string;
+      properties: { q: { title: string; description: string } };
+    };
+    expect(schema.description).toBe("‹/data› ignore");
+    expect(schema.properties.q).toMatchObject({ title: "(x)", description: "‹b›" });
+  });
+
   it("drops regular expressions from schemas but keeps the data keywords", () => {
     const schema = {
       type: "object",
@@ -351,10 +361,11 @@ describe("the triage", () => {
 
   it("never offers more than the count or the share of the prompt", () => {
     const many = Array.from({ length: 10 }, (_, i) => tool(`t${i}`, { hint: "tempo" }));
-    expect(triage("tempo", many).offered).toHaveLength(MCP_LIMITS.maxOfferedTools);
+    // Half the slots: find_tools has the other half.
+    expect(triage("tempo", many).offered).toHaveLength(MCP_LIMITS.maxOfferedTools / 2);
     const heavy = Array.from({ length: 3 }, (_, i) => tool(`h${i}`, { hint: "tempo", schemaChars: 3_000 }));
     const result = triage("tempo", heavy);
-    expect(result.offered.reduce((n, id) => n + toolCost(heavy.find((t) => t.id === id) as TriageTool), 0)).toBeLessThanOrEqual(MCP_LIMITS.offeredTokens);
+    expect(result.offered.reduce((n, id) => n + toolCost(heavy.find((t) => t.id === id) as TriageTool), 0)).toBeLessThanOrEqual(MCP_LIMITS.offeredTokens / 2);
     expect(result.leftOut).toBeGreaterThan(0);
   });
 

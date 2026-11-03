@@ -81,7 +81,8 @@ export interface Triage {
 /**
  * The tools a turn offers. All of them when they fit in the share and the
  * count; otherwise the ones used in the last messages first, then by score
- * (only those that match at all), until the share or the count is spent.
+ * (only those that match at all), in half the count and half the share, so
+ * find_tools has the other half.
  */
 export function triage(message: string, tools: readonly TriageTool[], recent: ReadonlySet<string> = new Set()): Triage {
   const total = tools.reduce((n, tool) => n + toolCost(tool), 0);
@@ -91,12 +92,15 @@ export function triage(message: string, tools: readonly TriageTool[], recent: Re
     .map((tool, index) => ({ tool, index, score: score(words, tool), recent: recent.has(tool.id) }))
     .filter((item) => item.recent || item.score > 0)
     .sort((a, b) => Number(b.recent) - Number(a.recent) || b.score - a.score || a.index - b.index);
+  // Half the slots and half the share: the other half is for what find_tools brings in this turn.
+  const slots = Math.floor(MCP_LIMITS.maxOfferedTools / 2);
+  const share = MCP_LIMITS.offeredTokens / 2;
   const offered: string[] = [];
   let spent = 0;
   for (const { tool } of ranked) {
-    if (offered.length >= MCP_LIMITS.maxOfferedTools) break;
+    if (offered.length >= slots) break;
     const cost = toolCost(tool);
-    if (spent + cost > MCP_LIMITS.offeredTokens) continue;
+    if (spent + cost > share) continue;
     offered.push(tool.id);
     spent += cost;
   }

@@ -10,9 +10,10 @@
   elas. Com **Perguntar sempre** (o padrão), cada chamada vira um cartão com os
   dados exatos que vão para o serviço e só roda se você aprovar. A resposta do
   serviço aparece no cartão.
-- **Usar sem perguntar**, para ferramentas que só consultam. Mesmo assim a
-  Zuri pergunta quando a chamada leva muitos dados ou quando outro serviço já
-  respondeu na mesma conversa.
+- **Usar sem perguntar**, só para ferramentas que o serviço marca como de
+  consulta. As que escrevem sempre perguntam. Mesmo assim a Zuri pergunta
+  quando a chamada leva muitos dados ou quando outro serviço já respondeu na
+  mesma conversa.
 - Com muitas ferramentas ligadas, a Zuri oferece ao modelo só as que combinam
   com o pedido e procura as outras quando precisa.
 - O cartão do servidor mostra se ele está conectado, o motivo de um problema
@@ -24,11 +25,21 @@
   particular ou de metadados são recusados, inclusive quando um nome público
   aponta para eles, e ela nunca segue redirecionamentos.
 - Adicionar um servidor, trocar endereço ou token e ligar **Usar sem
-  perguntar** pedem a senha digitada agora. Servidor novo e endereço trocado
-  geram aviso de segurança.
+  perguntar** pedem a senha digitada agora. Servidor novo, endereço trocado e
+  token trocado geram aviso de segurança.
 - O token fica cifrado e nunca volta para a tela, o registro ou o modelo.
   Trocar o endereço descarta o token e desliga as ferramentas.
-- Se o serviço mudar a descrição de uma ferramenta, ela sai de uso até você
-  ligar de novo. Uma aprovação só roda se nada mudou desde o cartão.
+- O texto que vem do serviço (nome, descrição) chega à Zuri sem marcas que
+  imitem as dela. Se o serviço mudar a descrição de uma ferramenta, ela sai de
+  uso até você ligar de novo. Uma aprovação só roda se nada mudou desde o cartão.
 - No modo de bloqueio e nas rotinas agendadas nenhuma ferramenta externa é
   usada. Aprovações de chamadas externas acontecem só no app.
+
+### Atualização
+
+- O banco ganha a migration 18 (tabelas dos servidores e das ferramentas MCP
+  e a resposta das chamadas aprovadas). Ela roda sozinha na primeira
+  requisição e só acrescenta.
+- Segredo novo e opcional `MCP_CREDENTIAL_KEY` (32 caracteres ou mais), só
+  para servidores com token de acesso. Passo a passo em
+  `docs/configuracao-cloudflare.md`.

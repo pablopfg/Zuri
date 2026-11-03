@@ -173,6 +173,11 @@ export class McpRepository {
     return this.db.all<ToolRow>(`SELECT * FROM zur_mcp_tools WHERE server_id = ? ORDER BY status = 'available' DESC, name LIMIT 200`, serverId);
   }
 
+  /** One tool by its name on the server: the primary key, one row. */
+  toolByName(serverId: string, name: string): ToolRow | null {
+    return this.db.one<ToolRow>(`SELECT * FROM zur_mcp_tools WHERE server_id = ? AND name = ?`, serverId, name);
+  }
+
   tool(exposedName: string): ToolRow | null {
     return this.db.one<ToolRow>(`SELECT * FROM zur_mcp_tools WHERE exposed_name = ?`, exposedName);
   }
@@ -255,8 +260,12 @@ export class McpRepository {
         );
       }
       const seen = new Set(entries.map((entry) => entry.name));
-      for (const name of existing.keys()) {
-        if (!seen.has(name)) this.db.run(`UPDATE zur_mcp_tools SET status = 'removed', updated_at = ? WHERE server_id = ? AND name = ?`, at, server.id, name);
+      for (const [name, tool] of existing) {
+        if (seen.has(name)) continue;
+        // A tool gone from the server and turned off has nothing to show: dropped, so the list stays bounded.
+        // One turned on stays, marked, so the owner sees why it is no longer used.
+        if (!tool.enabled) this.db.run(`DELETE FROM zur_mcp_tools WHERE server_id = ? AND name = ?`, server.id, name);
+        else if (tool.status !== "removed") this.db.run(`UPDATE zur_mcp_tools SET status = 'removed', updated_at = ? WHERE server_id = ? AND name = ?`, at, server.id, name);
       }
       this.db.run(`UPDATE zur_mcp_servers SET discovered_at = ? WHERE id = ?`, at, server.id);
     });

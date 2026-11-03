@@ -2,6 +2,8 @@ import { AGENT_INSTANCE_NAME, type McpOverview, type McpServerInfo, type McpTool
 import { runInDurableObject } from "cloudflare:test";
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import type { ZuriAgent } from "../src/agent/zuri-agent.ts";
+import { InternalState } from "../src/db/internal-state.ts";
+import { McpCredentials } from "../src/mcp/credentials.ts";
 import { call, CSRF, errorBody, HUMAN_TOKEN, ORIGIN, TEST_EMAIL, TEST_PASSWORD, testEnv } from "./helpers.ts";
 import { createIssueTool, type McpFixture, mcpFixture, searchTool } from "./mcp-fixture.ts";
 
@@ -48,6 +50,8 @@ beforeEach(async () => {
 afterEach(async () => {
   await inOwner((agent) => {
     const { db } = agent.store;
+    new InternalState(db).delete("lockdown_until");
+    Object.assign(agent.store.mcp, { credentials: new McpCredentials(testEnv.MCP_CREDENTIAL_KEY) });
     for (const table of ["zur_mcp_tools", "zur_mcp_servers", "zur_auth_events", "zur_notices"]) db.run(`DELETE FROM ${table}`);
   });
 });
@@ -194,6 +198,10 @@ describe("/api/mcp", () => {
     fixture.tools = [createIssueTool];
     await api("POST", `/mcp/servers/${server.id}/connect`);
     expect((await toolsOf(server.id)).find((t) => t.name === "search_docs")?.status).toBe("removed");
+    // One that was off is simply dropped.
+    fixture.tools = [];
+    await api("POST", `/mcp/servers/${server.id}/connect`);
+    expect((await toolsOf(server.id)).map((t) => [t.name, t.status])).toEqual([["search_docs", "removed"]]);
   });
 
   it("caps the servers and the tools turned on", async () => {
@@ -233,5 +241,64 @@ describe("/api/mcp", () => {
     fixture.failWith = null;
     const back = ((await (await api("POST", `/mcp/servers/${server.id}/connect`)).json()) as { server: McpServerInfo }).server;
     expect(back).toMatchObject({ status: "connected", pausedUntil: null });
+  });
+  it("refuses 'run without asking' for a tool that does not say it only reads", async () => {
+    const server = await addServer();
+    const path = `/mcp/servers/${server.id}/tools/mcp_docs_create_issue`;
+    expect((await api("PATCH", path, { enabled: true })).status).toBe(200);
+    const auto = await api("PATCH", path, { policy: "auto" });
+    expect(auto.status).toBe(409);
+    expect(((await auto.json()) as { message: string }).message).toBeTruthy();
+    expect((await toolsOf(server.id)).find((t) => t.name === "create_issue")?.policy).toBe("approve");
+  });
+
+  it("alerts when the token changes, even at the same address", async () => {
+    fixture.token = "tok-1";
+    const server = await addServer({ name: "Tracker", url: URL_A, authType: "bearer", token: "tok-1" });
+    await inOwner((agent) => agent.store.db.run(`DELETE FROM zur_auth_events`));
+    fixture.token = "tok-2";
+    expect((await api("PATCH", `/mcp/servers/${server.id}`, { token: "tok-2" })).status).toBe(200);
+    const kinds = await inOwner((agent) => agent.store.db.all<{ kind: string }>(`SELECT kind FROM zur_auth_events`).map((r) => r.kind));
+    expect(kinds).toEqual(["mcp_server_changed"]);
+  });
+
+  it("says when the stored token can no longer be read, without sending anything", async () => {
+    fixture.token = "tok-1";
+    const server = await addServer({ name: "Tracker", url: URL_A, authType: "bearer", token: "tok-1" });
+    // Another key, as after the owner replaced the secret.
+    await inOwner((agent) => {
+      Object.assign(agent.store.mcp, { credentials: new McpCredentials("outra-chave-inventada-0123456789abcdef") });
+    });
+    const before = fixture.requests.length;
+    const res = await api("POST", `/mcp/servers/${server.id}/connect`);
+    expect(((await res.json()) as { server: McpServerInfo }).server).toMatchObject({ status: "error", problem: "credential_unreadable" });
+    expect(fixture.requests.length).toBe(before);
+  });
+
+  it("refuses a token server when the credential secret is missing, and still takes open ones", async () => {
+    await inOwner((agent) => {
+      Object.assign(agent.store.mcp, { credentials: new McpCredentials(undefined) });
+    });
+    const overview = (await (await api("GET", "/mcp")).json()) as McpOverview;
+    expect(overview.credentialsAvailable).toBe(false);
+    const res = await api("POST", "/mcp/servers", { name: "Tracker", url: URL_A, authType: "bearer", token: "tok-1" });
+    expect(res.status).toBe(503);
+    expect(await errorBody(res)).toMatchObject({ code: "NOT_CONFIGURED" });
+    expect((await api("POST", "/mcp/servers", { name: "Docs", url: URL_A })).status).toBe(201);
+  });
+
+  it("answers nothing while the account is locked", async () => {
+    const server = await addServer();
+    await inOwner((agent) => new InternalState(agent.store.db).set("lockdown_until", new Date(Date.now() + 3_600_000).toISOString()));
+    const routes: [string, string, unknown?][] = [
+      ["GET", "/mcp"],
+      ["POST", "/mcp/servers", { name: "Outro", url: URL_A }],
+      ["PATCH", `/mcp/servers/${server.id}`, { name: "X" }],
+      ["DELETE", `/mcp/servers/${server.id}`],
+      ["POST", `/mcp/servers/${server.id}/connect`],
+      ["GET", `/mcp/servers/${server.id}/tools`],
+      ["PATCH", `/mcp/servers/${server.id}/tools/mcp_docs_search_docs`, { enabled: true }],
+    ];
+    for (const [method, path, body] of routes) expect((await api(method, path, body)).status, `${method} ${path}`).toBe(423);
   });
 });

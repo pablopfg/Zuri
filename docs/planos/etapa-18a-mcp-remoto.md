@@ -166,7 +166,7 @@ texto cita infraestrutura.
 
 Todas com sessão, CSRF e fora de `WHILE_LOCKDOWN`.
 
-- `GET /api/mcp` → `{ credentialsAvailable, limits, servers: McpServerInfo[] }`
+- `GET /api/mcp` → `{ credentialsAvailable, servers: McpServerInfo[] }` (os limites vêm de `MCP_LIMITS` no pacote compartilhado)
 - `POST /api/mcp/servers` (`mcpServerCreateSchema`, 16 KB, senha recente) → 201 `{ server }`
 - `PATCH /api/mcp/servers/:id` (`mcpServerUpdateSchema`; senha recente se a URL muda)
 - `DELETE /api/mcp/servers/:id`
@@ -213,13 +213,13 @@ Nenhum produto pago. Sem ⚠️.
 
 | Ameaça | Defesa | Teste |
 | --- | --- | --- |
-| SSRF por URL ou DNS | endereço público, DNS conferido, origem travada, sem redirecionamento | `mcp-url.test.ts`, `mcp-fetch.test.ts` |
-| Servidor lento ou enorme | 10/30/35 s, 2 MB | `mcp-fetch.test.ts` |
+| SSRF por URL ou DNS | endereço público, DNS conferido, origem travada, sem redirecionamento | `mcp-units.test.ts` |
+| Servidor lento ou enorme | 10/30/35 s, 2 MB | `mcp-units.test.ts` |
 | Vazamento do token | cifra, AAD, nunca em resposta, log ou prompt; só para a origem | `mcp-routes.test.ts` |
 | Troca de URL para roubar confiança | zera ferramentas e credencial; senha recente; alerta | `mcp-routes.test.ts` |
 | Injeção indireta (descrição/resultado) | `<data>`, descrição cortada, sem efeito na lista ou no cartão | `mcp-chat.test.ts` |
 | Agência excessiva | desligada por padrão, aprovação, escalonamento, sem agendadas, bloqueio | `mcp-chat.test.ts` |
-| Regex que trava o objeto | `pattern` removido antes do Zod | `mcp-catalog.test.ts` |
+| Regex que trava o objeto | `pattern` removido antes do Zod | `mcp-units.test.ts` |
 | Ferramenta trocada pelo servidor | hash revisado; aprovação presa ao hash | `mcp-chat.test.ts` |
 
 Auditoria: orientação (completa nas etapas 3, 4, 12, 16, 18, 20 e 25: a 18 é completa).
@@ -228,11 +228,11 @@ Auditoria: orientação (completa nas etapas 3, 4, 12, 16, 18, 20 e 25: a 18 é 
 
 | CA | Teste | Camada | Arquivo |
 | --- | --- | --- | --- |
-| CA1–CA2 | endereços e DNS | unitário | `apps/agent/test/mcp-url.test.ts` |
-| CA3–CA4 | origem, redirecionamento, 2 MB, 35 s | unitário | `apps/agent/test/mcp-fetch.test.ts` |
+| CA1–CA2 | endereços e DNS | unitário | `apps/agent/test/mcp-units.test.ts` |
+| CA3–CA4 | origem, redirecionamento, 2 MB, 35 s | unitário | `apps/agent/test/mcp-units.test.ts` |
 | CA5–CA7, CA15 | cadastro, token, troca de URL, catálogo, revisão, senha recente, alerta, limites | integração | `apps/agent/test/mcp-routes.test.ts` |
 | CA8–CA14 | chat com servidor de teste, aprovação, escalonamento, triagem, `find_tools`, injeção, agendada, bloqueio, sessão fechada | integração/segurança | `apps/agent/test/mcp-chat.test.ts` |
-| CA11 | triagem determinística pt-BR e en | unitário | `apps/agent/test/mcp-triage.test.ts` |
+| CA11 | triagem determinística pt-BR e en | unitário | `apps/agent/test/mcp-units.test.ts` |
 | P9 | subrequests e linhas do pior turno | orçamento | `apps/agent/test/free-tier-budget.test.ts` |
 | CA16 | tela, axe | e2e | `tests/e2e/integracoes.spec.ts` |
 
@@ -257,7 +257,8 @@ Auditoria: orientação (completa nas etapas 3, 4, 12, 16, 18, 20 e 25: a 18 é 
 
 - Etapa dividida em 18a e 18b, como o plano MCP recomenda e a especificação permite.
 - Aprovação de chamada MCP pelo bot fica para a 18b.
-- "Outro servidor na conversa" é contado dentro do turno: resultados de turnos anteriores não voltam ao contexto, só o texto das respostas.
+- "Outro servidor na conversa" vale para a conversa toda: a revisão de segurança mostrou que o texto das respostas de turnos anteriores volta ao contexto, então contam as aprovações com resposta e as chamadas automáticas recentes (corrigido antes do PR).
+- "Usar sem perguntar" só para ferramenta que o servidor marca como de consulta (`readOnlyHint`). É a leitura da regra 3 da especificação (escrita vira proposta); a revisão de QA achou o caso, e o PR avisa o Pablo.
 
 ## 14. Entrevista com o Pablo
 

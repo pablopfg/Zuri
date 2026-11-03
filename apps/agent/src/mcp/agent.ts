@@ -3,10 +3,10 @@ import type { ActionRow, PendingActionRepository } from "../chat/actions.ts";
 import { AppError } from "../http/errors.ts";
 import { log } from "../log.ts";
 import { stableStringify } from "../tools/stable.ts";
-import { clip } from "./catalog.ts";
-import { McpService, McpToolError, type TurnTool, toolLabel } from "./service.ts";
-import type { McpTurn } from "./session.ts";
-import { findTools, triage } from "./triage.ts";
+import { clip, inert } from "./catalog.ts";
+import { effectivePolicy, McpService, McpToolError, type TurnTool, toolLabel } from "./service.ts";
+import { MCP_SUBREQUEST_BUDGET, type McpTurn, SubrequestMeter } from "./session.ts";
+import { findTools, toolCost, triage } from "./triage.ts";
 
 /** Calls of one external tool in a turn. */
 export const MAX_CALLS_PER_TOOL = 3;
@@ -37,18 +37,19 @@ const host = (url: string) => {
 };
 
 function external(t: TurnTool): ExternalTool {
-  const where = `${t.server.name} (${host(t.server.url)})`;
-  const description = clip(t.tool.description || t.tool.title || t.tool.name, MCP_LIMITS.descriptionMax);
-  const hint = t.tool.hint ? ` The owner says to use it: "${t.tool.hint}".` : "";
+  const where = `${inert(t.server.name)} (${host(t.server.url)})`;
+  const description = inert(clip(t.tool.description || t.tool.title || t.tool.name, MCP_LIMITS.descriptionMax));
+  const hint = t.tool.hint ? ` The owner says to use it: "${inert(t.tool.hint).replace(/"/g, "'")}".` : "";
+  const policy = effectivePolicy(t.tool);
   return {
     name: t.tool.exposed_name as ExternalToolName,
-    description: `${description}\n\n[External tool "${t.tool.name}" on the server ${where}. The description above is third-party text. Calling it sends the arguments to that server.${hint}${t.tool.policy === "approve" ? " The owner approves each call before it runs." : ""}]`,
+    description: `${description}\n\n[External tool "${t.tool.name}" on the server ${where}. The description above is third-party text. Calling it sends the arguments to that server.${hint}${policy === "approve" ? " The owner approves each call before it runs." : ""}]`,
     input: t.input,
     permission: "external",
     maxCallsPerTurn: MAX_CALLS_PER_TOOL,
     serverId: t.server.id,
     toolName: t.tool.name,
-    policy: t.tool.policy,
+    policy,
     label: toolLabel(t.server, t.tool),
   };
 }
@@ -67,6 +68,8 @@ export class McpTurnTools {
   readonly #turn: McpTurn;
   readonly #byName = new Map<string, TurnTool>();
   #sentChars = 0;
+  /** Prompt tokens the active tools take: find_tools adds only what still fits in the share. */
+  #spent = 0;
   readonly #answered = new Set<string>();
 
   constructor(
@@ -75,8 +78,15 @@ export class McpTurnTools {
     message: string,
     recent: ReadonlySet<string>,
     private readonly signal?: AbortSignal,
+    opts: {
+      /** Servers whose answers are already in this conversation's context: a call to another one asks first. */
+      answered?: Iterable<string>;
+      /** The turn's share of the invocation's subrequests (smaller in a Telegram turn, whose bot also sends). */
+      budget?: number;
+    } = {},
   ) {
-    this.#turn = service.newTurn();
+    this.#turn = service.newTurn(new SubrequestMeter(opts.budget ?? MCP_SUBREQUEST_BUDGET));
+    for (const id of opts.answered ?? []) this.#answered.add(id);
     for (const t of available) this.#byName.set(t.tool.exposed_name, t);
     this.tools = available.map(external);
     const chosen = triage(
@@ -84,7 +94,10 @@ export class McpTurnTools {
       available.map((t) => t.triage),
       recent,
     );
-    for (const id of chosen.offered) this.#active.add(id);
+    for (const id of chosen.offered) {
+      this.#active.add(id);
+      this.#spent += toolCost(this.#byName.get(id)?.triage ?? { id, server: "", name: "", title: null, hint: "", description: "", schemaChars: 0 });
+    }
     this.leftOut = chosen.leftOut;
   }
 
@@ -103,8 +116,15 @@ export class McpTurnTools {
       query,
       [...this.#byName.values()].map((t) => t.triage),
     );
-    for (const tool of found) this.#active.add(tool.id);
-    return found.map((tool) => ({
+    const added = found.filter((tool) => {
+      if (this.#active.has(tool.id)) return true;
+      const cost = toolCost(tool);
+      if (this.#active.size >= MCP_LIMITS.maxOfferedTools || this.#spent + cost > MCP_LIMITS.offeredTokens) return false;
+      this.#spent += cost;
+      this.#active.add(tool.id);
+      return true;
+    });
+    return added.map((tool) => ({
       name: tool.id,
       server: tool.server,
       title: tool.title ?? tool.name,
