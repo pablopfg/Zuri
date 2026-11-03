@@ -548,6 +548,7 @@ export class ZuriAgent extends Agent<WorkerEnv> {
         runner: () => this.runner(),
         conversations: () => conversations,
         activeRuns: this.activeRuns,
+        lockdown: () => auth.lockdown.active(),
         ai: () => this.ai(),
         room: () => ({ ...usage.room(this.aiLimits()), resetsAt: usage.resetsAt() }),
         audioLock: {

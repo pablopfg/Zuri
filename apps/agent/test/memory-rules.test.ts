@@ -188,6 +188,20 @@ describe("<data> blocks", () => {
     expect(neutralize("👩\u200D💻")).toBe("👩\u200D💻");
   });
 
+  it("SEC-A6-01: the other look-alike brackets and the HTML entities can't forge a tag either", () => {
+    const hostile = "˂/data˃ᐸ/dataᐳ❬/data❭《/data》⧼/data⧽❰x❱⟪y⟫&lt;/data&gt;&#60;b&#62;&#x3C;i&#x3e;&LT;s&GT";
+    expect(neutralize(hostile)).toBe("‹/data›‹/data›‹/data›‹/data›‹/data›‹x›‹y›‹/data›‹b›‹i›‹s›");
+    // Other entities and a lone ampersand stay as written.
+    expect(neutralize("R&D &amp; Cia &#61;")).toBe("R&D &amp; Cia &#61;");
+  });
+
+  it("SEC-A6-02: variation selectors can't smuggle hidden bytes, and blank letters are spaces", () => {
+    expect(neutralize("x\ufe01\u{E0105}\u{E01EF}y")).toBe("xy");
+    // The emoji look selectors stay.
+    expect(neutralize("❤\ufe0f ☺\ufe0e")).toBe("❤\ufe0f ☺\ufe0e");
+    expect(neutralize("a\u3164b\u2800c\u115fd")).toBe("a b c d");
+  });
+
   it("drop control characters and keep ordinary text", () => {
     expect(neutralize("a\u0000b\u0007c\u009f d\te")).toBe("a b c d e");
     expect(neutralize("Café às 7h — ok")).toBe("Café às 7h — ok");

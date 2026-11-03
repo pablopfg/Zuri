@@ -307,6 +307,8 @@ export const DIAGNOSTIC_LIMITS = {
   days: 30,
   /** Interface errors accepted per hour. */
   clientPerHour: 20,
+  /** Kinds an interface error may open by its name; past them a new name counts as "Error" (SEC-A9-01). */
+  clientKinds: 20,
   /** "Repeated": this many in the window, or this many in a day. */
   burst: 5,
   burstWindowMs: 15 * MINUTE,

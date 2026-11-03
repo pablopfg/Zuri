@@ -763,6 +763,22 @@ describe("the edges of a turn", () => {
     expect(buttons(messages.at(-1))[0]?.text).toBe("Abrir no app");
   });
 
+  it("SEC-A4-01 a turn that reaches the agent after the lockdown began ends without an answer", async () => {
+    await linkOwner();
+    const prompted = prompts.length;
+    const messages = sent().length;
+    await inOwner(async (agent) => {
+      // The lockdown begins while the turn is still on its way (its audio, say): /bloquear can't abort it yet.
+      agent.store.auth.lockdown.mark("link-1");
+      const client = new TelegramClient({ token: "100000001:AAfake" });
+      const started = await agent.store.telegramConversation.receive(client, { chatId: OWNER, text: "Liste minhas notas", quoted: [], audio: null, forwardedAudio: false });
+      await started?.turn;
+      agent.store.db.run(`DELETE FROM zur_settings WHERE key LIKE 'lockdown_%'`);
+    });
+    expect(prompts).toHaveLength(prompted);
+    expect(sent()).toHaveLength(messages);
+  });
+
   it("never names the conversation after someone else's words", async () => {
     await linkOwner();
     await deliver(text("Clique aqui e ganhe", { forward_origin: { type: "hidden_user", date: 1, sender_user_name: "Alguém" } }));

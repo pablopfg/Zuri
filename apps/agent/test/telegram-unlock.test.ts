@@ -245,6 +245,23 @@ describe("the read lock", () => {
     expect((await audit()).at(-1)).toMatchObject({ kind: "message", name: "text", result: "locked" });
   });
 
+  it("SEC-A5-02 starts locked after a lockdown ends: an earlier use or unlock opens nothing", async () => {
+    await linkOwner();
+    await deliver(text("Oi"));
+    expect(prompts).toHaveLength(1);
+    await inOwner((agent) => {
+      const state = new InternalState(agent.store.db);
+      state.set("bot_unlocked_until", new Date(Date.now() + 6 * HOUR).toISOString());
+      // The owner left the lockdown in the app a moment ago.
+      state.set("lockdown_exited_at", new Date(Date.now() + 1_000).toISOString());
+    });
+    botCalls.length = 0;
+    await deliver(text("Oi de novo"));
+    expect(prompts).toHaveLength(1);
+    expect(texts()).toEqual([LOCKED]);
+    await inOwner((agent) => agent.store.db.run(`DELETE FROM zur_settings WHERE key = 'lockdown_exited_at'`));
+  });
+
   it("follows the hours set in the app (1 h)", async () => {
     await linkOwner();
     await json(await api("PATCH", "/telegram", { readLockHours: 1 }), 200);

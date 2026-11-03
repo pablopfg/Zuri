@@ -51,6 +51,8 @@ export interface TelegramConversationDeps {
   locale(): Locale;
   timeZone(): string;
   origin(): string;
+  /** The account's lockdown (step 16b): a turn that was still downloading or transcribing when it began never reaches the agent. */
+  lockdown?: () => boolean;
   clock?: () => number;
   /**
    * The cards of the proposals a turn made (step 16): the preview from the
@@ -479,6 +481,8 @@ export class TelegramConversation {
       await this.#say(client, chatId, "telegram.chat.failed");
       return;
     }
+    // SEC-A4-01: /bloquear aborts the running turns, but not one still on its audio; it ends here, silently.
+    if (this.deps.lockdown?.()) return;
     const runs = this.deps.activeRuns;
     if (runs.has(conversationId) || runs.size >= MAX_ACTIVE_TURNS) {
       await this.#say(client, chatId, "telegram.chat.busy");
