@@ -47,6 +47,8 @@ export const LOG_EVENTS = [
   "semantic_query_failed",
   "semantic_recall_failed",
   "mcp_connect_failed",
+  "mcp_signin_failed",
+  "mcp_meaning_failed",
   "mcp_call_failed",
   "mcp_tool_skipped",
 ] as const;

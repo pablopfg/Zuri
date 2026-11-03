@@ -44,6 +44,8 @@ export function classifyMcpError(error: unknown): McpConnectionError {
   const status = statusOf(error);
   const text = error instanceof Error ? `${error.name} ${error.message}` : String(error);
   if (status === 401 || status === 403 || /\bUnauthorized/i.test(text)) return new McpConnectionError("auth");
+  // The SDK's OAuth failures (discovery, registration, the code or the refresh refused, another issuer).
+  if (/OAuth|InvalidGrant|InvalidClient|issuer|AuthorizationServer|registration/i.test(text)) return new McpConnectionError("oauth");
   if (/timeout|timed out|AbortError/i.test(text)) return new McpConnectionError("timeout");
   if (/too large/i.test(text)) return new McpConnectionError("too_large");
   if (/redirect/i.test(text)) return new McpConnectionError("redirect");
@@ -87,8 +89,16 @@ export function limitBody(res: Response, maxBytes: number = FETCH_LIMITS.maxResp
   return new Response(counted, { status: res.status, statusText: res.statusText, headers: res.headers });
 }
 
-/** How a request to the server signs in. The token is attached here, only for the server's own origin. */
-export type FetchAuth = { kind: "none" } | { kind: "bearer"; token: string };
+/**
+ * How a request to the server signs in. A static token is attached here, only
+ * for the server's own origin. With OAuth (step 18b) the MCP SDK adds the
+ * access token itself; `allowOrigin` vets the service's sign-in server (its
+ * metadata, registration and token addresses) before anything goes there.
+ */
+export type FetchAuth =
+  | { kind: "none" }
+  | { kind: "bearer"; token: string }
+  | { kind: "oauth"; provider: import("@modelcontextprotocol/client").OAuthClientProvider; allowOrigin: (url: URL) => Promise<void> };
 
 /** A request made through the protected fetch: counted for the turn's subrequest budget (rule P9). */
 export interface FetchMeter {
@@ -106,14 +116,22 @@ export function guardedFetch(endpoint: URL, auth: FetchAuth, base: typeof fetch,
   return (async (input: RequestInfo | URL, init?: RequestInit) => {
     const request = new Request(input, init);
     const url = new URL(request.url);
-    if (url.origin !== endpoint.origin) throw new McpConnectionError("blocked");
-    if (request.method === "GET" && (request.headers.get("accept") ?? "").includes("text/event-stream")) {
-      return new Response(null, { status: 405, statusText: "Method Not Allowed" });
-    }
     const headers = new Headers(request.headers);
     headers.delete("cookie");
-    if (auth.kind === "bearer") headers.set("authorization", `Bearer ${auth.token}`);
-    else headers.delete("authorization");
+    if (url.origin !== endpoint.origin) {
+      // Only an OAuth sign-in reaches another origin, and only one that passed the same checks as the server.
+      if (auth.kind !== "oauth") throw new McpConnectionError("blocked");
+      await auth.allowOrigin(url);
+      // The access token is the MCP server's: it never travels to the sign-in server.
+      if (/^(bearer|dpop) /i.test(headers.get("authorization") ?? "")) headers.delete("authorization");
+      headers.delete("dpop");
+    } else {
+      if (request.method === "GET" && (request.headers.get("accept") ?? "").includes("text/event-stream")) {
+        return new Response(null, { status: 405, statusText: "Method Not Allowed" });
+      }
+      if (auth.kind === "bearer") headers.set("authorization", `Bearer ${auth.token}`);
+      else if (auth.kind === "none") headers.delete("authorization");
+    }
     meter?.take();
     const response = await base(new Request(request, { headers, redirect: "manual" }));
     if (response.status >= 300 && response.status < 400) {

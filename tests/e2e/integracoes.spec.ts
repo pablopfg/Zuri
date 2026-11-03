@@ -122,3 +122,39 @@ test("a refused token shows why on the card, and the server can be switched off"
   await expect(toggle).toHaveAttribute("aria-checked", "false");
   await expect(card.getByText("Desligado")).toBeVisible();
 });
+
+test("signs in to a service with OAuth: the service's page, back to the app, connected; accessible @mobile", async ({ page }) => {
+  const name = runName();
+  mine.push(name);
+  // The service's sign-in page (simulated, apps/agent/src/mcp/dev-oauth.ts): the owner "approves" and is sent
+  // back to the app with a code bound to the PKCE challenge, as a real service does.
+  await page.route("https://entrar.exemplo.com.br/**", async (route) => {
+    const asked = new URL(route.request().url());
+    const back = new URL(asked.searchParams.get("redirect_uri") ?? "");
+    back.searchParams.set("code", `dev.${asked.searchParams.get("code_challenge") ?? ""}`);
+    back.searchParams.set("state", asked.searchParams.get("state") ?? "");
+    back.searchParams.set("iss", "https://entrar.exemplo.com.br");
+    await route.fulfill({ status: 302, headers: { location: back.href } });
+  });
+  await openIntegrations(page);
+  await page.getByRole("button", { name: "Adicionar servidor" }).first().click();
+  const dialog = page.getByRole("dialog", { name: "Adicionar servidor" });
+  await dialog.getByRole("textbox", { name: "Nome" }).fill(name);
+  await dialog.getByRole("textbox", { name: "Endereço" }).fill("https://conta.exemplo.com.br/mcp");
+  await dialog.getByRole("combobox", { name: "Acesso" }).selectOption("oauth");
+  await expect(dialog.getByText("Ao salvar, a Zuri prepara o login")).toBeVisible();
+  await dialog.getByRole("button", { name: "Adicionar e conectar" }).click();
+  const card = page.getByRole("article").filter({ has: page.getByRole("heading", { name }) });
+  await expect(card.getByText("Falta entrar na conta do serviço para a Zuri usar este servidor.")).toBeVisible();
+  const signIn = card.getByRole("link", { name: "Entrar no serviço" });
+  await expect(signIn).toHaveAttribute("href", /^https:\/\/entrar\.exemplo\.com\.br\/authorize\?/);
+  await expectAccessible(page, "integracoes-oauth");
+  await signIn.click();
+  await expect(page.getByRole("status").filter({ hasText: "Pronto, a Zuri entrou na conta do serviço." })).toBeVisible();
+  // The code and the state left the address at once.
+  await expect(page).toHaveURL(/\/configuracoes\/integracoes$/);
+  const back = page.getByRole("article").filter({ has: page.getByRole("heading", { name }) });
+  await expect(back.getByText("Conectado")).toBeVisible();
+  await expect(back.getByText("0 de 2 ferramentas ligadas")).toBeVisible();
+  await expect(back.getByRole("link", { name: "Entrar no serviço" })).toHaveCount(0);
+});

@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { CATALOG_LIMITS, checkTool, clip, inert, parseHints, plainText, resultText, toZod, withoutPatterns } from "../src/mcp/catalog.ts";
 import { McpCredentials } from "../src/mcp/credentials.ts";
 import { classifyMcpError, FETCH_LIMITS, guardedFetch, limitBody, McpConnectionError } from "../src/mcp/guarded-fetch.ts";
+import { sameSecret, stateServerId, ZuriOAuthProvider } from "../src/mcp/oauth.ts";
 import { McpBudgetSpent, SubrequestMeter } from "../src/mcp/session.ts";
 import { findTools, stems, type TriageTool, toolCost, triage } from "../src/mcp/triage.ts";
 import { developmentMcpNetwork } from "../src/mcp/dev-mcp.ts";
@@ -410,5 +411,138 @@ describe("the development MCP servers", () => {
     expect((await network.fetch("https://docs.exemplo.com.br/mcp")).status).toBe(405);
     expect((await network.fetch("https://docs.exemplo.com.br/mcp", { method: "POST", body: "not json" })).status).toBe(202);
     expect(real).toEqual(["mcp.outro.org", "https://mcp.outro.org/mcp"]);
+  });
+});
+
+describe("guardedFetch with OAuth (step 18b)", () => {
+  const endpoint = new URL("https://mcp.exemplo.com.br/mcp");
+  const provider = {} as import("@modelcontextprotocol/client").OAuthClientProvider;
+
+  it("reaches a sign-in server only after it is vetted, never with the access token", async () => {
+    const seen: Request[] = [];
+    const vetted: string[] = [];
+    const base = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      seen.push(new Request(input, init));
+      return new Response("ok");
+    }) as typeof fetch;
+    const f = guardedFetch(endpoint, { kind: "oauth", provider, allowOrigin: async (url) => void vetted.push(url.origin) }, base);
+    await f("https://entrar.exemplo.com.br/token", { method: "POST", headers: { authorization: "Bearer tok-x", dpop: "proof", cookie: "a=b" }, body: "x" });
+    expect(vetted).toEqual(["https://entrar.exemplo.com.br"]);
+    expect(seen[0]?.headers.get("authorization")).toBeNull();
+    expect(seen[0]?.headers.get("dpop")).toBeNull();
+    expect(seen[0]?.headers.get("cookie")).toBeNull();
+    // To the MCP server itself the SDK's token goes as it set it.
+    await f("https://mcp.exemplo.com.br/mcp", { method: "POST", headers: { authorization: "Bearer tok-x" }, body: "{}" });
+    expect(seen[1]?.headers.get("authorization")).toBe("Bearer tok-x");
+  });
+
+  it("a refused sign-in origin sends nothing", async () => {
+    let calls = 0;
+    const base = (async () => {
+      calls++;
+      return new Response("ok");
+    }) as unknown as typeof fetch;
+    const f = guardedFetch(
+      endpoint,
+      {
+        kind: "oauth",
+        provider,
+        allowOrigin: async () => {
+          throw new McpConnectionError("private_address");
+        },
+      },
+      base,
+    );
+    await expect(f("https://interno.exemplo.com.br/token", { method: "POST" })).rejects.toMatchObject({ problem: "private_address" });
+    expect(calls).toBe(0);
+  });
+
+  it("without OAuth another origin is still blocked", async () => {
+    const f = guardedFetch(endpoint, { kind: "none" }, (async () => new Response("ok")) as unknown as typeof fetch);
+    await expect(f("https://entrar.exemplo.com.br/token")).rejects.toMatchObject({ problem: "blocked" });
+  });
+
+  it("names the SDK's OAuth failures", () => {
+    expect(classifyMcpError(new Error("OAuth error: invalid_grant")).problem).toBe("oauth");
+    expect(classifyMcpError(new Error("Incompatible auth server: does not support dynamic client registration")).problem).toBe("oauth");
+  });
+});
+
+describe("ZuriOAuthProvider", () => {
+  const store = () => {
+    const saved: Record<string, unknown> = {};
+    const pending: (string | null)[] = [];
+    return {
+      saved,
+      pending,
+      store: {
+        load: async () => saved,
+        save: async (patch: Record<string, unknown>) => void Object.assign(saved, patch),
+        pending: (url: string | null) => void pending.push(url),
+      },
+    };
+  };
+  const make = (interactive: boolean, s = store()) =>
+    new ZuriOAuthProvider("s1", "https://zuri.exemplo.com.br/configuracoes/integracoes", s.store, {
+      interactive,
+      checkAuthorizeUrl: (url) => {
+        if (url.protocol !== "https:") throw new McpConnectionError("oauth");
+      },
+      stateMs: 600_000,
+      clock: () => 0,
+    });
+
+  it("registers as a public client with one callback", () => {
+    expect(make(true).clientMetadata).toMatchObject({ token_endpoint_auth_method: "none", redirect_uris: ["https://zuri.exemplo.com.br/configuracoes/integracoes"], grant_types: ["authorization_code", "refresh_token"] });
+  });
+
+  it("outside the owner's action never starts a sign-in nor overwrites one waiting", async () => {
+    const s = store();
+    s.saved.state = "s1.waiting";
+    s.saved.verifier = "v-waiting";
+    const p = make(false, s);
+    await expect(p.state()).rejects.toMatchObject({ problem: "signin" });
+    await expect(p.saveCodeVerifier("new")).rejects.toMatchObject({ problem: "signin" });
+    await expect(p.redirectToAuthorization(new URL("https://entrar.exemplo.com.br/authorize"))).rejects.toMatchObject({ problem: "signin" });
+    expect(s.saved).toMatchObject({ state: "s1.waiting", verifier: "v-waiting" });
+    expect(s.pending).toEqual([]);
+  });
+
+  it("an interactive sign-in gets a state bound to the server, and only a safe page is recorded", async () => {
+    const s = store();
+    const p = make(true, s);
+    expect(await p.state()).toMatch(/^s1\.[A-Za-z0-9_-]{43}$/);
+    expect(s.saved.state_expires).toBe(new Date(600_000).toISOString());
+    await expect(p.redirectToAuthorization(new URL("http://entrar.exemplo.com.br/authorize"))).rejects.toMatchObject({ problem: "oauth" });
+    await p.redirectToAuthorization(new URL("https://entrar.exemplo.com.br/authorize?x=1"));
+    expect(s.pending).toEqual(["https://entrar.exemplo.com.br/authorize?x=1"]);
+  });
+
+  it("a registration for another callback is not reused", async () => {
+    const s = store();
+    s.saved.client = { client_id: "old" };
+    s.saved.redirect_url = "https://antigo.exemplo.com.br/configuracoes/integracoes";
+    expect(await make(true, s).clientInformation()).toBeUndefined();
+    s.saved.redirect_url = "https://zuri.exemplo.com.br/configuracoes/integracoes";
+    expect(await make(true, s).clientInformation()).toEqual({ client_id: "old" });
+  });
+
+  it("forgets what the service says is no longer valid", async () => {
+    const s = store();
+    Object.assign(s.saved, { client: { client_id: "c" }, tokens: { access_token: "a", token_type: "Bearer" }, verifier: "v" });
+    await make(true, s).invalidateCredentials("tokens");
+    expect(s.saved.tokens).toBeUndefined();
+    expect(s.saved.client).toEqual({ client_id: "c" });
+    await make(true, s).invalidateCredentials("all");
+    expect(s.saved).toMatchObject({ client: undefined, verifier: undefined });
+    await expect(make(true, s).codeVerifier()).rejects.toMatchObject({ problem: "oauth" });
+  });
+
+  it("compares secrets in full and finds the server from the state", () => {
+    expect(sameSecret("abc", "abc")).toBe(true);
+    expect(sameSecret("abc", "abd")).toBe(false);
+    expect(sameSecret("abc", "abcd")).toBe(false);
+    expect(stateServerId("id-1.segredo")).toBe("id-1");
+    expect(stateServerId("")).toBe("");
   });
 });

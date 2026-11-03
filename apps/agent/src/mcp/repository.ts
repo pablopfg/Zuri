@@ -17,6 +17,11 @@ export interface ServerRow {
   discovered_at: string | null;
   created_at: string;
   updated_at: string;
+  /** OAuth (step 18b): the sign-in page while a sign-in waits, and until when. */
+  authorize_url: string | null;
+  authorize_expires: string | null;
+  /** OAuth: when the last sign-in finished (what an approval is bound to). */
+  signed_in_at: string | null;
 }
 
 export interface ToolRow {
@@ -36,6 +41,10 @@ export interface ToolRow {
   reviewed_hash: string | null;
   created_at: string;
   updated_at: string;
+  /** The triage by meaning (step 18b): int8 vector, its scale, and the hash of model and text. */
+  embedding?: ArrayBuffer | null;
+  embedding_scale?: number | null;
+  embedding_key?: string | null;
 }
 
 /** Tool names the providers accept: `^[A-Za-z0-9_-]{1,64}$` is the strictest common rule. */
@@ -132,6 +141,32 @@ export class McpRepository {
     const values = given.map(([, value]) => value);
     if (sets.length === 0) return;
     this.db.run(`UPDATE zur_mcp_servers SET ${sets.join(", ")}, updated_at = ? WHERE id = ?`, ...values, this.now(), id);
+  }
+
+  /** OAuth: the sign-in page the owner opens (null clears it). */
+  pendingSignIn(id: string, url: string | null, expires: string | null): void {
+    this.db.run(`UPDATE zur_mcp_servers SET authorize_url = ?, authorize_expires = ? WHERE id = ?`, url, url === null ? null : expires, id);
+  }
+
+  /** OAuth: a sign-in finished (or, with null, the server has none any more). */
+  signedIn(id: string, at: string | null): void {
+    this.db.run(`UPDATE zur_mcp_servers SET signed_in_at = ?, authorize_url = NULL, authorize_expires = NULL WHERE id = ?`, at, id);
+  }
+
+  /** OAuth servers that need the owner to sign in (again), for the bot's /status. */
+  needingSignIn(): number {
+    return this.db.one<{ n: number }>(`SELECT COUNT(*) AS n FROM zur_mcp_servers WHERE auth_type = 'oauth' AND enabled = 1 AND (signed_in_at IS NULL OR problem = 'signin')`)?.n ?? 0;
+  }
+
+  /** The triage's vector of a tool, for the text and model in `key`. */
+  saveEmbedding(exposedName: string, key: string, vector: Int8Array, scale: number): void {
+    this.db.run(
+      `UPDATE zur_mcp_tools SET embedding = ?, embedding_scale = ?, embedding_key = ? WHERE exposed_name = ?`,
+      vector.slice().buffer as ArrayBuffer,
+      scale,
+      key,
+      exposedName,
+    );
   }
 
   /** Connected: the failure count starts over. */

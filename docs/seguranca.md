@@ -630,7 +630,9 @@ então o servidor externo é tratado como não confiável em tudo:
   particular, reservado ou de metadados, inclusive IPv4 embutido em IPv6. Antes
   de cada conexão, o nome é resolvido por DNS sobre HTTPS e qualquer endereço
   particular recusa. O fetch só fala com a origem cadastrada, nunca segue
-  redirecionamento e não manda cookie. O token vai só para essa origem.
+  redirecionamento e não manda cookie. O token vai só para essa origem. A
+  única exceção é o servidor de login OAuth (abaixo), que passa pelas mesmas
+  regras e nunca recebe o token de acesso.
 - **Sem travar o Durable Object.** Corpo cortado em 2 MB e 35 s, prazos de 10,
   15 e 30 s, sessão fechada no fim do turno, sem a stream `GET` do servidor e
   no máximo 24 subrequisições por turno (12 no Telegram), contando as
@@ -651,8 +653,33 @@ então o servidor externo é tratado como não confiável em tudo:
   num anterior (as aprovações com resposta e as chamadas automáticas recentes
   contam). O cartão mostra os
   argumentos exatos; a aprovação fica presa ao hash do servidor, do token
-  cifrado, da definição, da política e dos argumentos, roda uma vez e nunca é
-  repetida. Aprovações externas não passam pelo Telegram.
+  cifrado (num servidor com OAuth, da hora do login, para a renovação do token
+  não anular as propostas abertas), da definição, da política e dos
+  argumentos, roda uma vez e nunca é repetida.
+- **Aprovação pelo Telegram (etapa 18b).** O cartão do bot é montado pelo
+  servidor, com a ferramenta, o servidor e os argumentos exatos que vão sair,
+  e confere o hash de novo antes de mostrar e antes de rodar. Vale a mesma
+  confirmação das outras propostas (passkey ou código por e-mail); argumentos
+  com mais de 600 caracteres só se confirmam pela passkey, que mostra tudo. A
+  chamada aprovada no bot tem 12 subrequisições. A resposta do servidor volta
+  como citação de terceiros, desarmada e cortada em 600 caracteres.
+- **Login OAuth (etapa 18b).** PKCE S256, registro dinâmico como cliente
+  público e o parâmetro `resource` (RFC 8707). O endereço de login e o
+  servidor de autorização passam pelas regras de SSRF (resolvidos por DNS uma
+  vez por turno, contando nas subrequisições) e o emissor é conferido. O
+  cabeçalho `Authorization` é tirado de qualquer pedido para outra origem. O
+  `state` tem 32 bytes aleatórios, vale 10 minutos e uma vez só, e é gasto
+  antes de trocar o código. A volta do login pede a senha digitada agora e
+  gera aviso de segurança. Só ações do dono começam um login: um turno de
+  conversa ou uma rotina nunca abre a página de login, só marca o servidor
+  como "Entrar de novo". Tokens, cliente registrado e verificador ficam
+  cifrados como o token comum.
+- **Triagem por significado (etapa 18b).** Só com a busca por significado
+  ligada. Os vetores das ferramentas são feitos no alarme, uma chamada por
+  rodada com a fatia de Neurons da indexação; o turno reaproveita o vetor que
+  a busca de memórias já fez da mensagem, sem chamada a mais. O vetor só
+  soma pontos na escolha das ferramentas oferecidas; não libera nenhuma
+  ferramenta desligada nem pula aprovação.
 - **Bloqueio e rotinas.** Durante o bloqueio da conta nenhuma ferramenta
   externa é oferecida nem chamada, e as rotas do MCP ficam fechadas. Rotinas
   agendadas nunca recebem ferramentas externas.

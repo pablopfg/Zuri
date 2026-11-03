@@ -308,7 +308,7 @@ Ordem: nome do agente (uma linha) → instruções fixas → relógio do dono �
 ### Avisos, MCP, agenda, remoto e backup
 
 - **Avisos:** copie de `docs/alerts.md` do Talorys a tabela de categorias, as prioridades, os limites padrão por canal (por hora e por dia), a chave de deduplicação e a tabela de vigias com prioridade e repetição.
-- **MCP:** limites de servidores, ferramentas e tamanho de resposta iguais aos de `docs/mcp.md`; nenhuma ferramenta MCP roda em execuções agendadas; callback OAuth em `/settings/mcp-oauth` → `POST /api/mcp/oauth/callback`.
+- **MCP:** limites de servidores, ferramentas e tamanho de resposta iguais aos de `docs/mcp.md`; nenhuma ferramenta MCP roda em execuções agendadas; callback OAuth em `/configuracoes/integracoes` (a rota da tela de Integrações, que lê `code` e `state` e os tira do endereço) → `POST /api/mcp/oauth/callback`.
 - **Google Contatos (etapa 19b):** escopo `https://www.googleapis.com/auth/contacts.readonly`, somado à conexão da agenda com `include_granted_scopes=true`; People API (`people.googleapis.com`) com `contactGroups.list` e `people.connections.list` (`syncToken`, 1.000 por página). O app OAuth fica publicado "Em produção" sem verificação, porque em "Teste" o refresh token de escopo sensível vence em 7 dias (vale também para a agenda).
 - **Google Agenda:** escopos `https://www.googleapis.com/auth/calendar.events` (leitura e escrita) e `calendar.readonly` (só leitura), refresh token cifrado com `MCP_CREDENTIAL_KEY`, `redirect_uri` = `PUBLIC_URL` + `/settings/google-oauth`.
 - **Eventos remotos:** schema de `docs/alerts.md` (título até 120 caracteres, corpo até 1.000, `priority`, `category`, `dedupeKey`) e rotas por escopo de `docs/remote-access.md`.

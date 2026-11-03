@@ -16,6 +16,8 @@ import { log } from "../log.ts";
 import { stableStringify } from "../tools/stable.ts";
 import { CATALOG_LIMITS, type CallResult, type CatalogEntry, checkTool, clip, parseHints, resultText, toZod } from "./catalog.ts";
 import { McpCredentials } from "./credentials.ts";
+import type { McpMeaning } from "./meaning.ts";
+import { type OAuthRecord, sameSecret, stateServerId, ZuriOAuthProvider } from "./oauth.ts";
 import { classifyMcpError, type FetchAuth, McpConnectionError } from "./guarded-fetch.ts";
 import { isUsable, McpRepository, presentTool, type ServerRow, type ToolRow } from "./repository.ts";
 import { McpBudgetSpent, McpTurn, type SubrequestMeter } from "./session.ts";
@@ -40,8 +42,13 @@ export interface McpDeps {
   development: () => boolean;
   /** The lockdown of step 16b: no MCP call while it is on. */
   lockdown: () => boolean;
+  /** OAuth (step 18b): where the service's sign-in page sends the owner back (PUBLIC_URL's Integrations). */
+  redirectUrl: () => string;
   clock?: () => number;
 }
+
+/** The app's page that takes the service's answer to a sign-in (spec: callback OAuth). */
+export const OAUTH_CALLBACK_PATH = "/configuracoes/integracoes";
 
 /** One usable tool as a turn sees it. */
 export interface TurnTool {
@@ -98,10 +105,14 @@ export const toolLabel = (server: ServerRow, tool: ToolRow) => `${tool.title || 
  */
 export class McpService {
   readonly repo: McpRepository;
+  /** The triage by meaning (step 18b); set by the agent when the search by meaning exists. */
+  meaning: McpMeaning | null = null;
   readonly credentials: McpCredentials;
   network: McpNetwork;
   readonly #schemas = new Map<string, z.ZodType>();
   readonly #clock: () => number;
+  /** One write of a server's OAuth record at a time: two turns refreshing at once can't lose a token. */
+  readonly #saving = new Map<string, Promise<void>>();
 
   constructor(private readonly deps: McpDeps) {
     this.#clock = deps.clock ?? Date.now;
@@ -133,7 +144,8 @@ export class McpService {
       name: server.name,
       url: server.url,
       authType: server.auth_type,
-      hasCredential: server.credential !== null,
+      // OAuth: signed in, never merely "something stored" (a sign-in that only started stores a verifier).
+      hasCredential: server.auth_type === "oauth" ? server.signed_in_at !== null : server.credential !== null,
       enabled: server.enabled === 1,
       status: server.enabled !== 1 ? "disabled" : server.status,
       problem: server.problem,
@@ -143,6 +155,7 @@ export class McpService {
       reviewCount: c.review,
       discoveredAt: server.discovered_at,
       createdAt: server.created_at,
+      authorizeUrl: server.auth_type === "oauth" && server.authorize_url && server.authorize_expires && server.authorize_expires > this.now() ? server.authorize_url : null,
     };
   }
 
@@ -164,9 +177,11 @@ export class McpService {
   }
 
   /** Adds a server and connects it at once; a failure to connect comes back as its status. */
-  async create(input: { name: string; url: string; authType: "none" | "bearer"; token?: string | undefined }): Promise<McpServerInfo> {
+  async create(input: { name: string; url: string; authType: McpAuthType; token?: string | undefined }): Promise<McpServerInfo> {
     if (this.repo.count() >= MCP_LIMITS.maxServers) throw new AppError("CONFLICT", "error.mcpServerLimit");
     const url = this.endpoint(input.url);
+    // OAuth keeps its tokens encrypted like a static token: the key must be there.
+    if (input.authType === "oauth") this.assertCredentials();
     if (input.authType === "bearer") {
       this.assertCredentials();
       if (!input.token) throw new AppError("VALIDATION_FAILED", undefined, { fields: ["token"] });
@@ -175,7 +190,7 @@ export class McpService {
     if (input.authType === "bearer" && input.token) {
       this.repo.update(server.id, { credential: await this.credentials.encrypt(server.id, input.token) });
     }
-    return this.connect(server.id);
+    return this.connect(server.id, { interactive: true });
   }
 
   /**
@@ -185,7 +200,7 @@ export class McpService {
    */
   async update(
     id: string,
-    patch: { name?: string | undefined; url?: string | undefined; enabled?: boolean | undefined; authType?: "none" | "bearer" | undefined; token?: string | undefined },
+    patch: { name?: string | undefined; url?: string | undefined; enabled?: boolean | undefined; authType?: McpAuthType | undefined; token?: string | undefined },
   ): Promise<{ server: McpServerInfo; urlChanged: boolean }> {
     const server = this.require(id);
     const url = patch.url === undefined ? undefined : this.endpoint(patch.url).href;
@@ -193,7 +208,11 @@ export class McpService {
     const authType: McpAuthType = patch.authType ?? server.auth_type;
     if (patch.token !== undefined && authType !== "bearer") throw new AppError("VALIDATION_FAILED", undefined, { fields: ["token"] });
     let credential: string | null | undefined;
-    if (authType !== "bearer") credential = null;
+    if (authType === "oauth") {
+      this.assertCredentials();
+      // Another address or another way of signing in: the old sign-in (and its tokens) never carries over.
+      if (urlChanged || authType !== server.auth_type) credential = null;
+    } else if (authType !== "bearer") credential = null;
     else if (patch.token !== undefined) {
       this.assertCredentials();
       credential = await this.credentials.encrypt(id, patch.token);
@@ -203,10 +222,11 @@ export class McpService {
     this.deps.db.transaction(() => {
       this.repo.update(id, { name: patch.name, url, authType: patch.authType, credential, enabled: patch.enabled });
       if (urlChanged) this.repo.resetTrust(id);
+      if (credential === null) this.repo.signedIn(id, null);
     });
     const connection = urlChanged || patch.authType !== undefined || patch.token !== undefined || patch.enabled === true;
     if (patch.enabled === false) this.repo.disconnected(id);
-    else if (connection && this.require(id).enabled === 1) return { server: await this.connect(id), urlChanged };
+    else if (connection && this.require(id).enabled === 1) return { server: await this.connect(id, { interactive: true }), urlChanged };
     return { server: this.present(this.require(id)), urlChanged };
   }
 
@@ -216,8 +236,12 @@ export class McpService {
   }
 
   /** How a request to the server signs in; the token is opened only now. */
-  private async fetchAuth(server: ServerRow): Promise<FetchAuth> {
+  private async fetchAuth(server: ServerRow, turn: McpTurn, interactive = false): Promise<FetchAuth> {
     if (server.auth_type === "none") return { kind: "none" };
+    if (server.auth_type === "oauth") {
+      if (!this.credentials.available) throw new McpConnectionError("credential_unreadable");
+      return { kind: "oauth", provider: this.oauthProvider(server.id, interactive), allowOrigin: (url) => this.allowSignInOrigin(turn, url) };
+    }
     if (server.auth_type !== "bearer" || !server.credential) throw new McpConnectionError("auth");
     const token = await this.credentials.decrypt(server.id, server.credential);
     if (token === null) throw new McpConnectionError("credential_unreadable");
@@ -235,13 +259,15 @@ export class McpService {
    * Connects and reads the tool list again. A failure is kept on the server as
    * a code and returned as its status, never thrown: the owner sees why.
    */
-  async connect(id: string): Promise<McpServerInfo> {
+  async connect(id: string, opts: { interactive: boolean } = { interactive: false }): Promise<McpServerInfo> {
     const server = this.require(id);
     if (server.enabled !== 1) throw new AppError("CONFLICT", "error.mcpServerOff");
     const turn = this.newTurn();
+    // A new attempt replaces a sign-in still waiting: only the newest page works.
+    if (server.auth_type === "oauth" && opts.interactive && server.authorize_url) await this.clearSignIn(id);
     try {
       const target = this.target(server);
-      const client = await turn.client(server.id, target.url, await this.fetchAuth(server), () => target.verify());
+      const client = await turn.client(server.id, target.url, await this.fetchAuth(server, turn, opts.interactive), () => target.verify());
       const { tools, truncated } = await turn.listTools(client).catch((error: unknown) => {
         throw classifyMcpError(error);
       });
@@ -258,9 +284,11 @@ export class McpService {
       this.repo.connected(id, usable === 0 ? "no_tools" : truncated ? "truncated" : null);
     } catch (error) {
       if (error instanceof AppError) throw error;
-      const problem = error instanceof McpBudgetSpent ? "unavailable" : classifyMcpError(error).problem;
+      const problem = this.problemOf(server, error);
       log("warn", "mcp_connect_failed", { kind: problem });
-      this.repo.failed(id, problem, { pauseAfter: PAUSE_AFTER, pauseMs: PAUSE_MS, keepConnected: false });
+      // Waiting for the owner to sign in is not a failure of the server: it never pauses it.
+      if (problem === "signin") this.repo.failed(id, problem, { pauseAfter: Number.POSITIVE_INFINITY, pauseMs: 0, keepConnected: false });
+      else this.repo.failed(id, problem, { pauseAfter: PAUSE_AFTER, pauseMs: PAUSE_MS, keepConnected: false });
     } finally {
       await turn.closeAll();
     }
@@ -292,6 +320,131 @@ export class McpService {
       ...(patch.hint === undefined ? {} : { hint: patch.hint }),
     });
     return presentTool(this.storedTool(serverId, toolId));
+  }
+
+  // ---------- OAuth (step 18b) ----------
+
+  /** Why a connection or call failed, as a code; for an OAuth server, a refused token means signing in again. */
+  private problemOf(server: ServerRow, error: unknown): McpServerProblem {
+    if (error instanceof McpBudgetSpent) return "unavailable";
+    const { problem } = classifyMcpError(error);
+    if (server.auth_type !== "oauth") return problem;
+    if (problem === "auth" || problem === "signin") return "signin";
+    return problem;
+  }
+
+  private async loadOAuth(serverId: string): Promise<OAuthRecord> {
+    const stored = this.repo.get(serverId)?.credential;
+    if (!stored) return {};
+    const plain = await this.credentials.decrypt(serverId, stored);
+    if (plain === null) return {};
+    try {
+      const parsed = JSON.parse(plain) as unknown;
+      return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as OAuthRecord) : {};
+    } catch {
+      return {};
+    }
+  }
+
+  /** Merges a patch into the record, one write per server at a time. */
+  private saveOAuth(serverId: string, patch: Partial<OAuthRecord>): Promise<void> {
+    const previous = this.#saving.get(serverId) ?? Promise.resolve();
+    const next = previous
+      .catch(() => undefined)
+      .then(async () => {
+        if (!this.repo.get(serverId)) return;
+        const record: OAuthRecord = { ...(await this.loadOAuth(serverId)), ...patch };
+        this.repo.update(serverId, { credential: await this.credentials.encrypt(serverId, JSON.stringify(record)) });
+      });
+    this.#saving.set(serverId, next);
+    return next.finally(() => {
+      if (this.#saving.get(serverId) === next) this.#saving.delete(serverId);
+    });
+  }
+
+  private async clearSignIn(serverId: string): Promise<void> {
+    this.repo.pendingSignIn(serverId, null, null);
+    await this.saveOAuth(serverId, { state: undefined, state_expires: undefined, verifier: undefined });
+  }
+
+  private oauthProvider(serverId: string, interactive: boolean): ZuriOAuthProvider {
+    return new ZuriOAuthProvider(
+      serverId,
+      this.deps.redirectUrl(),
+      {
+        load: () => this.loadOAuth(serverId),
+        save: (patch) => this.saveOAuth(serverId, patch),
+        pending: (url, expires) => this.repo.pendingSignIn(serverId, url, expires),
+      },
+      {
+        interactive,
+        // The owner's browser goes there: only a public https address, never one inside a network.
+        checkAuthorizeUrl: (url) => {
+          if (!endpointUrl(url.href, { development: this.deps.development() })) throw new McpConnectionError("oauth");
+        },
+        stateMs: MCP_LIMITS.oauthStateMs,
+        clock: this.#clock,
+      },
+    );
+  }
+
+  /** A sign-in server gets the same checks as an MCP server: a public https address, checked in DNS. */
+  private async allowSignInOrigin(turn: McpTurn, url: URL): Promise<void> {
+    const checked = endpointUrl(url.href, { development: this.deps.development() });
+    if (!checked) throw new McpConnectionError("blocked");
+    await turn.vetOrigin(checked, () => assertPublicHost(checked, this.network.resolve, { development: this.deps.development() }));
+  }
+
+  /**
+   * Finishes a sign-in from the app's callback page. The state is single use,
+   * expires, and must match the one stored (encrypted) for the server it
+   * names; then the code is redeemed with PKCE and the server connects. Any
+   * failure leaves the server waiting for a new sign-in. Returns whether the
+   * sign-in went through.
+   */
+  async finishSignIn(input: { state: string; code?: string | undefined; iss?: string | undefined; error?: string | undefined }): Promise<{ server: McpServerInfo; signedIn: boolean }> {
+    const expired = () => new AppError("VALIDATION_FAILED", "error.mcpSignInExpired");
+    const server = this.repo.get(stateServerId(input.state));
+    if (server?.auth_type !== "oauth" || server.enabled !== 1) throw expired();
+    const record = await this.loadOAuth(server.id);
+    const valid = record.state !== undefined && sameSecret(record.state, input.state) && record.state_expires !== undefined && record.state_expires > this.now();
+    if (!valid) throw expired();
+    // Used once, right or wrong: the verifier stays only for this redemption.
+    this.repo.pendingSignIn(server.id, null, null);
+    await this.saveOAuth(server.id, { state: undefined, state_expires: undefined });
+    const done = async (problem: McpServerProblem) => {
+      await this.saveOAuth(server.id, { verifier: undefined });
+      this.repo.failed(server.id, problem, { pauseAfter: Number.POSITIVE_INFINITY, pauseMs: 0, keepConnected: false });
+      return { server: this.present(this.require(server.id)), signedIn: false };
+    };
+    if (input.error !== undefined || !input.code) return done("signin");
+    const turn = this.newTurn();
+    try {
+      const target = this.target(server);
+      await target.verify();
+      const auth = await this.fetchAuth(server, turn, true);
+      if (auth.kind !== "oauth") throw expired();
+      await turn.finishSignIn(target.url, auth, input.code, input.iss);
+    } catch (error) {
+      if (error instanceof AppError) throw error;
+      const problem = this.problemOf(server, error);
+      log("warn", "mcp_signin_failed", { kind: problem });
+      return done(problem === "signin" ? "oauth" : problem);
+    } finally {
+      await turn.closeAll();
+    }
+    await this.saveOAuth(server.id, { verifier: undefined });
+    this.repo.signedIn(server.id, this.now());
+    return { server: await this.connect(server.id), signedIn: true };
+  }
+
+  /** OAuth servers waiting for the owner to sign in, for the bot's /status. */
+  needingSignIn(): number {
+    try {
+      return this.repo.needingSignIn();
+    } catch {
+      return 0;
+    }
   }
 
   // ---------- The agent's side ----------
@@ -372,7 +525,9 @@ export class McpService {
     const server = this.repo.get(serverId);
     const tool = server ? this.repo.toolByName(server.id, rest.join("/")) : null;
     if (!server || !tool || server.enabled !== 1 || !isUsable(tool)) return null;
-    return { server: server.id, url: server.url, auth: server.auth_type, credential: server.credential, tool: tool.name, schema: tool.schema_hash, policy: tool.policy };
+    // OAuth: the sign-in, not the token, which a refresh replaces without the owner doing anything.
+    const credential = server.auth_type === "oauth" ? server.signed_in_at : server.credential;
+    return { server: server.id, url: server.url, auth: server.auth_type, credential, tool: tool.name, schema: tool.schema_hash, policy: tool.policy };
   }
 
   /** The hash a proposal stores: the snapshot and the exact arguments together. */
@@ -400,17 +555,18 @@ export class McpService {
     if (opts.unattended && effectivePolicy(tool) !== "auto") throw new McpToolError("The owner changed this tool to ask first; it no longer runs without approval.");
     try {
       const where = this.target(server);
-      const client = await turn.client(server.id, where.url, await this.fetchAuth(server), () => where.verify(opts.signal), opts.signal);
+      const client = await turn.client(server.id, where.url, await this.fetchAuth(server, turn), () => where.verify(opts.signal), opts.signal);
       const result = await turn.callTool(client, tool.name, args, opts.signal);
       this.repo.succeeded(server.id);
       return { server, tool, result };
     } catch (error) {
       if (error instanceof McpBudgetSpent) throw new McpToolError("This request reached its limit of external calls. Answer with what you have.");
       if (opts.signal?.aborted) throw error;
-      const { problem } = classifyMcpError(error);
+      const problem = this.problemOf(server, error);
       log("warn", "mcp_call_failed", { kind: problem });
       // A call that timed out leaves the server listed; three failures in a row pause it all the same.
-      this.repo.failed(server.id, problem, { pauseAfter: PAUSE_AFTER, pauseMs: PAUSE_MS, keepConnected: TRANSIENT.has(problem) });
+      // A sign-in that ran out leaves it out of the turns until the owner signs in again.
+      this.repo.failed(server.id, problem, { pauseAfter: problem === "signin" ? Number.POSITIVE_INFINITY : PAUSE_AFTER, pauseMs: PAUSE_MS, keepConnected: TRANSIENT.has(problem) });
       throw new McpToolError(
         problem === "timeout" || problem === "unavailable" || problem === "protocol" || problem === "too_large"
           ? "The external server failed to answer. The call may or may not have run there: tell the owner, do not retry."

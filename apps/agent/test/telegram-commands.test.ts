@@ -337,6 +337,18 @@ describe("reading", () => {
     expect(status).toMatch(/^Zuri \d+\.\d+\.\d+\n/);
     expect(status).toContain("Falhas nas últimas 24 h: 0");
     expect(status).toContain("A IA está disponível.");
+    expect(status).not.toContain("Serviços externos");
+    // Step 18b: an OAuth server waiting for the owner to sign in shows up.
+    await inOwner((agent) =>
+      agent.store.db.run(
+        `INSERT INTO zur_mcp_servers (id, slug, name, url, auth_type, status, problem, created_at, updated_at) VALUES ('s-status', 'conta', 'Conta', 'https://conta.exemplo.com.br/mcp', 'oauth', 'error', 'signin', 'x', 'x')`,
+      ),
+    );
+    try {
+      expect(await command("/status")).toContain("Serviços externos esperando você entrar na conta: 1. Veja em Configurações › Integrações.");
+    } finally {
+      await inOwner((agent) => agent.store.db.run(`DELETE FROM zur_mcp_servers`));
+    }
     expect(await command("/backup")).toBe("O backup automático ainda não está ligado. Quando estiver, eu conto aqui a idade do último.");
     expect(buttons(lastSent())).toEqual([{ text: "Abrir no app", url: `${ORIGIN}/configuracoes/dados` }]);
     // None of these counted as use: reading stays locked.

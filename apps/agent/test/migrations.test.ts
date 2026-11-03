@@ -99,6 +99,7 @@ describe("the migration list", () => {
       16: "0670271af26f7129e724c31b2de44737396c3c420aee68a96b2585662489e53d",
       17: "fd290cc5de35dccf4d948273b968436628891a5c4bcdaa43aa16917db22466a2",
       18: "6e59b3b8d2eb9f8dbc3195ea0aa951c60139ebc0fc34400bf6c85e010f96b3fb",
+      19: "15098917e96439840fa87c1d6e7eb725ce5f2c971a4e9b5334d625f8e52f6897",
     };
     for (const m of MIGRATIONS) {
       const digest = createHash("sha256").update(statementText(m).replace(/\r\n/g, "\n")).digest("hex");
@@ -114,7 +115,7 @@ describe("migrate", () => {
       expect(zurObjects(db)).toEqual([]);
 
       expect(migrate(db)).toBe(LATEST_SCHEMA_VERSION);
-      expect(schemaVersion(db)).toBe(18);
+      expect(schemaVersion(db)).toBe(19);
       // FTS5 keeps shadow tables of its own (zur_notes_fts_data and others): only ours are listed.
       expect(zurObjects(db).filter((name) => !/^table:zur_(notes|memories)_fts_/.test(name))).toEqual([
         "table:zur_activity",
@@ -461,7 +462,7 @@ describe("migrate", () => {
       db.run(
         `INSERT INTO zur_pending_actions (id, conversation_id, tool, target_id, target_hash, target_label, created_at, expires_at) VALUES ('p1', 'c1', 'delete_task', 't1', 'h', 'Tarefa', 'x', 'y')`,
       );
-      expect(migrate(db)).toBe(18);
+      expect(migrate(db, MIGRATIONS.slice(0, 18))).toBe(18);
       expect(db.one(`SELECT target_label, result FROM zur_pending_actions WHERE id = 'p1'`)).toEqual({ target_label: "Tarefa", result: null });
       db.run(`INSERT INTO zur_mcp_servers (id, slug, name, url, auth_type, created_at, updated_at) VALUES ('s1', 'docs', 'Docs', 'https://exemplo.com.br/mcp', 'none', 'x', 'x')`);
       expect(db.one(`SELECT enabled, status, failures, credential FROM zur_mcp_servers WHERE id = 's1'`)).toEqual({ enabled: 1, status: "disconnected", failures: 0, credential: null });
@@ -473,6 +474,17 @@ describe("migrate", () => {
       expect(db.one(`SELECT enabled, policy, hint, reviewed_hash FROM zur_mcp_tools`)).toEqual({ enabled: 0, policy: "approve", hint: "", reviewed_hash: null });
       expect(() => db.run(`INSERT INTO zur_mcp_tools (server_id, name, exposed_name, input_schema, schema_hash, status, created_at, updated_at) VALUES ('s1', 'other', 'mcp_docs_search', '{}', 'h', 'available', 'x', 'x')`)).toThrow();
       expect(() => db.run(`UPDATE zur_mcp_tools SET policy = 'always'`)).toThrow();
+    });
+  });
+
+  it("upgrades a database at version 18 to 19: the OAuth sign-in and the tools' vectors, servers and tools kept", async () => {
+    await withEmptyDatabase("from-18", (db) => {
+      expect(migrate(db, MIGRATIONS.slice(0, 18))).toBe(18);
+      db.run(`INSERT INTO zur_mcp_servers (id, slug, name, url, auth_type, credential, created_at, updated_at) VALUES ('s1', 'docs', 'Docs', 'https://exemplo.com.br/mcp', 'bearer', 'v1.a.b', 'x', 'x')`);
+      db.run(`INSERT INTO zur_mcp_tools (server_id, name, exposed_name, input_schema, schema_hash, status, enabled, hint, created_at, updated_at) VALUES ('s1', 'search', 'mcp_docs_search', '{}', 'h', 'available', 1, 'Docs', 'x', 'x')`);
+      expect(migrate(db)).toBe(19);
+      expect(db.one(`SELECT credential, authorize_url, authorize_expires, signed_in_at FROM zur_mcp_servers`)).toEqual({ credential: "v1.a.b", authorize_url: null, authorize_expires: null, signed_in_at: null });
+      expect(db.one(`SELECT enabled, hint, embedding, embedding_scale, embedding_key FROM zur_mcp_tools`)).toEqual({ enabled: 1, hint: "Docs", embedding: null, embedding_scale: null, embedding_key: null });
     });
   });
 

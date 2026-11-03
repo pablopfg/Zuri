@@ -107,6 +107,8 @@ export interface CommandDeps {
   healthy(): boolean;
   /** Whether a chat could get an answer now (the day's AI left, the provider not down). */
   aiAvailable(): boolean;
+  /** MCP servers waiting for the owner to sign in (step 18b), for /status. */
+  mcpSignIn?: () => number;
   buttons: CommandButtons;
   state: InternalState;
   locale(): Locale;
@@ -366,6 +368,8 @@ export class TelegramCommands {
       this.#t("telegram.cmd.status.falhas", { n: failures }),
       this.#t(this.deps.aiAvailable() ? "telegram.cmd.status.iaOk" : "telegram.cmd.status.iaFora"),
     ];
+    const signIn = this.deps.mcpSignIn?.() ?? 0;
+    if (signIn > 0) lines.push(this.#t("telegram.cmd.status.mcpSemLogin", { n: signIn }));
     return { text: lines.join("\n") };
   }
 

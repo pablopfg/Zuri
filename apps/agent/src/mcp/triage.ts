@@ -66,6 +66,16 @@ export function score(words: Set<string>, tool: TriageTool): number {
   return 3 * hits(words, stems(tool.hint)) + 2 * hits(words, names) + hits(words, stems(tool.description));
 }
 
+/**
+ * The points of the meaning (step 18b): a tool at or above the model's floor
+ * counts like a word of the owner's hint (3), plus up to 3 more the closer it
+ * is. `above` is how far above the floor the cosine is (0 to about 0.45).
+ */
+export function meaningPoints(above: number | undefined): number {
+  if (above === undefined || !Number.isFinite(above) || above < 0) return 0;
+  return 3 + Math.min(3, above * 10);
+}
+
 /** The prompt tokens one tool takes when offered: name, the description the model reads, schema and a margin. */
 export function toolCost(tool: TriageTool): number {
   return estimateTokens(tool.id.length + Math.min(tool.description.length, MCP_LIMITS.descriptionMax) + tool.hint.length + tool.schemaChars + 120);
@@ -84,12 +94,12 @@ export interface Triage {
  * (only those that match at all), in half the count and half the share, so
  * find_tools has the other half.
  */
-export function triage(message: string, tools: readonly TriageTool[], recent: ReadonlySet<string> = new Set()): Triage {
+export function triage(message: string, tools: readonly TriageTool[], recent: ReadonlySet<string> = new Set(), meaning: ReadonlyMap<string, number> = new Map()): Triage {
   const total = tools.reduce((n, tool) => n + toolCost(tool), 0);
   if (tools.length <= MCP_LIMITS.maxOfferedTools && total <= MCP_LIMITS.offeredTokens) return { offered: tools.map((tool) => tool.id), leftOut: 0 };
   const words = stems(message);
   const ranked = tools
-    .map((tool, index) => ({ tool, index, score: score(words, tool), recent: recent.has(tool.id) }))
+    .map((tool, index) => ({ tool, index, score: score(words, tool) + meaningPoints(meaning.get(tool.id)), recent: recent.has(tool.id) }))
     .filter((item) => item.recent || item.score > 0)
     .sort((a, b) => Number(b.recent) - Number(a.recent) || b.score - a.score || a.index - b.index);
   // Half the slots and half the share: the other half is for what find_tools brings in this turn.

@@ -1,10 +1,10 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { MCP_LIMITS, type McpOverview, type McpServerInfo, type McpServerProblem, type McpToolInfo, type McpToolProblem } from "@zuri/shared";
+import { MCP_LIMITS, type McpAuthType, type McpOverview, type McpServerInfo, type McpServerProblem, type McpToolInfo, type McpToolProblem } from "@zuri/shared";
 import { CircleAlert, CircleCheck, Plug, RefreshCw, Trash2 } from "lucide-react";
-import { type FormEvent, useId, useState } from "react";
+import { type FormEvent, useEffect, useId, useRef, useState } from "react";
 import { Switch } from "../../components/Switch.tsx";
 import { useToast } from "../../components/Toaster.tsx";
-import { Button, Card, cn, Dialog, EmptyState, ErrorNotice, Notice, PasswordField, SelectField, Spinner, TextField } from "../../components/ui.tsx";
+import { Button, buttonClass, Card, cn, Dialog, EmptyState, ErrorNotice, Notice, PasswordField, SelectField, Spinner, TextField } from "../../components/ui.tsx";
 import { api, errorMessage } from "../../lib/api.ts";
 import { useI18n } from "../../lib/i18n.tsx";
 
@@ -27,6 +27,8 @@ const PROBLEM_TEXT: Record<McpServerProblem, Parameters<T>[0]> = {
   credential_unreadable: "web.integrations.problem.credential_unreadable",
   no_tools: "web.integrations.problem.no_tools",
   truncated: "web.integrations.problem.truncated",
+  signin: "web.integrations.problem.signin",
+  oauth: "web.integrations.problem.oauth",
 };
 
 const TOOL_PROBLEM_TEXT: Record<McpToolProblem, Parameters<T>[0]> = {
@@ -59,6 +61,7 @@ const host = (url: string) => {
 export function IntegrationsTab() {
   const { t } = useI18n();
   const overview = useQuery({ queryKey: MCP_KEY, queryFn: ({ signal }) => api<McpOverview>("/mcp", { signal }) });
+  const finishing = useSignInCallback();
   const [adding, setAdding] = useState(false);
   const full = (overview.data?.servers.length ?? 0) >= MCP_LIMITS.maxServers;
   return (
@@ -81,6 +84,12 @@ export function IntegrationsTab() {
           <ErrorNotice error={overview.error} onRetry={() => void overview.refetch()} />
         ) : (
           <div className="space-y-4">
+            {finishing && (
+              <p role="status" className="inline-flex items-center gap-2 text-sm text-fg-muted">
+                <Spinner />
+                {t("web.integrations.signinFinishing")}
+              </p>
+            )}
             <Notice tone="warning">{t("web.integrations.leaves")}</Notice>
             {full && <Notice>{t("web.integrations.full", { max: MCP_LIMITS.maxServers })}</Notice>}
             {overview.data.servers.length === 0 ? (
@@ -107,6 +116,41 @@ export function IntegrationsTab() {
   );
 }
 
+/**
+ * OAuth (step 18b): the service's sign-in page sends the owner back here with
+ * `state` and `code` (or `error`) in the address. They leave the address at
+ * once (history, a shared screen) and go to the server, which checks them.
+ */
+function useSignInCallback(): boolean {
+  const { t } = useI18n();
+  const toast = useToast();
+  const update = useServerUpdate();
+  const started = useRef(false);
+  const [finishing, setFinishing] = useState(false);
+  useEffect(() => {
+    if (started.current) return;
+    const query = new URLSearchParams(window.location.search);
+    const state = query.get("state");
+    if (!state) return;
+    started.current = true;
+    window.history.replaceState(window.history.state, "", window.location.pathname);
+    const body: Record<string, string> = { state };
+    for (const key of ["code", "iss", "error"] as const) {
+      const value = query.get(key);
+      if (value !== null) body[key] = value.slice(0, key === "error" ? 200 : 2_048);
+    }
+    setFinishing(true);
+    api<{ server: McpServerInfo; signedIn: boolean }>("/mcp/oauth/callback", { method: "POST", body })
+      .then((result) => {
+        update(result.server);
+        toast(result.signedIn ? t("web.integrations.signedIn") : t("web.integrations.signinFailed"));
+      })
+      .catch((failure: unknown) => toast(errorMessage(failure)))
+      .finally(() => setFinishing(false));
+  }, [t, toast, update]);
+  return finishing;
+}
+
 /** Puts a server as the server answered into the cached list. */
 function useServerUpdate() {
   const qc = useQueryClient();
@@ -125,7 +169,7 @@ function ServerDialog({ open, onClose, credentials, server }: { open: boolean; o
   const update = useServerUpdate();
   const [name, setName] = useState(server?.name ?? "");
   const [url, setUrl] = useState(server?.url ?? "");
-  const [authType, setAuthType] = useState<"none" | "bearer">(server?.authType === "bearer" ? "bearer" : "none");
+  const [authType, setAuthType] = useState<McpAuthType>(server?.authType ?? "none");
   const [token, setToken] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -180,13 +224,21 @@ function ServerDialog({ open, onClose, credentials, server }: { open: boolean; o
           required
           autoComplete="off"
         />
-        <SelectField label={t("web.integrations.field.auth")} value={authType} onChange={(e) => setAuthType(e.target.value === "bearer" ? "bearer" : "none")}>
+        <SelectField
+          label={t("web.integrations.field.auth")}
+          value={authType}
+          onChange={(e) => setAuthType(e.target.value === "bearer" || e.target.value === "oauth" ? e.target.value : "none")}
+        >
           <option value="none">{t("web.integrations.auth.none")}</option>
           <option value="bearer" disabled={!credentials && server?.authType !== "bearer"}>
             {t("web.integrations.auth.bearer")}
           </option>
+          <option value="oauth" disabled={!credentials && server?.authType !== "oauth"}>
+            {t("web.integrations.auth.oauth")}
+          </option>
         </SelectField>
         {!credentials && <p className="text-xs leading-5 text-fg-muted">{t("web.integrations.noKey")}</p>}
+        {authType === "oauth" && <p className="text-xs leading-5 text-fg-muted">{t("web.integrations.oauthHint")}</p>}
         {authType === "bearer" && (
           <PasswordField
             label={t("web.integrations.field.token")}
@@ -253,6 +305,19 @@ function ServerCard({ server, credentials }: { server: McpServerInfo; credential
           </p>
           {server.problem && server.enabled && <p className="text-sm leading-6 text-fg-muted">{t(PROBLEM_TEXT[server.problem])}</p>}
           {server.pausedUntil && <p className="text-sm leading-6 text-fg-muted">{t("web.integrations.paused", { time: dateTime(server.pausedUntil) })}</p>}
+          {server.authorizeUrl && server.enabled && (
+            <div className="space-y-1 pt-1">
+              <a
+                href={server.authorizeUrl}
+                rel="noopener noreferrer"
+                referrerPolicy="no-referrer"
+                className={buttonClass("primary")}
+              >
+                {t("web.integrations.signin")}
+              </a>
+              <p className="text-xs leading-5 text-fg-muted">{t("web.integrations.signinHint")}</p>
+            </div>
+          )}
           {ok && (
             <p className="text-sm text-fg-muted">
               {t("web.integrations.counts", { on: server.enabledToolCount, total: server.toolCount })}

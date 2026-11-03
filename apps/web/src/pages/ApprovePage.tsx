@@ -63,6 +63,7 @@ const ACTION: Record<ApprovalPreview["tool"], MessageKey> = {
   delete_note: "web.approve.action.delete_note",
   forget_memory: "web.approve.action.forget_memory",
   cancel_automation: "web.approve.action.cancel_automation",
+  mcp_call: "web.approve.action.mcp_call",
 };
 
 /** The proposal as the server built it (step 16): never the model's words. A list of terms, read in order. */
@@ -100,7 +101,7 @@ function Preview({ preview }: { preview: ApprovalPreview }) {
         )}
         {preview.after !== undefined && (
           <div className="space-y-1">
-            <dt className="text-xs font-medium tracking-wide text-fg-muted uppercase">{t("web.approve.preview.after")}</dt>
+            <dt className="text-xs font-medium tracking-wide text-fg-muted uppercase">{t(preview.tool === "mcp_call" ? "web.approve.preview.sent" : "web.approve.preview.after")}</dt>
             {text(preview.after)}
           </div>
         )}
