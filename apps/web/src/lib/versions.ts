@@ -78,12 +78,16 @@ function apply(qc: QueryClient, next: AreaVersions, share: boolean): Area[] {
 export function seen(qc: QueryClient, input: unknown, share = true): Area[] {
   client = qc;
   bus();
-  startLive(qc);
-  return apply(qc, cleanVersions(input), share);
+  const next = cleanVersions(input);
+  // No numbers (lockdown, a password to change, a second step to set up): the server would refuse the channel too.
+  if (Object.keys(next).length > 0) startLive(qc);
+  return apply(qc, next, share);
 }
 
 /** The tab holding this lock keeps the browser's one live channel; the others wait their turn. */
 const LIVE_LOCK = "zuri-live";
+/** Refused this many times in a row without ever opening: back to the heartbeat until its next numbers. */
+const LIVE_MAX_FAILURES = 5;
 
 let live: { stop(): void } | null = null;
 /** Replaced by a newer channel, or blocked by the browser: the heartbeat alone until the page reloads. */
@@ -109,6 +113,8 @@ export function startLive(qc: QueryClient, retryBaseMs = 1000): void {
   if (live || benched || typeof WebSocket === "undefined" || typeof location === "undefined") return;
   let socket: WebSocket | null = null;
   let attempt = 0;
+  /** Tries in a row that never opened: a refusal the browser only sees as 1006. */
+  let failures = 0;
   let retry: ReturnType<typeof setTimeout> | undefined;
   let ping: ReturnType<typeof setInterval> | undefined;
   let release: () => void = () => undefined;
@@ -138,8 +144,11 @@ export function startLive(qc: QueryClient, retryBaseMs = 1000): void {
       return handle.stop();
     }
     socket = ws;
+    let opened = false;
     ws.addEventListener("open", () => {
+      opened = true;
       attempt = 0;
+      failures = 0;
       // Answered by the runtime without waking the object: only keeps the connection from looking idle.
       ping = setInterval(() => ws.readyState === WebSocket.OPEN && ws.send(LIVE_PING), LIVE_LIMITS.pingMs);
     });
@@ -157,7 +166,10 @@ export function startLive(qc: QueryClient, retryBaseMs = 1000): void {
       if (socket !== ws) return;
       socket = null;
       if (event.code === LIVE_CLOSE.replaced) benched = true;
-      if (benched || !signedIn(qc)) return handle.stop();
+      if (!opened) failures += 1;
+      // Lockdown and the other gates (4403), or refused again and again: stop until the next numbers
+      // from the server (seen) start it over, at most once a heartbeat.
+      if (benched || !signedIn(qc) || event.code === LIVE_CLOSE.closed || failures >= LIVE_MAX_FAILURES) return handle.stop();
       const wait = Math.min(LIVE_LIMITS.retryMaxMs, retryBaseMs * 2 ** attempt);
       attempt += 1;
       // Some spread, so many devices never come back in the same second.
@@ -169,10 +181,12 @@ export function startLive(qc: QueryClient, retryBaseMs = 1000): void {
     navigator.locks
       .request(LIVE_LOCK, () => {
         if (live !== handle) return;
-        connect();
-        return new Promise<void>((resolve) => {
+        // The release is in place before connect(): a connect that stops at once must still let the lock go.
+        const held = new Promise<void>((resolve) => {
           release = resolve;
         });
+        connect();
+        return live === handle ? held : undefined;
       })
       .catch(() => handle.stop());
   } else {

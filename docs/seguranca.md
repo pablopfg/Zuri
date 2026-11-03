@@ -428,9 +428,11 @@ pelas rotas normais, com as checagens delas. Regras:
    `Origin`, ou com outro, 403 `CSRF_FAILED` (impede o sequestro do WebSocket
    por outro site, que mandaria o cookie junto).
 3. **Sessão válida.** O cookie de sessão é conferido como em qualquer rota
-   (401 sem ele ou com um que não abre nada). Abrir o canal não conta como uso
-   e não estica o limite de inatividade; o heartbeat continua sendo o sinal de
-   presença.
+   (401 sem ele ou com um que não abre nada). Abrir o canal conta como
+   presença, como qualquer requisição, mas não como uso: não estica o limite
+   de inatividade. Com o Cloudflare Access ligado, o token dele é conferido
+   na abertura; um canal já aberto segue até a próxima conferência da sessão
+   do Zuri e só leva números, nunca conteúdo.
 4. **Conferido de novo a cada aviso.** Antes de escrever, o servidor confere
    se a sessão ainda existe: sessão encerrada (Sair, /sessoes, limite, troca de
    senha) fecha o canal com o código 4401. Bloqueio (/bloquear), senha a trocar
@@ -438,6 +440,9 @@ pelas rotas normais, com as checagens delas. Regras:
 5. **Nada vindo do navegador.** Só o `ping` é esperado, e quem responde é o
    próprio runtime (resposta automática), sem acordar o objeto. Qualquer outra
    mensagem fecha o canal com 1008.
+   O navegador só tenta abrir quando o servidor mandou números (sessão sem
+   bloqueio, sem senha a trocar e sem segundo passo pendente), para não bater
+   à toa num canal que seria recusado.
 6. **Limite.** No máximo 5 canais abertos; um novo fecha o mais antigo (4409),
    para uma página recarregada nunca trancar o dono do lado de fora. Cada
    navegador abre um só (a aba que tem a trava `zuri-live`).

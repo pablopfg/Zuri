@@ -74,13 +74,15 @@ export class LiveChannel {
     const token = readSessionCookie(request);
     if (token === null) throw new AppError("UNAUTHORIZED");
     const auth = this.deps.auth();
-    // Opening the channel is not the owner's use: it never extends the idle limit.
+    // Opening the channel is not the owner's use (the idle limit stays); like any request, it shows a tab is open.
     const session = await auth.validate(token, false);
     if (!session) throw new AppError("UNAUTHORIZED");
     if (this.gated()) throw new AppError("FORBIDDEN");
 
     // The newest channel wins: the oldest ones close until there is room.
+    // Only the open ones count: a channel already closed by the server is waiting for the browser's reply.
     const open = this.sockets()
+      .filter((ws) => ws.readyState === WebSocket.OPEN)
       .map((ws) => ({ ws, at: attachment(ws)?.at ?? 0 }))
       .sort((a, b) => a.at - b.at);
     for (const { ws } of open.slice(0, Math.max(0, open.length - LIVE_LIMITS.maxSockets + 1))) close(ws, LIVE_CLOSE.replaced);

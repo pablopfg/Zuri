@@ -54,7 +54,7 @@ describe("the areas' numbers", () => {
     const { qc, stale } = clientWith([["tasks"]]);
     seen(qc, { tasks: 1 }, false);
     seen(qc, { tasks: 1 }, false);
-    seen(qc, {}, false);
+    seen(qc, { tasks: 1 }, false);
     seen(qc, { tasks: "9" }, false);
     expect(stale()).toEqual([]);
   });
@@ -146,7 +146,7 @@ describe("the live channel", () => {
 
   it("pings while open, so the connection never looks idle", () => {
     const { qc } = signedInClient();
-    seen(qc, {}, false);
+    seen(qc, { tasks: 1 }, false);
     const ws = FakeSocket.made[0] as FakeSocket;
     ws.open();
     vi.advanceTimersByTime(LIVE_LIMITS.pingMs * 2);
@@ -156,29 +156,28 @@ describe("the live channel", () => {
     expect(ws.sent).toHaveLength(2);
   });
 
-  it("comes back after a fall with a growing wait, never longer than a minute", () => {
+  it("comes back after a fall with a growing wait", () => {
     vi.spyOn(Math, "random").mockReturnValue(1);
     const { qc } = signedInClient();
-    seen(qc, {}, false);
+    seen(qc, { tasks: 1 }, false);
     const waits: number[] = [];
-    for (let i = 0; i < 9; i++) {
+    for (let i = 0; i < 4; i++) {
       (FakeSocket.made.at(-1) as FakeSocket).drop(1006);
       const before = FakeSocket.made.length;
       let waited = 0;
-      while (FakeSocket.made.length === before) {
+      while (FakeSocket.made.length === before && waited < LIVE_LIMITS.retryMaxMs * 2) {
         vi.advanceTimersByTime(500);
         waited += 500;
       }
       waits.push(waited);
     }
-    expect(waits.slice(0, 4)).toEqual([1000, 2000, 4000, 8000]);
-    expect(Math.max(...waits)).toBe(LIVE_LIMITS.retryMaxMs);
+    expect(waits).toEqual([1000, 2000, 4000, 8000]);
   });
 
   it("starts the wait over after a channel that opened", () => {
     vi.spyOn(Math, "random").mockReturnValue(1);
     const { qc } = signedInClient();
-    seen(qc, {}, false);
+    seen(qc, { tasks: 1 }, false);
     (FakeSocket.made[0] as FakeSocket).drop(1006);
     vi.advanceTimersByTime(1000);
     (FakeSocket.made[1] as FakeSocket).drop(1006);
@@ -192,7 +191,7 @@ describe("the live channel", () => {
 
   it("stays on the heartbeat alone once a newer channel took its place", () => {
     const { qc } = signedInClient();
-    seen(qc, {}, false);
+    seen(qc, { tasks: 1 }, false);
     (FakeSocket.made[0] as FakeSocket).drop(LIVE_CLOSE.replaced);
     vi.advanceTimersByTime(LIVE_LIMITS.retryMaxMs * 2);
     seen(qc, { tasks: 3 }, false);
@@ -201,11 +200,81 @@ describe("the live channel", () => {
 
   it("stops after a sign-out instead of knocking again", () => {
     const { qc } = signedInClient();
-    seen(qc, {}, false);
+    seen(qc, { tasks: 1 }, false);
     qc.setQueryData(["session"], null);
     (FakeSocket.made[0] as FakeSocket).drop(LIVE_CLOSE.ended);
     vi.advanceTimersByTime(LIVE_LIMITS.retryMaxMs * 2);
     expect(FakeSocket.made).toHaveLength(1);
+  });
+
+  it("stops on a gate (4403) and starts again only with the next numbers", () => {
+    const { qc } = signedInClient();
+    seen(qc, { tasks: 1 }, false);
+    (FakeSocket.made[0] as FakeSocket).drop(LIVE_CLOSE.closed);
+    vi.advanceTimersByTime(LIVE_LIMITS.retryMaxMs * 2);
+    expect(FakeSocket.made).toHaveLength(1);
+    seen(qc, { tasks: 1 }, false);
+    expect(FakeSocket.made).toHaveLength(2);
+  });
+
+  it("gives up after five refusals in a row that never opened, until the next numbers", () => {
+    const { qc } = signedInClient();
+    seen(qc, { tasks: 1 }, false);
+    for (let i = 0; i < 10; i++) {
+      (FakeSocket.made.at(-1) as FakeSocket).drop(1006);
+      vi.advanceTimersByTime(LIVE_LIMITS.retryMaxMs);
+    }
+    expect(FakeSocket.made).toHaveLength(5);
+    seen(qc, { tasks: 1 }, false);
+    expect(FakeSocket.made).toHaveLength(6);
+  });
+
+  it("lets the lock go when it is granted to a tab already signed out, so the next sign-in opens a channel", async () => {
+    let holder: Promise<void> | null = null;
+    const waiting: (() => void)[] = [];
+    vi.stubGlobal("navigator", {
+      locks: {
+        request: (_name: string, fn: () => Promise<void> | undefined) => {
+          const run = (): Promise<void> => {
+            holder = Promise.resolve(fn()).finally(() => {
+              holder = null;
+              waiting.shift()?.();
+            });
+            return holder;
+          };
+          if (!holder) return run();
+          return new Promise<void>((resolve) => waiting.push(() => void run().then(resolve)));
+        },
+      },
+    });
+    // Another tab holds the lock; this one waits for it.
+    let otherTab: () => void = () => undefined;
+    holder = new Promise<void>((resolve) => {
+      otherTab = resolve;
+    }).finally(() => {
+      holder = null;
+      waiting.shift()?.();
+    });
+    const { qc } = clientWith([]);
+    qc.setQueryData(["session"], { authenticated: true });
+    seen(qc, { tasks: 1 }, false);
+    // Signed out everywhere, then the other tab lets the lock go: it reaches this tab with no session.
+    qc.setQueryData(["session"], null);
+    otherTab();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(FakeSocket.made).toHaveLength(0);
+    expect(holder).toBeNull();
+    qc.setQueryData(["session"], { authenticated: true });
+    seen(qc, { tasks: 2 }, false);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(FakeSocket.made).toHaveLength(1);
+  });
+
+  it("never opens while the server sends no numbers (lockdown, password to change, second step)", () => {
+    const { qc } = signedInClient();
+    seen(qc, {}, false);
+    seen(qc, undefined, false);
+    expect(FakeSocket.made).toHaveLength(0);
   });
 
   it("never opens without a session on the screen", () => {
@@ -216,7 +285,7 @@ describe("the live channel", () => {
 
   it("closes its channel when stopped", () => {
     const { qc } = signedInClient();
-    seen(qc, {}, false);
+    seen(qc, { tasks: 1 }, false);
     stopLive();
     expect(FakeSocket.made[0]?.closedWith).toBe(1000);
     vi.advanceTimersByTime(LIVE_LIMITS.retryMaxMs * 2);
@@ -242,7 +311,7 @@ describe("the live channel", () => {
       },
     });
     const { qc } = signedInClient();
-    seen(qc, {}, false);
+    seen(qc, { tasks: 1 }, false);
     await vi.advanceTimersByTimeAsync(0);
     expect(FakeSocket.made).toHaveLength(1);
     expect(held).toBe(true);

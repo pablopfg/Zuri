@@ -31,8 +31,6 @@ export const LIVE_LIMITS = {
   pingMs: 50_000,
   /** The longest wait before the browser tries again after the channel fell. */
   retryMaxMs: 60_000,
-  /** The most a browser may send in one message (only the ping is expected). */
-  messageMaxBytes: 16,
 } as const;
 export const LIVE_PING = "ping";
 export const LIVE_PONG = "pong";

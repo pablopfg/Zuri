@@ -706,7 +706,12 @@ export class ZuriAgent extends Agent<WorkerEnv> {
    * reaches the object without the Worker's gates; so do sub-agent paths.
    */
   override async fetch(request: Request): Promise<Response> {
-    if (request.headers.get("upgrade")?.toLowerCase() === "websocket") return this.#live.open(request);
+    if (request.headers.get("upgrade")?.toLowerCase() === "websocket") {
+      const response = await this.#live.open(request);
+      // Same follow-up as a request: an object woken cold by the channel still checks its alarm.
+      if (this.#store) await this.afterRequest();
+      return response;
+    }
     return super.fetch(request);
   }
 

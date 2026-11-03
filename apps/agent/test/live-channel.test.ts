@@ -2,6 +2,7 @@ import { AGENT_INSTANCE_NAME, AREAS, LIVE_CLOSE, LIVE_LIMITS, LIVE_PATH, type Ar
 import { runInDurableObject } from "cloudflare:test";
 import { afterEach, beforeAll, describe, expect, it } from "vitest";
 import type { ZuriAgent } from "../src/agent/zuri-agent.ts";
+import { InternalState } from "../src/db/internal-state.ts";
 import { LIVE_TAG } from "../src/live/channel.ts";
 import { call, CSRF, errorBody, HUMAN_TOKEN, ORIGIN, TEST_EMAIL, TEST_PASSWORD, testEnv } from "./helpers.ts";
 
@@ -169,16 +170,25 @@ describe("opening the live channel", () => {
     expect(res.status).toBe(404);
   });
 
-  it(`keeps at most ${LIVE_LIMITS.maxSockets} channels: a new one closes the oldest`, async () => {
+  it(`keeps at most ${LIVE_LIMITS.maxSockets} channels: up to the limit all stay, the next one closes only the oldest`, async () => {
+    // Start from none open (the earlier tests' channels are closed by afterEach; let the server see it).
+    await inOwner((_agent, state) => {
+      for (const ws of state.getWebSockets(LIVE_TAG)) ws.close(1000);
+    });
     const channels: Channel[] = [];
     for (let i = 0; i < LIVE_LIMITS.maxSockets; i++) channels.push(await open());
-    const before = await inOwner((_agent, state) => state.getWebSockets(LIVE_TAG).length);
-    expect(before).toBeLessThanOrEqual(LIVE_LIMITS.maxSockets);
-    await open();
+    for (const channel of channels) await channel.next();
+    // n: all of them open.
+    for (const channel of channels) expect(channel.ws.readyState).toBe(WebSocket.OPEN);
+    const extra = await open();
+    await extra.next();
+    // n + 1: the oldest closes, and only it.
     expect((await channels[0]?.closed)?.code).toBe(LIVE_CLOSE.replaced);
-    expect(await inOwner((_agent, state) => state.getWebSockets(LIVE_TAG).filter((ws) => ws.readyState === WebSocket.OPEN).length)).toBeLessThanOrEqual(
-      LIVE_LIMITS.maxSockets,
-    );
+    await settle();
+    for (const channel of channels.slice(1)) expect(channel.ws.readyState).toBe(WebSocket.OPEN);
+    expect(
+      await inOwner((_agent, state) => state.getWebSockets(LIVE_TAG).filter((ws) => ws.readyState === WebSocket.OPEN).length),
+    ).toBe(LIVE_LIMITS.maxSockets);
   });
 });
 
@@ -230,6 +240,31 @@ describe("what the channel says", () => {
   });
 });
 
+describe("what the channel costs", () => {
+  it("nothing more per write while no channel is open; with one, a few rows per write", async () => {
+    const rowsRead = () => inOwner((agent) => agent.store.db.usage.rowsRead);
+    const write = () => inOwner((agent) => agent.store.db.run(`UPDATE zur_area_versions SET trash = trash WHERE id = 1`));
+    await inOwner((_agent, state) => {
+      for (const ws of state.getWebSockets(LIVE_TAG)) ws.close(1000);
+    });
+    await settle();
+    let before = await rowsRead();
+    await write();
+    await settle();
+    const closedCost = (await rowsRead()) - before;
+    const channel = await open();
+    await channel.next();
+    before = await rowsRead();
+    await write();
+    await settle();
+    const openCost = (await rowsRead()) - before;
+    // The row of numbers and the sessions (at most MAX_SESSIONS), plus the gates' settings.
+    expect(openCost - closedCost).toBeLessThanOrEqual(12);
+    expect(closedCost).toBeLessThanOrEqual(1);
+    expect(openCost).toBeGreaterThan(closedCost);
+  });
+});
+
 describe("what the channel accepts from the browser", () => {
   it("answers the ping without the object reading it", async () => {
     const channel = await open();
@@ -249,6 +284,38 @@ describe("what the channel accepts from the browser", () => {
 });
 
 describe("when the session or the gates change", () => {
+  it("closes once the session runs out of time, before anything is sent", async () => {
+    const channel = await open();
+    await channel.next();
+    // Five minutes and more without a sign of an open tab: the session is past its limit.
+    await inOwner((agent) => agent.store.db.run(`UPDATE zur_sessions SET last_presence_at = last_presence_at - 3600000`));
+    expect((await channel.closed).code).toBe(LIVE_CLOSE.ended);
+    expect(channel.messages).toHaveLength(1);
+    await signIn();
+  });
+
+  it("closes, and refuses to open, while the password must be changed", async () => {
+    const channel = await open();
+    await channel.next();
+    await inOwner((agent) => new InternalState(agent.store.db).set("auth_password_change_required", true));
+    expect((await channel.closed).code).toBe(LIVE_CLOSE.closed);
+    expect(channel.messages).toHaveLength(1);
+    const refused = await upgrade();
+    expect(refused.status).toBe(403);
+    expect(refused.webSocket).toBeNull();
+    await inOwner((agent) => new InternalState(agent.store.db).delete("auth_password_change_required"));
+    expect((await upgrade()).status).toBe(101);
+  });
+
+  it("closes, and refuses to open, while the second step is still to be set up", async () => {
+    const channel = await open();
+    await channel.next();
+    await inOwner((agent) => new InternalState(agent.store.db).set("setup_second_step_required", true));
+    expect((await channel.closed).code).toBe(LIVE_CLOSE.closed);
+    expect((await upgrade()).status).toBe(403);
+    await inOwner((agent) => new InternalState(agent.store.db).delete("setup_second_step_required"));
+  });
+
   it("closes when the session signs out", async () => {
     const channel = await open();
     await channel.next();

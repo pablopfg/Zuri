@@ -121,8 +121,10 @@ Como cheguei nos números:
   arquivos com hash ficam no cache do navegador por um ano, então uma visita
   nova custa umas quatro requisições (HTML, service worker, ícone, manifesto).
   O canal de tempo real custa uma requisição ao abrir (e a cada volta depois
-  de cair). Parado, não custa nada: o ping a cada 50 s é respondido pelo
-  runtime sem acordar o objeto, e o servidor só escreve quando um número muda.
+  de cair). Parado, custa quase nada: o ping a cada 50 s é respondido pelo
+  runtime sem acordar o objeto (sem duração); se as mensagens recebidas
+  contarem como requisições na proporção de 20 para 1, são umas 86 por dia por
+  navegador. O servidor só escreve quando um número muda.
   Com o canal aberto, cada escrita no banco lê também a linha dos números e as
   sessões (uma leitura de cada, junte o que vier na mesma tarefa).
 - **Duração.** Segundo a documentação, um objeto parado entra em hibernação
