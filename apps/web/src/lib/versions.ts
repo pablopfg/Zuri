@@ -27,6 +27,8 @@ const AREA_KEYS: Record<Area, readonly { queryKey: QueryKey; exact?: boolean }[]
   calendar: [{ queryKey: ["calendar"] }],
   // The Contacts screen and the contacts in Integrations (step 19b).
   contacts: [{ queryKey: ["contacts"] }],
+  // The Flows tab in Automations (step 22a).
+  flows: [{ queryKey: ["flows"] }],
 };
 
 const CHANNEL = "zuri-versions";

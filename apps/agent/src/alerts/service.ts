@@ -667,6 +667,11 @@ const KIND_TEXT: Record<Exclude<NoticeKind, "security">, Text> = {
   "contacts.scope": { title: "notice.contacts.problem.title", body: "notice.contacts.scope.body" },
   "contacts.too_many": { title: "notice.contacts.problem.title", body: "notice.contacts.too_many.body" },
   "contacts.unavailable": { title: "notice.contacts.problem.title", body: "notice.contacts.unavailable.body" },
+  "flow.notice": { title: "notice.flow.notice.title", body: null },
+  "flow.siteDown": { title: "notice.flow.siteDown.title", body: "notice.flow.siteDown.body" },
+  "flow.siteUp": { title: "notice.flow.siteUp.title", body: "notice.flow.siteUp.body" },
+  "flow.failed": { title: "notice.flow.failed.title", body: "notice.flow.failed.body" },
+  "flow.paused": { title: "notice.flow.paused.title", body: "notice.flow.paused.body" },
 };
 
 /** Security alerts: what happened and what to do if it was not the owner, never where it came from (it may show on a locked screen). */
@@ -697,6 +702,8 @@ const SECURITY_TEXT: Record<SecurityAlertEvent, Text> = {
   mcp_server_added: { title: "notice.security.mcp_server_added.title", body: "notice.security.mcp_server_added.body" },
   mcp_server_changed: { title: "notice.security.mcp_server_changed.title", body: "notice.security.mcp_server_changed.body" },
   mcp_tool_autonomy: { title: "notice.security.mcp_tool_autonomy.title", body: "notice.security.mcp_tool_autonomy.body" },
+  flow_connection_added: { title: "notice.security.flow_connection_added.title", body: "notice.security.flow_connection_added.body" },
+  flow_connection_changed: { title: "notice.security.flow_connection_changed.title", body: "notice.security.flow_connection_changed.body" },
   google_connected: { title: "notice.security.google_connected.title", body: "notice.security.google_connected.body" },
   google_calendar_write: { title: "notice.security.google_calendar_write.title", body: "notice.security.google_calendar_write.body" },
   setup_failure: { title: "notice.security.setup_failure.title", body: "notice.security.setup_failure.body" },

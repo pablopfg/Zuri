@@ -104,6 +104,7 @@ describe("the migration list", () => {
       21: "77a1bb6400daf53af88998aec9180efc8546f0550afebf3cf4ad0519e695b8a3",
       22: "710250c6a5ac9b1b789ba436657e0013925b1c44b409bde00a784c5e0778159a",
       23: "5a2aa2b2a2bed010c38ab88ef70332d8f0e26857c4e03d98f8b2fc043509fb60",
+      24: "3d7bddca36ec7e09e99bf352e56cc93c3cf74977ca62c80d5e820ace82f1c8a7",
     };
     for (const m of MIGRATIONS) {
       const digest = createHash("sha256").update(statementText(m).replace(/\r\n/g, "\n")).digest("hex");
@@ -119,7 +120,7 @@ describe("migrate", () => {
       expect(zurObjects(db)).toEqual([]);
 
       expect(migrate(db)).toBe(LATEST_SCHEMA_VERSION);
-      expect(schemaVersion(db)).toBe(23);
+      expect(schemaVersion(db)).toBe(24);
       // FTS5 keeps shadow tables of its own (zur_notes_fts_data and others): only ours are listed.
       expect(zurObjects(db).filter((name) => !/^table:zur_(notes|memories)_fts_/.test(name))).toEqual([
         "table:zur_activity",
@@ -151,6 +152,15 @@ describe("migrate", () => {
         "trigger:zur_area_conversations_conversations_delete",
         "trigger:zur_area_conversations_conversations_insert",
         "trigger:zur_area_conversations_conversations_update",
+        "trigger:zur_area_flows_flow_connections_delete",
+        "trigger:zur_area_flows_flow_connections_insert",
+        "trigger:zur_area_flows_flow_connections_update",
+        "trigger:zur_area_flows_flow_sites_delete",
+        "trigger:zur_area_flows_flow_sites_insert",
+        "trigger:zur_area_flows_flow_sites_update",
+        "trigger:zur_area_flows_flows_delete",
+        "trigger:zur_area_flows_flows_insert",
+        "trigger:zur_area_flows_flows_update",
         "trigger:zur_area_memories_memories_delete",
         "trigger:zur_area_memories_memories_insert",
         "trigger:zur_area_memories_memories_update",
@@ -207,6 +217,8 @@ describe("migrate", () => {
         "trigger:zur_counts_automations_insert",
         "trigger:zur_counts_conversations_delete",
         "trigger:zur_counts_conversations_insert",
+        "trigger:zur_counts_flow_runs_delete",
+        "trigger:zur_counts_flow_runs_insert",
         "trigger:zur_counts_memories_delete",
         "trigger:zur_counts_memories_insert",
         "trigger:zur_counts_memories_status",
@@ -234,6 +246,16 @@ describe("migrate", () => {
         "table:zur_devices",
         "table:zur_diagnostics",
         "index:zur_diagnostics_last",
+        "table:zur_flow_connections",
+        "table:zur_flow_runs",
+        "index:zur_flow_runs_flow",
+        "index:zur_flow_runs_open",
+        "index:zur_flow_runs_resume",
+        "index:zur_flow_runs_slot",
+        "index:zur_flow_runs_started",
+        "table:zur_flow_sites",
+        "table:zur_flows",
+        "index:zur_flows_due",
         "table:zur_google_account",
         "table:zur_google_calendars",
         "index:zur_google_calendars_watch",
@@ -569,7 +591,7 @@ describe("migrate", () => {
       expect(migrate(db, MIGRATIONS.slice(0, 22))).toBe(22);
       db.run(`UPDATE zur_area_versions SET calendar = 4`);
       db.run(`INSERT INTO zur_tasks (id, title, created_at, updated_at) VALUES ('t1', 'Ligar', 'x', 'x')`);
-      expect(migrate(db)).toBe(23);
+      expect(migrate(db, MIGRATIONS.slice(0, 23))).toBe(23);
       expect(db.one(`SELECT calendar, contacts FROM zur_area_versions`)).toEqual({ calendar: 4, contacts: 0 });
       expect(db.all(`SELECT id FROM zur_tasks`)).toEqual([{ id: "t1" }]);
       db.run(`INSERT INTO zur_contact_sync (id) VALUES (1)`);
@@ -596,6 +618,39 @@ describe("migrate", () => {
       db.run(`UPDATE zur_contact_sync SET last_ok_at = 9, copied = 1`);
       expect(db.one(`SELECT contacts FROM zur_area_versions`)).toEqual({ contacts: 3 });
       expect(() => db.run(`INSERT INTO zur_contacts (id, resource_name, etag, display_name, search_name, data, synced_at) VALUES ('d', 'people/c1', 'e', 'B', 'b', '{}', 1)`)).toThrow();
+    });
+  });
+
+  it("upgrades a database at version 23 to 24: the flows, born off, their area moved only by what the Flows tab shows", async () => {
+    await withEmptyDatabase("from-23", (db) => {
+      expect(migrate(db, MIGRATIONS.slice(0, 23))).toBe(23);
+      db.run(`UPDATE zur_area_versions SET contacts = 3`);
+      expect(migrate(db)).toBe(24);
+      expect(db.one(`SELECT contacts, flows FROM zur_area_versions`)).toEqual({ contacts: 3, flows: 0 });
+      db.run(`INSERT INTO zur_flows (id, name, definition, created_at, updated_at) VALUES ('f', 'Monitor', '{}', 'x', 'x')`);
+      expect(db.one(`SELECT enabled, uses_ai, failures FROM zur_flows`)).toEqual({ enabled: 0, uses_ai: 0, failures: 0 });
+      expect(db.one(`SELECT flows FROM zur_area_versions`)).toEqual({ flows: 1 });
+      // The bookkeeping the tab does not show moves nothing.
+      db.run(`UPDATE zur_flows SET last_problem = 'x', updated_at = 'y'`);
+      expect(db.one(`SELECT flows FROM zur_area_versions`)).toEqual({ flows: 1 });
+      db.run(`INSERT INTO zur_flow_sites (flow_id, url) VALUES ('f', 'https://a.exemplo.com.br/')`);
+      expect(db.one(`SELECT flows FROM zur_area_versions`)).toEqual({ flows: 2 });
+      // A site looked at again moves nothing; one that went down does.
+      db.run(`UPDATE zur_flow_sites SET checked_at = 'z', ms = 10, failures = 1`);
+      expect(db.one(`SELECT flows FROM zur_area_versions`)).toEqual({ flows: 2 });
+      db.run(`UPDATE zur_flow_sites SET state = 'down'`);
+      expect(db.one(`SELECT flows FROM zur_area_versions`)).toEqual({ flows: 3 });
+      // A runs' row moves nothing by itself; a scheduled time runs once; the checks hold.
+      db.run(`INSERT INTO zur_flow_runs (id, flow_id, flow_name, trigger, slot, status, started_at) VALUES ('r1', 'f', 'Monitor', 'schedule', 's1', 'running', 'x')`);
+      expect(db.one(`SELECT flows FROM zur_area_versions`)).toEqual({ flows: 3 });
+      // The history's counter follows inserts and deletes.
+      expect(db.one(`SELECT n FROM zur_counts WHERE kind = 'flow_runs'`)).toEqual({ n: 1 });
+      expect(() => db.run(`INSERT INTO zur_flow_runs (id, flow_id, flow_name, trigger, slot, status, started_at) VALUES ('r2', 'f', 'Monitor', 'schedule', 's1', 'running', 'x')`)).toThrow();
+      expect(() => db.run(`INSERT INTO zur_flow_runs (id, flow_id, flow_name, trigger, status, started_at) VALUES ('r3', 'f', 'M', 'webhook', 'running', 'x')`)).toThrow();
+      expect(() => db.run(`INSERT INTO zur_flow_connections (id, name, origin, methods, paths, auth, created_at, updated_at) VALUES ('c', 'CRM', 'o', '[]', '[]', 'basic', 'x', 'x')`)).toThrow();
+      expect(() => db.run(`UPDATE zur_flows SET enabled = 2`)).toThrow();
+      db.run(`DELETE FROM zur_flow_runs`);
+      expect(db.one(`SELECT n FROM zur_counts WHERE kind = 'flow_runs'`)).toEqual({ n: 0 });
     });
   });
 

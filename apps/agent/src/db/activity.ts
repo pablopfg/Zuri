@@ -6,7 +6,14 @@ export type ActivityKind = "settings.updated" | "trash.restored" | "trash.purged
   | "automation.approved"
   | "automation.deleted"
   | "automation.failed"
-  | "automation.reconciled";
+  | "automation.reconciled"
+  | "flow.created"
+  | "flow.changed"
+  | "flow.deleted"
+  | "flow.paused"
+  | "flow.connection_added"
+  | "flow.connection_changed"
+  | "flow.connection_removed";
 
 /**
  * Records one entry of the activity log. `detail` holds names and ids, never

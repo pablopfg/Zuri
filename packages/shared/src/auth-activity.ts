@@ -49,6 +49,8 @@ export const AUTH_EVENT_KINDS = [
   "mcp_server_added",
   "mcp_server_changed",
   "mcp_tool_autonomy",
+  "flow_connection_added",
+  "flow_connection_changed",
   "google_connected",
   "google_calendar_write",
   "google_disconnected",

@@ -112,6 +112,8 @@ export interface CommandDeps {
   aiAvailable(): boolean;
   /** MCP servers waiting for the owner to sign in (step 18b), for /status. */
   mcpSignIn?: () => number;
+  /** The flows (step 22a), for /status: the monitors' sites and the flows whose last run failed. */
+  flows?: () => { sites: { host: string; state: "up" | "down" | "unknown" }[]; failing: string[] };
   /** The Google Calendar (step 19): /hoje lists today's events of the calendars open to Zuri. */
   calendar?: GoogleCalendar;
   buttons: CommandButtons;
@@ -413,6 +415,16 @@ export class TelegramCommands {
     ];
     const signIn = this.deps.mcpSignIn?.() ?? 0;
     if (signIn > 0) lines.push(this.#t("telegram.cmd.status.mcpSemLogin", { n: signIn }));
+    const flows = this.deps.flows?.();
+    if (flows && flows.sites.length > 0) {
+      const down = flows.sites.filter((site) => site.state === "down");
+      lines.push(this.#t("telegram.cmd.status.sites", { up: flows.sites.filter((site) => site.state === "up").length, n: flows.sites.length }));
+      // Host names are the owner's own entries, but still pass the escape like any stored text.
+      for (const site of down.slice(0, 10)) lines.push(this.#t("telegram.cmd.status.siteDown", { host: this.#line(site.host) }));
+    }
+    if (flows && flows.failing.length > 0) {
+      lines.push(this.#t("telegram.cmd.status.flowsFailing", { n: flows.failing.length, names: flows.failing.slice(0, 5).map((name) => this.#line(name)).join(", ") }));
+    }
     return { text: lines.join("\n") };
   }
 

@@ -1,4 +1,4 @@
-import { AGENT_INSTANCE_NAME, LIST_LIMIT_DEFAULT } from "@zuri/shared";
+import { AGENT_INSTANCE_NAME, FLOW_LIMITS, LIST_LIMIT_DEFAULT } from "@zuri/shared";
 import { runInDurableObject } from "cloudflare:test";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import type { ZuriAgent } from "../src/agent/zuri-agent.ts";
@@ -13,6 +13,7 @@ import { unit } from "../src/semantic/vectors.ts";
 import { CSRF, call, HUMAN_TOKEN, ORIGIN, TEST_EMAIL, TEST_PASSWORD, testEnv } from "./helpers.ts";
 import { mcpFixture } from "./mcp-fixture.ts";
 import { withChatWorld } from "./chat-world.ts";
+import { addConnection, withFlowWorld } from "./flow-world.ts";
 
 // What each route costs in the units the Free plan bills: rows read and rows
 // written in the object's SQLite (docs/arquitetura/orcamento-free-tier.md). A
@@ -529,7 +530,8 @@ describe("the Free plan budget of each route", () => {
     });
     // 41: the Telegram channel's look at its link and the snoozed notices' index (step 13) cost a row.
     // 45: the run's two writes and the automation's bookkeeping each move the automations' number (nova UI, PR 2).
-    expect(wake.read).toBeLessThanOrEqual(45);
+    // 49: the flows (step 22a) look for due and waiting runs, and the planning for their next time: four indexed looks.
+    expect(wake.read).toBeLessThanOrEqual(49);
     expect(wake.written).toBeLessThanOrEqual(30);
   });
 
@@ -649,7 +651,8 @@ describe("the Free plan budget of each route", () => {
       const reindex = await cost("POST", "/semantic/reindex");
       expect(reindex.status).toBe(200);
       // 231: the alarm's planning also checks the MCP tools for a stale vector (step 18b, one read).
-      expect(reindex.read).toBeLessThanOrEqual(231);
+      // 233: and the flows' next scheduled or waiting run (step 22a, two indexed looks).
+      expect(reindex.read).toBeLessThanOrEqual(233);
       expect(reindex.written).toBeLessThanOrEqual(4);
       const off = await cost("PATCH", "/semantic", { enabled: false });
       expect(off.status).toBe(200);
@@ -810,5 +813,64 @@ describe("Google contacts (step 19b)", () => {
       world.contacts.search({ query: "pessoa 4", limit: 50 });
       expect(world.googleSim.seen.length).toBe(calls);
       expect(world.db.usage.rowsRead - before.rowsRead).toBeLessThanOrEqual(1_000);
+    }));
+});
+
+describe("flows (step 22a)", () => {
+  it("the Flows tab, a page of the history, a monitor run of 10 sites and an idle wake read and write about one page, out of 20 flows and 2,000 runs", () =>
+    withFlowWorld(async (world) => {
+      const sites = Array.from({ length: FLOW_LIMITS.sites }, (_, i) => `https://s${i}.exemplo.com.br/`);
+      for (const url of sites) world.network.handlers.set(new URL(url).host, () => new Response("ok"));
+      for (let i = 0; i < FLOW_LIMITS.connections; i++) await addConnection(world, { name: `C${i}` });
+      const monitor = await world.flows.create({
+        name: "Monitor",
+        definition: { version: 1, trigger: { type: "schedule", schedule: { type: "interval", minutes: 15 } }, nodes: [{ type: "monitor", sites }] },
+      });
+      for (let i = 1; i < FLOW_LIMITS.flows; i++) {
+        await world.flows.create({ name: `F${i}`, definition: { version: 1, trigger: { type: "manual" }, nodes: [{ type: "wait", minutes: 1 }] } });
+      }
+      world.db.transaction(() => {
+        for (let i = 0; i < 2_000; i++) {
+          world.db.run(
+            `INSERT INTO zur_flow_runs (id, flow_id, flow_name, trigger, status, started_at, finished_at) VALUES (?, ?, 'Monitor', 'manual', 'success', ?, ?)`,
+            crypto.randomUUID(),
+            monitor.id,
+            new Date(Date.UTC(2026, 0, 1) + i * 60_000).toISOString(),
+            new Date(Date.UTC(2026, 0, 1) + i * 60_000).toISOString(),
+          );
+        }
+      });
+      const measure = async <T>(fn: () => T | Promise<T>) => {
+        const before = { ...world.db.usage };
+        await fn();
+        return { read: world.db.usage.rowsRead - before.rowsRead, written: world.db.usage.rowsWritten - before.rowsWritten };
+      };
+      // The tab: every flow, connection and site (all capped at 20, 20 and 10), the day's counters by index.
+      const list = await measure(() => world.flows.list());
+      expect(list.written).toBe(0);
+      // Measured 92.
+      expect(list.read).toBeLessThanOrEqual(100);
+      const page = await measure(() => world.flows.runs({}));
+      expect(page.written).toBe(0);
+      // One page of 30 and the look past it (measured 31).
+      expect(page.read).toBeLessThanOrEqual(40);
+      // A run of the monitor: 10 sites looked at once, over two wakes (20 subrequests each).
+      await world.flows.update(monitor.id, { enabled: true });
+      const run = await measure(async () => {
+        world.clock.now = Date.parse(world.flows.nextDue() ?? "");
+        await world.flows.tick();
+        world.clock.now = Date.parse(world.flows.nextDue() ?? "");
+        await world.flows.tick();
+      });
+      expect(world.flows.runs({}).runs[0]).toMatchObject({ status: "success", calls: 10 });
+      // Measured 77 and 39: the open-runs index and the history's counter keep the 2,000 runs out of it.
+      expect(run.read).toBeLessThanOrEqual(90);
+      expect(run.written).toBeLessThanOrEqual(45);
+      // A wake with nothing due: two indexed looks, nothing written, and the alarm left as the planning set it.
+      const rearms = world.rearms.count;
+      const idle = await measure(() => world.flows.tick());
+      expect(idle.written).toBe(0);
+      expect(idle.read).toBeLessThanOrEqual(2);
+      expect(world.rearms.count).toBe(rearms);
     }));
 });
