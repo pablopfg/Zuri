@@ -14,7 +14,7 @@ import { KeyRound, LockKeyhole, Mail, RotateCw } from "lucide-react";
 import { type FormEvent, type MouseEvent, useEffect, useRef, useState } from "react";
 import { Logo } from "../../components/Logo.tsx";
 import { TurnstileWidget } from "../../components/TurnstileWidget.tsx";
-import { Button, ErrorNotice, Notice, PasswordField, Spinner, TextField, useDocumentTitle } from "../../components/ui.tsx";
+import { Button, ErrorNotice, Notice, PasswordField, Loading, TextField, useDocumentTitle } from "../../components/ui.tsx";
 import { useSession } from "../../hooks/session.tsx";
 import { ApiError, api, errorMessage } from "../../lib/api.ts";
 import { addMessages, useI18n } from "../../lib/i18n.tsx";
@@ -152,7 +152,7 @@ export function RecoveryPage({ go }: { go: (path: string) => void }) {
     return (
       <main className="flex min-h-full flex-col items-center justify-center gap-6 p-6">
         <Logo className="h-12 w-12" working />
-        <Spinner label={t("web.session.checking")} />
+        <Loading label={t("web.session.checking")} />
       </main>
     );
   }
@@ -295,7 +295,7 @@ export function RecoveryPage({ go }: { go: (path: string) => void }) {
             status.isError ? (
               <ErrorNotice error={status.error} onRetry={() => void status.refetch()} />
             ) : status.isPending ? (
-              <Spinner />
+              <Loading />
             ) : !status.data.available ? (
               <div className="space-y-4">
                 <Notice tone="warning">{t("web.recovery.unavailable")}</Notice>
@@ -380,7 +380,7 @@ export function RecoveryPage({ go }: { go: (path: string) => void }) {
                 }}
               />
             ) : (
-              <Spinner label={t("web.recovery.checking")} />
+              <Loading label={t("web.recovery.checking")} />
             )
           ) : step.kind === "link" ? (
             <form onSubmit={submitPassword} className="space-y-4" noValidate aria-describedby={error ? "recovery-error" : undefined}>

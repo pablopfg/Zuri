@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { PushDevice, PushStatus } from "@zuri/shared";
 import { BellRing, Smartphone } from "lucide-react";
 import { useState } from "react";
-import { Button, Card, ErrorNotice, Spinner } from "../../components/ui.tsx";
+import { Button, Card, ErrorNotice, Loading } from "../../components/ui.tsx";
 import { useToast } from "../../components/Toaster.tsx";
 import { ALERTS_KEY } from "../../hooks/notices.ts";
 import { ApiError, api } from "../../lib/api.ts";
@@ -23,7 +23,7 @@ export function PushCard() {
   const status = useQuery({ queryKey: PUSH_KEY, queryFn: ({ signal }) => api<PushStatus>("/push", { signal }) });
   return (
     <Card title={t("web.alerts.push.title")} description={t("web.alerts.push.description")}>
-      {status.isPending && <Spinner />}
+      {status.isPending && <Loading />}
       {status.isError && <ErrorNotice error={status.error} onRetry={() => void status.refetch()} />}
       {status.data && <PushBody status={status.data} />}
     </Card>

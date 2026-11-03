@@ -23,7 +23,7 @@ import {
 import { Bot, ExternalLink, FlaskConical, RotateCw } from "lucide-react";
 import { type FormEvent, useEffect, useId, useState } from "react";
 import { Switch } from "../../components/Switch.tsx";
-import { Button, Card, cn, ErrorNotice, Notice, SelectField, Spinner, TextField } from "../../components/ui.tsx";
+import { Button, Card, cn, ErrorNotice, Notice, SelectField, Loading, TextField } from "../../components/ui.tsx";
 import { useSettings, useSettingsMutation } from "../../hooks/settings.ts";
 import { USAGE_KEY, useUsage } from "../../hooks/usage.ts";
 import { api, errorMessage } from "../../lib/api.ts";
@@ -70,7 +70,7 @@ function UsageCard() {
   return (
     <Card title={t("web.ai.usage.title")} description={description} actions={usage.data && <ProviderBadge provider={usage.data.provider} />}>
       {usage.isPending ? (
-        <Spinner />
+        <Loading />
       ) : usage.isError ? (
         <ErrorNotice error={usage.error} onRetry={() => void usage.refetch()} />
       ) : (
@@ -285,7 +285,7 @@ function LimitsCard() {
   return (
     <Card title={t("web.ai.settings.title")} description={t("web.ai.settings.description")}>
       {settings.isPending ? (
-        <Spinner />
+        <Loading />
       ) : settings.isError ? (
         <ErrorNotice error={settings.error} onRetry={() => void settings.refetch()} />
       ) : (
@@ -464,7 +464,7 @@ function SemanticCard() {
   return (
     <Card title={t("web.ai.semantic.title")} description={t("web.ai.semantic.description")}>
       {status.isPending ? (
-        <Spinner />
+        <Loading />
       ) : status.isError ? (
         <ErrorNotice error={status.error} onRetry={() => void status.refetch()} />
       ) : (

@@ -46,7 +46,7 @@ export const ptBRAlerts = {
   "web.alerts.watchers.hint": "Alertas de segurança e falhas do sistema continuam chegando mesmo desligado.",
   "web.alerts.saved": "Avisos salvos.",
   "web.alerts.channels.title": "Onde os avisos chegam",
-  "web.alerts.channels.description": "O sino sempre recebe tudo. A notificação no aparelho já funciona; o e-mail chega na próxima atualização e o Telegram logo depois.",
+  "web.alerts.channels.description": "O sino do app sempre recebe tudo. Cada canal mostra se está ligado.",
   "web.alerts.channel.push": "Notificação no aparelho",
   "web.alerts.routes.short.push": "Aparelho",
   "web.alerts.routes.short.telegram": "Telegram",

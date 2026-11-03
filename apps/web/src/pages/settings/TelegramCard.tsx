@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { TelegramAccount, TelegramConnect, TelegramGroupCode, TelegramStatus } from "@zuri/shared";
 import { Copy, ExternalLink, Send, Users } from "lucide-react";
 import { useId, useState } from "react";
-import { Button, Card, Dialog, ErrorNotice, Notice, Spinner } from "../../components/ui.tsx";
+import { Button, Card, Dialog, ErrorNotice, Notice, Loading } from "../../components/ui.tsx";
 import { Switch } from "../../components/Switch.tsx";
 import { useToast } from "../../components/Toaster.tsx";
 import { ALERTS_KEY } from "../../hooks/notices.ts";
@@ -23,7 +23,7 @@ export function TelegramCard() {
   const status = useQuery({ queryKey: TELEGRAM_KEY, queryFn: ({ signal }) => api<TelegramStatus>("/telegram", { signal }) });
   return (
     <Card title={t("web.alerts.telegram.title")} description={t("web.alerts.telegram.description")}>
-      {status.isPending && <Spinner />}
+      {status.isPending && <Loading />}
       {status.isError && <ErrorNotice error={status.error} onRetry={() => void status.refetch()} />}
       {status.data && <TelegramBody status={status.data} />}
     </Card>

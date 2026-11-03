@@ -14,8 +14,10 @@ import {
   ListPlus,
   ListTodo,
   type LucideIcon,
+  MessageCircle,
   NotebookPen,
   Plug,
+  Plus,
   Search,
   Shield,
   ShieldCheck,
@@ -94,6 +96,7 @@ export function CommandPalette({ onClose, navigate }: { onClose: () => void; nav
     });
     return [
       { id: "home", group: go, label: t("web.nav.home"), icon: House, to: "/" },
+      { id: "chat", group: go, label: t("web.nav.chat"), icon: MessageCircle, to: "/conversa" },
       { id: "tasks", group: go, label: t("web.nav.tasks"), icon: ListTodo, to: "/tarefas" },
       { id: "notes", group: go, label: t("web.nav.notes"), icon: NotebookPen, to: "/notas" },
       { id: "automations", group: go, label: t("web.nav.automations"), icon: Clock, to: "/automacoes" },
@@ -106,6 +109,7 @@ export function CommandPalette({ onClose, navigate }: { onClose: () => void; nav
       section("integracoes", "web.settings.tab.integrations", Plug),
       section("dados", "web.settings.tab.data", Database),
       section("diagnostico", "web.settings.tab.diagnostics", Activity),
+      { id: "new-chat", group: t("web.palette.groupCreate"), label: t("web.palette.newChat"), icon: Plus, to: "/conversa" },
       { id: "new-task", group: t("web.palette.groupCreate"), label: t("web.palette.newTask"), icon: ListPlus, to: "/tarefas", state: { newTask: true } },
       {
         id: "new-automation",
@@ -162,8 +166,13 @@ export function CommandPalette({ onClose, navigate }: { onClose: () => void; nav
   });
 
   const items = useMemo<Item[]>(() => {
+    // A sentence (words with a space between) may be a question: the last option asks Zuri, in a new conversation.
+    const question = query.trim();
+    const ask: Item[] = /\S\s+\S/.test(question)
+      ? [{ id: "ask", group: t("web.palette.groupAsk"), label: t("web.palette.ask", { query: question }), icon: MessageCircle, to: "/conversa", state: { ask: question } }]
+      : [];
     const list = commands.filter((item) => matches(query, item.label));
-    if (term === "" || !found.data) return list;
+    if (term === "" || !found.data) return [...list, ...ask];
     const { tasks, notes, memories } = found.data;
     // What the words already listed is not repeated under "Pelo significado".
     const listed = new Set([...tasks, ...notes, ...memories].map((item) => item.id));
@@ -191,6 +200,7 @@ export function CommandPalette({ onClose, navigate }: { onClose: () => void; nav
       ...notes.map((note) => ({ id: `note-${note.id}`, group: t("web.nav.notes"), label: note.title, detail: note.excerpt, icon: NotebookPen, to: `/notas/${note.id}` })),
       ...memories.map((memory) => ({ id: `memory-${memory.id}`, group: t("web.nav.memory"), label: memory.content, icon: Brain, to: "/memoria", before: () => askMemorySearch(term) })),
       ...extra,
+      ...ask,
     ];
   }, [commands, query, term, found.data, byMeaning.data, t]);
 

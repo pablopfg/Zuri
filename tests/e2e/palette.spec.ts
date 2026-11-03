@@ -78,7 +78,7 @@ test("the search finds a task and opens it, and one letter asks the server nothi
   const palette = page.getByRole("dialog", { name: "Buscar e ir para" });
   const input = palette.getByRole("combobox", { name: "Buscar e ir para" });
   await input.fill("x");
-  await expect(palette.getByText("Nada encontrado para “x”.")).toBeVisible();
+  await expect(palette.getByText("Nada com “x”. Tente outra palavra.")).toBeVisible();
   expect(searches).toEqual([]);
 
   await input.fill("passaporte");

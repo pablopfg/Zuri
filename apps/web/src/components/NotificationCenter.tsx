@@ -2,7 +2,7 @@ import { Bell } from "lucide-react";
 import { lazy, Suspense, useState } from "react";
 import { useSession } from "../hooks/session.tsx";
 import { useI18n } from "../lib/i18n.tsx";
-import { Dialog, Spinner } from "./ui.tsx";
+import { Dialog, Loading } from "./ui.tsx";
 
 // The list, its actions and its texts come only when the bell is opened (rule P11).
 const NoticesPanel = lazy(() => import("./NoticesPanel.tsx").then((m) => ({ default: m.NoticesPanel })));
@@ -38,7 +38,7 @@ export function NotificationCenter({ navigate }: { navigate: (to: string) => voi
         )}
       </button>
       <Dialog open={open} onClose={() => setOpen(false)} title={t("web.notifications.title")}>
-        <Suspense fallback={<Spinner />}>
+        <Suspense fallback={<Loading />}>
           <NoticesPanel onClose={() => setOpen(false)} navigate={navigate} />
         </Suspense>
       </Dialog>

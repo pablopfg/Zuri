@@ -58,3 +58,30 @@ export async function openSettingsSection(page: Page, name: string) {
   if (!settingsHasTabs(page) && (await sections.count()) === 0) await page.getByRole("link", { name: "Todas as configurações" }).click();
   await sections.getByRole("link", { name, exact: true }).click();
 }
+
+/** True where the sidebar is a drawer behind the top bar's menu button (Tailwind's md). */
+export function navIsDrawer(page: Page) {
+  return (page.viewportSize()?.width ?? 0) < 768;
+}
+
+/** The sidebar as the owner reaches it: on a phone, the drawer opened from the top bar. */
+export async function openSidebar(page: Page) {
+  if (navIsDrawer(page)) {
+    await page.getByRole("button", { name: "Abrir menu" }).click();
+    return page.getByRole("dialog", { name: "Navegação principal" });
+  }
+  return page.locator("aside");
+}
+
+/** Opens the account menu at the foot of the sidebar (Configurações, Acessos, tema, Sair). */
+export async function openAccountMenu(page: Page) {
+  const sidebar = await openSidebar(page);
+  await sidebar.getByRole("button", { name: /^Menu da conta de / }).click();
+  return sidebar;
+}
+
+/** Signs out the way the owner does: the account menu's "Sair". */
+export async function signOutFromMenu(page: Page) {
+  const sidebar = await openAccountMenu(page);
+  await sidebar.getByRole("button", { name: "Sair", exact: true }).click();
+}

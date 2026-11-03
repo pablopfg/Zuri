@@ -2,9 +2,9 @@
 // the interface downloads them with the screen and not in its first bundle (rule P11).
 export const ptBRMemory = {
   "web.memory.title": "Memória",
-  "web.memory.description": "O que a Zuri sabe sobre você. Fatos que mudam guardam o histórico, e nada é trocado ou apagado sem você saber.",
+  "web.memory.description": "O que a Zuri sabe sobre você. Corrija ou apague o que quiser; nada muda sem você saber.",
   "web.memory.new": "Guardar uma memória",
-  "web.memory.newHint": "Um fato por vez, nas suas palavras. Se ele muda algo que já está guardado, a Zuri pergunta antes de mexer.",
+  "web.memory.newHint": "Um fato por vez, com as suas palavras. Se ele mudar algo já guardado, a Zuri pergunta antes.",
   "web.memory.content": "Memória",
   "web.memory.placeholder": "Ex.: Moro em Curitiba desde 2024",
   "web.memory.counter": "{used} de {max} caracteres",
@@ -42,8 +42,8 @@ export const ptBRMemory = {
   "web.memory.origin.app": "App",
   "web.memory.origin.telegram": "Telegram",
   "web.memory.origin.import": "Backup",
-  "web.memory.author.agent": "Anotada pela assistente",
-  "web.memory.author.agentHint": "A assistente guardou isto numa conversa. Quando você edita, ela passa a ser sua.",
+  "web.memory.author.agent": "Anotada pela Zuri numa conversa",
+  "web.memory.author.agentHint": "A Zuri guardou isto numa conversa. Quando você edita, a memória passa a ser sua.",
   "web.memory.since": "desde {date}",
   "web.memory.savedAt": "guardada em {time}",
   "web.memory.correct": "Atualizar este fato",

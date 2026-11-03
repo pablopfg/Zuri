@@ -4,7 +4,7 @@ import { ArrowRight, History, TriangleAlert } from "lucide-react";
 import { Link } from "react-router";
 import { api } from "../../lib/api.ts";
 import { useI18n } from "../../lib/i18n.tsx";
-import { Card, cn, EmptyState, ErrorNotice, Spinner } from "../ui.tsx";
+import { Card, cn, EmptyState, ErrorNotice, Loading } from "../ui.tsx";
 import { deviceText, isWarning, KIND_LABEL, placeText } from "./activity.ts";
 
 /** Rows the card shows; the access log has the rest, with filters. */
@@ -24,7 +24,7 @@ export function ActivityCard() {
   return (
     <Card title={t("web.activity.title")} description={t("web.activity.description")} actions={all}>
       {activity.isPending ? (
-        <Spinner />
+        <Loading />
       ) : activity.isError ? (
         <ErrorNotice error={activity.error} onRetry={() => void activity.refetch()} />
       ) : activity.data.events.length === 0 ? (

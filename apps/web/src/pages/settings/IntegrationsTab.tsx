@@ -4,7 +4,7 @@ import { CircleAlert, CircleCheck, Plug, RefreshCw, Trash2 } from "lucide-react"
 import { type FormEvent, useEffect, useId, useRef, useState } from "react";
 import { Switch } from "../../components/Switch.tsx";
 import { useToast } from "../../components/Toaster.tsx";
-import { Button, buttonClass, Card, cn, Dialog, EmptyState, ErrorNotice, Notice, PasswordField, SelectField, Spinner, TextField } from "../../components/ui.tsx";
+import { Button, buttonClass, Card, cn, Dialog, EmptyState, ErrorNotice, Notice, PasswordField, SelectField, Loading, TextField } from "../../components/ui.tsx";
 import { api, errorMessage } from "../../lib/api.ts";
 import { useI18n } from "../../lib/i18n.tsx";
 
@@ -91,14 +91,14 @@ export function IntegrationsTab() {
         }
       >
         {overview.isPending ? (
-          <Spinner />
+          <Loading />
         ) : overview.isError ? (
           <ErrorNotice error={overview.error} onRetry={() => void overview.refetch()} />
         ) : (
           <div className="space-y-4">
             {finishing && (
               <p role="status" className="inline-flex items-center gap-2 text-sm text-fg-muted">
-                <Spinner />
+                <Loading />
                 {t("web.integrations.signinFinishing")}
               </p>
             )}
@@ -433,7 +433,7 @@ function ServerCard({ server, credentials }: { server: McpServerInfo; credential
 function ToolList({ server }: { server: McpServerInfo }) {
   const { t } = useI18n();
   const tools = useQuery({ queryKey: toolsKey(server.id), queryFn: ({ signal }) => api<{ tools: McpToolInfo[] }>(`/mcp/servers/${server.id}/tools`, { signal }) });
-  if (tools.isPending) return <Spinner />;
+  if (tools.isPending) return <Loading />;
   if (tools.isError) return <ErrorNotice error={tools.error} onRetry={() => void tools.refetch()} />;
   if (tools.data.tools.length === 0) return <p className="text-sm text-fg-muted">{t("web.integrations.noTools")}</p>;
   return (

@@ -15,7 +15,7 @@ import {
 import { CalendarDays, CheckCircle2, ChevronDown, Circle, CircleDot, Flag, FolderKanban, Plus, Search, Trash2 } from "lucide-react";
 import { type FormEvent, useEffect, useId, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router";
-import { Button, cn, Dialog, EmptyState, ErrorNotice, fieldClass, PageHeader, SelectField, Spinner, TextAreaField, TextField } from "../../components/ui.tsx";
+import { Button, cn, Dialog, EmptyState, ErrorNotice, fieldClass, PageHeader, SelectField, Loading, TextAreaField, TextField } from "../../components/ui.tsx";
 import { PROJECTS_KEY, TASKS_KEY, useProjects, useTasks } from "../../hooks/productivity.ts";
 import { api, errorMessage } from "../../lib/api.ts";
 import { useDebounced } from "../../lib/debounce.ts";
@@ -125,7 +125,7 @@ export function TasksPage() {
           </div>
 
           {tasks.isPending ? (
-            <Spinner />
+            <Loading />
           ) : tasks.isError ? (
             <ErrorNotice error={tasks.error} onRetry={() => void tasks.refetch()} />
           ) : tasks.data.tasks.length === 0 ? (

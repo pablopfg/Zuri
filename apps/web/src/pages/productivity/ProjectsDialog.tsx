@@ -2,7 +2,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { PROJECT_NAME_MAX, type Project, type TrashItem } from "@zuri/shared";
 import { FolderKanban } from "lucide-react";
 import { type FormEvent, useState } from "react";
-import { Button, Dialog, EmptyState, ErrorNotice, Spinner, TextField } from "../../components/ui.tsx";
+import { Button, Dialog, EmptyState, ErrorNotice, Loading, TextField } from "../../components/ui.tsx";
 import { NOTES_KEY, PROJECTS_KEY, TASKS_KEY, useProjects } from "../../hooks/productivity.ts";
 import { api, errorMessage } from "../../lib/api.ts";
 import { useI18n } from "../../lib/i18n.tsx";
@@ -79,7 +79,7 @@ export function ProjectsDialog({ open, onClose }: { open: boolean; onClose: () =
         </p>
       )}
       {projects.isPending ? (
-        <Spinner />
+        <Loading />
       ) : projects.isError ? (
         <ErrorNotice error={projects.error} onRetry={() => void projects.refetch()} />
       ) : projects.data.projects.length === 0 ? (

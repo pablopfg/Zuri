@@ -15,6 +15,7 @@ import { ptBRAlerts } from "./pt-BR-alerts.ts";
 import { ptBRApprove } from "./pt-BR-approve.ts";
 import { ptBRShell } from "./pt-BR-shell.ts";
 import { ptBRSettingsTabs } from "./pt-BR-settings-tabs.ts";
+import { ptBRHome } from "./pt-BR-home.ts";
 
 // Default and fallback catalog. Every key must also exist in en.ts and be used in the code (npm run lint).
 // The texts of the lazy screens live in their own files (pt-BR-memory.ts, pt-BR-productivity.ts,
@@ -38,10 +39,15 @@ export const ptBRCore = {
   "web.nav.settings": "Configurações",
   "web.search.open": "Buscar",
   "web.nav.signOut": "Sair",
-  "web.nav.signOutConfirmTitle": "Sair da Zuri?",
   "web.nav.collapse": "Recolher menu",
   "web.nav.expand": "Expandir menu",
   "web.nav.version": "Versão {version}",
+  "web.nav.newChat": "Nova conversa",
+  "web.nav.openMenu": "Abrir menu",
+  "web.nav.themeDark": "Tema escuro",
+  "web.nav.themeLight": "Tema claro",
+  "web.account.menuOpen": "Menu da conta de {name}",
+  "web.account.menuFallback": "Sua conta",
   "web.login.email": "E-mail",
   "web.login.password": "Senha",
   "web.login.submit": "Entrar",
@@ -81,15 +87,6 @@ export const ptBRCore = {
   "web.notifications.open": "Abrir avisos",
   "web.notifications.title": "Avisos",
   "web.notifications.openUnread": "Abrir avisos, {count} sem ler",
-  "web.home.emptyTitle": "A conversa com a Zuri chega em breve",
-  "web.home.emptyBody": "A conversa com ela entra numa próxima etapa. Enquanto isso, deixe a sua conta protegida.",
-  "web.home.securityLink": "Revisar a segurança da conta",
-  "web.home.securityTitle": "Segurança",
-  "web.home.mfaOn": "Verificação em duas etapas ligada",
-  "web.home.mfaOff": "Verificação em duas etapas desligada",
-  "web.home.sessionTitle": "Sessão",
-  "web.home.sessionUntil": "Aberta até {time}",
-  "web.home.sessionHint": "Ela termina antes se você ficar sem usar a Zuri pelo tempo definido nas configurações.",
   "web.notFound.title": "Página não encontrada",
   "web.notFound.body": "Este endereço não existe na Zuri.",
   "web.notFound.home": "Voltar ao início",
@@ -141,4 +138,5 @@ export const ptBR = /* @__PURE__ */ join(
   ptBRApprove,
   ptBRShell,
   ptBRSettingsTabs,
+  ptBRHome,
 );

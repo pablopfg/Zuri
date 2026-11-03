@@ -3,7 +3,7 @@ import { type LockdownExit, lockdownStatusSchema, ptBRSetup, ptBRShell } from "@
 import { ShieldAlert, Unlink } from "lucide-react";
 import { type FormEvent, useEffect, useRef, useState } from "react";
 import { Logo } from "../components/Logo.tsx";
-import { Button, Card, Dialog, ErrorNotice, Notice, PasswordField, Spinner, TextField, useDocumentTitle } from "../components/ui.tsx";
+import { Button, Card, Dialog, ErrorNotice, Notice, PasswordField, Loading, TextField, useDocumentTitle } from "../components/ui.tsx";
 import { SESSION_KEY, useSession } from "../hooks/session.tsx";
 import { api, errorMessage, onRecentAuthRequired } from "../lib/api.ts";
 import { addMessages, useI18n } from "../lib/i18n.tsx";
@@ -67,7 +67,7 @@ export function LockdownPage() {
             </div>
           </div>
         </header>
-        {status.isPending && <Spinner />}
+        {status.isPending && <Loading />}
         {status.isError && <ErrorNotice error={status.error} onRetry={() => void status.refetch()} />}
         {status.data && (
           <>

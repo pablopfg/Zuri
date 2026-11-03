@@ -4,7 +4,7 @@ import { type FormEvent, type ReactNode, useEffect, useRef, useState } from "rea
 import { MFA_KEY, useMfaStatus } from "../../hooks/mfa.ts";
 import { api, errorMessage } from "../../lib/api.ts";
 import { useI18n } from "../../lib/i18n.tsx";
-import { Button, Card, ErrorNotice, Notice, Spinner, TextField } from "../ui.tsx";
+import { Button, Card, ErrorNotice, Notice, Loading, TextField } from "../ui.tsx";
 import { PasswordNowDialog } from "./PasswordNowDialog.tsx";
 import { QrCode } from "./QrCode.tsx";
 import { RecoveryCodes } from "./RecoveryCodes.tsx";
@@ -105,7 +105,7 @@ export function TwoStepCard({ onCodesKept }: { onCodesKept?: () => void } = {}) 
   );
 
   let body: ReactNode;
-  if (status.isPending) body = <Spinner />;
+  if (status.isPending) body = <Loading />;
   else if (status.isError) body = <ErrorNotice error={status.error} onRetry={() => void status.refetch()} />;
   else if (mode.kind === "codes")
     body = (

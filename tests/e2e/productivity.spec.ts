@@ -1,5 +1,5 @@
 import { expect, type Page, test } from "./fixtures.ts";
-import { CSRF, expectAccessible, signIn, tooSmallControls } from "./ui-helpers.ts";
+import { CSRF, expectAccessible, signIn, signOutFromMenu, tooSmallControls } from "./ui-helpers.ts";
 
 // Tasks, notes, projects and the trash against the real Worker (step 6):
 // create, edit, complete, delete and restore. pt-BR, the owner in São Paulo.
@@ -33,16 +33,16 @@ test("a task: create with a deadline and a project, edit, complete, delete and r
   // both sides even when the test runs across midnight in São Paulo.
   const now = new Date();
   await page.clock.setFixedTime(now);
-  await form.getByLabel("Adicionar uma tarefa para hoje").fill(`${title} hoje`);
+  await form.getByLabel("Adicionar tarefa para hoje").fill(`${title} hoje`);
   const quick = page.waitForResponse((r) => r.url().endsWith("/api/tasks") && r.request().method() === "POST");
-  await form.getByLabel("Adicionar uma tarefa para hoje").press("Enter");
+  await form.getByLabel("Adicionar tarefa para hoje").press("Enter");
   const today = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(now);
   const tomorrowUtc = new Date(Date.parse(`${today}T00:00:00Z`) + 86_400_000).toISOString().slice(0, 10);
   expect(((await (await quick).json()) as { task: { dueAt: string } }).task.dueAt).toBe(`${tomorrowUtc}T02:59:00.000Z`);
   await expect(page.getByRole("region", { name: "Lista de tarefas" }).getByRole("button", { name: `${title} hoje` })).toBeVisible();
   expect(await tooSmallControls(page), "a task row is a 44 px target").toEqual([]);
 
-  await form.getByLabel("Adicionar uma tarefa para hoje").fill(title);
+  await form.getByLabel("Adicionar tarefa para hoje").fill(title);
   await form.getByRole("button", { name: "Prazo, projeto e prioridade" }).click();
   await form.getByLabel("Prazo").fill("2099-12-10");
   await form.getByLabel("Hora").fill("18:30");
@@ -247,7 +247,7 @@ test("unsaved note text never holds back signing out", async ({ page }) => {
   await openSignedIn(page, "/notas/nova");
   await page.getByLabel("Título").fill("texto que vai embora com a sessão");
   await expect(page.getByText("Alterações não salvas")).toBeVisible();
-  await page.locator("aside").getByRole("button", { name: "Sair" }).click();
+  await signOutFromMenu(page);
   await expect(page).toHaveURL(/\/entrar/);
   await expect(page.getByRole("dialog", { name: "Sair sem salvar?" })).toHaveCount(0);
 });
@@ -303,7 +303,7 @@ test.describe("a device in another zone than the owner's", () => {
     await expect(page.getByRole("heading", { level: 1, name: "Tarefas" })).toBeVisible();
     const form = page.getByRole("region", { name: "Nova tarefa" });
     const title = "Prazo no fuso do dono";
-    await form.getByLabel("Adicionar uma tarefa para hoje").fill(title);
+    await form.getByLabel("Adicionar tarefa para hoje").fill(title);
     await form.getByRole("button", { name: "Prazo, projeto e prioridade" }).click();
     await form.getByLabel("Prazo").fill("2099-12-10");
     await form.getByLabel("Hora").fill("18:30");

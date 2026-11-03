@@ -1,6 +1,6 @@
 import type { Response } from "@playwright/test";
 import { expect, test } from "./fixtures.ts";
-import { openSettingsSection, PASSWORD, signIn } from "./ui-helpers.ts";
+import { openAccountMenu, openSettingsSection, PASSWORD, signIn } from "./ui-helpers.ts";
 
 // Details from the design review (docs/qa/revisao-de-design.md): tab names,
 // the password reveal and the theme choice on a phone.
@@ -104,19 +104,18 @@ test("the password form in settings has a reveal on each field", async ({ page }
 test.describe("on a phone-wide screen", () => {
   test.use({ viewport: { width: 390, height: 844 } });
 
-  test("the top bar's sign-out asks first, and cancelling keeps the session", async ({ page }) => {
+  test("sign-out sits two taps away, in the drawer's account menu, never in the top bar", async ({ page }) => {
     await page.goto("/");
     await signIn(page);
     await expect(page).toHaveTitle("Início · Zuri");
-    await page.getByRole("banner").getByRole("button", { name: "Sair" }).click();
-    const dialog = page.getByRole("dialog", { name: "Sair da Zuri?" });
-    await expect(dialog).toBeVisible();
-    await dialog.getByRole("button", { name: "Cancelar" }).click();
-    await expect(dialog).toBeHidden();
-    await expect(page).toHaveURL(/\/$/);
-    await page.getByRole("banner").getByRole("button", { name: "Sair" }).click();
+    await expect(page.getByRole("banner").getByRole("button", { name: "Sair" })).toHaveCount(0);
+    const drawer = await openAccountMenu(page);
+    await expect(drawer.getByRole("button", { name: "Sair", exact: true })).toBeVisible();
+    // Escape closes the menu first, then the drawer, and the session stays.
     await page.keyboard.press("Escape");
-    await expect(dialog).toBeHidden();
+    await expect(drawer.getByRole("button", { name: "Sair", exact: true })).toBeHidden();
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("dialog", { name: "Navegação principal" })).toHaveCount(0);
     await expect(page).toHaveURL(/\/$/);
   });
 

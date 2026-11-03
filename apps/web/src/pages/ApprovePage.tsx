@@ -4,7 +4,7 @@ import { type ApprovalPreview, type ApproveOptions, type ApproveResult, type Mes
 import { CircleCheck, Fingerprint, LockKeyhole, TriangleAlert } from "lucide-react";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { Logo } from "../components/Logo.tsx";
-import { Button, ErrorNotice, Notice, Spinner, useDocumentTitle } from "../components/ui.tsx";
+import { Button, ErrorNotice, Notice, Loading, useDocumentTitle } from "../components/ui.tsx";
 import { ApiError, api } from "../lib/api.ts";
 import { addMessages, useI18n } from "../lib/i18n.tsx";
 import { APPROVE_PATH } from "../lib/next.ts";
@@ -237,7 +237,7 @@ export function ApprovePage() {
 
         <section className="rounded-2xl border border-border bg-surface p-5 shadow-sm sm:p-6" aria-live="polite">
           {step.kind === "loading" ? (
-            <Spinner label={t("web.approve.checking")} />
+            <Loading label={t("web.approve.checking")} />
           ) : step.kind === "ready" || step.kind === "working" ? (
             <div className="space-y-4">
               {approval && <Preview preview={approval} />}

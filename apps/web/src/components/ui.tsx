@@ -264,13 +264,38 @@ export function PasswordField({
   );
 }
 
-export function Spinner({ label }: { label?: string }) {
+/**
+ * Something is on its way: gray lines in the shape of a list, with a soft
+ * shine. Nothing shows in the first 300 ms, so a fast answer never flashes
+ * (styles.css, "zuri-wait"); the shine stops with "reduce motion". Screen
+ * readers hear the label once, right away.
+ */
+export function Loading({ label, rows = 3 }: { label?: string; rows?: number }) {
   const { t } = useI18n();
   return (
-    <div role="status" className="flex items-center justify-center gap-2 p-6 text-sm text-fg-muted">
-      <LoaderCircle className="h-5 w-5 motion-safe:animate-spin" aria-hidden />
-      <span>{label ?? t("web.loading")}</span>
+    <div role="status" className="space-y-4 py-2">
+      <span className="sr-only">{label ?? t("web.loading")}</span>
+      {Array.from({ length: rows }, (_, row) => (
+        // biome-ignore lint/suspicious/noArrayIndexKey: identical placeholder rows, never reordered
+        <div key={row} aria-hidden className="zuri-wait flex items-center gap-3">
+          <span className="zuri-skeleton h-6 w-6 shrink-0 rounded-full" />
+          <span className="flex-1 space-y-2">
+            <span className="zuri-skeleton block h-3.5 w-3/4 rounded-md" />
+            <span className="zuri-skeleton block h-3 w-2/5 rounded-md" />
+          </span>
+        </div>
+      ))}
     </div>
+  );
+}
+
+/** While a screen downloads: a thin green line on top and the gray lines below, both after 300 ms. */
+export function ScreenLoading() {
+  return (
+    <>
+      <div aria-hidden className="zuri-wait zuri-progress" />
+      <Loading />
+    </>
   );
 }
 

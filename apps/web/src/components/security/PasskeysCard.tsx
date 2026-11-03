@@ -6,7 +6,7 @@ import { type FormEvent, useState } from "react";
 import { useMfaStatus } from "../../hooks/mfa.ts";
 import { api, errorMessage } from "../../lib/api.ts";
 import { useI18n } from "../../lib/i18n.tsx";
-import { Button, Card, EmptyState, ErrorNotice, Notice, Spinner, TextField } from "../ui.tsx";
+import { Button, Card, EmptyState, ErrorNotice, Notice, Loading, TextField } from "../ui.tsx";
 import { PasswordNowDialog } from "./PasswordNowDialog.tsx";
 
 const PASSKEYS_KEY = ["passkeys"] as const;
@@ -103,7 +103,7 @@ export function PasskeysCard() {
   return (
     <Card title={t("web.passkeys.title")} description={t("web.passkeys.description")}>
       {list.isPending ? (
-        <Spinner />
+        <Loading />
       ) : list.isError ? (
         <ErrorNotice error={list.error} onRetry={() => void list.refetch()} />
       ) : (

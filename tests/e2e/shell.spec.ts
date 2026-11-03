@@ -1,6 +1,6 @@
 import { APP_VERSION } from "@zuri/shared";
 import { expect, test } from "./fixtures.ts";
-import { CSRF, EMAIL, expectAccessible, openSettingsSection, PASSWORD, settingsHasTabs, signIn } from "./ui-helpers.ts";
+import { CSRF, EMAIL, expectAccessible, openAccountMenu, openSettingsSection, openSidebar, PASSWORD, settingsHasTabs, signIn, signOutFromMenu } from "./ui-helpers.ts";
 
 // The interface against the real Worker: sign-in, the session guard, sign-out
 // and the ways a session ends. pt-BR is the default language.
@@ -44,11 +44,7 @@ test("signing out ends the session on the server and in every tab @mobile", asyn
   await expect(other.getByRole("heading", { level: 1, name: "Configurações" })).toBeVisible();
 
   const logout = page.waitForResponse((r) => new URL(r.url()).pathname === "/api/auth/logout");
-  await page.getByRole("button", { name: "Sair" }).first().click();
-  // On a phone the top bar's "Sair" asks first; the sidebar's leaves at once.
-  if (test.info().project.name === "mobile") {
-    await page.getByRole("dialog", { name: "Sair da Zuri?" }).getByRole("button", { name: "Sair" }).click();
-  }
+  await signOutFromMenu(page);
   expect((await logout).status()).toBe(204);
   await expect(page).toHaveURL(/\/entrar$/);
   await expect(other).toHaveURL(/\/entrar\?next=%2Fconfiguracoes%2Fconta$/);
@@ -97,9 +93,9 @@ test("a session the server ended sends to the sign-in at the next request, with 
   await signIn(page);
   await expect(page.getByRole("heading", { level: 1, name: /^(Bom dia|Boa tarde|Boa noite)/ })).toBeVisible();
   await context.clearCookies();
-  // The security tab asks the server for fresh data on opening; the answer is 401.
-  await page.getByRole("link", { name: "Revisar a segurança da conta" }).click();
-  await expect(page).toHaveURL(/\/entrar\?next=%2Fconfiguracoes%2Fseguranca$/);
+  // The tasks page asks the server for its list on opening; the answer is 401.
+  await (await openSidebar(page)).getByRole("link", { name: "Tarefas" }).click();
+  await expect(page).toHaveURL(/\/entrar\?next=%2Ftarefas$/);
   await expect(page.getByText("Sua sessão terminou. Entre de novo para continuar.")).toBeVisible();
 });
 
@@ -121,18 +117,19 @@ test("settings has the seven sections, each with its address and content: tabs o
   await page.goto("/configuracoes");
   await signIn(page);
   const sections = page.getByRole("navigation", { name: "Seções das configurações" });
-  // The version in use, quietly: at the foot of the sidebar on a computer, of the list on a phone.
+  // The version in use, quietly: in the account menu on a computer, also at the foot of the list on a phone.
   const version = `Versão ${APP_VERSION}`;
   if (settingsHasTabs(page)) {
     await expect(page).toHaveURL(/\/configuracoes\/conta$/);
-    await expect(page.locator("aside").getByText(version, { exact: true })).toBeVisible();
+    await expect((await openAccountMenu(page)).getByText(version, { exact: true })).toBeVisible();
+    await page.keyboard.press("Escape");
   } else {
     await expect(page.getByRole("main").getByText(version, { exact: true })).toBeVisible();
     // The list is the page: each section with what it holds, no section open yet.
     await expect(page).toHaveURL(/\/configuracoes$/);
     await expect(sections.getByRole("link")).toHaveCount(7);
         await expect(page.getByRole("link", { name: "Todas as configurações" })).toHaveCount(0);
-    await expect(sections.getByRole("link", { name: "Segurança", exact: true })).toHaveAccessibleDescription("Duas etapas, passkeys e saída automática");
+    await expect(sections.getByRole("link", { name: "Segurança", exact: true })).toHaveAccessibleDescription("Verificação em duas etapas, passkeys e saída automática");
     await expectAccessible(page, "configuracoes (lista)");
   }
   for (const [name, path, text] of [
@@ -156,7 +153,7 @@ test("settings has the seven sections, each with its address and content: tabs o
     }
   }
   // These texts arrive with the screen, not with the first download: they must still show, never as raw keys.
-  await expect(page.getByRole("main")).toContainText("Conta, segurança e o que a Zuri pode usar.");
+  await expect(page.getByRole("main")).toContainText("Sua conta, a segurança e o que a Zuri pode usar.");
   await openSettingsSection(page, "Segurança");
   await expect(page.getByRole("main")).toContainText("Saída automática");
   await expect(page.getByRole("main")).toContainText("Em breve nesta aba");
@@ -215,14 +212,11 @@ test("the two-step reminder shows until put off, and never on the settings @mobi
   await signIn(page);
   const reminder = page.getByRole("status").filter({ hasText: "A verificação em duas etapas está desligada." });
   await expect(reminder).toBeVisible();
-  // The home page says the same, with when the session ends at the latest.
-  await expect(page.getByRole("region", { name: "Segurança" })).toContainText("Verificação em duas etapas desligada");
-  await expect(page.getByRole("region", { name: "Sessão" })).toContainText(/Aberta até \d{2}\/\d{2}\/\d{4}/);
   await reminder.getByRole("link", { name: "Ligar agora" }).click();
   await expect(page).toHaveURL(/\/configuracoes\/seguranca$/);
   await expect(reminder).toHaveCount(0);
 
-  await page.getByRole("link", { name: "Início" }).first().click();
+  await (await openSidebar(page)).getByRole("link", { name: "Início" }).click();
   await expect(reminder).toBeVisible();
   await reminder.getByRole("button", { name: "Lembrar depois" }).click();
   await expect(reminder).toHaveCount(0);

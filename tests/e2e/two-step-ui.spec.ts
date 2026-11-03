@@ -1,6 +1,6 @@
 import { expect, HUMAN_TOKEN, test } from "./fixtures.ts";
 import { totpCode, totpStep } from "@zuri/shared";
-import { CSRF, EMAIL, PASSWORD, signIn } from "./ui-helpers.ts";
+import { CSRF, EMAIL, PASSWORD, signIn, signOutFromMenu } from "./ui-helpers.ts";
 
 // Two-step sign-in through the screens: turn it on in Settings (scan, confirm,
 // keep the codes), sign in again with the code, and turn it off at the end so
@@ -105,7 +105,7 @@ test("turns two-step sign-in on in Settings and asks for the code at the next si
   await page.getByRole("button", { name: "Cancelar" }).click();
 
   try {
-    await page.getByRole("button", { name: "Sair" }).first().click();
+    await signOutFromMenu(page);
     await expect(page).toHaveURL(/\/entrar\?next=%2Fconfiguracoes%2Fseguranca$/);
     await signIn(page);
     await expect(page.getByRole("heading", { name: "Verificação em duas etapas" })).toBeVisible();

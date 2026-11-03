@@ -4,7 +4,7 @@ import { useSession } from "../hooks/session.tsx";
 import { useI18n } from "../lib/i18n.tsx";
 import { loginPath } from "../lib/next.ts";
 import { Logo } from "./Logo.tsx";
-import { ErrorNotice, Spinner } from "./ui.tsx";
+import { ErrorNotice, Loading } from "./ui.tsx";
 
 export function FullScreen({ children }: { children: ReactNode }) {
   return <main className="flex min-h-full flex-col items-center justify-center gap-6 p-6">{children}</main>;
@@ -19,7 +19,8 @@ export function SessionChecking() {
   return (
     <FullScreen>
       <Logo className="h-12 w-12" working />
-      <Spinner label={t("web.session.checking")} />
+      {/* The pulsing mark is the picture here: no gray lines under it. */}
+      <Loading label={t("web.session.checking")} rows={0} />
     </FullScreen>
   );
 }

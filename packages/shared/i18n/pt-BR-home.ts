@@ -1,0 +1,25 @@
+// The pt-BR texts of the home page under the greeting: the field to write to
+// Zuri, the ideas to start with and the two cards. They come with that part,
+// on demand (rule P11).
+export const ptBRHome = {
+  "web.home.ask": "Escreva para a Zuri",
+  "web.home.send": "Enviar para a Zuri",
+  "web.home.ideas": "Ideias para começar",
+  "web.home.idea.week": "Organizar a semana",
+  "web.home.idea.tomorrow": "O que tenho amanhã?",
+  "web.home.idea.remind": "Me lembre de pagar a luz",
+  "web.home.today.title": "Hoje",
+  "web.home.today.count.one": "{count} tarefa",
+  "web.home.today.count.other": "{count} tarefas",
+  "web.home.today.late.one": "{count} atrasada",
+  "web.home.today.late.other": "{count} atrasadas",
+  "web.home.today.withLate": "{tasks}, {late}",
+  "web.home.today.empty": "Nada para hoje. Quer adiantar algo dos próximos dias?",
+  "web.home.today.link": "Ver tarefas",
+  "web.home.next.title": "Próximos dias",
+  "web.home.next.summary": "Tarefas com prazo marcado",
+  "web.home.next.empty": "Nada marcado para os próximos dias.",
+  "web.home.next.link": "Ver próximas",
+  "web.home.tomorrow": "Amanhã",
+  "web.home.late": "Atrasada",
+} as const;

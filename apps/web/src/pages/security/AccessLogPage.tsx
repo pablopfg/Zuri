@@ -10,7 +10,7 @@ import {
 import { Globe, ShieldCheck } from "lucide-react";
 import { useSearchParams } from "react-router";
 import { deviceText, GROUP_LABEL, groupOf, KIND_LABEL, placeText, reasonLabels } from "../../components/security/activity.ts";
-import { Button, Card, cn, EmptyState, ErrorNotice, PageHeader, SelectField, Spinner, TextField } from "../../components/ui.tsx";
+import { Button, Card, cn, EmptyState, ErrorNotice, PageHeader, SelectField, Loading, TextField } from "../../components/ui.tsx";
 import { api } from "../../lib/api.ts";
 import { useDebounced } from "../../lib/debounce.ts";
 import { useI18n } from "../../lib/i18n.tsx";
@@ -118,7 +118,7 @@ export function AccessLogPage() {
       </Card>
 
       {!ipValid ? null : log.isPending ? (
-        <Spinner />
+        <Loading />
       ) : log.isError ? (
         <ErrorNotice error={log.error} onRetry={() => void log.refetch()} />
       ) : events.length === 0 ? (
