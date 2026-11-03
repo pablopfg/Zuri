@@ -82,7 +82,8 @@ export class SettingsRepository {
 
   /** The language of the text the server writes on its own (API errors, bot, e-mail). */
   locale(): Locale {
-    return this.get().language;
+    // One row: every error answer reads it, the refusals before a session too (P11).
+    return this.field("language");
   }
 
   /** Validates and saves a change; only fields that really changed are written and logged. */

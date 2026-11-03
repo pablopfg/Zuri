@@ -495,8 +495,8 @@ describe("/bloquear and the lockdown", () => {
     expect((await api("GET", "/tasks", undefined, fresh)).status).toBe(200);
     expect((await api("POST", "/lockdown/exit", {}, fresh)).status).toBe(409);
     expect((await events("lockdown_exited")).length).toBe(1);
-    // The bot answers again.
-    expect(await command("/tokens")).toBe("Nenhum token de acesso remoto ativo.");
+    // The bot answers again, with reading locked until a new unlock (SEC-A5-02): the account may still be in other hands.
+    expect(await command("/tokens")).toMatch(/^Faz um tempo que você não usa o bot/);
   });
 
   it("leaving asks for the password typed in the last 15 minutes", async () => {

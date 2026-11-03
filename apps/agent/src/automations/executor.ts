@@ -68,6 +68,8 @@ async function routine(automation: Automation, runId: string, deps: ExecutorDeps
       // wake stay well inside the alarm's time.
       signal: AbortSignal.timeout(ROUTINE_DEADLINE_MS),
     });
+    // SEC-A4-02: a lockdown that began while the model answered delivers nothing of it.
+    if (deps.lockdown?.()) return { status: "skipped", result: null, problem: "lockdown", ai: true };
     const delivered = notices.map((notice) => `${notice.title}\n${notice.body}`);
     const answer = automation.sentinel && isQuietAnswer(text) ? "" : text;
     if (answer) delivered.push(answer);

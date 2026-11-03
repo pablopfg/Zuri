@@ -19,6 +19,38 @@ funciona: [docs/agente/versionamento.md](docs/agente/versionamento.md).
 
 O que já entrou na `develop` e ainda não ganhou número fica em [`changelog/nao-lancado/`](changelog/nao-lancado/) por alguns minutos, até o workflow de versão escrever a seção.
 
+## [0.25.7] - 2026-11-03
+
+Mesclada às 03:07 (UTC-3) · commit [`9e97e7e`](https://github.com/pablopfg/Zuri/commit/9e97e7e31fe4a0caca76b0be11d5e67db5ad3e29) · PR [#121](https://github.com/pablopfg/Zuri/pull/121) · Correções do primeiro passe completo de pentest
+
+### Segurança
+
+- Ferramentas de servidores MCP: as descrições dos campos agora passam pela
+  mesma limpeza da descrição principal, e a lista de caracteres invisíveis
+  ficou maior (tags Unicode, isolamentos bidi, seletores de variação, letras
+  em branco). Uma ferramenta com nome de campo estranho ou com valor
+  escondido nas opções fica como "schema não suportado". Assim o texto que
+  a Zuri lê é o mesmo que você revisou.
+- Com o modo de bloqueio ligado, a troca de senha por e-mail fica parada
+  até ele acabar: nenhum link novo é enviado, e um link enviado antes não
+  troca mais a senha, nem com o código do app autenticador. Para sair do
+  bloqueio, entre com a sua senha e um código de recuperação.
+- O texto guardado que vai para a Zuri (notas, memórias, mensagens de
+  terceiros, resultados de ferramentas) agora neutraliza mais sinais
+  parecidos com `<` e `>`, as entidades HTML desses sinais, os seletores de
+  variação que escondem bytes e as letras em branco.
+- O modo de bloqueio também segura o que já estava a caminho: uma conversa
+  do Telegram que ainda transcrevia um áudio para sem resposta, e a
+  resposta de uma rotina com IA pega no meio não é entregue.
+- Ao sair do modo de bloqueio, a leitura pelo bot do Telegram volta
+  travada e pede `/destravar` de novo.
+- O Diagnóstico aceita no máximo 20 tipos de erro da interface pelo nome;
+  depois disso, um nome novo conta como "Error". Assim uma página com
+  defeito não apaga as falhas do servidor nem gera um aviso por nome.
+- Telegram: uma nota de voz encaminhada acima do limite, processada depois
+  do toque em **Processar mesmo assim**, continua sendo tratada como fala de
+  outra pessoa. Antes, ela chegava à Zuri como se fosse você falando.
+
 ## [0.25.6] - 2026-11-03
 
 Mesclada às 02:35 (UTC-3) · commit [`d797d64`](https://github.com/pablopfg/Zuri/commit/d797d64ceb7a3682417b39579671921d28cb9967) · PR [#123](https://github.com/pablopfg/Zuri/pull/123) · Registra a 18b e a autonomia por ferramenta mescladas
@@ -1868,7 +1900,8 @@ Mesclada às 22:15 (UTC-3) · commit [`360a79e`](https://github.com/pablopfg/Zur
   `npm audit`), CodeQL, Dependabot e rulesets para a `develop` e a `main`.
 - `LICENSE` (MIT), `NOTICE.md`, `SECURITY.md` e `CONTRIBUTING.md`.
 
-[Não lançado]: https://github.com/pablopfg/Zuri/compare/v0.25.6...develop
+[Não lançado]: https://github.com/pablopfg/Zuri/compare/v0.25.7...develop
+[0.25.7]: https://github.com/pablopfg/Zuri/releases/tag/v0.25.7
 [0.25.6]: https://github.com/pablopfg/Zuri/releases/tag/v0.25.6
 [0.25.5]: https://github.com/pablopfg/Zuri/releases/tag/v0.25.5
 [0.25.4]: https://github.com/pablopfg/Zuri/releases/tag/v0.25.4

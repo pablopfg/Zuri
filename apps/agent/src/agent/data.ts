@@ -13,8 +13,20 @@ export type DataSource = (typeof DATA_SOURCES)[number];
  * and math forms): stored text can't forge a tag in any of them, nor one that
  * looks like an already neutralized tag from another block.
  */
-const OPENING = new Set(["<", "‹", "＜", "﹤", "〈", "⟨", "〈", "❮", "«"]);
-const CLOSING = new Set([">", "›", "＞", "﹥", "〉", "⟩", "〉", "❯", "»"]);
+const OPENING = new Set(["<", "‹", "＜", "﹤", "〈", "⟨", "〈", "❮", "«", "˂", "ᐸ", "❬", "《", "⧼", "❰", "⟪", "≺", "⋖"]);
+const CLOSING = new Set([">", "›", "＞", "﹥", "〉", "⟩", "〉", "❯", "»", "˃", "ᐳ", "❭", "》", "⧽", "❱", "⟫", "≻", "⋗"]);
+
+/** The brackets written as HTML entities (`&lt;`, `&#62;`, `&#x3C;`): a model may read them as the real thing (SEC-A6-01). */
+const ENTITY = /&(?:lt|gt|#0*6[02]|#x0*3[ce]);?/gi;
+
+/**
+ * Variation selectors carry no letter of their own, so a run of them can
+ * smuggle hidden bytes after a visible character. Only the two that pick an
+ * emoji's text or color look (U+FE0E, U+FE0F) stay (SEC-A6-02).
+ */
+const SMUGGLING = /(?![\ufe0e\ufe0f])\p{Variation_Selector}/u;
+/** Letters that render as nothing (Hangul fillers, the blank Braille pattern): spaces (SEC-A6-02). */
+const BLANK = new Set([0x115f, 0x1160, 0x3164, 0xffa0, 0x2800]);
 
 /**
  * Invisible format characters (Unicode Cf): zero widths, bidi overrides,
@@ -28,14 +40,15 @@ const ZERO_WIDTH_JOINER = 0x200d;
 export function neutralize(text: string): string {
   let out = "";
   let space = false;
-  for (const char of text) {
+  const decoded = text.replace(ENTITY, (entity) => (/^&(?:lt|#0*60|#x0*3c)/i.test(entity) ? "‹" : "›"));
+  for (const char of decoded) {
     const code = char.codePointAt(0) ?? 0;
-    // C0, DEL and C1 controls (line breaks included) and the Unicode line and paragraph separators: one space.
-    if (code < 0x20 || (code >= 0x7f && code <= 0x9f) || code === 0x2028 || code === 0x2029) {
+    // C0, DEL and C1 controls (line breaks included), the Unicode line and paragraph separators and blank letters: one space.
+    if (code < 0x20 || (code >= 0x7f && code <= 0x9f) || code === 0x2028 || code === 0x2029 || BLANK.has(code)) {
       space = true;
       continue;
     }
-    if (code !== ZERO_WIDTH_JOINER && FORMAT.test(char)) continue;
+    if ((code !== ZERO_WIDTH_JOINER && FORMAT.test(char)) || SMUGGLING.test(char)) continue;
     if (space && char !== " " && !out.endsWith(" ")) out += " ";
     space = false;
     out += OPENING.has(char) ? "‹" : CLOSING.has(char) ? "›" : char;

@@ -33,7 +33,19 @@ export class ReadLock {
   unlockedUntil(): number | null {
     const stored = this.state.get<unknown>("bot_unlocked_until");
     const at = typeof stored === "string" ? Date.parse(stored) : Number.NaN;
+    if (this.#beforeLockdownExit(at - TELEGRAM_LIMITS.unlockMs)) return null;
     return Number.isFinite(at) && at > this.clock() ? at : null;
+  }
+
+  /**
+   * SEC-A5-02: an unlock or a use from before the last lockdown ended opens
+   * nothing after it. The lockdown means the account may be in other hands, so
+   * reading starts locked again and asks for a passkey or an e-mailed code.
+   */
+  #beforeLockdownExit(at: number): boolean {
+    const exited = this.state.get<unknown>("lockdown_exited_at");
+    const exitedAt = typeof exited === "string" ? Date.parse(exited) : Number.NaN;
+    return Number.isFinite(exitedAt) && at <= exitedAt;
   }
 
   /**
@@ -45,7 +57,7 @@ export class ReadLock {
     if (this.unlockedUntil() !== null) return false;
     const since = Date.parse(link.lastUsedAt ?? link.confirmedAt ?? link.linkedAt);
     // A broken date fails closed.
-    if (!Number.isFinite(since)) return true;
+    if (!Number.isFinite(since) || this.#beforeLockdownExit(since)) return true;
     return this.clock() - since > this.hours() * HOUR_MS;
   }
 

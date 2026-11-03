@@ -556,7 +556,7 @@ describe("the history", () => {
 
 // ---------- What a run does ----------
 
-function executorFor(world: ChatWorld, steps: Step[] = [], settings: Partial<Settings> = {}, locale: "pt-BR" | "en" = "pt-BR") {
+function executorFor(world: ChatWorld, steps: Step[] = [], settings: Partial<Settings> = {}, locale: "pt-BR" | "en" = "pt-BR", lockdown?: () => boolean) {
   const provider = new ScriptedProvider(steps);
   const runner = () =>
     new AgentRunner({
@@ -574,6 +574,7 @@ function executorFor(world: ChatWorld, steps: Step[] = [], settings: Partial<Set
     settings: () => ({ ...world.settings, ...settings }),
     locale: () => "pt-BR",
     runner,
+    ...(lockdown ? { lockdown } : {}),
   });
   return { provider, execute };
 }
@@ -628,6 +629,27 @@ describe("running each kind", () => {
       expect(system).toContain("scheduled run of a routine the owner approved");
       expect(provider.transcript.requests[0]?.messages).toEqual([{ role: "user", content: "O que está atrasado?" }]);
       expect(world.automations.aiRunsToday()).toBe(1);
+    });
+  });
+
+  it("SEC-A4-02 a routine whose lockdown began while the model answered delivers nothing", async () => {
+    await withChatWorld(async (world) => {
+      let locked = false;
+      const a = await world.automations.create(reminder({ kind: "agent_prompt", message: "Resuma minhas notas" }), "app");
+      const { execute } = executorFor(
+        world,
+        [
+          () => {
+            locked = true;
+            return { text: "Resumo das notas do dono" };
+          },
+        ],
+        {},
+        "pt-BR",
+        () => locked,
+      );
+      const run = await world.automations.runNow(a.id, execute);
+      expect(run).toMatchObject({ status: "skipped", problem: "lockdown", result: null });
     });
   });
 

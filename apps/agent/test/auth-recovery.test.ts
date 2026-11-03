@@ -1,4 +1,4 @@
-import { RECOVERY_LIMITS, totpCode, totpStep } from "@zuri/shared";
+import { LOCKDOWN_STRICT_MS, RECOVERY_LIMITS, totpCode, totpStep } from "@zuri/shared";
 import { describe, expect, it } from "vitest";
 import type { AppError } from "../src/http/errors.ts";
 import {
@@ -272,7 +272,7 @@ describe("using a recovery link", () => {
     await withAuth(
       "recovery-mfa",
       async (h) => {
-        const { secret } = await turnOn(h);
+        const { secret, codes } = await turnOn(h);
         await h.auth.requestRecovery({ email: TEST_EMAIL }, client(NET));
         const token = box.sent[0]?.token ?? "";
         expect(await h.auth.checkRecovery(token)).toEqual({ secondStep: true });
@@ -368,6 +368,48 @@ describe("using a recovery link", () => {
         const { token } = await h.auth.login(right(), client(NET), noCookies);
         await h.auth.changePassword(await live(h.auth, token), { currentPassword: TEST_PASSWORD, newPassword: NEW_PASSWORD }, client(NET));
         expect(await outcome(h.auth.checkRecovery(box.sent[0]?.token ?? ""))).toBe("RECOVERY_EXPIRED");
+      },
+      { recoveryMail: box.mail },
+    );
+  });
+});
+
+describe("SEC-A3-01: recovery while lockdown mode is on", () => {
+  it("sends no link during the lockdown, in the first hour and after it, and answers as ever", async () => {
+    const box = mailbox();
+    await withAuth(
+      "recovery-lockdown-request",
+      async (h) => {
+        await turnOn(h);
+        h.service.enterLockdown("link-1");
+        await h.auth.requestRecovery({ email: TEST_EMAIL }, client(NET));
+        h.clock.advance(LOCKDOWN_STRICT_MS + 1);
+        await h.auth.requestRecovery({ email: TEST_EMAIL }, client("198.51.100.126"));
+        await box.settled();
+        expect(box.sent).toHaveLength(0);
+        expect(h.events().filter((e) => e.kind === "recovery_requested").map((e) => e.reason)).toEqual(["lockdown", "lockdown"]);
+      },
+      { recoveryMail: box.mail },
+    );
+  });
+
+  it("refuses a link sent before the lockdown, even with the authenticator's code, and the password stays", async () => {
+    const box = mailbox();
+    await withAuth(
+      "recovery-lockdown-complete",
+      async (h) => {
+        const { secret, codes } = await turnOn(h);
+        await h.auth.requestRecovery({ email: TEST_EMAIL }, client(NET));
+        const token = box.sent[0]?.token ?? "";
+        h.service.enterLockdown("link-1");
+        expect((await failure(h.auth.checkRecovery(token)))?.code).toBe("LOCKDOWN_ACTIVE");
+        const strict = await failure(h.auth.completeRecovery({ token, password: NEW_PASSWORD, totp: await totpCode(secret, totpStep(h.clock.now())) }, client(NET)));
+        expect(strict).toMatchObject({ code: "LOCKDOWN_ACTIVE", messageKey: "auth.lockdown.recovery" });
+        // A recovery code doesn't open it either.
+        expect(await outcome(h.auth.completeRecovery({ token, password: NEW_PASSWORD, totp: codes[0] ?? "" }, client(NET)))).toBe("LOCKDOWN_ACTIVE");
+        expect(h.events().some((e) => e.kind === "password_recovered")).toBe(false);
+        // The old password still signs in (to its second step): nothing changed.
+        expect("mfa" in (await h.service.login(right(), client("198.51.100.127"), noCookies))).toBe(true);
       },
       { recoveryMail: box.mail },
     );

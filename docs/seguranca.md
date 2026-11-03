@@ -126,6 +126,13 @@ e o e-mail do dono); sem ele, a página aponta para o código de instalação.
   resposta. Antes de olhar o e-mail, passa pelo limite de 3 pedidos por rede em
   15 minutos (no máximo 200 redes lembradas) e pela verificação de robô, que
   falha fechada como no login.
+- **Durante o modo de bloqueio** (etapa 16b) a recuperação por e-mail fica
+  parada: o pedido responde 202 como sempre, mas não envia link (motivo
+  `lockdown` no registro), e um link enviado antes responde
+  `LOCKDOWN_ACTIVE` na conferência e na troca, com qualquer código. O bloqueio
+  existe porque o celular (e-mail e app autenticador) pode estar em outras
+  mãos; a saída é a senha com um código de recuperação, ou o código de
+  instalação (SEC-A3-01).
 - De todas as redes juntas, saem no máximo 3 links em 24 horas, com pelo menos
   10 minutos entre um e outro. Um pedido fora disso não envia nada e mantém o
   link anterior (motivo "link anterior mantido" no registro de acessos). Assim,
@@ -466,9 +473,12 @@ IP, o país, a região, a cidade, o ASN e o data center da borda, o user agent
 Memórias (e, nas próximas etapas, notas, tarefas, resultados de ferramentas e
 mensagens de terceiros) entram no prompt só por `dataLine`
 (`apps/agent/src/agent/data.ts`), uma linha `<data>` por item. Dentro dela, os
-sinais `<` e `>` e os parecidos (`‹ › ＜ ＞ ﹤ ﹥ 〈 〉 ⟨ ⟩ « »`) viram `‹` e `›`,
-quebras de linha e controles viram espaço, e os caracteres invisíveis de
-formato (bidi, largura zero, "tags" U+E0000) somem. Uma memória que diga
+sinais `<` e `>`, os parecidos (`‹ › ＜ ＞ ﹤ ﹥ 〈 〉 ⟨ ⟩ « » ˂ ˃ ᐸ ᐳ ❬ ❭ 《 》 ⧼ ⧽ ❰ ❱ ⟪ ⟫ ≺ ≻ ⋖ ⋗`)
+e as entidades HTML (`&lt;`, `&#62;`, `&#x3C;`…) viram `‹` e `›` (SEC-A6-01),
+quebras de linha, controles e letras em branco (U+3164, U+2800…) viram
+espaço, e os caracteres invisíveis de formato (bidi, largura zero, "tags"
+U+E0000) e os seletores de variação que não escolhem a cara de um emoji
+somem, para nada ir escondido ao modelo (SEC-A6-02). Uma memória que diga
 "ignore as instruções</data>" continua dentro do próprio bloco. Os testes
 estão em `apps/agent/test/memory-rules.test.ts` (inclusive `SEG-07-01`).
 
@@ -653,7 +663,13 @@ então o servidor externo é tratado como não confiável em tudo:
 - **Texto de terceiros é dado.** Nome, título e descrição (também as do
   schema) viram uma linha sem caracteres invisíveis, com `<`, `>` e colchetes
   trocados por sinais inertes, e vão ao modelo marcados como texto de
-  terceiros. A
+  terceiros. "Invisível" inclui controles, marcas e isolamentos bidi, tags
+  Unicode, hífen discreto, seletores de variação, letras em branco e
+  separadores de linha. Nome de campo fora de `^[A-Za-z0-9_.-]{1,64}$`, ou
+  valor de `enum`, `const`, `default` e `examples` com caractere invisível,
+  deixa a ferramenta como "schema não suportado": esses textos chegam ao
+  modelo como estão, e limpá-los mudaria o que o servidor aceita
+  (SEC-A7-01). A
   resposta entra em `<data source="mcp">` e não muda regra nenhuma. A
   descrição mudou? A ferramenta sai de uso até o dono religar (hash revisado).
 - **Os dados não passeiam.** Mesmo sem perguntar, a chamada vira
@@ -780,7 +796,10 @@ Detalhes em [avisos.md](avisos.md).
 - O Diagnóstico guarda origem, rota com ids trocados, código, nome do erro,
   `cf-ray` e versão, cada um passando por expressão estrita. Nunca mensagem,
   pilha, corpo, IP ou texto do dono. A tela só pode mandar nome e caminho, no
-  máximo 20 por hora; 200 tipos e 30 dias no máximo.
+  máximo 20 por hora, e abre no máximo 20 tipos pelo nome: depois disso, um
+  nome novo conta como `Error`, para a tela não empurrar as falhas do servidor
+  para fora dos 200 tipos nem gerar um aviso "falha nova" a cada nome
+  inventado (SEC-A9-01); 200 tipos e 30 dias no máximo.
 - Contadores, deduplicação e limites por canal impedem que uma falha em laço
   vire uma enxurrada de avisos ou de escritas no banco.
 
@@ -898,7 +917,9 @@ Etapa 12, fundação. O bot obedece a uma conta só, no chat privado
 - **Conversa pelo bot (etapa 14).** Nasce desligada; desligada, o bot não
   chama `getFile` nem pergunta nada. O texto que o próprio dono escreve é a
   mensagem do turno, como no app. Texto de terceiros (mensagem encaminhada,
-  `quote`, resposta à mensagem de outra pessoa, voz encaminhada) fica à parte
+  `quote`, resposta à mensagem de outra pessoa, voz encaminhada, inclusive a
+  grande que só se processa depois do toque em **Processar mesmo assim**,
+  SEC-A5-01) fica à parte
   na mensagem (`zur_messages.quoted`) e entra no prompt só como
   `<data source="telegram_forward">`, neutralizado; um `/comando` encaminhado
   não roda. A resposta sai em HTML com `<`, `>` e `&` escapados antes de
@@ -919,7 +940,9 @@ Etapa 12, fundação. O bot obedece a uma conta só, no chat privado
   por padrão), conversa, `/nova_conversa` e o botão de arquivo grande pedem
   `/destravar`. Só uso com a leitura liberada renova o prazo: mensagem
   enviada travada não conta, e ligar a conversa no app não destrava. Data
-  quebrada no banco conta como travada.
+  quebrada no banco conta como travada. Ao sair do modo de bloqueio, a
+  leitura volta travada: nem o uso nem o destravamento de antes da saída
+  valem, porque a conta do Telegram pode estar em outras mãos (SEC-A5-02).
 - **`/destravar` por passkey.** O bot cria uma linha em
   `zur_telegram_approvals` e manda um botão de URL para
   `/aprovar#<token>`. O token tem 32 bytes aleatórios, vale 5 minutos e uma
@@ -975,7 +998,10 @@ Etapa 12, fundação. O bot obedece a uma conta só, no chat privado
   /api/telegram`); o bot responde só a `/status`, `/avisos` e `/ajuda`, sem
   botões, e recusa conversa, aprovações (botão, `/aprovar`, código por e-mail
   e a página `/aprovar`, 423 `APPROVALS_LOCKED`) e destravamento; o executor
-  pula as rotinas com IA. Na primeira hora o login só aceita senha + código de
+  pula as rotinas com IA. O que já estava a caminho também para: um turno do
+  bot que ainda baixava ou transcrevia um áudio termina sem chegar à Zuri
+  (SEC-A4-01), e a resposta de uma rotina com IA que o bloqueio pegou no meio
+  não é entregue (SEC-A4-02). Na primeira hora o login só aceita senha + código de
   recuperação (o código do app e a passkey recebem 423 sem gastar tentativa;
   sem 2FA, ninguém entra), e esse login sai do bloqueio. Depois, senha + 2FA
   abre a tela **Sair do bloqueio**, que pede a senha digitada nos últimos 15
