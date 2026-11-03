@@ -1,6 +1,6 @@
 # Plano · Nova organização da interface
 
-Situação: modelo 2 esperando a aprovação do Pablo (organização escolhida, visual de hoje, todas as telas, textos revisados, carregamento e atualização só do que mudou)
+Situação: modelo 2 aprovado pelo Pablo em 03/11/2026; falta escolher entre tempo real e o sinal de vida (seção "Atualização automática só do que mudou")
 Origem: pedidos do Pablo em 03/11/2026, com a barra lateral do ChatGPT como referência
 Dependências: nenhuma para aprovar. A implementação espera a etapa 18 sair da `AppShell` (outra thread mexe no app agora).
 
@@ -135,6 +135,8 @@ Regras usadas: as de `docs/planos/revisao-de-textos-e-experiencia.md` (frase cur
 
 **Tempo até aparecer:** o que a pessoa faz aparece na hora; o que a Zuri faz na conversa também; o que vem de fora aparece em até 60 s com a aba aberta, ou na hora ao voltar para ela. Se o Pablo quiser menos que 60 s, o sinal de vida pode ir para 20 s só enquanto uma lista estiver na tela, o que triplica essas chamadas. Recomendo começar com 60 s.
 
+**Tempo real (pergunta do Pablo, 03/11).** É possível, sem custo no plano gratuito para um dono só: o Durable Object aceita WebSocket com hibernação (`ctx.acceptWebSocket`), que fica parado sem cobrar duração enquanto nada muda e só acorda para avisar "tarefas mudaram". A tela recebe o aviso e busca só aquela área, como na camada 3. Pede três cuidados: (1) muda um portão da etapa 1, que hoje recusa WebSocket, então a conexão exige sessão válida, `Origin` igual ao site e o mesmo bloqueio do destravamento, com testes de segurança; (2) o código da conexão fica num pedaço carregado depois da primeira tela, para não tocar no teto de JS; (3) se a conexão cair, volta para o sinal de vida de 60 s. Seria uma PR própria, depois da PR da atualização automática.
+
 **Edição em andamento:** se uma nota aberta no editor mudar em outro lugar, a tela não troca o texto. Ela mostra "Esta nota mudou em outro aparelho" com "Ver a versão nova" e "Manter a minha". Isso é a mesma proteção de "Sair sem salvar?" que já existe.
 
 ### Animação de carregamento
@@ -250,7 +252,8 @@ O modelo é HTML estático em `docs/`, fora do pacote servido. Auditoria em modo
 | 03/11/2026 | Qual proposta de organização (cinco opções)? | A, sem projetos e com as recentes dentro de Conversa |
 | 03/11/2026 | Qual modelo visual ou paleta? | Nenhum: manter as cores atuais e aproveitar só a organização |
 | 03/11/2026 | Aprova o modelo 2 (menus, textos, carregamento e atualização automática)? Recomendação: sim, em dois PRs depois da etapa 18 | aguardando |
-| 03/11/2026 | Mudança de fora em até 60 s está bom, ou quer 20 s com mais chamadas? Recomendação: 60 s | aguardando |
+| 03/11/2026 | O modelo 2 está aprovado? | aprovado (Pablo, 03/11 02:44) |
+| 03/11/2026 | Mudança de fora em até 60 s, 20 s ou em tempo real? Recomendação: tempo real com WebSocket hibernável, com os 60 s como reserva | aguardando |
 
 ### Perguntas abertas
 
