@@ -98,7 +98,9 @@ jobs:
 
   e2e:
     runs-on: ubuntu-26.04
-    timeout-minutes: 20
+    # One worker runs the whole suite: 254 tests took 16 min on 03/11/2026,
+    # plus about 4 min of setup, so 20 cancelled a run with every test green.
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
