@@ -1,4 +1,4 @@
-import { APP_VERSION, ptBRSettings } from "@zuri/shared";
+import { APP_VERSION, ptBRSettings, ptBRSettingsTabs } from "@zuri/shared";
 import { Activity, Bell, Bot, ChevronLeft, ChevronRight, Clock, Database, Plug, Shield, User } from "lucide-react";
 import { useSyncExternalStore } from "react";
 import { Link, NavLink, Navigate, useParams } from "react-router";
@@ -9,11 +9,12 @@ import { AiTab } from "./settings/AiTab.tsx";
 import { AlertsTab } from "./settings/AlertsTab.tsx";
 import { DataTab } from "./settings/DataTab.tsx";
 import { DiagnosticsTab } from "./settings/DiagnosticsTab.tsx";
-import { LaterTab } from "./settings/LaterTab.tsx";
+import { IntegrationsTab } from "./settings/IntegrationsTab.tsx";
 import { SecurityTab } from "./settings/SecurityTab.tsx";
 
 // The screen's texts come with its download (rule P11).
 addMessages(ptBRSettings);
+addMessages(ptBRSettingsTabs);
 
 /** The tabs, by the path segment the address shows ("/configuracoes/seguranca"). */
 export const SETTINGS_TABS = ["conta", "seguranca", "ia", "avisos", "integracoes", "dados", "diagnostico"] as const;
@@ -42,7 +43,7 @@ export function SettingsPage() {
     { id: "seguranca", label: t("web.settings.tab.security"), hint: t("web.settings.hint.security"), icon: Shield },
     { id: "ia", label: t("web.settings.tab.ai"), hint: t("web.settings.hint.ai"), icon: Bot },
     { id: "avisos", label: t("web.settings.tab.notifications"), hint: t("web.settings.hint.notifications"), icon: Bell },
-    { id: "integracoes", label: t("web.settings.tab.integrations"), hint: t("web.settings.hint.later"), icon: Plug },
+    { id: "integracoes", label: t("web.settings.tab.integrations"), hint: t("web.settings.hint.integrations"), icon: Plug },
     { id: "dados", label: t("web.settings.tab.data"), hint: t("web.settings.hint.data"), icon: Database },
     { id: "diagnostico", label: t("web.settings.tab.diagnostics"), hint: t("web.settings.hint.diagnostics"), icon: Activity },
   ] as const satisfies readonly { id: Tab; label: string; hint: string; icon: unknown }[];
@@ -149,7 +150,7 @@ export function SettingsPage() {
         {current === "ia" && <AiTab />}
         {current === "avisos" && <AlertsTab />}
         {current === "integracoes" && (
-          <LaterTab title={t("web.settings.tab.integrations")} body={t("web.settings.later.integrations")} icon={<Plug className="h-6 w-6" />} />
+          <IntegrationsTab />
         )}
         {current === "dados" && <DataTab />}
         {current === "diagnostico" && <DiagnosticsTab />}

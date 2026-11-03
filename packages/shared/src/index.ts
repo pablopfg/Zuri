@@ -29,6 +29,8 @@ export {
   ptBRNotices,
   ptBRSetup,
   ptBRApprove,
+  ptBRShell,
+  ptBRSettingsTabs,
   t,
 } from "../i18n/index.ts";
 export { AGENT_INSTANCE_NAME } from "./constants.ts";
@@ -126,3 +128,5 @@ export * from "./telegram.ts";
 export * from "./email.ts";
 export * from "./semantic.ts";
 export { APP_VERSION } from "./version.ts";
+export * from "./mcp.ts";
+export * from "./mcp-schemas.ts";

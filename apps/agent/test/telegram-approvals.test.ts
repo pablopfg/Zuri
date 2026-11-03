@@ -507,6 +507,23 @@ describe("Aprovar", () => {
     expect(texts()).toEqual(["Essa proposta só pode ser aprovada no app."]);
     expect(buttons(sent()[0]).map((b) => b.text)).toEqual(["Abrir no app"]);
   });
+  it("keeps an external call (MCP) in the app: its arguments are checked there in full", async () => {
+    await linkOwner();
+    await addPasskey();
+    const conversationId = await inOwner((agent) => agent.store.conversations.create("Teste").id);
+    await inOwner((agent) =>
+      agent.store.db.run(
+        `INSERT INTO zur_pending_actions (id, conversation_id, tool, target_id, target_hash, target_label, payload, created_at, expires_at) VALUES ('a1b2c3d4-0000-4000-8000-000000000002', ?, 'mcp_docs_create_issue', 's/create_issue', 'h', 'create_issue · Docs', '{"args":{}}', ?, ?)`,
+        conversationId,
+        new Date().toISOString(),
+        new Date(Date.now() + HOUR).toISOString(),
+      ),
+    );
+    botCalls.length = 0;
+    await deliver(text("/aprovar"));
+    expect(texts()).toEqual(["Essa proposta só pode ser aprovada no app."]);
+    expect(buttons(sent()[0]).map((b) => b.text)).toEqual(["Abrir no app"]);
+  });
 });
 
 describe("the /aprovar page", () => {

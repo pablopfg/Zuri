@@ -809,6 +809,62 @@ export const MIGRATIONS: readonly Migration[] = [
       `CREATE INDEX IF NOT EXISTS zur_telegram_approvals_status ON zur_telegram_approvals (status, created_at)`,
     ],
   },
+  {
+    version: 18,
+    name: "mcp_servers",
+    statements: [
+      // Remote MCP servers (step 18), added by the owner in Settings ›
+      // Integrations. The credential is AES-256-GCM under MCP_CREDENTIAL_KEY,
+      // bound to the row's id, and never in the backup. `problem` is a code the
+      // interface words, never the server's own text. `failures` and
+      // `paused_until` take a server that keeps failing out of the turns for a
+      // while (docs/planos/mcp.md, "Servidor fora do ar"). 'oauth' is accepted
+      // already, so step 18b adds only columns.
+      `CREATE TABLE IF NOT EXISTS zur_mcp_servers (
+        id TEXT PRIMARY KEY,
+        slug TEXT NOT NULL UNIQUE,
+        name TEXT NOT NULL,
+        url TEXT NOT NULL,
+        auth_type TEXT NOT NULL CHECK (auth_type IN ('none', 'bearer', 'oauth')),
+        credential TEXT,
+        enabled INTEGER NOT NULL DEFAULT 1,
+        status TEXT NOT NULL DEFAULT 'disconnected' CHECK (status IN ('connected', 'error', 'disconnected')),
+        problem TEXT,
+        failures INTEGER NOT NULL DEFAULT 0,
+        paused_until TEXT,
+        discovered_at TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      )`,
+      // The catalog as the server last listed it. A tool comes in off and
+      // asking first; turning it on records the definition's hash, and a later
+      // change takes it out of the turns until the owner turns it on again.
+      // `hint` is the owner's "Quando usar".
+      `CREATE TABLE IF NOT EXISTS zur_mcp_tools (
+        server_id TEXT NOT NULL,
+        name TEXT NOT NULL,
+        exposed_name TEXT NOT NULL UNIQUE,
+        title TEXT,
+        description TEXT NOT NULL DEFAULT '',
+        input_schema TEXT NOT NULL,
+        annotations TEXT,
+        schema_hash TEXT NOT NULL,
+        status TEXT NOT NULL CHECK (status IN ('available', 'removed', 'invalid')),
+        problem TEXT,
+        enabled INTEGER NOT NULL DEFAULT 0,
+        policy TEXT NOT NULL DEFAULT 'approve' CHECK (policy IN ('approve', 'auto')),
+        hint TEXT NOT NULL DEFAULT '',
+        reviewed_hash TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        PRIMARY KEY (server_id, name)
+      )`,
+      `CREATE INDEX IF NOT EXISTS zur_mcp_tools_enabled ON zur_mcp_tools (enabled) WHERE enabled = 1`,
+      // An approved external call keeps what the server answered, cut short:
+      // the card shows it and the next turn reads it as <data source="mcp">.
+      `ALTER TABLE zur_pending_actions ADD COLUMN result TEXT`,
+    ],
+  },
 ];
 
 export const LATEST_SCHEMA_VERSION = MIGRATIONS.at(-1)?.version ?? 0;

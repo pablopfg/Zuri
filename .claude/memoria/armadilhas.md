@@ -263,6 +263,15 @@ acrescente aqui cada armadilha nova que encontrar (sem dados pessoais).
   mudou. Antes de abrir a PR, confira o total exato em bytes e deixe pelo menos
   20 bytes de folga. Ícone já usado em outra tela sob demanda conta como
   pedaço novo; troque por um do inicial (`RotateCw`, `Clock`).
+- 03/11: a develop chegou a 3 bytes do teto e a PR de versão 0.24.0 estourou.
+  A folga voltou (926 bytes) tirando do inicial o que quase nunca aparece: o
+  formulário da confirmação de senha (`ReauthDialog.tsx`, o `ConfirmDialog` só
+  escuta), o aviso de duas etapas (o `AppShell` só o carrega com o 2FA
+  desligado), `shortcutLabel` fora de `lib/palette.ts` (um import do `AppShell`
+  levava o módulo inteiro) e os textos das seções e do tema para catálogos sob
+  demanda. Deixar a `LoginPage` ou a `NotFoundPage` sob demanda dividiu o
+  pacote inicial em vários pedaços (com a `NotFoundPage`, o total ainda subiu
+  400 bytes): não é o caminho.
 - O axe rodando no meio da animação de entrada (opacidade baixa) acusa
   contraste falso. `expectAccessible` espera as animações finitas terminarem.
 
@@ -327,3 +336,12 @@ acrescente aqui cada armadilha nova que encontrar (sem dados pessoais).
 - Depois da PR da versão no app (02/11/2026) o JavaScript inicial ficou em
   138.986 bytes, colado no teto de 139 kB. Texto novo no primeiro carregamento
   vai para um `pt-BR-<tela>.ts` com `addMessages` ou tira bytes de outro lugar.
+- Constante de `packages/shared` que a interface importa não pode morar num
+  módulo que monta esquema Zod (nem que só importe `zod-config.ts` ou `line()`
+  de `productivity.ts`): na etapa 18 isso levou 5,9 kB de Zod para o JS
+  inicial, mesmo com a tela lazy. Constantes e tipos num arquivo sem Zod
+  (`mcp.ts`), esquemas em outro (`mcp-schemas.ts`); confira com
+  `node scripts/check-bundle-size.ts` depois do build.
+- `new Request(input, init)` consome o corpo de um `Request` passado como
+  `input`: num fetch de teste que só lê a URL e repassa `input`/`init`, o
+  servidor recebe o corpo vazio. Monte o `Request` uma vez e repasse ele.

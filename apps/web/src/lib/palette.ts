@@ -34,11 +34,6 @@ export function moveActive(active: number, key: string, count: number): number {
   return Math.min(active, count - 1);
 }
 
-/** How the shortcut reads on this device: ⌘ K on Apple, Ctrl K elsewhere. */
-export function shortcutLabel(platform: string): string {
-  return /Mac|iPhone|iPad|iPod/.test(platform) ? "⌘ K" : "Ctrl K";
-}
-
 type MemorySearchListener = (query: string) => void;
 let pendingMemorySearch: string | null = null;
 const memorySearchListeners = new Set<MemorySearchListener>();

@@ -12,7 +12,7 @@
 [![Licença: MIT](https://img.shields.io/badge/licen%C3%A7a-MIT-0b0f19)](LICENSE)
 [![Roda na Cloudflare](https://img.shields.io/badge/roda%20na-Cloudflare-f38020?logo=cloudflare&logoColor=white)](https://developers.cloudflare.com/workers/)
 [![Plano Free](https://img.shields.io/badge/plano%20Free-compat%C3%ADvel-22c55e)](#-plano-free-sem-surpresa-na-fatura)
-[![Etapas](https://img.shields.io/badge/etapas-20%20de%2030-22c55e)](#️-mapa-das-etapas)
+[![Etapas](https://img.shields.io/badge/etapas-20%20de%2031-22c55e)](#️-mapa-das-etapas)
 [![Sem telemetria](https://img.shields.io/badge/telemetria-nenhuma-0b0f19)](#-segurança-e-privacidade)
 [![Node.js 24+](https://img.shields.io/badge/node-24%2B-339933?logo=nodedotjs&logoColor=white)](.nvmrc)
 
@@ -24,7 +24,7 @@ de um Durable Object e conversa com você pelo navegador e pelo Telegram.
 </div>
 
 > [!NOTE]
-> **Em construção.** A Zuri sai em 30 etapas, uma por PR, a partir da [especificação](docs/especificacao.md).
+> **Em construção.** A Zuri sai em 31 etapas, uma por PR, a partir da [especificação](docs/especificacao.md).
 > As etapas 0 a 17 estão na `develop`,
 > da conversa com o agente às automações, à central de avisos e ao bot do Telegram, que já manda avisos, conversa por texto e voz, responde a comandos rápidos sem IA, trava a leitura depois de horas sem uso, aprova as propostas da Zuri com passkey ou código por e-mail e liga o modo de bloqueio numa emergência. O [mapa das etapas](#️-mapa-das-etapas) mostra o que já existe e o que vem a seguir; o estado detalhado fica em [`progresso.md`](.claude/memoria/progresso.md).
 
@@ -52,7 +52,7 @@ Cada pessoa publica a própria Zuri na própria conta Cloudflare, e ela atende s
 
 - **Seus dados ficam com você.** Tudo mora no SQLite de um Durable Object da sua conta. Não há banco externo nem servidor de terceiros.
 - **Custo zero.** Foi desenhado para caber no plano Free da Cloudflare, com contadores e tetos para a IA não passar da cota.
-- **Segurança.** Turnstile em todo login, 2FA, passkeys, página de acessos e um agente que não tem shell, não roda código e não acessa a internet livremente.
+- **Segurança.** Turnstile em todo login, 2FA, passkeys, página de acessos e um agente que não tem shell, não roda código e só sai para a internet pelos serviços MCP que você ligar.
 - **Web e Telegram.** A interface web (PWA) já está no ar; o bot do Telegram chega na fase C e passa pelos mesmos portões, com os mesmos dados.
 
 ## 📸 Telas
@@ -178,13 +178,14 @@ O que está na `develop` hoje, etapa por etapa. "extra" marca melhorias feitas f
 | ✋ | **Aprovar pelo Telegram** | Quando a Zuri propõe apagar ou reescrever algo numa conversa pelo bot, a proposta chega com o botão Aprovar e uma prévia montada com o que está guardado, nunca com as palavras dela. Tocar não basta: você confirma com a passkey, numa página do app, ou com um código no seu e-mail, e só então a proposta é feita, uma vez. `/aprovar` mostra o que espera por você, e cada aprovação aparece em Acessos. | 16a |
 | 🚨 | **Emergência pelo Telegram** | `/acessos` e `/sessoes` mostram quem entrou e o que está aberto; `/encerrar_sessoes`, `/pausar_rotinas` e `/bloquear` agem com um toque, mesmo com a IA fora do ar. O modo de bloqueio derruba as sessões do app, para as rotinas com IA e deixa o bot só com `/status`, `/avisos` e `/ajuda`. Na primeira hora só se entra com um código de recuperação; depois, o app abre em Sair do bloqueio, com **Não fui eu: desvincular o Telegram**. Os alertas que o bot causa só param quando você confirma no app, com a senha. | 16b |
 | 🔎 | **Busca pelo significado** | Opcional, em Configurações > IA. Ligada, a busca acha "carro" na memória sobre o "automóvel": a paleta ganha o grupo "Pelo significado", a Zuri lembra das memórias certas na conversa e `/buscar` também acha rotinas. Tudo fica no banco da sua Zuri, com o modelo grátis do Workers AI e no máximo 2.000 textos por dia, sem passar de metade do teto de IA. Desligada, nada muda. | 17 |
+| 🔌 | **Serviços externos (MCP)** | Em Configurações > Integrações, você adiciona servidores MCP (sem login ou com um token guardado cifrado) e liga, uma por uma, as ferramentas que a Zuri pode usar. Cada chamada vira um cartão com os dados exatos que vão para o serviço, a menos que você libere uma ferramenta que só consulta. Só endereços públicos, nunca redirecionamento, e nada externo no modo de bloqueio. | 18 |
 | 🎯 | **Prioridade que aprende** | O tipo de aviso que você quase sempre deixa de lado desce um nível, e o que você abre logo sobe, no máximo um nível por semana e sempre com "Desfazer". Lembretes e segurança nunca mudam, e cada automação tem a sua prioridade. | 11 |
 
 ## 🔭 O que vem a seguir
 
 | | Funcionalidade | O que faz | Etapa |
 | :---: | --- | --- | :---: |
-| 🔌 | **Integrações** | Servidores MCP, Google Agenda, Google Contatos por etiqueta, acesso remoto para o n8n e monitor de sites, todos opcionais. | 18–22 |
+| 🔌 | **Integrações** | Login OAuth nos servidores MCP, Google Agenda, Google Contatos por etiqueta, acesso remoto para o n8n e monitor de sites, todos opcionais. | 18b–22 |
 | 💾 | **Backup e instalação** | Backup e importação, guia de instalação só pelo navegador e auditoria final. | 23–25 |
 
 ## 🧭 Como funciona
@@ -276,7 +277,8 @@ O orçamento de cada cota está em [docs/arquitetura/orcamento-free-tier.md](doc
 | | 16a | Aprovações pelo bot | ✅ |
 | | 16b | Comandos de segurança e modo de bloqueio | ✅ |
 | **D · Integrações** | 17 | Busca semântica | ✅ |
-| | 18 | Servidores MCP remotos | ⬜ |
+| | 18a | Servidores MCP remotos | 🚧 |
+| | 18b | Login OAuth nos servidores MCP | ⬜ |
 | | 19 | Google Agenda | ⬜ |
 | | 19b | Google Contatos | ⬜ |
 | | 20 | Acesso remoto e eventos | ⬜ |
@@ -348,6 +350,7 @@ scripts/        Lint de i18n, ícones, tamanho do pacote e capturas do README
 | [Produtividade](docs/produtividade.md) | Tarefas, notas, projetos e lixeira |
 | [Memória](docs/memoria.md) | Estados, histórico e revisão de conflitos |
 | [Busca por significado](docs/semantic-recall.md) | Busca semântica opcional, limites e custo |
+| [Serviços externos (MCP)](docs/mcp.md) | Servidores MCP, aprovação das chamadas, limites e proteções |
 | [Avisos e Diagnóstico](docs/avisos.md) | Central de avisos, insistência, resumo do dia, vigias e registro de falhas |
 | [Configurar a Cloudflare](docs/configuracao-cloudflare.md) | Segredos, Turnstile, primeiro acesso e recuperação |
 | [Configurar o GitHub](docs/configuracao-github.md) | Rulesets e proteção das branches |
@@ -365,7 +368,7 @@ Leia o [CONTRIBUTING.md](CONTRIBUTING.md) e o [AGENTS.md](AGENTS.md). Em resumo:
 ## 🌎 In English
 
 **Zuri** is a self-hosted, single-owner AI assistant that runs entirely in your own Cloudflare account: one Worker, one Durable Object with SQLite and Workers AI, designed to fit the Free plan. It has a web app (PWA) and a Telegram admin bot that sends notifications, chats, answers quick commands and approves the agent's proposals with a passkey or an e-mailed code. Sign-in uses Turnstile, TOTP 2FA and passkeys, and the agent has no shell, code execution or open HTTP.
-It's built in public in 30 steps; steps 0 to 17 are merged.
+It's built in public in 31 steps; steps 0 to 17 are merged.
 The docs and the UI default to Brazilian Portuguese, and the interface is also available in English.
 
 ## 🙌 Créditos e licença

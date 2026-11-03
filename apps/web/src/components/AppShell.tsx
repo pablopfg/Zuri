@@ -2,19 +2,22 @@ import { APP_VERSION } from "@zuri/shared";
 import { Brain, Clock, House, ListTodo, LogOut, MessageCircle, NotebookPen, PanelLeftClose, PanelLeftOpen, Search, Settings, ShieldCheck } from "lucide-react";
 import { lazy, type ReactNode, Suspense, useEffect, useState } from "react";
 import { NavLink, Outlet, useNavigate } from "react-router";
+import { useMfaStatus } from "../hooks/mfa.ts";
 import { useSession } from "../hooks/session.tsx";
 import { useI18n } from "../lib/i18n.tsx";
-import { shortcutLabel } from "../lib/palette.ts";
+import { shortcutLabel } from "../lib/shortcut.ts";
 import { readSidebarCollapsed, SIDEBAR_KEY, saveSidebarCollapsed } from "../lib/sidebar.ts";
 import { ConfirmDialog } from "./ConfirmDialog.tsx";
 import { Logo } from "./Logo.tsx";
-import { MfaReminder } from "./MfaReminder.tsx";
 import { NotificationCenter } from "./NotificationCenter.tsx";
 import { SessionGuard } from "./SessionGuard.tsx";
 import { Button, cn, Dialog } from "./ui.tsx";
 
 // Downloaded the first time it opens (rule P11): most visits never use it.
 const CommandPalette = lazy(() => import("./CommandPalette.tsx").then((m) => ({ default: m.CommandPalette })));
+// Only while two-step sign-in is off, which setup soon makes rare. The reminder checks the same
+// status (and the snooze) itself: this test only spares the download.
+const MfaReminder = lazy(() => import("./MfaReminder.tsx").then((m) => ({ default: m.MfaReminder })));
 const SecretNotices = lazy(() => import("./SecretNotices.tsx").then((m) => ({ default: m.SecretNotices })));
 
 /**
@@ -26,6 +29,7 @@ const SecretNotices = lazy(() => import("./SecretNotices.tsx").then((m) => ({ de
 export function AppShell() {
   const { t } = useI18n();
   const { session, signOut } = useSession();
+  const mfa = useMfaStatus();
   // Only the home link needs `end` (it would match every address otherwise).
   const sections: { to: string; label: string; icon: typeof House; end?: boolean }[] = [
     { to: "/", label: t("web.nav.home"), icon: House, end: true },
@@ -205,7 +209,11 @@ export function AppShell() {
             </Dialog>
           </div>
         </header>
-        <MfaReminder />
+        {mfa.data?.enabled === false && (
+          <Suspense fallback={null}>
+            <MfaReminder />
+          </Suspense>
+        )}
         <main id="conteudo" tabIndex={-1} className="mx-auto w-full max-w-5xl flex-1 space-y-6 px-4 pb-24 pt-6 focus:outline-none md:px-8 md:pb-10 md:pt-8">
           {(session?.removePlainPasswordSecret || session?.removeSetupCodeSecret) && (
             <Suspense fallback={null}>

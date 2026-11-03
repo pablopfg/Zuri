@@ -139,7 +139,7 @@ test("settings has the seven sections, each with its address and content: tabs o
     ["Segurança", "seguranca", "Atividade de acesso"],
     ["IA", "ia", "Uso de hoje"],
     ["Avisos", "avisos", "Resumo do dia"],
-    ["Integrações", "integracoes", "Google Agenda"],
+    ["Integrações", "integracoes", "Serviços externos (MCP)"],
     ["Dados", "dados", "Backup e uso do armazenamento"],
     ["Diagnóstico", "diagnostico", "Nada do que você escreveu entra neste registro."],
     ["Conta", "conta", "Nome, idioma e fuso horário"],
@@ -229,4 +229,53 @@ test("the two-step reminder shows until put off, and never on the settings @mobi
   await page.reload();
   await expect(page.getByRole("heading", { level: 1, name: /^(Bom dia|Boa tarde|Boa noite)/ })).toBeVisible();
   await expect(reminder).toHaveCount(0);
+});
+
+test("a sensitive change asks for the password again, then repeats itself", async ({ page }) => {
+  await page.goto("/configuracoes/conta");
+  await signIn(page);
+  const name = page.getByLabel("Seu nome");
+  await expect(name).toBeVisible();
+
+  // The server's answer for an old sign-in, on every save: the dialog is what's under test, and
+  // the retry gets the stored settings back, so no other test sees a changed name.
+  let saves = 0;
+  await page.route("**/api/settings", async (route) => {
+    if (route.request().method() !== "PATCH") return route.continue();
+    saves += 1;
+    if (saves < 3) {
+      return route.fulfill({
+        status: 403,
+        contentType: "application/json",
+        body: JSON.stringify({ code: "RECENT_AUTH_REQUIRED", message: "Digite a sua senha de novo para continuar." }),
+      });
+    }
+    const stored = await page.request.get("/api/settings", { headers: CSRF });
+    return route.fulfill({ response: stored });
+  });
+
+  await name.fill("Outro nome");
+  await page.getByRole("button", { name: "Salvar nome" }).click();
+  const dialog = page.getByRole("dialog", { name: "Confirme que é você" });
+  await expect(dialog).toBeVisible();
+  await expect(dialog).toContainText("A confirmação vale por 15 minutos.");
+  const password = dialog.getByLabel("Senha", { exact: true });
+  await expect(password).toBeFocused();
+  await expectAccessible(page, "confirm dialog");
+
+  // Giving up closes it, and the save says why it didn't happen.
+  await password.fill("not sent");
+  await dialog.getByRole("button", { name: "Cancelar" }).click();
+  await expect(dialog).toBeHidden();
+  await expect(page.getByText("Digite a sua senha de novo para continuar.")).toBeVisible();
+
+  // Asked again, it opens empty; the right password confirms and the save goes through.
+  await page.getByRole("button", { name: "Salvar nome" }).click();
+  await expect(dialog).toBeVisible();
+  await expect(password).toHaveValue("");
+  await password.fill(PASSWORD);
+  await dialog.getByRole("button", { name: "Confirmar" }).click();
+  await expect(dialog).toBeHidden();
+  await expect(page.getByRole("status").filter({ hasText: "Salvo." })).toBeVisible();
+  expect(saves).toBe(3);
 });

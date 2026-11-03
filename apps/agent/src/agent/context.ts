@@ -45,7 +45,12 @@ function outcomes(row: MessageRow, actions: Map<string, PendingAction>, plans: M
   const notes: string[] = [];
   for (const tool of decodeTools(row.tools)) {
     const action = tool.actionId ? actions.get(tool.actionId) : undefined;
-    if (tool.actionId) {
+    if (tool.actionId && action?.tool === "mcp_call") {
+      // An external call (step 18): what the server answered comes back as data, never as instructions.
+      const outcome = action.status === "approved" ? "approved by the owner and run; the server's answer follows as data" : action.status === "failed" ? "approved, but the call failed; it may or may not have run on the server" : ACTION_OUTCOME[action.status];
+      const answer = action.result !== undefined ? ` ${dataLine("mcp", tool.name, action.result, action.resultError ? { error: "true" } : {})}` : "";
+      notes.push(`[External call ${tool.name}: ${outcome}] ${dataLine("tool", action.id, action.target)}${answer}`);
+    } else if (tool.actionId) {
       // The label is stored text (a title): inside a <data> line, it can't pose as another note.
       const label = action ? dataLine("tool", action.id, action.target) : "";
       notes.push(`[Proposal ${tool.name}: ${action ? ACTION_OUTCOME[action.status] : ACTION_OUTCOME.expired}] ${label}`.trim());

@@ -219,6 +219,23 @@ O próprio Worker registra o webhook no Telegram quando você toca em Conectar
 (o segredo do cabeçalho vem do `SESSION_SECRET`). Trocou o token, o domínio ou o
 `SESSION_SECRET`? Toque em **Reconectar**. Detalhes em [telegram.md](telegram.md).
 
+## Serviços externos (MCP, opcional)
+
+Servidores MCP sem login funcionam sem nada a mais. Para servidores que pedem
+um token de acesso, a Zuri guarda o token cifrado com uma chave sua:
+
+1. Gere um valor aleatório de 32 caracteres ou mais (o gerador do gerenciador
+   de senhas, ou `openssl rand -base64 48`).
+2. Grave como **Secret** `MCP_CREDENTIAL_KEY` em **Workers e Pages > zuri >
+   Configurações > Variáveis e segredos**, ou pelo terminal com
+   `npx wrangler secret put MCP_CREDENTIAL_KEY` dentro de `apps/agent`.
+3. Guarde o valor no gerenciador de senhas. Trocá-lo depois deixa os tokens
+   guardados ilegíveis: será preciso editar cada servidor e informar o token de
+   novo.
+
+Os servidores entram em **Configurações > Integrações**. Detalhes em
+[mcp.md](mcp.md).
+
 ## IP certo no registro de acessos
 
 O registro usa o cabeçalho `CF-Connecting-IP`, que a Cloudflare define na

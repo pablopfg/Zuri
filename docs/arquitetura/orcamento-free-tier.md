@@ -68,6 +68,12 @@ Medido dentro do workerd por `apps/agent/test/free-tier-budget.test.ts`, com
 | `POST /api/transcribe` | 4 | 4 |
 | `DELETE /api/conversations/:id` | cerca de 3 por mensagem (1.224 com 406) | cerca de 2 por mensagem (816 com 406) |
 | `GET /api/search/semantic` (busca semântica ligada; medido em `semantic.test.ts`) | até 20 com poucos itens; 1 por bloco de 64 vetores (cerca de 550 com todos os tetos) | até 4 (contador do dia) |
+| `GET /api/mcp` (10 servidores) | até 150 | 0 |
+| `POST /api/mcp/servers` (servidor com 100 ferramentas) | até 260 | até 340 (servidor, ferramentas com índice, evento e aviso) |
+| `POST /api/mcp/servers/:id/connect` (sem mudança no servidor) | até 650 | até 10 |
+| `PATCH /api/mcp/servers/:id/tools/:tool` | até 20 | até 3 |
+| `POST /api/chat` com uma ferramenta externa (conversa curta) | 41 (teto 80) | 18 (teto 30) |
+| `POST /api/actions/:id/approve` de uma chamada externa | 13 (teto 25) | 2 (teto 12) |
 
 Os números contam só o SQL do Zuri (`Database.usage`): a cada despertar o
 Agents SDK lê algumas linhas das tabelas `cf_agents_*`, quase vazias hoje. O
@@ -144,6 +150,12 @@ Como cheguei nos números:
   (35.000 itens em 18 dias) e cerca de 3 gravações por item (6.000 por dia).
   Cada busca faz um embedding da pergunta (perto de 0,01 Neuron), com teto de
   500 por dia e cache das 32 últimas. Detalhes em `docs/semantic-recall.md`.
+- **Serviços externos (MCP, etapa 18, opcional).** Sem servidor, custa zero.
+  Cada turno do chat lê só as ferramentas ligadas (índice, no máximo 10) e
+  abre a sessão MCP na primeira chamada, com teto de 24 subrequisições por
+  turno (12 num turno do Telegram, que também envia mensagens) dentro das 50
+  do plano Free. A sessão fecha no fim do turno, então o objeto continua
+  hibernando. Detalhes em `docs/mcp.md`.
 - **Neurons.** Um chamado ao modelo com 6.000 tokens de contexto custa uns 33
   Neurons de entrada; 400 tokens de resposta, uns 15. Um turno com duas
   iterações fica perto de 100. Os padrões da especificação (200 pedidos de IA

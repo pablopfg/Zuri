@@ -44,6 +44,7 @@ export function ApprovalCard({ action, onChange }: { action: PendingAction; onCh
   const [error, setError] = useState<string | null>(null);
   const titleId = useId();
   const rewrite = action.tool === "replace_note_content" || action.tool === "replace_task_description";
+  const external = action.tool === "mcp_call";
 
   async function decide(kind: "approve" | "cancel") {
     setBusy(kind);
@@ -76,7 +77,9 @@ export function ApprovalCard({ action, onChange }: { action: PendingAction; onCh
           <h3 id={titleId} className="text-sm font-semibold">
             {t("web.chat.approval.title")}
           </h3>
-          <p className="break-words text-sm leading-6">{t(APPROVAL_LABEL[action.tool], { target: action.target })}</p>
+          <p className="break-words text-sm leading-6">
+            {external ? t("web.chat.approval.mcp_call", { target: action.target }) : t(APPROVAL_LABEL[action.tool as Exclude<PendingAction["tool"], "mcp_call">], { target: action.target })}
+          </p>
         </div>
       </div>
       {rewrite && (
@@ -84,6 +87,20 @@ export function ApprovalCard({ action, onChange }: { action: PendingAction; onCh
           <p className="text-xs font-medium text-fg-muted">{t("web.chat.approval.preview")}</p>
           <pre className="max-h-64 overflow-auto whitespace-pre-wrap break-words rounded-xl border border-border bg-surface p-3 font-sans text-sm leading-6">
             {action.preview || t("web.chat.approval.previewEmpty")}
+          </pre>
+        </div>
+      )}
+      {external && (
+        <div className="space-y-1">
+          <p className="text-xs font-medium text-fg-muted">{t("web.chat.approval.mcpArgs")}</p>
+          <pre className="max-h-64 overflow-auto whitespace-pre-wrap break-words rounded-xl border border-border bg-surface p-3 font-mono text-xs leading-5">{action.preview ?? "{}"}</pre>
+        </div>
+      )}
+      {external && action.result !== undefined && (
+        <div className="space-y-1">
+          <p className="text-xs font-medium text-fg-muted">{action.resultError ? t("web.chat.approval.mcpResultError") : t("web.chat.approval.mcpResult")}</p>
+          <pre className="max-h-64 overflow-auto whitespace-pre-wrap break-words rounded-xl border border-border bg-surface p-3 font-sans text-sm leading-6">
+            {action.result || t("web.chat.approval.mcpResultEmpty")}
           </pre>
         </div>
       )}
@@ -102,7 +119,9 @@ export function ApprovalCard({ action, onChange }: { action: PendingAction; onCh
       ) : (
         <p role="status" className="text-sm font-medium">
           {t(APPROVAL_STATUS_LABEL[action.status])}
-          {action.problem && <span className="font-normal text-fg-muted"> · {t(PROBLEM_LABEL[action.problem])}</span>}
+          {action.problem && (
+            <span className="font-normal text-fg-muted"> · {external && action.problem === "failed" ? t("web.chat.approval.mcpFailed") : t(PROBLEM_LABEL[action.problem])}</span>
+          )}
         </p>
       )}
       {error && (

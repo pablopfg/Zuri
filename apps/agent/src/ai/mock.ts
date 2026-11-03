@@ -106,7 +106,9 @@ export class MockAIProvider implements AIProvider {
     };
     try {
       const call = /^call ([a-z_][a-z0-9_]{0,63})(?:\s+(\{.*\}))?$/is.exec(input);
-      const tool = call && req.maxIterations > 1 && !req.toolBudgetExhausted() ? req.tools.find((item) => item.name === call[1]) : undefined;
+      const active = req.activeTools?.();
+      const tool =
+        call && req.maxIterations > 1 && !req.toolBudgetExhausted() ? req.tools.find((item) => item.name === call[1] && (!active || active.includes(item.name))) : undefined;
       let reply = this.reply(input);
       if (tool && call) {
         const id = "mock_1";

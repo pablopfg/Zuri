@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { type Automation, type Memory, type NoteSummary, ptBRPalette, SEMANTIC_LIMITS, type Task } from "@zuri/shared";
+import { type Automation, type Memory, type NoteSummary, ptBRPalette, ptBRSettingsTabs, SEMANTIC_LIMITS, type Task } from "@zuri/shared";
 import {
   Activity,
   Bell,
@@ -30,6 +30,8 @@ import { cn } from "./ui.tsx";
 
 // The palette's texts come with its download, the first time it opens (rule P11).
 addMessages(ptBRPalette);
+// The palette lists the settings sections by name.
+addMessages(ptBRSettingsTabs);
 
 /**
  * "Nova automação" opens the form on the Automations page: by the address when

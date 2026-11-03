@@ -11,6 +11,7 @@ import { MockEmbedder } from "../src/semantic/embedder.ts";
 import { VectorStore } from "../src/semantic/store.ts";
 import { unit } from "../src/semantic/vectors.ts";
 import { CSRF, call, HUMAN_TOKEN, ORIGIN, TEST_EMAIL, TEST_PASSWORD, testEnv } from "./helpers.ts";
+import { mcpFixture } from "./mcp-fixture.ts";
 
 // What each route costs in the units the Free plan bills: rows read and rows
 // written in the object's SQLite (docs/arquitetura/orcamento-free-tier.md). A
@@ -644,6 +645,92 @@ describe("the Free plan budget of each route", () => {
       await runInDurableObject(owner(), (agent: ZuriAgent) => {
         agent.store.semantic.disable();
         agent.testEmbedder = null;
+      });
+    }
+  });
+  it("remote MCP (step 18): the list, a connection with 100 tools, a tool switch and a turn's tool list read and write about one row per tool", async () => {
+    const fixture = mcpFixture({ tools: Array.from({ length: 100 }, (_, i) => ({ name: `tool_${i}`, description: `Tool ${i}.` })) });
+    await runInDurableObject(owner(), (agent: ZuriAgent) => {
+      agent.store.mcp.network = fixture.network;
+      for (let i = 0; i < 9; i++) agent.store.mcp.repo.create({ name: `Outro ${i}`, url: `https://s${i}.exemplo.com.br/mcp`, authType: "none" });
+    });
+    try {
+      const added = await cost("POST", "/mcp/servers", { name: "Grande", url: "https://grande.exemplo.com.br/mcp" });
+      expect(added.status).toBe(201);
+      // The server, its 100 tools (row and unique index each) and the security event with its notice.
+      expect(added.written).toBeLessThanOrEqual(3 * 100 + 40);
+      expect(added.read).toBeLessThanOrEqual(260);
+      const serverId = await runInDurableObject(owner(), (agent: ZuriAgent) => agent.store.db.one<{ id: string }>(`SELECT id FROM zur_mcp_servers WHERE slug = 'grande'`)?.id ?? "");
+      const list = await cost("GET", "/mcp");
+      // Ten servers and the tools counted once, whatever servers have none.
+      expect(list.read).toBeLessThanOrEqual(150);
+      expect(list.written).toBe(0);
+
+      const tools = await cost("GET", `/mcp/servers/${serverId}/tools`);
+      expect(tools.read).toBeLessThanOrEqual(2 * 100 + 20);
+      expect(tools.written).toBe(0);
+      const again = await cost("POST", `/mcp/servers/${serverId}/connect`);
+      // Connecting again to an unchanged server rewrites none of its tools.
+      expect(again.status).toBe(200);
+      expect(again.written).toBeLessThanOrEqual(10);
+      expect(again.read).toBeLessThanOrEqual(650);
+      for (let i = 0; i < 10; i++) await cost("PATCH", `/mcp/servers/${serverId}/tools/mcp_grande_tool_${i}`, { enabled: true });
+      const toggle = await cost("PATCH", `/mcp/servers/${serverId}/tools/mcp_grande_tool_0`, { enabled: false });
+      expect(toggle.read).toBeLessThanOrEqual(20);
+      expect(toggle.written).toBeLessThanOrEqual(3);
+      const turn = await runInDurableObject(owner(), (agent: ZuriAgent) => {
+        const before = agent.store.db.usage.rowsRead;
+        const offered = agent.store.mcp.turnTools().length;
+        return { offered, read: agent.store.db.usage.rowsRead - before };
+      });
+      // A chat turn's list: the tools on (an index) and the servers, never the whole catalog.
+      expect(turn.offered).toBe(9);
+      expect(turn.read).toBeLessThanOrEqual(60);
+    } finally {
+      await runInDurableObject(owner(), (agent: ZuriAgent) => {
+        agent.store.db.run(`DELETE FROM zur_mcp_tools`);
+        agent.store.db.run(`DELETE FROM zur_mcp_servers`);
+      });
+    }
+  });
+  it("remote MCP (step 18): a chat turn with an external call and an approved one read the turn's window and write a handful of rows", async () => {
+    const fixture = mcpFixture({
+      tools: [
+        { name: "lookup", description: "Looks something up.", annotations: { readOnlyHint: true } },
+        { name: "file_ticket", description: "Files a ticket." },
+      ],
+    });
+    const conversationId = await runInDurableObject(owner(), async (agent: ZuriAgent) => {
+      agent.testProvider = new MockAIProvider();
+      agent.store.mcp.network = fixture.network;
+      const server = await agent.store.mcp.create({ name: "Leve", url: "https://leve.exemplo.com.br/mcp", authType: "none" });
+      agent.store.mcp.updateTool(server.id, "mcp_leve_lookup", { enabled: true, policy: "auto" });
+      agent.store.mcp.updateTool(server.id, "mcp_leve_file_ticket", { enabled: true, policy: "approve" });
+      return agent.store.conversations.create("externo").id;
+    });
+    try {
+      const turn = await cost("POST", "/chat", { conversationId, message: "call mcp_leve_lookup {}" });
+      expect(turn.status).toBe(200);
+      expect(fixture.calls).toEqual([{ name: "lookup", args: {} }]);
+      // A short conversation's window, the tools on, the server and the call's own rows; the same as a turn
+      // with one of the Zuri's own tools.
+      expect(turn.read).toBeLessThanOrEqual(80);
+      expect(turn.written).toBeLessThanOrEqual(30);
+      const proposal = await cost("POST", "/chat", { conversationId, message: "call mcp_leve_file_ticket {}" });
+      expect(proposal.read).toBeLessThanOrEqual(80);
+      expect(proposal.written).toBeLessThanOrEqual(30);
+      const actionId = await runInDurableObject(owner(), (agent: ZuriAgent) => agent.store.db.one<{ id: string }>(`SELECT id FROM zur_pending_actions WHERE substr(tool, 1, 4) = 'mcp_'`)?.id ?? "");
+      const approve = await cost("POST", `/actions/${actionId}/approve`);
+      expect(approve.status).toBe(200);
+      expect(fixture.calls).toHaveLength(2);
+      // The proposal, the tool and the server to recheck the hash, then the result on the proposal's row.
+      expect(approve.read).toBeLessThanOrEqual(25);
+      expect(approve.written).toBeLessThanOrEqual(12);
+    } finally {
+      await runInDurableObject(owner(), (agent: ZuriAgent) => {
+        agent.testProvider = null;
+        for (const table of ["zur_pending_actions", "zur_mcp_tools", "zur_mcp_servers"]) agent.store.db.run(`DELETE FROM ${table}`);
+        agent.store.conversations.delete(conversationId);
       });
     }
   });

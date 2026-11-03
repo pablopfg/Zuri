@@ -34,5 +34,7 @@ export type WorkerEnv = Env & {
    * on the domain with Email Routing. Both or neither.
    */
   SEND_EMAIL?: SendEmail;
+  /** Encrypts the MCP servers' tokens (step 18) and, later, Google's (step 19): 32+ random characters. */
+  MCP_CREDENTIAL_KEY?: string;
   ALERT_EMAIL_FROM?: string;
 };
