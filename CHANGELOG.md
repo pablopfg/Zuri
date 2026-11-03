@@ -19,6 +19,36 @@ funciona: [docs/agente/versionamento.md](docs/agente/versionamento.md).
 
 O que já entrou na `develop` e ainda não ganhou número fica em [`changelog/nao-lancado/`](changelog/nao-lancado/) por alguns minutos, até o workflow de versão escrever a seção.
 
+## [0.25.12] - 2026-11-03
+
+Mesclada às 08:58 (UTC-3) · commit [`54ba3fb`](https://github.com/pablopfg/Zuri/commit/54ba3fbfa669d9e8f201866aabb0d10ccbfbaba9) · PR [#134](https://github.com/pablopfg/Zuri/pull/134) · Animação de entrada não esconde o LCP do primeiro acesso
+
+### Corrigido
+
+- A tela de primeiro acesso (e as outras que entram subindo, como a de
+  entrar) agora tem o texto principal medido como o maior conteúdo da página.
+  Antes a animação de entrada começava totalmente transparente, o navegador
+  não contava esse texto e a medição de desempenho falhava de vez em quando.
+
+## [0.25.11] - 2026-11-03
+
+Mesclada às 06:54 (UTC-3) · commit [`e974236`](https://github.com/pablopfg/Zuri/commit/e974236f139a04431f143d336b62eba5843e2ba3) · PR [#132](https://github.com/pablopfg/Zuri/pull/132) · Tempo real por WebSocket com hibernação (nova UI, PR 3)
+
+### Adicionado
+
+- Tempo real: o que muda fora da tela (Telegram, rotinas, outro aparelho)
+  aparece na hora, sem esperar o minuto do sinal de vida e sem recarregar a
+  página. Cada navegador mantém uma conexão só, parada enquanto nada muda.
+  Se ela cair, a Zuri tenta de novo sozinha e, enquanto isso, o sinal de vida
+  de 1 minuto continua trazendo as mudanças.
+
+### Segurança
+
+- A conexão de tempo real é o único WebSocket aceito, num endereço só. Ela
+  exige login válido e a origem do próprio site, leva só números (nunca o
+  conteúdo), fecha quando a sessão termina e não abre durante o bloqueio
+  (/bloquear), com senha a trocar ou com o segundo passo pendente.
+
 ## [0.25.10] - 2026-11-03
 
 Mesclada às 05:12 (UTC-3) · commit [`ed624d1`](https://github.com/pablopfg/Zuri/commit/ed624d12036fd80445f6505ae52066cb65f1e349) · PR [#130](https://github.com/pablopfg/Zuri/pull/130) · Atualização automática só do trecho que mudou
@@ -1982,7 +2012,9 @@ Mesclada às 22:15 (UTC-3) · commit [`360a79e`](https://github.com/pablopfg/Zur
   `npm audit`), CodeQL, Dependabot e rulesets para a `develop` e a `main`.
 - `LICENSE` (MIT), `NOTICE.md`, `SECURITY.md` e `CONTRIBUTING.md`.
 
-[Não lançado]: https://github.com/pablopfg/Zuri/compare/v0.25.10...develop
+[Não lançado]: https://github.com/pablopfg/Zuri/compare/v0.25.12...develop
+[0.25.12]: https://github.com/pablopfg/Zuri/releases/tag/v0.25.12
+[0.25.11]: https://github.com/pablopfg/Zuri/releases/tag/v0.25.11
 [0.25.10]: https://github.com/pablopfg/Zuri/releases/tag/v0.25.10
 [0.25.9]: https://github.com/pablopfg/Zuri/releases/tag/v0.25.9
 [0.25.8]: https://github.com/pablopfg/Zuri/releases/tag/v0.25.8
