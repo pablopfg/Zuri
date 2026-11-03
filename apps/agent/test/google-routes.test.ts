@@ -38,9 +38,9 @@ async function connect(): Promise<GoogleStatus> {
 
 const setMode = (id: string, mode: string) => api("PATCH", `/google/calendars/${encodeURIComponent(id)}`, { mode });
 const PRIMARY = "dono@exemplo.com.br";
-const WORK = "trabalho@group.exemplo.com.br";
-const READER = "consultorio@group.exemplo.com.br";
-const FREE_BUSY = "livre@group.exemplo.com.br";
+const WORK = "trabalho@exemplo.com.br";
+const READER = "consultorio@exemplo.com.br";
+const FREE_BUSY = "livre@exemplo.com.br";
 
 /** Today and the next day, local dates in the default zone. */
 function window(): { from: string; to: string } {

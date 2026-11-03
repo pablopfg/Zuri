@@ -488,7 +488,7 @@ export const ptBRServer = {
   "error.googleNotConfigured": "A Google Agenda ainda não foi configurada nesta instalação.",
   "error.googleNotConnected": "Conecte a Google Agenda primeiro.",
   "error.googleRevoked": "O Google recusou o acesso. Conecte a Google Agenda de novo em Configurações › Integrações.",
-  "error.googleRefused": "O Google recusou a conexão. Confira o ID do cliente, a chave secreta e o endereço de redirecionamento no Google Cloud.",
+  "error.googleRefused": "O Google recusou a conexão. Confira o ID e a chave do cliente e o endereço de redirecionamento no Google Cloud.",
   "error.googleUnavailable": "Não deu para falar com o Google agora. Tente de novo em um minuto.",
   "error.googleRateLimited": "O Google está segurando os pedidos agora. Tente de novo em um minuto.",
   "error.googleNotFound": "Esse evento ou essa agenda não existe mais.",

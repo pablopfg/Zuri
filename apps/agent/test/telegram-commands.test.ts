@@ -232,7 +232,7 @@ describe("reading", () => {
       { id: "e1", etag: '"1"', summary: "Dentista", start: at(mid), end: at(mid + HOUR) },
       { id: "e2", etag: '"1"', summary: "Feriado", start: { date: localDate(mid) }, end: { date: localDate(mid + 24 * HOUR) } },
     ]);
-    sim.events.set("trabalho@group.exemplo.com.br", [{ id: "e3", etag: '"1"', summary: "Agenda oculta", start: at(mid), end: at(mid + HOUR) }]);
+    sim.events.set("trabalho@exemplo.com.br", [{ id: "e3", etag: '"1"', summary: "Agenda oculta", start: at(mid), end: at(mid + HOUR) }]);
     await inOwner(async (agent) => {
       const google = agent.store.google;
       google.network = googleNetwork(sim, { fetch: () => Promise.reject(new Error("no network in tests")) });

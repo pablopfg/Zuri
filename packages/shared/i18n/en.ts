@@ -1886,7 +1886,7 @@ export const en: Messages = {
   "error.googleNotConfigured": "Google Calendar isn't set up on this installation yet.",
   "error.googleNotConnected": "Connect Google Calendar first.",
   "error.googleRevoked": "Google refused the access. Connect Google Calendar again in Settings › Integrations.",
-  "error.googleRefused": "Google refused the connection. Check the client ID, the client secret and the redirect address in Google Cloud.",
+  "error.googleRefused": "Google refused the connection. Check the client ID and key and the redirect address in Google Cloud.",
   "error.googleUnavailable": "Couldn't reach Google right now. Try again in a minute.",
   "error.googleRateLimited": "Google is holding back requests right now. Try again in a minute.",
   "error.googleNotFound": "That event or calendar doesn't exist anymore.",

@@ -70,9 +70,9 @@ export function devGoogle(options: { clientId?: string | undefined; clientSecret
     clientSecret: options.clientSecret ?? "dev-secret",
     calendars: options.calendars ?? [
       { id: "dono@exemplo.com.br", summary: "dono@exemplo.com.br", accessRole: "owner", primary: true, backgroundColor: "#4f7cff", timeZone: "America/Sao_Paulo" },
-      { id: "trabalho@group.exemplo.com.br", summary: "Trabalho", accessRole: "writer", backgroundColor: "#16a34a" },
-      { id: "consultorio@group.exemplo.com.br", summary: "Consultório", accessRole: "reader", backgroundColor: "#f59e0b" },
-      { id: "livre@group.exemplo.com.br", summary: "Livre e ocupado", accessRole: "freeBusyReader" },
+      { id: "trabalho@exemplo.com.br", summary: "Trabalho", accessRole: "writer", backgroundColor: "#16a34a" },
+      { id: "consultorio@exemplo.com.br", summary: "Consultório", accessRole: "reader", backgroundColor: "#f59e0b" },
+      { id: "livre@exemplo.com.br", summary: "Livre e ocupado", accessRole: "freeBusyReader" },
     ],
     events: new Map(),
     grant: null,
@@ -253,10 +253,10 @@ function seed(google: DevGoogle): void {
   add("dono@exemplo.com.br", "Café com a Ana", { dateTime: at(0, 9) }, { dateTime: at(0, 10) }, { location: "Padaria Central" });
   add("dono@exemplo.com.br", "Dentista", { dateTime: at(1, 15) }, { dateTime: at(1, 16) });
   add("dono@exemplo.com.br", "Aniversário da Bia", { date: day(3) }, { date: day(4) });
-  add("trabalho@group.exemplo.com.br", "Reunião de planejamento", { dateTime: at(0, 14) }, { dateTime: at(0, 15, 30) }, { attendees: [{}, {}, {}] });
-  add("trabalho@group.exemplo.com.br", "Revisão do projeto", { dateTime: at(2, 10) }, { dateTime: at(2, 11) });
-  add("consultorio@group.exemplo.com.br", "Atendimento", { dateTime: at(0, 16) }, { dateTime: at(0, 17) });
-  add("consultorio@group.exemplo.com.br", "Atendimento", { dateTime: at(1, 8) }, { dateTime: at(1, 9) });
+  add("trabalho@exemplo.com.br", "Reunião de planejamento", { dateTime: at(0, 14) }, { dateTime: at(0, 15, 30) }, { attendees: [{}, {}, {}] });
+  add("trabalho@exemplo.com.br", "Revisão do projeto", { dateTime: at(2, 10) }, { dateTime: at(2, 11) });
+  add("consultorio@exemplo.com.br", "Atendimento", { dateTime: at(0, 16) }, { dateTime: at(0, 17) });
+  add("consultorio@exemplo.com.br", "Atendimento", { dateTime: at(1, 8) }, { dateTime: at(1, 9) });
 }
 
 let development: DevGoogle | null = null;

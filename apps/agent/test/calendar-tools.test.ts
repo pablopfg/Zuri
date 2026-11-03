@@ -10,8 +10,8 @@ import { AppError } from "../src/http/errors.ts";
 // proposal the owner approves, checked against Google's version of the event.
 
 const PRIMARY = "dono@exemplo.com.br";
-const WORK = "trabalho@group.exemplo.com.br";
-const READER = "consultorio@group.exemplo.com.br";
+const WORK = "trabalho@exemplo.com.br";
+const READER = "consultorio@exemplo.com.br";
 const CALENDAR_TOOLS = ["list_calendar_events", "create_calendar_event", "update_calendar_event", "delete_calendar_event"];
 
 async function connect(world: ChatWorld, modes: Record<string, "read" | "write"> = { [PRIMARY]: "write", [READER]: "read" }): Promise<void> {
