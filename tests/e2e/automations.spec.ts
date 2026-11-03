@@ -127,6 +127,11 @@ test("the AI routine templates fill the form: the morning briefing and the end o
   await expect(form.getByLabel("Nome", { exact: true })).toHaveValue("Fechamento do dia");
   await expect(form.getByLabel("Quando", { exact: true })).toHaveValue("weekly");
   await expect(form.getByLabel("Horário", { exact: true })).toHaveValue("19:00");
+  // Step 22b: the CRM's funnel on Monday mornings.
+  await form.getByRole("button", { name: "Resumo do funil" }).click();
+  await expect(form.getByLabel("Nome", { exact: true })).toHaveValue("Resumo do funil");
+  await expect(form.getByLabel("O que a Zuri deve fazer")).toHaveValue(/funil do meu CRM/);
+  await expect(form.getByLabel("Horário", { exact: true })).toHaveValue("08:00");
   await form.getByRole("button", { name: "Cancelar" }).click();
   await expect(form).toBeHidden();
 });

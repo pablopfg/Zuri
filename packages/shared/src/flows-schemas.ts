@@ -166,7 +166,9 @@ type SameShape<A, B> = [A] extends [B] ? ([B] extends [A] ? true : never) : neve
 const definitionShapeMatches: SameShape<z.output<typeof flowDefinitionSchema>, FlowDefinition> = true;
 void definitionShapeMatches;
 
-export const flowCreateSchema = /* @__PURE__ */ (() => z.object({ name: line(FLOW_LIMITS.name), definition: flowDefinitionSchema }).strict())();
+/** `draft`: the chat's suggestion this flow came from (step 22b), which goes once the flow is saved. */
+export const flowCreateSchema = /* @__PURE__ */ (() =>
+  z.object({ name: line(FLOW_LIMITS.name), definition: flowDefinitionSchema, draft: z.string().regex(RECORD_ID).optional() }).strict())();
 
 export const flowUpdateSchema = /* @__PURE__ */ (() =>
   z

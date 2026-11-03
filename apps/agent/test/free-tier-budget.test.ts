@@ -1,4 +1,4 @@
-import { AGENT_INSTANCE_NAME, FLOW_LIMITS, LIST_LIMIT_DEFAULT } from "@zuri/shared";
+import { AGENT_INSTANCE_NAME, CRM_LIMITS, FLOW_LIMITS, LIST_LIMIT_DEFAULT } from "@zuri/shared";
 import { runInDurableObject } from "cloudflare:test";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import type { ZuriAgent } from "../src/agent/zuri-agent.ts";
@@ -6,6 +6,7 @@ import { ProviderChain } from "../src/ai/chain.ts";
 import { MeteredAI } from "../src/ai/metered.ts";
 import { MockAIProvider } from "../src/ai/mock.ts";
 import { MockTranscriber } from "../src/ai/transcription.ts";
+import { crmSignature } from "../src/gates/crm-events.ts";
 import { telegramWebhookSecret } from "../src/gates/telegram.ts";
 import { MockEmbedder } from "../src/semantic/embedder.ts";
 import { VectorStore } from "../src/semantic/store.ts";
@@ -531,7 +532,9 @@ describe("the Free plan budget of each route", () => {
     // 41: the Telegram channel's look at its link and the snoozed notices' index (step 13) cost a row.
     // 45: the run's two writes and the automation's bookkeeping each move the automations' number (nova UI, PR 2).
     // 49: the flows (step 22a) look for due and waiting runs, and the planning for their next time: four indexed looks.
-    expect(wake.read).toBeLessThanOrEqual(49);
+    // 54: the CRM (step 22b): its settings row and the due follow-ups in the wake, then its settings, the next
+    // follow-up and whether any client has a birthday in the planning; five indexed looks.
+    expect(wake.read).toBeLessThanOrEqual(54);
     expect(wake.written).toBeLessThanOrEqual(30);
   });
 
@@ -652,7 +655,8 @@ describe("the Free plan budget of each route", () => {
       expect(reindex.status).toBe(200);
       // 231: the alarm's planning also checks the MCP tools for a stale vector (step 18b, one read).
       // 233: and the flows' next scheduled or waiting run (step 22a, two indexed looks).
-      expect(reindex.read).toBeLessThanOrEqual(233);
+      // 236: and the CRM's next follow-up or birthday notice (step 22b, three indexed looks).
+      expect(reindex.read).toBeLessThanOrEqual(236);
       expect(reindex.written).toBeLessThanOrEqual(4);
       const off = await cost("PATCH", "/semantic", { enabled: false });
       expect(off.status).toBe(200);
@@ -902,4 +906,88 @@ describe("flows (step 22a)", () => {
       const start = await measure(() => world.flows.reconcile());
       expect(start.read).toBeLessThanOrEqual(2);
     }));
+});
+
+describe("the CRM (step 22b)", () => {
+  it("the Clients tab, a page, the filters, a change and a signed event read about one page, out of 5,000 clients", async () => {
+    const { stages, first } = await runInDurableObject(owner(), (agent: ZuriAgent) => {
+      const { db, crm } = agent.store;
+      const ids = crm.stages().map((stage) => stage.id);
+      const now = Date.now();
+      db.transaction(() => {
+        for (let i = 0; i < CRM_LIMITS.clients; i++) {
+          const id = crypto.randomUUID();
+          const name = `cliente ${String(i).padStart(4, "0")}`;
+          const follow = i % 10 === 0 ? new Date(now + (i - CRM_LIMITS.clients / 2) * 60_000).toISOString() : null;
+          db.run(
+            `INSERT INTO zur_crm_clients (id, name, search_name, stage_id, follow_up_at, source, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 'app', ?, ?)`,
+            id,
+            name,
+            name,
+            ids[i % ids.length] as string,
+            follow,
+            // A client every 3 hours, back about two years: some fifty are this week's.
+            new Date(now - i * 3 * 3600_000).toISOString(),
+            new Date(now).toISOString(),
+          );
+          db.run(`INSERT INTO zur_crm_tags (client_id, tag) VALUES (?, ?), (?, ?)`, id, `t${i % 10}`, id, i % 500 === 0 ? "vip" : `u${i % 7}`);
+        }
+      });
+      return { stages: ids, first: db.one<{ id: string }>(`SELECT id FROM zur_crm_clients ORDER BY search_name LIMIT 1`)?.id ?? "" };
+    });
+    try {
+      // The overview: the stages and tags from their counters, the summary from the follow-ups' and creation's indexes.
+      const overview = await cost("GET", "/crm");
+      expect(overview.status).toBe(200);
+      expect(overview.read).toBeLessThanOrEqual(CRM_LIMITS.clients / 10 + 1_000);
+      expect(overview.written).toBe(0);
+      const page = await cost("GET", "/crm/clients");
+      expect(page.status).toBe(200);
+      // A page is 50 clients and each one's tags (two here), plus the session.
+      expect(page.read).toBeLessThanOrEqual(CRM_LIMITS.page * 4 + 20);
+      const stage = await cost("GET", `/crm/clients?stage=${stages[2]}`);
+      expect(stage.read).toBeLessThanOrEqual(CRM_LIMITS.page * 4 + 20);
+      // A rare tag is read from the tags' index, not by walking every client.
+      const tag = await cost("GET", "/crm/clients?tag=vip");
+      expect(tag.status).toBe(200);
+      // Ten clients carry it: their index entries, rows and tags, plus the session; far from 5,000.
+      expect(tag.read).toBeLessThanOrEqual(100);
+      const today = await cost("GET", "/crm/clients?followUp=today");
+      expect(today.read).toBeLessThanOrEqual(CRM_LIMITS.clients / 10 + 50);
+      // The CRM is full: one more is refused before it costs a write.
+      const refused = await cost("POST", "/crm/clients", { name: "Nova" });
+      expect(refused.status).toBe(507);
+      expect(refused.written).toBe(0);
+      const changed = await cost("PATCH", `/crm/clients/${first}`, { stageId: stages[1], tags: ["t0", "vip"], followUp: { at: new Date(Date.now() + 86_400_000).toISOString() } });
+      expect(changed.status).toBe(200);
+      expect(changed.read).toBeLessThanOrEqual(150);
+      expect(changed.written).toBeLessThanOrEqual(40);
+      // A signed event from n8n on a client it knows: a line in the history, the limits and the repeat check.
+      const opened = await runInDurableObject(owner(), async (agent: ZuriAgent) => {
+        const { db } = agent.store;
+        db.run(`UPDATE zur_crm_clients SET ref = 'cw-1' WHERE id = ?`, first);
+        return agent.store.crmEvents.enable();
+      });
+      const event = JSON.stringify({ id: "evt-budget", type: "client.activity", data: { ref: "cw-1", kind: "message_in", text: "Oi" } });
+      const timestamp = String(Math.floor(Date.now() / 1000));
+      const usage = () => runInDurableObject(owner(), (agent: ZuriAgent) => ({ ...agent.store.db.usage }));
+      const before = await usage();
+      const res = await call(opened.url, {
+        method: "POST",
+        headers: { "content-type": "application/json", "x-zuri-timestamp": timestamp, "x-zuri-signature": await crmSignature(opened.secret, timestamp, event) },
+        body: event,
+      });
+      expect(res.status).toBe(200);
+      await res.arrayBuffer();
+      const after = await usage();
+      expect(after.rowsRead - before.rowsRead).toBeLessThanOrEqual(60);
+      expect(after.rowsWritten - before.rowsWritten).toBeLessThanOrEqual(20);
+    } finally {
+      await runInDurableObject(owner(), (agent: ZuriAgent) => {
+        const { db } = agent.store;
+        for (const table of ["zur_crm_tags", "zur_crm_history", "zur_crm_clients", "zur_crm_tag_counts", "zur_crm_inbox", "zur_crm_counts"]) db.run(`DELETE FROM ${table}`);
+        agent.store.crmEvents.disable();
+      });
+    }
+  });
 });

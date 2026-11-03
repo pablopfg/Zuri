@@ -36,6 +36,7 @@ export {
   ptBRAgenda,
   ptBRContacts,
   ptBRFlows,
+  ptBRCrm,
   t,
 } from "../i18n/index.ts";
 export { AGENT_INSTANCE_NAME } from "./constants.ts";
@@ -142,3 +143,5 @@ export * from "./contacts.ts";
 export * from "./contacts-schemas.ts";
 export * from "./flows.ts";
 export * from "./flows-schemas.ts";
+export * from "./crm.ts";
+export * from "./crm-schemas.ts";

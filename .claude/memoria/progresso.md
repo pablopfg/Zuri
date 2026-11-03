@@ -40,8 +40,15 @@ etapas ficam detalhadas; as mais antigas viram uma linha na tabela.
 | 19 | mesclada (03/11/2026) | #136 | Google Agenda: OAuth próprio do dono, agendas fechada/só ler/ler e editar, 5 ferramentas (apagar e mudar evento com convidados são propostas), `/hoje` com agenda, modelos de rotina, tela **Agenda** (dia, semana, mês) em tempo real por push do Google |
 | 19b | mesclada (03/11/2026) | #144 | Google Contatos: cópia só leitura das etiquetas escolhidas (até 5.000, de hora em hora com `syncToken`), tela **Contatos**, avisos de aniversário e datas especiais, `search_contacts` e `get_contact` |
 | 22a | mesclada (03/11/2026) | #153 | Motor de fluxos no alarme único (7 passos de catálogo fechado), conexões com métodos marcados e credencial cifrada, monitor de sites como modelo, aba **Fluxos** em Automações, `/status` com os sites |
+| 22b | em revisão (03/11/2026) | — | CRM interno na aba **Clientes** de Contatos (funil editável, etiquetas, retorno, aniversário, histórico), avisos do CRM, eventos do n8n assinados com HMAC, 5 ferramentas do CRM, sugestões de fluxo da conversa na aba Fluxos |
 
 ## Últimas etapas (detalhe)
+
+### Etapa 22b · CRM interno e eventos do n8n
+- Entregou: `apps/agent/src/crm/` (`service.ts` `CrmService` com `atomic()` aninhável, funil com etapas padrão no idioma do dono, `tick` no alarme para retornos e aniversários às 9 h no fuso do dono, `announceNew`; `events.ts` `CrmEvents` com `receive` na ordem bloqueio → chave → assinatura → limites → formato → repetição → aplicar inteiro), `gates/crm-events.ts` (segredo derivado de `SESSION_SECRET`, assinatura conferida no Worker antes do Access e de novo no objeto), rotas `api/crm.ts`, ferramentas `tools/crm.ts` (`search_clients`, `get_client`, `crm_summary`, `add_client`, `update_client`) e `tools/flows.ts` (`propose_flow`, só rascunho, com o manejo estreito `flowDrafts`), aba `pages/contacts/crm/ClientsPanel.tsx` (textos em `pt-BR-crm.ts`, carregada sob demanda), seção **Sugestões da Zuri** em Fluxos. Doc: `docs/crm.md`. Plano: `docs/planos/etapa-22b-crm-interno.md`.
+- Migrations: 25 (`crm`: `zur_crm_clients`, `zur_crm_tags`, `zur_crm_tag_counts` e `zur_crm_stages.clients` mantidos por gatilho, `zur_crm_history`, `zur_crm_settings`, `zur_crm_inbox`, `zur_crm_counts`, `zur_flow_drafts`, coluna `crm` em `zur_area_versions`). A próxima livre é a 26.
+- Decisões do Pablo (03/11/2026): aba dentro de Contatos; 5.000 clientes, 1.000 eventos/dia (300/h), 100 registros por cliente; a conversa cadastra e muda sem pedir, apagar só na tela.
+- Para as próximas: a 19c vem antes da 22c (o Pablo ligou as APIs do Business Profile e pediu o Basic API Access em 03/11/2026, 20:46); a 22c pode ganhar gatilho por evento do CRM; o backup (23) leva o CRM, sem `zur_crm_inbox` e `zur_crm_counts`.
 
 ### Etapa 22a · Motor de fluxos e monitor de sites
 - Entregou: `apps/agent/src/flows/` (`engine.ts` com `advance()` por passo e retomada entre despertares; `service.ts` `FlowService` com `tick` no alarme depois de `contacts.tick`, `claim` por horário único, `runNow`, `reconcile`, `prune` pelo contador; `connections.ts` `FlowConnections.call` com fetch protegido, DNS por host por despertar, caminho por segmento; `monitor.ts` `checkSite` e `SiteStates`; `paths.ts` sem protótipo; `dev-flows.ts` simula `*.exemplo.com.br`), rotas `api/flows.ts`, `MeteredAI.generate` com `maxNeurons`/`onNeurons`, `<data source="flow">`, área `flows`, aba `pages/automations/flows/` (textos em `pt-BR-flows.ts`, carregada sob demanda), `/status` com sites. Doc: `docs/fluxos.md`. Plano: `docs/planos/etapa-22a-motor-de-fluxos.md`.
@@ -108,10 +115,10 @@ etapas ficam detalhadas; as mais antigas viram uma linha na tabela.
 - ⚠️ Antes do próximo deploy: criar o widget do Turnstile e gravar `TURNSTILE_SITE_KEY` e `TURNSTILE_SECRET_KEY` (docs/configuracao-cloudflare.md); sem eles o login fica fechado.
 - Não travam: perguntas abertas da etapa 4 (senha digitada de novo para ligar 2FA/passkey; resolvido: alerta repetido e teto de 30 erros em 24 h), da etapa 3 (acerto não zera falhas).
 - Rulesets da `develop` e da `main` conferidos ativos pela API em 31/10/2026.
-- Etapas 19c e 19d (avaliações do Google, depois da 19b): plano aprovado em 03/11/2026 (`docs/planos/google-business-profile.md`); antes da 19c o Pablo liga as APIs do Business Profile e pede o "Basic API Access" ao Google (aprovação pode levar dias).
+- Etapas 19c e 19d (avaliações do Google): plano aprovado em 03/11/2026 (`docs/planos/google-business-profile.md`). O Pablo confirmou em 03/11/2026 que ligou as APIs do Business Profile e pediu o "Basic API Access" ao Google.
 
 ## Próxima etapa
 
-- Número e nome: 19c · Avaliações do Google Business Profile, se o Pablo já tiver o "Basic API Access"; senão 22b · CRM interno e eventos do n8n
-- Dependências mescladas: 19 (Google Agenda), 19b (Google Contatos), 22a (fluxos) para a 22b
-- Precisa de algo do Pablo antes: para a 19c, ligar as APIs do Business Profile e o pedido de acesso no Google; para a 22b, o volume do CRM (plano `docs/planos/workflows-n8n.md`).
+- Número e nome: 19c · Avaliações do Google Business Profile (o Pablo confirmou o pedido do "Basic API Access" em 03/11/2026); depois dela, 22c · Passos da agenda e dos contatos
+- Dependências mescladas: 19 (Google Agenda) e 19b (Google Contatos)
+- Precisa de algo do Pablo antes: que o Google tenha aprovado o "Basic API Access" (a aprovação pode levar dias; a etapa pode começar pelo que não depende da API).

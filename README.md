@@ -184,13 +184,14 @@ O que está na `develop` hoje, etapa por etapa. "extra" marca melhorias feitas f
 | 📅 | **Google Agenda** | Em Configurações > Integrações, você conecta a sua conta do Google pelo seu próprio app OAuth, de graça, e escolhe agenda por agenda: fechada (padrão), só ler, ou ler e editar. A tela **Agenda** mostra os eventos por dia, semana ou mês, cria, edita e apaga eventos nas agendas abertas para edição e acompanha o Google na hora: o que muda lá aparece aqui sem recarregar. Na conversa, a Zuri consulta, cria e muda eventos; apagar, ou mudar evento com convidados, vira cartão para aprovar. `/hoje` no Telegram mostra a agenda do dia, e Automações ganha os modelos Briefing da manhã e Fechamento do dia. Ninguém é convidado nem avisado pela Zuri, e os tokens ficam cifrados. | 19 |
 | 👥 | **Google Contatos** | No cartão Google Agenda e Contatos, você liga os contatos com a mesma conta e escolhe quais etiquetas a Zuri copia, só para leitura, até 5.000 contatos, atualizados de hora em hora. A tela **Contatos** busca por nome, pedaço do telefone ou e-mail e mostra os detalhes de cada um. A Zuri avisa dos aniversários do dia e, se você quiser, das datas especiais, e na conversa e nas rotinas consulta os contatos. Ela nunca muda nada no Google nem manda mensagem a ninguém, e os contatos ficam fora do log. | 19b |
 | 🔁 | **Fluxos e monitor de sites** | Em Automações, a aba **Fluxos** monta passos que rodam sozinhos: chamar um serviço seu, filtrar, montar campos, esperar, avisar você e pedir um resumo à IA. O modelo **Monitorar sites** olha até 10 endereços a cada 15 minutos, testa de novo antes de dizer que um site caiu e avisa na queda e na volta. Um fluxo só chama as conexões que você cadastrou, com os caminhos e métodos marcados (nunca DELETE) e a credencial cifrada, que não volta para a tela. Todo fluxo nasce desligado, ligar pede a senha e só a tela mexe neles. `/status` no bot mostra os sites. | 22a |
+| 🤝 | **CRM interno e eventos do n8n** | Em Contatos, a aba **Clientes** guarda até 5.000 clientes com etapa do funil (que você edita), etiquetas, anotações, retorno e aniversário, e um histórico de cada um. A Zuri avisa dos retornos na hora, dos aniversários às 9 h e dos clientes novos que chegam do n8n. O n8n manda clientes, mensagens e agendamentos por eventos assinados com um segredo que aparece uma vez, até 300 por hora e 1.000 por dia. Na conversa, a Zuri busca, cadastra e muda etapa, etiquetas e retorno sem perguntar, mas só a tela apaga cliente; telefone e e-mail só aparecem quando você pede, e nada dos clientes vai para o log. Pedir um fluxo na conversa deixa uma sugestão na aba Fluxos, que só vira fluxo, desligado, quando você salva. | 22b |
 | 🎯 | **Prioridade que aprende** | O tipo de aviso que você quase sempre deixa de lado desce um nível, e o que você abre logo sobe, no máximo um nível por semana e sempre com "Desfazer". Lembretes e segurança nunca mudam, e cada automação tem a sua prioridade. | 11 |
 
 ## 🔭 O que vem a seguir
 
 | | Funcionalidade | O que faz | Etapa |
 | :---: | --- | --- | :---: |
-| 🔌 | **Integrações** | Avaliações do perfil da empresa no Google (aviso das negativas à equipe e respostas às positivas com aprovação), acesso remoto para o n8n, CRM interno e passos da agenda e dos contatos nos fluxos, todos opcionais. | 19c–22c |
+| 🔌 | **Integrações** | Avaliações do perfil da empresa no Google (aviso das negativas à equipe e respostas às positivas com aprovação), acesso remoto para o n8n e passos da agenda e dos contatos nos fluxos, todos opcionais. | 19c–22c |
 | 💾 | **Backup e instalação** | Backup e importação, guia de instalação só pelo navegador e auditoria final. | 23–25 |
 
 ## 🧭 Como funciona
@@ -363,6 +364,7 @@ scripts/        Lint de i18n, ícones, tamanho do pacote e capturas do README
 | [Google Agenda](docs/google-agenda.md) | Conectar a conta, o que cada agenda permite, a tela Agenda em tempo real e como criar o cliente OAuth do Google |
 | [Google Contatos](docs/google-contatos.md) | Ligar os contatos, escolher as etiquetas, a tela Contatos, os avisos de aniversário e o que muda no cliente OAuth |
 | [Fluxos e monitor de sites](docs/fluxos.md) | A aba Fluxos, os passos, as conexões e suas travas, o monitor de sites, limites e custo |
+| [CRM interno e eventos do n8n](docs/crm.md) | A aba Clientes, o funil, os avisos, o que a conversa pode fazer, como o n8n assina e manda eventos, respostas e limites |
 | [Avisos e Diagnóstico](docs/avisos.md) | Central de avisos, insistência, resumo do dia, vigias e registro de falhas |
 | [Configurar a Cloudflare](docs/configuracao-cloudflare.md) | Segredos, Turnstile, primeiro acesso e recuperação |
 | [Configurar o GitHub](docs/configuracao-github.md) | Rulesets e proteção das branches |

@@ -1,3 +1,4 @@
+import type { FlowDraft } from "./crm.ts";
 import type { Schedule } from "./schedule.ts";
 
 /**
@@ -224,6 +225,8 @@ export interface FlowList {
   counts: { flows: number; enabled: number; connections: number; sites: number; runsToday: number; neuronsToday: number };
   /** False without MCP_CREDENTIAL_KEY: connections can't keep a credential. */
   credentialsAvailable: boolean;
+  /** Flows the chat suggested (step 22b), newest first, until saved or dropped. */
+  drafts: FlowDraft[];
 }
 
 /** True when a step calls the model: the flow then runs at most hourly. */

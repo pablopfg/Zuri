@@ -1,4 +1,4 @@
-import { AGENT_INSTANCE_NAME, GOOGLE_CALLBACK_PATH, GOOGLE_RETURN_PAGE, LIVE_PATH, LOGIN_OPTIONS_PATH, type LoginOptions, TELEGRAM_LIMITS } from "@zuri/shared";
+import { AGENT_INSTANCE_NAME, CRM_EVENTS_PATH, CRM_LIMITS, CRM_SIGNATURE_HEADER, CRM_TIMESTAMP_HEADER, GOOGLE_CALLBACK_PATH, GOOGLE_RETURN_PAGE, LIVE_PATH, LOGIN_OPTIONS_PATH, type LoginOptions, TELEGRAM_LIMITS } from "@zuri/shared";
 import { checkCsrf, readBodyLimited } from "./api/http.ts";
 import { CLIENT_GEO_HEADER, geoFromCf } from "./auth/client.ts";
 import { TURNSTILE_ORIGIN, turnstileSiteKey } from "./auth/turnstile.ts";
@@ -8,6 +8,7 @@ import { type AccessConfig, verifyAccessToken } from "./gates/access.ts";
 import { withBodyRead } from "./gates/body.ts";
 import { withApiHeaders, withWebHeaders } from "./gates/headers.ts";
 import { isTelegramWebhookSecret, TELEGRAM_SECRET_HEADER, TELEGRAM_WEBHOOK_PATH } from "./gates/telegram.ts";
+import { checkCrmSignature, crmEventsKey } from "./gates/crm-events.ts";
 import { GOOGLE_CHANNEL_HEADER, GOOGLE_PUSH_PATH, GOOGLE_STATE_HEADER, GOOGLE_TOKEN_HEADER, isGooglePushToken } from "./gates/google-push.ts";
 import { AppError, errorResponse } from "./http/errors.ts";
 import { log } from "./log.ts";
@@ -56,6 +57,10 @@ async function handle(request: Request, env: WorkerEnv): Promise<Response> {
   if (request.headers.get("upgrade")?.toLowerCase() === "websocket" && !(request.method === "GET" && url.pathname === LIVE_PATH)) {
     return refuse(new AppError("FORBIDDEN", "error.websocketNotSupported"));
   }
+
+  // n8n's CRM events (step 22b) can't sign in to Access either: the signature proves each one, here,
+  // before Access and before the object. Nothing else on this path gets past.
+  if (url.pathname.startsWith(CRM_EVENTS_PATH)) return withApiHeaders(await crmEvents(request, url, env, config.secretsReady));
 
   // Gate 3.
   if (config.access && !(await passesAccess(request, url, config.access, config.secretsReady, env))) {
@@ -140,6 +145,40 @@ async function telegramWebhook(request: Request, url: URL, env: WorkerEnv): Prom
   void answer.body?.cancel();
   // A failure inside the object asks Telegram to try again (the update_id is only kept once handled).
   return new Response(null, { status: answer.status >= 500 ? 500 : 200 });
+}
+
+/**
+ * n8n's events for the CRM (step 22b): POST, a well-formed key in the path,
+ * at most 16 KB, a signature from the last 5 minutes made with the secret of
+ * that key (derived from SESSION_SECRET). Anything else is refused here
+ * without an object request; the object checks again that the key is the one
+ * turned on. Only the body and the two signature headers go on.
+ */
+async function crmEvents(request: Request, url: URL, env: WorkerEnv, secretsReady: boolean): Promise<Response> {
+  const key = crmEventsKey(url.pathname);
+  if (request.method !== "POST" || key === null || !secretsReady) {
+    await request.body?.cancel();
+    return errorResponse(secretsReady ? new AppError("NOT_FOUND") : new AppError("NOT_CONFIGURED"));
+  }
+  let body: Uint8Array;
+  try {
+    body = await readBodyLimited(request, CRM_LIMITS.eventBodyBytes);
+  } catch (error) {
+    const refused = errorResponse(error);
+    const tooLarge = error instanceof AppError && error.messageKey === "error.bodyTooLarge";
+    return tooLarge ? new Response(refused.body, { status: 413, headers: refused.headers }) : refused;
+  }
+  const timestamp = request.headers.get(CRM_TIMESTAMP_HEADER);
+  const signature = request.headers.get(CRM_SIGNATURE_HEADER);
+  const checked = await checkCrmSignature({ key, timestamp, signature, body, sessionSecret: env.SESSION_SECRET, now: Date.now() });
+  if (!checked.ok) return errorResponse(new AppError("UNAUTHORIZED"));
+  const agent = env.AGENT.getByName(AGENT_INSTANCE_NAME);
+  const forwarded = new Request(new URL(url.pathname, url.origin), {
+    method: "POST",
+    headers: { "content-type": "application/json", [CRM_TIMESTAMP_HEADER]: timestamp ?? "", [CRM_SIGNATURE_HEADER]: signature ?? "" },
+    body,
+  });
+  return withoutRawErrors(await agent.fetch(forwarded));
 }
 
 /**

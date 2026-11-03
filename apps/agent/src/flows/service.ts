@@ -1,6 +1,8 @@
 import {
   AUTOMATION_CATCH_UP_MS,
+  CRM_LIMITS,
   FLOW_LIMITS,
+  type FlowDraft,
   type Flow,
   type FlowDefinition,
   type FlowList,
@@ -159,7 +161,50 @@ export class FlowService {
         neuronsToday: Math.round(this.neuronsToday()),
       },
       credentialsAvailable: this.deps.connections.credentialsAvailable,
+      drafts: this.drafts(),
     };
+  }
+
+  // ---------- The chat's suggestions (step 22b) ----------
+
+  /** The suggestions still valid, newest first; the expired ones go. */
+  drafts(): FlowDraft[] {
+    const at = this.iso();
+    this.db.run(`DELETE FROM zur_flow_drafts WHERE expires_at <= ?`, at);
+    return this.db
+      .all<{ id: string; name: string; definition: string; created_at: string; expires_at: string }>(
+        `SELECT id, name, definition, created_at, expires_at FROM zur_flow_drafts ORDER BY created_at DESC, id LIMIT ?`,
+        CRM_LIMITS.drafts,
+      )
+      .map((row) => ({ id: row.id, name: row.name, definition: safeJson(row.definition), createdAt: row.created_at, expiresAt: row.expires_at }));
+  }
+
+  /**
+   * A flow the chat suggests: checked as if it were saved (schema, connections,
+   * methods, sites), kept only as a draft. Nothing runs and nothing is turned
+   * on: the owner reviews it on the Flows tab and saves it with the password.
+   * Five at most; the oldest goes for a new one.
+   */
+  saveDraft(input: unknown): FlowDraft {
+    const data = parse(flowCreateSchema, input);
+    if (data.draft) throw new AppError("VALIDATION_FAILED", undefined, { fields: ["draft"] });
+    this.checkReferences(data.definition, null);
+    const id = crypto.randomUUID();
+    const created = this.iso();
+    const expires = this.iso(this.now() + CRM_LIMITS.draftMs);
+    this.db.transaction(() => {
+      this.db.run(
+        `DELETE FROM zur_flow_drafts WHERE id IN (SELECT id FROM zur_flow_drafts ORDER BY created_at DESC, id LIMIT -1 OFFSET ?)`,
+        CRM_LIMITS.drafts - 1,
+      );
+      this.db.run(`INSERT INTO zur_flow_drafts (id, name, definition, created_at, expires_at) VALUES (?, ?, ?, ?, ?)`, id, data.name, JSON.stringify(data.definition), created, expires);
+    });
+    return { id, name: data.name, definition: data.definition, createdAt: created, expiresAt: expires };
+  }
+
+  removeDraft(id: string): void {
+    const { rowsWritten } = this.db.run(`DELETE FROM zur_flow_drafts WHERE id = ?`, id);
+    if (rowsWritten === 0) throw new AppError("NOT_FOUND", "error.flowDraftNotFound");
   }
 
   get(id: string): Flow {
@@ -237,6 +282,8 @@ export class FlowService {
         at,
       );
       this.deps.sites.keep(id, sitesOf(data.definition));
+      // Saved from the chat's suggestion: the suggestion has done its job.
+      if (data.draft) this.db.run(`DELETE FROM zur_flow_drafts WHERE id = ?`, data.draft);
       recordActivity(this.db, "flow.created", { nodes: data.definition.nodes.length });
     });
     return this.get(id);
@@ -697,6 +744,15 @@ function sitesOf(definition: Pick<FlowDefinition, "nodes">): string[] {
 }
 
 /** A stored definition for showing it; one that no longer passes the schema shows as an empty manual flow. */
+/** A draft's definition as stored (checked when it was saved; the editor checks it again). */
+function safeJson(value: string): unknown {
+  try {
+    return JSON.parse(value);
+  } catch {
+    return null;
+  }
+}
+
 function safeDefinition(value: string): FlowDefinition {
   try {
     const parsed = flowDefinitionSchema.safeParse(JSON.parse(value));

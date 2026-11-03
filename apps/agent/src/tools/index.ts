@@ -2,6 +2,8 @@ import { TOOL_NAMES } from "@zuri/shared";
 import { automationTools } from "./automations.ts";
 import { calendarTools } from "./calendar.ts";
 import { contactTools } from "./contacts.ts";
+import { crmTools } from "./crm.ts";
+import { flowTools } from "./flows.ts";
 import { findTools } from "./find-tools.ts";
 import { memoryTools } from "./memories.ts";
 import { noteTools } from "./notes.ts";
@@ -15,7 +17,7 @@ import { projectTools, taskTools } from "./tasks.ts";
  * owner's data through the services: no network, shell, code, credentials or
  * deploy (rule 3). The list must match TOOL_NAMES exactly; a test checks it.
  */
-export const ALL_TOOLS: readonly ToolDefinition[] = [...taskTools, ...planTools, ...noteTools, ...projectTools, ...memoryTools, ...searchTools, ...automationTools, ...calendarTools, ...contactTools, ...findTools];
+export const ALL_TOOLS: readonly ToolDefinition[] = [...taskTools, ...planTools, ...noteTools, ...projectTools, ...memoryTools, ...searchTools, ...automationTools, ...calendarTools, ...contactTools, ...crmTools, ...flowTools, ...findTools];
 
 const names = new Set<string>();
 for (const tool of ALL_TOOLS) {

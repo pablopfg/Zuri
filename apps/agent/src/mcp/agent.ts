@@ -71,6 +71,7 @@ export class McpTurnTools {
   /** Prompt tokens the active tools take: find_tools adds only what still fits in the share. */
   #spent = 0;
   readonly #answered = new Set<string>();
+  #thirdParty = false;
   /** A routine's run (its automation id): what runs on its own is what the owner let run there. */
   readonly #routine: string | undefined;
 
@@ -83,6 +84,8 @@ export class McpTurnTools {
     opts: {
       /** Servers whose answers are already in this conversation's context: a call to another one asks first. */
       answered?: Iterable<string>;
+      /** A recent message of this conversation read the CRM (strangers' text): no external call runs unasked. */
+      thirdParty?: boolean;
       /** The turn's share of the invocation's subrequests (smaller in a Telegram turn, whose bot also sends). */
       budget?: number;
       /** The triage by meaning (step 18b): how far above the floor each tool is from the message. */
@@ -97,6 +100,7 @@ export class McpTurnTools {
     this.#routine = opts.routine?.id;
     const routine = opts.routine;
     for (const id of opts.answered ?? []) this.#answered.add(id);
+    this.#thirdParty = opts.thirdParty === true;
     for (const t of available) this.#byName.set(t.tool.exposed_name, t);
     this.tools = available.map((t) => external(t, routine ? { allowed: routine.allowed.has(t.tool.exposed_name) } : undefined));
     const chosen = triage(
@@ -144,9 +148,19 @@ export class McpTurnTools {
     }));
   }
 
+  /**
+   * The turn read text a stranger could have written straight into Zuri (the
+   * CRM's history, from n8n): from then on no external call runs on its own,
+   * so a planted instruction can't send the owner's data out unseen.
+   */
+  sawThirdPartyText(): void {
+    this.#thirdParty = true;
+  }
+
   /** True when a call that would run on its own must ask the owner this time. */
   mustAsk(tool: ExternalTool, argsChars: number): boolean {
     if (tool.policy !== "auto") return true;
+    if (this.#thirdParty) return true;
     if (argsChars > ESCALATE.argsChars) return true;
     if (this.#sentChars + argsChars > ESCALATE.turnChars) return true;
     return [...this.#answered].some((id) => id !== tool.serverId);
