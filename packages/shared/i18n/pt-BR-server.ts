@@ -491,6 +491,7 @@ export const ptBRServer = {
   "error.googleRevoked": "O Google recusou o acesso. Conecte a Google Agenda de novo em Configurações › Integrações.",
   "error.googleRefused": "O Google recusou a conexão. Confira o ID e a chave do cliente e o endereço de redirecionamento no Google Cloud.",
   "error.googleUnavailable": "Não deu para falar com o Google agora. Tente de novo em um minuto.",
+  "error.googleInvalid": "O Google não aceitou esse pedido. Confira os dados e tente de novo.",
   "error.googleRateLimited": "O Google está segurando os pedidos agora. Tente de novo em um minuto.",
   "error.googleNotFound": "Esse evento ou essa agenda não existe mais.",
   "error.googleEventChanged": "O evento mudou no Google enquanto isso, então nada foi feito. Abra de novo e tente outra vez.",

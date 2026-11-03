@@ -62,7 +62,7 @@ etapas ficam detalhadas; as mais antigas viram uma linha na tabela.
 - Um alarme só (P8): use `AutomationService.rearm()`/`otherDue`, nunca outro alarme. O runner aceita `context: "scheduled"` (ferramentas da Zuri só leem; externas só as liberadas para rotinas, o resto vira proposta de 24 h). Toda IA por `agent.ai()`.
 - Bloqueio (16b): a etapa 20 liga os tokens no `RemoteTokenHook` (`suspendAll`/`resumeAll`/`active`) e põe **Revogar** em `/tokens`; IA, MCP e workflows em segundo plano consultam `auth.lockdown.active()`; rota que precise funcionar no bloqueio entra em `WHILE_LOCKDOWN`.
 - Busca por significado (17): item novo com texto pesquisável ganha entrada em `KIND_SOURCES` e migration nova em `SEMANTIC_MIGRATIONS`.
-- JS inicial em ~138,2 kB (teto 139,1): tela nova sob demanda, textos via `addMessages`; tela que trava o app vai no chunk de `PasswordChangePage`.
+- JS inicial em ~138,2 kB (teto 139,4): tela nova sob demanda, textos via `addMessages`; tela que trava o app vai no chunk de `PasswordChangePage`.
 
 <!-- Modelo, até 10 linhas por etapa:
 ### Etapa NN · <nome>

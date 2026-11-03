@@ -1889,6 +1889,7 @@ export const en: Messages = {
   "error.googleRevoked": "Google refused the access. Connect Google Calendar again in Settings › Integrations.",
   "error.googleRefused": "Google refused the connection. Check the client ID and key and the redirect address in Google Cloud.",
   "error.googleUnavailable": "Couldn't reach Google right now. Try again in a minute.",
+  "error.googleInvalid": "Google didn't accept that request. Check the details and try again.",
   "error.googleRateLimited": "Google is holding back requests right now. Try again in a minute.",
   "error.googleNotFound": "That event or calendar doesn't exist anymore.",
   "error.googleEventChanged": "The event changed at Google in the meantime, so nothing was done. Open it again and try once more.",

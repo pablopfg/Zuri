@@ -21,7 +21,7 @@ const MESSAGE: Record<GoogleError["kind"], [AppError["code"], MessageKey]> = {
   free_busy: ["VALIDATION_FAILED", "error.googleFreeBusy"],
   budget: ["SERVICE_UNAVAILABLE", "error.googleUnavailable"],
   // Google refused the values themselves (400): the owner checks what was sent.
-  invalid: ["VALIDATION_FAILED", "error.validationFailed"],
+  invalid: ["VALIDATION_FAILED", "error.googleInvalid"],
   lockdown: ["LOCKDOWN_ACTIVE", "auth.lockdown.active"],
 };
 
