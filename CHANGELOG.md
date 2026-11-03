@@ -19,6 +19,52 @@ funciona: [docs/agente/versionamento.md](docs/agente/versionamento.md).
 
 O que já entrou na `develop` e ainda não ganhou número fica em [`changelog/nao-lancado/`](changelog/nao-lancado/) por alguns minutos, até o workflow de versão escrever a seção.
 
+## [0.25.5] - 2026-11-03
+
+Mesclada às 02:06 (UTC-3) · commit [`ee60bcd`](https://github.com/pablopfg/Zuri/commit/ee60bcd42a7230d778d54e63534a33b3be5b3ad5) · PR [#120](https://github.com/pablopfg/Zuri/pull/120) · Autonomia por ferramenta em três níveis e nas rotinas com IA
+
+### Adicionado
+
+- Três níveis para cada ferramenta externa, em Configurações › Integrações:
+  "Perguntar sempre" (o padrão), "Sem perguntar na conversa" e "Sem
+  perguntar, também em rotinas e workflows". Subir de nível pede a sua senha e
+  gera um aviso de segurança. Uma ferramenta que pode mudar dados também sobe,
+  com um aviso a mais na tela.
+- A Zuri diz o que cada ferramenta externa faz (só consulta, altera dados, ou
+  apaga e sobrescreve) lendo o nome, a descrição e os campos dela, e mostra o
+  motivo no cartão. Você confirma ou troca; deixar menos cautelosa pede a sua
+  senha.
+- As rotinas com IA podem usar ferramentas externas: as do terceiro nível e as
+  que você liberar só para aquela rotina, na nova seção "Ferramentas externas"
+  ao editar a rotina.
+- Quando uma rotina esbarra num limite (dados demais, ou outro serviço já
+  respondeu), nada é enviado: a chamada fica esperando a sua aprovação numa
+  conversa "Rotina: <nome>" por 24 horas, você recebe um aviso no app e no
+  Telegram, e a rotina segue.
+
+### Segurança
+
+- Ferramentas que apagam ou sobrescrevem sempre perguntam, em qualquer nível,
+  e nunca são liberadas para uma rotina. A marcação do serviço só pode deixar
+  uma ferramenta mais cautelosa.
+- Enquanto alguma ferramenta roda sozinha em rotinas, criar uma rotina com IA,
+  mudar a instrução dela ou aprovar uma que a Zuri propôs pede a sua senha.
+- Desligar uma ferramenta, ou voltá-la para "Perguntar sempre", também a tira
+  das rotinas.
+- Mudar a definição de uma ferramenta volta ela para "Perguntar sempre" e a
+  tira das rotinas. Mudar a instrução de uma rotina, ou apagá-la, desfaz a
+  liberação das ferramentas dela.
+- Cada execução de rotina deixa no máximo 3 propostas, e as rotinas de um
+  mesmo despertar dividem no máximo 12 chamadas externas.
+
+### Atualização
+
+- O banco ganha a migration 20 (nível das ferramentas para rotinas, o tipo
+  confirmado por você, as ferramentas liberadas por rotina e a conversa de
+  cada rotina). Ela roda sozinha na primeira requisição e só acrescenta. Uma
+  ferramenta que estava em "Usar sem perguntar" sem ser marcada como consulta
+  volta para "Perguntar sempre".
+
 ## [0.25.4] - 2026-11-03
 
 Mesclada às 00:59 (UTC-3) · commit [`2aba183`](https://github.com/pablopfg/Zuri/commit/2aba183998d18bc1f4fb6495b365226bb4ffd85d) · PR [#108](https://github.com/pablopfg/Zuri/pull/108) · Nova organização da interface, textos revisados e atualização automática
@@ -1814,7 +1860,8 @@ Mesclada às 22:15 (UTC-3) · commit [`360a79e`](https://github.com/pablopfg/Zur
   `npm audit`), CodeQL, Dependabot e rulesets para a `develop` e a `main`.
 - `LICENSE` (MIT), `NOTICE.md`, `SECURITY.md` e `CONTRIBUTING.md`.
 
-[Não lançado]: https://github.com/pablopfg/Zuri/compare/v0.25.4...develop
+[Não lançado]: https://github.com/pablopfg/Zuri/compare/v0.25.5...develop
+[0.25.5]: https://github.com/pablopfg/Zuri/releases/tag/v0.25.5
 [0.25.4]: https://github.com/pablopfg/Zuri/releases/tag/v0.25.4
 [0.25.3]: https://github.com/pablopfg/Zuri/releases/tag/v0.25.3
 [0.25.2]: https://github.com/pablopfg/Zuri/releases/tag/v0.25.2
