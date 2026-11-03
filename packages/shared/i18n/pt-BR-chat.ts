@@ -171,4 +171,6 @@ export const ptBRChat = {
   "web.chat.approval.mcpResultError": "O serviço respondeu com um erro",
   "web.chat.approval.mcpResultEmpty": "(sem conteúdo)",
   "web.chat.approval.mcpFailed": "A chamada falhou. Confira no serviço antes de pedir de novo.",
+  "web.chat.tool.search_contacts": "Procurar nos contatos",
+  "web.chat.tool.get_contact": "Abrir um contato",
 } as const;

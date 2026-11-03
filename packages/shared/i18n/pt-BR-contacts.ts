@@ -1,0 +1,27 @@
+// The pt-BR texts of the Contacts screen (step 19b): the read-only copy of the owner's
+// Google contacts. They come with the screen, on demand (rule P11).
+export const ptBRContacts = {
+  "web.contacts.title": "Contatos",
+  "web.contacts.description": "Os contatos das etiquetas que você escolheu no Google. Aqui é só leitura: para mudar algo, use o Google Contatos.",
+  "web.contacts.search": "Buscar por nome, telefone ou e-mail",
+  "web.contacts.label": "Etiqueta",
+  "web.contacts.allLabels": "Todas as etiquetas",
+  "web.contacts.empty": "Nenhum contato encontrado.",
+  "web.contacts.emptyAll": "Nenhum contato copiado ainda. Escolha as etiquetas em Integrações.",
+  "web.contacts.off.title": "Ligue os contatos do Google",
+  "web.contacts.off.body": "Em Integrações, ligue os contatos e escolha quais etiquetas a Zuri copia.",
+  "web.contacts.goIntegrations": "Ir para Integrações",
+  "web.contacts.more": "Ver mais",
+  "web.contacts.noName": "(sem nome)",
+  "web.contacts.phones": "Telefones",
+  "web.contacts.emails": "E-mails",
+  "web.contacts.birthday": "Aniversário",
+  "web.contacts.dates": "Datas especiais",
+  "web.contacts.company": "Empresa",
+  "web.contacts.notes": "Observações",
+  "web.contacts.fields": "Campos personalizados",
+  "web.contacts.labels": "Etiquetas",
+  "web.contacts.openGoogle": "Abrir no Google Contatos",
+  "web.contacts.close": "Fechar",
+  "web.contacts.nickname": "Apelido",
+} as const;

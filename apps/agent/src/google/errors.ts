@@ -23,6 +23,10 @@ const MESSAGE: Record<GoogleError["kind"], [AppError["code"], MessageKey]> = {
   // Google refused the values themselves (400): the owner checks what was sent.
   invalid: ["VALIDATION_FAILED", "error.googleInvalid"],
   lockdown: ["LOCKDOWN_ACTIVE", "auth.lockdown.active"],
+  // Handled inside the contacts' sync (a full read again); never meant for the owner.
+  expired: ["SERVICE_UNAVAILABLE", "error.googleUnavailable"],
+  api_disabled: ["CONFLICT", "error.googleApiDisabled"],
+  contacts_scope: ["VALIDATION_FAILED", "error.googleContactsScope"],
 };
 
 const INPUT: Record<EventInputError["reason"], MessageKey> = {

@@ -659,6 +659,14 @@ const KIND_TEXT: Record<Exclude<NoticeKind, "security">, Text> = {
   "alerts.lowered": { title: "notice.alerts.lowered.title", body: "notice.alerts.lowered.body" },
   "alerts.raised": { title: "notice.alerts.raised.title", body: "notice.alerts.raised.body" },
   "google.reconnect": { title: "notice.google.reconnect.title", body: "notice.google.reconnect.body" },
+  "contacts.birthdays": { title: "notice.contacts.birthdays.title", body: "notice.contacts.birthdays.body" },
+  "contacts.dates": { title: "notice.contacts.dates.title", body: "notice.contacts.dates.body" },
+  "contacts.added": { title: "notice.contacts.added.title", body: "notice.contacts.added.body" },
+  "contacts.labelGone": { title: "notice.contacts.labelGone.title", body: "notice.contacts.labelGone.body" },
+  "contacts.api_disabled": { title: "notice.contacts.problem.title", body: "notice.contacts.api_disabled.body" },
+  "contacts.scope": { title: "notice.contacts.problem.title", body: "notice.contacts.scope.body" },
+  "contacts.too_many": { title: "notice.contacts.problem.title", body: "notice.contacts.too_many.body" },
+  "contacts.unavailable": { title: "notice.contacts.problem.title", body: "notice.contacts.unavailable.body" },
 };
 
 /** Security alerts: what happened and what to do if it was not the owner, never where it came from (it may show on a locked screen). */

@@ -1,5 +1,6 @@
 import {
   type CalendarMode,
+  CONTACTS_SCOPE,
   GOOGLE_CALLBACK_PATH,
   GOOGLE_LIMITS,
   GOOGLE_STATE_PREFIX,
@@ -16,12 +17,18 @@ import type { InternalState } from "../db/internal-state.ts";
 import { googlePushToken, GOOGLE_PUSH_PATH } from "../gates/google-push.ts";
 import { log } from "../log.ts";
 import { McpCredentials } from "../mcp/credentials.ts";
+import { forgetContacts } from "./contacts-store.ts";
 import { type CalendarEvent, cleanText, readEvent, startMs } from "./events.ts";
 
 export const GOOGLE_AUTH_URL = "https://accounts.google.com/o/oauth2/v2/auth";
 export const GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token";
 export const GOOGLE_REVOKE_URL = "https://oauth2.googleapis.com/revoke";
 export const GOOGLE_CALENDAR_API = "https://www.googleapis.com/calendar/v3";
+/** The People API (step 19b): the contacts and their labels, read only. */
+export const GOOGLE_PEOPLE_API = "https://people.googleapis.com/v1";
+
+/** What a consent asks for: the calendar (step 19), or the contacts joined to the same grant (step 19b). */
+export type GooglePurpose = "calendar" | "contacts";
 
 /**
  * The narrowest scopes that do the job: the list of calendars (read only) and
@@ -71,7 +78,10 @@ export type GoogleErrorKind =
   | "free_busy"
   | "budget"
   | "invalid"
-  | "lockdown";
+  | "lockdown"
+  | "expired"
+  | "api_disabled"
+  | "contacts_scope";
 
 export class GoogleError extends Error {
   constructor(
@@ -121,6 +131,7 @@ export interface GoogleDeps {
 }
 
 interface Pending {
+  purpose?: GooglePurpose;
   stateHash: string;
   verifier: string;
   session: string;
@@ -265,6 +276,16 @@ export class GoogleCalendar {
     return this.account()?.email ?? null;
   }
 
+  /** The account is connected and in order (not waiting for the owner). */
+  connected(): boolean {
+    return this.account()?.status === "connected";
+  }
+
+  /** Whether Google granted this scope to the connected account (with include_granted_scopes, all of the grant). */
+  granted(scope: string): boolean {
+    return this.account()?.scopes.split(" ").includes(scope) ?? false;
+  }
+
   /** The calendars' change counters, for the screen's "changed elsewhere" (they move the calendar area). */
   touch(calendarId: string): void {
     this.deps.db.run(`UPDATE zur_google_calendars SET changed = changed + 1 WHERE id = ?`, calendarId);
@@ -278,12 +299,15 @@ export class GoogleCalendar {
   // ---------- Connecting ----------
 
   /** The Google page where the owner allows access. Nothing about the account is stored until `finish`. */
-  async begin(session: string): Promise<string> {
+  async begin(session: string, purpose: GooglePurpose = "calendar"): Promise<string> {
     this.assertReady();
+    // The contacts join a grant that exists: the account comes from connecting the calendar.
+    if (purpose === "contacts" && this.account()?.status !== "connected") throw new GoogleError("not_connected");
     const state = `${GOOGLE_STATE_PREFIX}${randomToken(32)}`;
     const verifier = randomToken(48);
     const challenge = toBase64Url(new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier))));
     const pending: Pending = {
+      purpose,
       stateHash: await sha256Hex(state),
       verifier: await this.credentials.encrypt(SEAL_VERIFIER, verifier),
       session: await sha256Hex(session),
@@ -295,11 +319,11 @@ export class GoogleCalendar {
       client_id: this.deps.clientId()?.trim() ?? "",
       redirect_uri: this.redirectUri(),
       response_type: "code",
-      scope: GOOGLE_CALENDAR_SCOPES.join(" "),
+      scope: (purpose === "contacts" ? [CONTACTS_SCOPE] : GOOGLE_CALENDAR_SCOPES).join(" "),
       access_type: "offline",
       // Asked every time, so Google always hands out a refresh token.
       prompt: "consent",
-      // The contacts of step 19b join this same grant later.
+      // The contacts of step 19b join this same grant (and the calendar's scopes come back with them).
       include_granted_scopes: "true",
       state,
       code_challenge: challenge,
@@ -318,7 +342,7 @@ export class GoogleCalendar {
    * code is redeemed with the PKCE verifier and the client secret. Returns
    * whether another account took the place of a connected one.
    */
-  async finish(input: { state: string; code?: string | undefined; error?: string | undefined }, session: string): Promise<{ replaced: boolean }> {
+  async finish(input: { state: string; code?: string | undefined; error?: string | undefined }, session: string): Promise<{ replaced: boolean; purpose: GooglePurpose }> {
     this.assertReady();
     const raw = this.deps.state.get<string>("google_oauth_pending");
     this.deps.state.delete("google_oauth_pending");
@@ -347,11 +371,13 @@ export class GoogleCalendar {
     const refresh = typeof token.refresh_token === "string" ? token.refresh_token : "";
     const granted = typeof token.scope === "string" ? token.scope.split(" ") : [];
     const previous = this.account();
-    if (!refresh || !GOOGLE_CALENDAR_SCOPES.every((scope) => granted.includes(scope))) {
+    const purpose: GooglePurpose = pending.purpose === "contacts" ? "contacts" : "calendar";
+    const required: readonly string[] = purpose === "contacts" ? [...GOOGLE_CALENDAR_SCOPES, CONTACTS_SCOPE] : GOOGLE_CALENDAR_SCOPES;
+    if (!refresh || !required.every((scope) => granted.includes(scope))) {
       // Unticked permissions on Google's page: give back what was granted and stop. Not while an account is
       // connected: revoking ends the whole grant, which may be that account's.
       if (!previous) await this.revoke(refresh || (typeof token.access_token === "string" ? token.access_token : ""), meter);
-      throw new GoogleError("scopes");
+      throw new GoogleError(purpose === "contacts" ? "contacts_scope" : "scopes");
     }
     const access = accessFrom(token, this.clock());
     const list = await this.calendarList(access.token, meter);
@@ -362,8 +388,12 @@ export class GoogleCalendar {
     const sealedRefresh = await this.credentials.encrypt(SEAL_REFRESH, refresh);
     const sealedAccess = await this.credentials.encrypt(SEAL_ACCESS, access.token);
     this.deps.db.transaction(() => {
-      // Another account starts from nothing: its calendars stay hidden until the owner opens them.
-      if (replaced) this.deps.db.run(`DELETE FROM zur_google_calendars`);
+      // Another account starts from nothing: its calendars stay hidden until the owner opens them,
+      // and the copy of the other account's contacts goes (step 19b).
+      if (replaced) {
+        this.deps.db.run(`DELETE FROM zur_google_calendars`);
+        forgetContacts(this.deps.db);
+      }
       this.deps.db.run(
         `INSERT INTO zur_google_account (id, email, refresh_token, access_token, access_expires_at, scopes, status, problem, problem_noticed_at, connected_at, checked_at)
          VALUES (1, ?, ?, ?, ?, ?, 'connected', NULL, NULL, ?, ?)
@@ -385,7 +415,7 @@ export class GoogleCalendar {
       const old = await this.credentials.decrypt(SEAL_REFRESH, previous.refresh_token);
       if (old && old !== refresh) await this.revoke(old, meter);
     }
-    return { replaced };
+    return { replaced, purpose };
   }
 
   private storeCalendars(list: CalendarEntry[]): void {
@@ -452,6 +482,8 @@ export class GoogleCalendar {
     this.deps.db.transaction(() => {
       this.deps.db.run(`DELETE FROM zur_google_calendars`);
       this.deps.db.run(`DELETE FROM zur_google_account`);
+      // The contacts' copy goes with the access that read them (step 19b).
+      forgetContacts(this.deps.db);
       this.deps.state.delete("google_oauth_pending");
     });
     this.#due = undefined;
@@ -557,7 +589,10 @@ export class GoogleCalendar {
     try {
       // Google never redirects these calls; one that does is refused rather than followed.
       res = await this.network.fetch(url, { ...init, redirect: "manual", signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) });
-    } catch {
+    } catch (error) {
+      // The platform's cap on a wake's subrequests, spent by the other work of the same wake:
+      // the rest waits for the next one, like a spent meter, and Google isn't to blame.
+      if (error instanceof Error && /too many subrequests/i.test(error.message)) throw new GoogleError("budget");
       throw new GoogleError("unavailable");
     }
     if (res.status >= 300 && res.status < 400) {
@@ -573,9 +608,25 @@ export class GoogleCalendar {
     meter: GoogleMeter,
     init: { method?: string; query?: Record<string, string>; body?: unknown; ifMatch?: string } = {},
   ): Promise<Record<string, unknown> | null> {
-    const url = new URL(`${GOOGLE_CALENDAR_API}${path}`);
+    return this.call(GOOGLE_CALENDAR_API, path, meter, init);
+  }
+
+  /** A People API read (step 19b): GET only, with the account's token. */
+  async people(path: string, meter: GoogleMeter, query: Record<string, string>): Promise<Record<string, unknown>> {
+    const body = await this.call(GOOGLE_PEOPLE_API, path, meter, { query });
+    if (!body) throw new GoogleError("unavailable");
+    return body;
+  }
+
+  private async call(
+    base: string,
+    path: string,
+    meter: GoogleMeter,
+    init: { method?: string; query?: Record<string, string>; body?: unknown; ifMatch?: string } = {},
+  ): Promise<Record<string, unknown> | null> {
+    const url = new URL(`${base}${path}`);
     // An id of dots ("." or "..") would climb out of /events/ once the URL is normalized.
-    if (path.split("/").some((part) => /^\.+$/.test(part)) || !url.href.startsWith(`${GOOGLE_CALENDAR_API}/`)) throw new GoogleError("not_found");
+    if (path.split("/").some((part) => /^\.+$/.test(part)) || !url.href.startsWith(`${base}/`)) throw new GoogleError("not_found");
     if (init.query) url.search = new URLSearchParams(init.query).toString();
     for (const force of [false, true]) {
       const token = await this.accessToken(meter, force);
@@ -609,7 +660,18 @@ export class GoogleCalendar {
       if (res.status === 403) {
         // Google says "rate limit" with a 403 too; only its reason tells it from a refusal.
         const body = await readJson(res);
-        throw rateLimited(body) ? new GoogleError("rate_limited", 403) : new GoogleError("forbidden", 403);
+        if (rateLimited(body)) throw new GoogleError("rate_limited", 403);
+        // The API off in the owner's Cloud project, or a scope the grant lacks: the owner can fix either.
+        const reasons = errorReasons(body);
+        if (reasons.has("SERVICE_DISABLED") || reasons.has("accessNotConfigured")) throw new GoogleError("api_disabled", 403);
+        if (reasons.has("ACCESS_TOKEN_SCOPE_INSUFFICIENT") || reasons.has("insufficientPermissions")) throw new GoogleError("scopes", 403);
+        throw new GoogleError("forbidden", 403);
+      }
+      if ((res.status === 400 || res.status === 410) && base === GOOGLE_PEOPLE_API) {
+        // A sync token older than 7 days: the caller reads everything again.
+        const body = await readJson(res);
+        if (res.status === 410 || errorReasons(body).has("EXPIRED_SYNC_TOKEN")) throw new GoogleError("expired", res.status);
+        throw apiError(res.status);
       }
       await res.body?.cancel();
       throw apiError(res.status);
@@ -893,6 +955,22 @@ function apiError(status: number): GoogleError {
 }
 
 const RATE_REASONS = new Set(["rateLimitExceeded", "userRateLimitExceeded", "quotaExceeded"]);
+
+/**
+ * The reasons in a Google error body: `error.errors[].reason` (the classic
+ * APIs) and `error.details[].reason` (google.rpc.ErrorInfo, the People API).
+ */
+function errorReasons(body: Record<string, unknown> | null): Set<string> {
+  const error = body?.error as { errors?: unknown; details?: unknown; status?: unknown } | undefined;
+  const out = new Set<string>();
+  for (const list of [error?.errors, error?.details]) {
+    for (const item of Array.isArray(list) ? list.slice(0, 20) : []) {
+      const reason = item && typeof item === "object" ? (item as { reason?: unknown }).reason : undefined;
+      if (typeof reason === "string") out.add(reason.slice(0, 60));
+    }
+  }
+  return out;
+}
 
 /** Whether a 403's body is Google's "slow down" (usageLimits), not a refusal of the access. */
 function rateLimited(body: Record<string, unknown> | null): boolean {

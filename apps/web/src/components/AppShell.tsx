@@ -18,6 +18,7 @@ import {
   Settings as SettingsIcon,
   ShieldCheck,
   SunMoon,
+  Users,
   X,
 } from "lucide-react";
 import { lazy, type ReactNode, Suspense, useEffect, useId, useRef, useState } from "react";
@@ -196,6 +197,7 @@ function Sidebar({ collapsed, onToggle, onClose, onSearch }: { collapsed: boolea
     { to: "/conversa", label: t("web.nav.chat"), icon: MessageCircle },
     { to: "/tarefas", label: t("web.nav.tasks"), icon: ListTodo, count: today },
     { to: "/agenda", label: t("web.nav.agenda"), icon: CalendarDays },
+    { to: "/contatos", label: t("web.nav.contacts"), icon: Users },
     { to: "/notas", label: t("web.nav.notes"), icon: NotebookPen },
     { to: "/memoria", label: t("web.nav.memory"), icon: Brain },
     { to: "/automacoes", label: t("web.nav.automations"), icon: Clock },
