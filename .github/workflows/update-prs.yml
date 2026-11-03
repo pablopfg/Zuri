@@ -14,6 +14,9 @@ on:
     branches: [develop]
   # Catches what no push shows: an older pull request closed or out of draft
   # leaves a stale merge-order result on the newer ones.
+  # GitHub drops most of these scheduled runs, so a merge made by GITHUB_TOKEN
+  # (README and release pull requests, no push run) comes by workflow_dispatch
+  # from seguir-merge.yml instead.
   schedule:
     - cron: "*/15 * * * *"
   workflow_dispatch:
