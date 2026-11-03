@@ -825,6 +825,13 @@ A etapa 19 liga a conta Google do dono pelo cliente OAuth dele mesmo
   aprovação manda o `etag` visto. Criar evento numa agenda de outra pessoa
   pela conversa é recusado. Isso fecha o caminho em que o texto de um convite
   manda a Zuri copiar dados do dono para o evento (auditoria da etapa 19).
+  O cartão começa pela agenda e pelo horário lidos do Google e corta o título
+  em 60 caracteres, sem aspas: um título longo ou montado não esconde qual
+  evento muda. Evento sem versão (`etag`) do Google não vira proposta.
+  Limite conhecido: uma agenda do próprio dono que ele compartilhou ou deixou
+  pública conta como só dele (o Google não diz isso na lista de agendas sem
+  uma chamada a mais); quem compartilha a agenda principal deve deixá-la em
+  "Só ler" na Zuri.
 - **Ids que não saem de `/events/`.** Id de evento só de pontos (`.`, `..`) é
   recusado no schema, na ferramenta e no serviço, antes de qualquer chamada:
   normalizado, ele apontaria para a agenda inteira. Uma agenda fechada não

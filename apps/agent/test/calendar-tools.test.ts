@@ -184,7 +184,7 @@ describe("delete_calendar_event", () => {
       const actionId = await propose(world, chat);
       // Nothing deleted yet.
       expect(world.googleSim.events.get(PRIMARY)).toHaveLength(1);
-      expect(world.actions.view(actionId)).toMatchObject({ tool: "delete_calendar_event", status: "pending", target: `Consulta · ${PRIMARY} · 2026-10-31 15:00 – 16:00` });
+      expect(world.actions.view(actionId)).toMatchObject({ tool: "delete_calendar_event", status: "pending", target: `${PRIMARY} · 2026-10-31 15:00 – 16:00 · Consulta` });
       await runApprovedAction(ALL_TOOLS, world.ctx(chat), actionId);
       expect(world.googleSim.events.get(PRIMARY)).toHaveLength(0);
       expect(world.googleSim.seen.find((r) => r.method === "DELETE")?.headers["if-match"]).toBe('"d1-1"');

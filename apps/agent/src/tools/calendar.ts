@@ -199,6 +199,16 @@ function body(draft: EventDraft, timeZone: string, base?: CalendarEvent): Record
 }
 
 /**
+ * A proposal's card label, cut to 120 characters by the registry: the calendar and the time
+ * (Google's, short) come first, so a long or crafted title (a stranger's invite) can never push
+ * them out; quotes in the title can't close the card's own.
+ */
+function eventLabel(event: CalendarEvent, calendarName: string, timeZone: string): string {
+  const titleText = cleanText((event.title || "—").replace(/["“”«»]/g, "'"), 60);
+  return `${cleanText(calendarName, 30)} · ${eventWhen(event, timeZone)} · ${titleText}`;
+}
+
+/**
  * What an approval on an event depends on here: the same account, the calendar still open for
  * changes. Google checks the event itself with its etag (If-Match) when the change is sent.
  */
@@ -326,10 +336,11 @@ export const calendarTools = [
       const calendar = service(ctx);
       const chosen = pick(input.calendar, calendar.writable(), "write");
       const event = await google(() => calendar.event(chosen.id, input.event_id, meter(ctx)));
+      if (!event.etag) throw new ToolError("Google didn't give this event's version, so it can't be proposed safely. Tell the owner to do it on the Agenda screen.");
       return {
         id: target(chosen.id, event.id),
-        // Google's title and time, cleaned; never the model's words.
-        label: `${event.title || "—"} · ${chosen.name} · ${eventWhen(event, ctx.timeZone)}`,
+        // Google's calendar, time and title, cleaned; never the model's words.
+        label: eventLabel(event, chosen.name, ctx.timeZone),
         payload: { text: event.etag },
       };
     },
@@ -339,6 +350,7 @@ export const calendarTools = [
     },
     commitAsync: async (id, payload, ctx) => {
       const { calendarId, id: event } = parseTarget(id);
+      if (!payload?.text) throw new TargetGone(false);
       try {
         await service(ctx).deleteEvent(calendarId, event, payload?.text ?? "", meter(ctx));
       } catch (error) {
@@ -358,6 +370,7 @@ export const calendarTools = [
       const calendar = service(ctx);
       const chosen = pick(input.calendar, calendar.writable(), "write");
       const event = await google(() => calendar.event(chosen.id, input.event_id, meter(ctx)));
+      if (!event.etag) throw new ToolError("Google didn't give this event's version, so it can't be proposed safely. Tell the owner to do it on the Agenda screen.");
       const patch = body(draftOf(input), ctx.timeZone, event);
       if (Object.keys(patch).length === 0) throw new ToolError("Say what to change: title, start, end, location or description.");
       // The card shows the new values as they will be written (the model's words, shown as such) and,
@@ -375,7 +388,7 @@ export const calendarTools = [
       const change: ChangePayload = { etag: event.etag, patch, show };
       return {
         id: target(chosen.id, event.id),
-        label: `${event.title || "—"} · ${chosen.name} · ${eventWhen(event, ctx.timeZone)}`,
+        label: eventLabel(event, chosen.name, ctx.timeZone),
         payload: { text: JSON.stringify(change) },
       };
     },
@@ -386,7 +399,8 @@ export const calendarTools = [
     commitAsync: async (id, payload, ctx) => {
       const { calendarId, id: event } = parseTarget(id);
       const change = readChange(payload?.text);
-      if (!change) throw new TargetGone(false);
+      // Without the version seen at the proposal, Google can't refuse a newer one: nothing is sent.
+      if (!change?.etag) throw new TargetGone(false);
       try {
         await service(ctx).updateEvent(calendarId, event, change.patch, change.etag, meter(ctx));
       } catch (error) {

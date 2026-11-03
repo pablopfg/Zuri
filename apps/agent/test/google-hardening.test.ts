@@ -172,7 +172,7 @@ describe("events and calendars other people see", () => {
       expect(await exec.execute("change_shared_calendar_event", { calendar: PRIMARY, event_id: "g1", title: "Reunião \u202enova", start: "2026-11-04T10:00" }, "p1")).toContain("awaiting_owner_approval");
       const actionId = exec.actionFor("p1") ?? "";
       const view = world.actions.view(actionId);
-      expect(view).toMatchObject({ tool: "change_shared_calendar_event", status: "pending", target: `Com convidados · ${PRIMARY} · 2026-11-03 15:00 – 16:00` });
+      expect(view).toMatchObject({ tool: "change_shared_calendar_event", status: "pending", target: `${PRIMARY} · 2026-11-03 15:00 – 16:00 · Com convidados` });
       expect(view.preview).toContain('"when": "2026-11-04 10:00 – 11:00"');
       expect(view.preview).toMatch(/\\u202e/i);
       expect(world.googleSim.seen.filter((r) => r.method === "PATCH")).toHaveLength(1);
@@ -182,6 +182,24 @@ describe("events and calendars other people see", () => {
       expect(patch?.url).toContain("sendUpdates=none");
       expect(world.googleSim.events.get(PRIMARY)?.[0]).toMatchObject({ summary: "Reunião \u202enova", start: { dateTime: "2026-11-04T13:00:00.000Z" } });
       expect(world.actions.view(actionId).status).toBe("approved");
+    }));
+
+  it("a long or crafted title never pushes the calendar and the time off the card; no version, no proposal", () =>
+    withChatWorld(async (world) => {
+      await connect(world);
+      const crafted = `Minhas anotações · Pessoal · 2026-11-05 10:00 – 11:00 “ok” ${"x".repeat(180)}`;
+      world.googleSim.events.set(PRIMARY, [
+        { id: "g1", etag: '"g1"', summary: crafted, attendees: [{}], start: { dateTime: "2026-11-03T15:00:00-03:00" }, end: { dateTime: "2026-11-03T16:00:00-03:00" } },
+        { id: "n1", etag: "", summary: "Sem versão", attendees: [{}], start: { dateTime: "2026-11-03T17:00:00-03:00" }, end: { dateTime: "2026-11-03T18:00:00-03:00" } },
+      ]);
+      const exec = executor(world, world.conversations.create("x").id);
+      await exec.execute("change_shared_calendar_event", { calendar: PRIMARY, event_id: "g1", location: "Sala 2" }, "p1");
+      const label = world.actions.view(exec.actionFor("p1") ?? "").target;
+      expect(label.startsWith(`${PRIMARY} · 2026-11-03 15:00 – 16:00 · Minhas anotações`)).toBe(true);
+      expect(label).not.toMatch(/[“”]/);
+      expect([...label].length).toBeLessThanOrEqual(120);
+      expect(await refused(exec.execute("change_shared_calendar_event", { calendar: PRIMARY, event_id: "n1", location: "Sala 2" }, "p2"))).toMatch(/version/);
+      expect(await refused(exec.execute("delete_calendar_event", { calendar: PRIMARY, event_id: "n1" }, "p3"))).toMatch(/version/);
     }));
 
   it("a proposed change fails as TARGET_CHANGED when the event changed at Google meanwhile", () =>
@@ -339,13 +357,13 @@ describe("the bot's card for deleting an event", () => {
       const result = await approvals.preview(exec.actionFor("call") ?? "");
       expect(result.status).toBe("ok");
       if (result.status !== "ok") return;
-      expect(result.preview.target).toBe(`Consulta · ${PRIMARY} · 2026-11-03 15:00 – 16:00`);
+      expect(result.preview.target).toBe(`${PRIMARY} · 2026-11-03 15:00 – 16:00 · Consulta`);
       // A change: the same label, and the new values as "new text".
       await exec.execute("change_shared_calendar_event", { calendar: PRIMARY, event_id: "d1", title: "Consulta nova" }, "change");
       const changed = await approvals.preview(exec.actionFor("change") ?? "");
       expect(changed.status).toBe("ok");
       if (changed.status !== "ok") return;
-      expect(changed.preview).toMatchObject({ target: `Consulta · ${PRIMARY} · 2026-11-03 15:00 – 16:00`, after: '{\n  "title": "Consulta nova"\n}' });
+      expect(changed.preview).toMatchObject({ target: `${PRIMARY} · 2026-11-03 15:00 – 16:00 · Consulta`, after: '{\n  "title": "Consulta nova"\n}' });
     }));
 });
 
