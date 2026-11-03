@@ -100,6 +100,7 @@ etapas ficam detalhadas; as mais antigas viram uma linha na tabela.
 - ⚠️ Antes do próximo deploy: criar o widget do Turnstile e gravar `TURNSTILE_SITE_KEY` e `TURNSTILE_SECRET_KEY` (docs/configuracao-cloudflare.md); sem eles o login fica fechado.
 - Não travam: perguntas abertas da etapa 4 (senha digitada de novo para ligar 2FA/passkey; resolvido: alerta repetido e teto de 30 erros em 24 h), da etapa 3 (acerto não zera falhas).
 - Rulesets da `develop` e da `main` conferidos ativos pela API em 31/10/2026.
+- Etapas 19c e 19d (avaliações do Google, depois da 19b): plano aprovado em 03/11/2026 (`docs/planos/google-business-profile.md`); antes da 19c o Pablo liga as APIs do Business Profile e pede o "Basic API Access" ao Google (aprovação pode levar dias).
 
 ## Próxima etapa
 
