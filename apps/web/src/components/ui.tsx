@@ -6,6 +6,7 @@ import {
   type SelectHTMLAttributes,
   useEffect,
   useId,
+  useLayoutEffect,
   useRef,
   useState,
 } from "react";
@@ -346,7 +347,12 @@ export function EmptyState({ icon, title, children }: { icon: ReactNode; title: 
 export function Dialog({ open, onClose, title, children }: { open: boolean; onClose: () => void; title: string; children: ReactNode }) {
   const ref = useRef<HTMLDialogElement>(null);
   const id = useId();
-  useEffect(() => {
+  // A layout effect, not a plain one: the content below comes and goes in the same
+  // commit as the modal opens and closes. With a plain effect a non-urgent render
+  // (the router's blocker runs in a transition) leaves a moment where the content is
+  // gone but the modal is still open, so the page behind stays inert and swallows
+  // keys and clicks while nothing shows on screen.
+  useLayoutEffect(() => {
     const dialog = ref.current;
     if (!dialog) return;
     if (open && !dialog.open) dialog.showModal();
