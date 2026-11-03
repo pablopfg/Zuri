@@ -148,6 +148,9 @@ export class ZuriAgent extends Agent<WorkerEnv> {
     automations: () => ({
       service: this.store.automations,
       runNow: (id: string) => this.store.automations.runNow(id, this.executor()),
+      guardRoutine: (session) => {
+        if (this.store.mcp.routinesReachOut()) this.store.auth.requireRecentAuth(session);
+      },
     }),
     aiUsage: () => this.store.usage.report(this.aiLimits(), this.development() ? "mock" : "workers-ai", this.store.settings.field("aiModel")),
     passwordSecretSet: () => this.passwordSecretSet(),

@@ -319,7 +319,6 @@ export class AutomationService {
     return this.get(id);
   }
 
-  /** Deletes for good; the history keeps its runs (with the name they had) until they age out. */
   /** The conversation where the routine leaves external calls for the owner (migration 20). */
   conversationOf(id: string): string | null {
     return this.db.one<{ conversation_id: string | null }>(`SELECT conversation_id FROM zur_automations WHERE id = ?`, id)?.conversation_id ?? null;
@@ -329,6 +328,7 @@ export class AutomationService {
     this.db.run(`UPDATE zur_automations SET conversation_id = ? WHERE id = ?`, conversationId, id);
   }
 
+  /** Deletes for good; the history keeps its runs (with the name they had) until they age out. */
   async delete(id: string): Promise<void> {
     this.db.transaction(() => this.deleteNow(id));
     await this.rearm();

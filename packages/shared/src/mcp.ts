@@ -20,6 +20,14 @@ export const MCP_AUTH_CHOICES = MCP_AUTH_TYPES;
 export const MCP_TOOL_POLICIES = ["approve", "auto", "routines"] as const;
 export type McpToolPolicy = (typeof MCP_TOOL_POLICIES)[number];
 
+/**
+ * What a tool does, as Zuri judges it from its name, description and fields
+ * (decision of 03/11/2026), confirmed by the owner. The server's marks can
+ * only make it more careful. "destructive" always asks.
+ */
+export const MCP_TOOL_KINDS = ["read", "write", "destructive"] as const;
+export type McpToolKind = (typeof MCP_TOOL_KINDS)[number];
+
 /** Every exposed MCP tool starts with this; built-in tools never do. */
 export const MCP_TOOL_PREFIX = "mcp_";
 
@@ -45,6 +53,8 @@ export const MCP_LIMITS = {
   routineTools: 10,
   /** Proposals one routine run may leave for the owner; past them, only a notice. */
   routineProposals: 3,
+  /** How long a routine's proposal waits for the owner (the chat's wait 30 minutes). */
+  routineProposalTtlMs: 24 * 60 * 60_000,
   /** OAuth: how long a sign-in may wait for the service's answer. */
   oauthStateMs: 10 * 60_000,
   /** Shortest MCP_CREDENTIAL_KEY accepted. */
@@ -121,6 +131,13 @@ export interface McpToolInfo {
   /** The owner's "Quando usar". */
   hint: string;
   hints: McpToolHints;
+  /** What the tool does: the owner's choice, or else Zuri's. */
+  kind: McpToolKind;
+  /** Zuri's own judgement, and why: the word found and where, the server's mark, or nothing known. */
+  kindAuto: McpToolKind;
+  kindReason: { source: "name" | "description" | "fields"; word: string } | { source: "server" } | { source: "unknown" };
+  /** Routines this tool was set free for. */
+  routineCount: number;
   status: McpToolStatus;
   problem: McpToolProblem | null;
   /** On, but its definition changed since the owner turned it on: out of the turns until turned on again. */

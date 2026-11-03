@@ -318,6 +318,8 @@ export class ToolExecutor {
       targetHash: hash,
       targetLabel: [...tool.label.replace(/\s+/g, " ").trim()].slice(0, 120).join(""),
       payload: { args },
+      // Nobody is watching a routine: its proposal waits a day for the owner (decision of 03/11/2026).
+      ...(scheduled ? { ttlMs: MCP_LIMITS.routineProposalTtlMs } : {}),
     });
     this.ctx.actions.prune();
     this.actionsByCall.set(callId, action.id);

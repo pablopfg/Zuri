@@ -7,6 +7,7 @@ import {
   type McpServerProblem,
   type McpRoutineTool,
   type McpToolInfo,
+  type McpToolKind,
   type McpToolPolicy,
   sha256Hex,
 } from "@zuri/shared";
@@ -15,12 +16,13 @@ import type { Database } from "../db/database.ts";
 import { AppError } from "../http/errors.ts";
 import { log } from "../log.ts";
 import { stableStringify } from "../tools/stable.ts";
-import { CATALOG_LIMITS, type CallResult, type CatalogEntry, checkTool, clip, parseHints, resultText, toZod } from "./catalog.ts";
+import { CATALOG_LIMITS, type CallResult, type CatalogEntry, checkTool, clip, resultText, toZod } from "./catalog.ts";
+import { classifyTool } from "./classify.ts";
 import { McpCredentials } from "./credentials.ts";
 import type { McpMeaning } from "./meaning.ts";
 import { type OAuthRecord, oauthBinding, sameSecret, stateServerId, ZuriOAuthProvider } from "./oauth.ts";
 import { classifyMcpError, type FetchAuth, McpConnectionError } from "./guarded-fetch.ts";
-import { isUsable, levelOf, McpRepository, presentTool, type ServerRow, type ToolRow } from "./repository.ts";
+import { isUsable, kindOf, levelOf, McpRepository, presentTool, type ServerRow, type ToolRow } from "./repository.ts";
 import { McpBudgetSpent, McpTurn, type SubrequestMeter } from "./session.ts";
 import { type TriageTool, toolCost } from "./triage.ts";
 import { assertPublicHost, dohResolver, endpointUrl, McpEndpointError, type Resolver } from "./url.ts";
@@ -84,12 +86,12 @@ const host = (url: string) => {
 
 /** "tool · server": how the owner sees an external tool in the chat. */
 /**
- * A tool its server marks destructive always asks (decision of 03/11/2026):
- * the owner may let a tool that writes run on its own, never one that deletes
- * or overwrites. The mark is part of what the owner reviewed (the hash), so it
- * can't flip after the tool was turned on.
+ * A destructive tool always asks (decision of 03/11/2026): the owner may let
+ * a tool that writes run on its own, never one that deletes or overwrites.
+ * Zuri judges it from the definition the owner reviewed (classify.ts), the
+ * owner confirms; a changed definition is judged again.
  */
-export const destructive = (tool: ToolRow) => parseHints(tool.annotations).destructive === true;
+export const destructive = (tool: ToolRow) => kindOf(tool) === "destructive";
 
 /**
  * What really applies to a call: in the chat, the levels "auto" and
@@ -310,7 +312,8 @@ export class McpService {
   }
 
   tools(serverId: string): McpToolInfo[] {
-    return this.repo.tools(this.require(serverId).id).map(presentTool);
+    const counts = this.repo.routineCounts();
+    return this.repo.tools(this.require(serverId).id).map((tool) => presentTool(tool, counts.get(tool.exposed_name) ?? 0));
   }
 
   /** The tool as stored, for the route's check of the recent password. */
@@ -320,10 +323,15 @@ export class McpService {
     return tool;
   }
 
-  updateTool(serverId: string, toolId: string, patch: { enabled?: boolean | undefined; policy?: McpToolPolicy | undefined; hint?: string | undefined }): McpToolInfo {
+  updateTool(
+    serverId: string,
+    toolId: string,
+    patch: { enabled?: boolean | undefined; policy?: McpToolPolicy | undefined; hint?: string | undefined; kind?: McpToolKind | undefined },
+  ): McpToolInfo {
     const tool = this.storedTool(serverId, toolId);
     if (patch.enabled === true && tool.status !== "available") throw new AppError("CONFLICT", "error.mcpToolUnavailable");
-    if (patch.policy !== undefined && patch.policy !== "approve" && destructive(tool)) throw new AppError("CONFLICT", "error.mcpToolDestructive");
+    const kind = patch.kind ?? kindOf(tool);
+    if (patch.policy !== undefined && patch.policy !== "approve" && kind === "destructive") throw new AppError("CONFLICT", "error.mcpToolDestructive");
     if (patch.enabled === true && tool.enabled !== 1) {
       const on = this.repo.enabledTools().filter((t) => t.status === "available").length;
       if (on >= MCP_LIMITS.maxEnabledTools) throw new AppError("CONFLICT", "error.mcpToolLimit");
@@ -332,8 +340,13 @@ export class McpService {
       ...(patch.enabled === undefined ? {} : { enabled: patch.enabled }),
       ...(patch.policy === undefined ? {} : { policy: patch.policy }),
       ...(patch.hint === undefined ? {} : { hint: patch.hint }),
+      // The owner's kind; the same as Zuri's judgement is stored as none, so a new definition is judged again.
+      ...(patch.kind === undefined ? {} : { kind: patch.kind === classifyTool(tool).kind ? null : patch.kind }),
+      // Confirmed destructive: back to asking, whatever it was.
+      ...(kind === "destructive" && levelOf(tool) !== "approve" ? { policy: "approve" as const } : {}),
     });
-    return presentTool(this.storedTool(serverId, toolId));
+    const after = this.storedTool(serverId, toolId);
+    return presentTool(after, this.repo.routineCounts().get(after.exposed_name) ?? 0);
   }
 
   // ---------- Autonomy per routine (decision of 03/11/2026) ----------
@@ -363,7 +376,6 @@ export class McpService {
       if (!tool) throw new AppError("NOT_FOUND", "error.mcpToolNotFound");
       if (tool.destructive) throw new AppError("CONFLICT", "error.mcpToolDestructive");
     }
-    if (names.length > MCP_LIMITS.routineTools) throw new AppError("VALIDATION_FAILED", undefined, { fields: ["tools"] });
     this.repo.setRoutineTools(automationId, names);
     return { tools: this.routineTools(automationId), added: names.some((name) => !before.has(name)) };
   }
@@ -373,9 +385,10 @@ export class McpService {
     return this.repo.routineTools(automationId);
   }
 
-  /** A deleted routine leaves nothing behind. */
-  forgetRoutine(automationId: string): void {
-    this.repo.setRoutineTools(automationId, []);
+  /** True while some tool runs on its own in every routine, or one was set free for a routine (the instruction then takes the password). */
+  routinesReachOut(automationId?: string): boolean {
+    if (this.repo.enabledTools().some((tool) => isUsable(tool) && levelOf(tool) === "routines" && !destructive(tool))) return true;
+    return automationId !== undefined && this.repo.routineTools(automationId).size > 0;
   }
 
   // ---------- OAuth (step 18b) ----------

@@ -27,17 +27,31 @@ Em **Configurações > Integrações**:
        nas rotinas com IA (e nos workflows da etapa 22).
 
      Subir de nível pede a senha digitada agora e gera o aviso de segurança
-     `mcp_tool_autonomy`; descer não pede nada. Uma ferramenta que pode mudar
-     dados sobe com um aviso a mais na tela. A que o servidor marca como
-     destrutiva (`destructiveHint: true`) fica sempre em "Perguntar sempre": a
-     tela desativa as outras opções, a API recusa com `409` e a execução
-     confere de novo.
+     `mcp_tool_autonomy`; descer não pede nada. Uma ferramenta que altera
+     dados sobe com um aviso a mais na tela. A que apaga ou sobrescreve fica
+     sempre em "Perguntar sempre": a tela desativa as outras opções, a API
+     recusa com `409` e a execução confere de novo.
+   - **O que ela faz** (decisão de 03/11/2026): **Só consulta**, **Altera
+     dados** ou **Apaga ou sobrescreve**. Quem decide é a própria Zuri, com
+     uma regra fixa (`apps/agent/src/mcp/classify.ts`, sem IA) que lê o nome,
+     a descrição e os campos de entrada. Palavras como "delete", "apagar" ou
+     "substituir" contam como apagar; "criar", "enviar" ou "atualizar" contam
+     como alterar; "buscar" ou "listar" no nome contam como consulta. Na
+     dúvida, vale o tipo mais perigoso, e nenhuma palavra conhecida conta como
+     "Altera dados". A marcação do servidor (`readOnlyHint`,
+     `destructiveHint`) só pode deixar a ferramenta mais cautelosa. O cartão
+     mostra o motivo, e você pode trocar o tipo: mais cauteloso não pede nada,
+     menos cauteloso pede a senha e gera o aviso. Confirmar "Apaga ou
+     sobrescreve" volta a ferramenta para "Perguntar sempre" e a tira das
+     rotinas.
    - **Quando usar**: uma dica sua, até 200 caracteres, que ajuda a Zuri a
      escolher a ferramenta certa.
 3. **Reconectar** lê a lista de novo. Se o serviço mudar a descrição ou a
    entrada de uma ferramenta ligada, ela sai de uso, aparece "Mudou: ligue de
-   novo para revisar", volta para "Perguntar sempre" e sai das rotinas em que
-   estava liberada.
+   novo para revisar", volta para "Perguntar sempre", é classificada de novo
+   (o tipo que você escolheu se perde) e sai das rotinas em que estava
+   liberada. Desligar a ferramenta ou baixá-la para "Perguntar sempre" também
+   a tira das rotinas; o cartão diz em quantas rotinas ela está liberada.
 
 ### Ferramentas externas nas rotinas
 
@@ -46,16 +60,21 @@ liberou para ela. Para liberar, edite a rotina em Automações: a seção
 **Ferramentas externas** lista as ferramentas ligadas. As do terceiro nível
 aparecem marcadas e travadas; as outras podem ser marcadas só para aquela
 rotina (até 10), com a senha digitada agora e o aviso de segurança. Uma
-ferramenta destrutiva nunca é liberada. Mudar a instrução da rotina, ou
-apagá-la, desfaz a liberação.
+ferramenta que apaga ou sobrescreve nunca é liberada. Mudar a instrução da
+rotina, ou apagá-la, desfaz a liberação. Enquanto alguma ferramenta estiver
+no nível "também em rotinas", criar uma rotina com IA, mudar a instrução de
+uma ou aprovar uma que a Zuri propôs pede a senha digitada agora.
 
 Numa rotina valem os mesmos limites da conversa (mais de 1.000 caracteres na
 chamada, mais de 4.000 na execução, outro serviço já respondeu). Quando um
 deles barra a chamada, nada é enviado: a chamada vira proposta na conversa
 "Rotina: <nome>", criada na primeira vez, você recebe um aviso no app e no
 Telegram (onde `/aprovar` também mostra a proposta) e a rotina segue sem a
-resposta. Cada execução deixa no máximo 3 propostas e usa no máximo 12
-subrequisições externas.
+resposta. A proposta de rotina vale 24 horas (a da conversa, 30 minutos).
+Cada execução deixa no máximo 3 propostas, e as rotinas de um mesmo
+despertar do alarme dividem 12 subrequisições externas. Uma ferramenta que
+você baixou de nível no meio da execução não roda nem vira proposta: a
+chamada é recusada.
 
 Mesmo sem perguntar, a Zuri pergunta quando a chamada leva mais de
 1.000 caracteres, quando o turno já mandou mais de 4.000, ou quando outro

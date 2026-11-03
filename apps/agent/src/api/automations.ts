@@ -10,6 +10,13 @@ import { readJson } from "./http.ts";
 export interface AutomationDeps {
   service: AutomationService;
   runNow(id: string): Promise<AutomationRun>;
+  /**
+   * A new instruction for an AI routine, while some external tool runs on its
+   * own in every routine (decision of 03/11/2026): the password typed
+   * recently, so a stolen session alone can't plant a routine that sends
+   * data out. Throws RECENT_AUTH_REQUIRED.
+   */
+  guardRoutine?(session: ApiEnv["Variables"]["session"]): void;
 }
 
 /** Bodies are parsed by the service (the same rules as the chat's tools); here only their size is capped. */
@@ -42,6 +49,7 @@ export function registerAutomationRoutes(app: Hono<ApiEnv>, deps: () => Automati
 
   app.post("/automations", async (c) => {
     const input = await readJson(c.req.raw, anyObject, BODY_MAX_BYTES);
+    if (input.kind === "agent_prompt") deps().guardRoutine?.(c.get("session"));
     return Response.json({ automation: await deps().service.create(input, "app") }, { status: 201 });
   });
 
@@ -52,6 +60,8 @@ export function registerAutomationRoutes(app: Hono<ApiEnv>, deps: () => Automati
   app.patch("/automations/:id", async (c) => {
     const id = recordId(c.req.param("id"));
     const input = await readJson(c.req.raw, anyObject, BODY_MAX_BYTES);
+    const current = deps().service.get(id);
+    if (current.kind === "agent_prompt" && typeof input.message === "string" && input.message.trim() !== current.message) deps().guardRoutine?.(c.get("session"));
     return Response.json({ automation: await deps().service.update(id, input) });
   });
 
@@ -64,6 +74,8 @@ export function registerAutomationRoutes(app: Hono<ApiEnv>, deps: () => Automati
   app.post("/automations/:id/approve", async (c) => {
     const id = recordId(c.req.param("id"));
     const input = await readJson(c.req.raw, anyObject, 1024);
+    // The model wrote this instruction: with tools that reach out of the account, approving it takes the password.
+    deps().guardRoutine?.(c.get("session"));
     return Response.json({ automation: await deps().service.approve(id, input) });
   });
 

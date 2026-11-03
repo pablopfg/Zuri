@@ -5,7 +5,7 @@ import type { MeteredAI } from "../ai/metered.ts";
 import { estimateTokens, type ProviderTool } from "../ai/provider.ts";
 import { type ConversationRepository, decodeTools, type Quoted } from "../chat/conversations.ts";
 import { McpTurnTools, recentExternal } from "../mcp/agent.ts";
-import { MCP_SUBREQUEST_BUDGET } from "../mcp/session.ts";
+import { MCP_SUBREQUEST_BUDGET, type SubrequestMeter } from "../mcp/session.ts";
 import { AppError } from "../http/errors.ts";
 import { MAX_RELEVANT_MEMORIES, memoryPromptSection, memoryTokenBudget, selectRelevantMemories } from "../memory/recall.ts";
 import { ALL_TOOLS } from "../tools/index.ts";
@@ -20,8 +20,8 @@ const RECENT_EXTERNAL_MESSAGES = 6;
 const MCP_TELEGRAM_BUDGET = 12;
 /**
  * A routine's external calls (decision of 03/11/2026): the alarm's
- * invocation has 50 subrequests and may run two routines besides the
- * reminders, so each run gets 12 of them.
+ * invocation has 50 subrequests and also sends notices and checks sites, so
+ * the routines of one wake share 12 of them (automations/executor.ts).
  */
 export const ROUTINE_MCP_BUDGET = 12;
 
@@ -352,11 +352,20 @@ export class AgentRunner {
    * run goes on (decision of 03/11/2026). The routine's instruction is the
    * owner's own, approved text; everything it reads is data.
    */
-  async scheduled(input: { id?: string; name: string; prompt: string; quiet: boolean; signal: AbortSignal }): Promise<{ text: string; notices: Notice[] }> {
+  async scheduled(input: {
+    id?: string;
+    name: string;
+    prompt: string;
+    quiet: boolean;
+    signal: AbortSignal;
+    meter?: SubrequestMeter;
+    /** Filled as the run goes, so a run that fails still hands over what it left for the owner. */
+    notices?: Notice[];
+  }): Promise<{ text: string; notices: Notice[] }> {
     const settings = this.deps.settings();
     const locale = this.deps.locale();
-    const notices: Notice[] = [];
-    const mcp = input.id === undefined ? null : this.safeRoutineTools(input.id, input.prompt, input.signal);
+    const notices: Notice[] = input.notices ?? [];
+    const mcp = input.id === undefined ? null : this.safeRoutineTools(input.id, input.prompt, input.signal, input.meter);
     let conversationId: string | null = null;
     const routineConversation = () => {
       conversationId ??= this.routineConversation(input.id ?? "", input.name, locale);
@@ -406,6 +415,18 @@ export class AgentRunner {
       routine: scheduledInstructions(input.name, input.quiet, offered.some((tool) => tool.permission === "external")),
     });
     let text = "";
+    try {
+      text = await this.routineAnswer(executor, offered, system, input, settings);
+    } finally {
+      // Even when the model fails after a call became a proposal, the owner gets its card and the notice.
+      this.leaveProposals(input.name, executor, ctx, locale, notices);
+    }
+    return text.trim();
+  }
+
+  private async routineAnswer(executor: ToolExecutor, offered: ToolDefinition[], system: Parameters<MeteredAI["generateWithTools"]>[0]["system"], input: { prompt: string; signal: AbortSignal }, settings: Settings): Promise<string> {
+    const ai = this.deps.ai();
+    let text = "";
     for await (const event of ai.generateWithTools({
       system,
       messages: [{ role: "user", content: input.prompt }],
@@ -422,8 +443,7 @@ export class AgentRunner {
     })) {
       if (event.type === "text") text += event.delta;
     }
-    this.leaveProposals(input.name, executor, ctx, locale, notices);
-    return text.trim();
+    return text;
   }
 
   /**
@@ -444,14 +464,14 @@ export class AgentRunner {
   }
 
   /** A broken MCP setup never breaks the routine: it runs with the built-in tools. */
-  private safeRoutineTools(automationId: string, prompt: string, signal: AbortSignal): McpTurnTools | null {
+  private safeRoutineTools(automationId: string, prompt: string, signal: AbortSignal, meter?: SubrequestMeter): McpTurnTools | null {
     try {
       const service = this.deps.tools.mcpService;
       if (!service) return null;
       const available = service.turnTools(automationId);
       if (available.length === 0) return null;
       return new McpTurnTools(service, available, prompt, new Set(), signal, {
-        budget: ROUTINE_MCP_BUDGET,
+        ...(meter ? { meter } : { budget: ROUTINE_MCP_BUDGET }),
         routine: { id: automationId, allowed: service.routineAllowed(automationId) },
       });
     } catch (error) {

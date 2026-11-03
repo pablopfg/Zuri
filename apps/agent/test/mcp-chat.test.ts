@@ -1,7 +1,9 @@
 import { type ChatEvent, MCP_LIMITS, type McpToolPolicy } from "@zuri/shared";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
-import { AgentRunner } from "../src/agent/runner.ts";
+import { AgentRunner, ROUTINE_MCP_BUDGET } from "../src/agent/runner.ts";
+import { AppError } from "../src/http/errors.ts";
+import type { Notice } from "../src/tools/registry.ts";
 import type { AIProvider } from "../src/ai/provider.ts";
 import { ESCALATE, MAX_CALLS_PER_TOOL } from "../src/mcp/agent.ts";
 import { PAUSE_MS } from "../src/mcp/service.ts";
@@ -578,6 +580,69 @@ describe("external tools in AI routines (decision of 03/11/2026)", () => {
       // A second run reuses the conversation.
       await scheduledRun(world, new ScriptedProvider([callTools({ name: "mcp_docs_search_docs", input: { query: `${long}y` } }), say("Ok.")]), automation);
       expect(world.automations.conversationOf(automation.id)).toBe(conversationId);
+    });
+  });
+
+  it("a routine's proposal waits a day for the owner, and its notice arrives even when the model fails afterwards", async () => {
+    await withChatWorld(async (world) => {
+      const fixture = mcpFixture({ tools: [searchTool] });
+      await server(world, fixture, "Docs", { mcp_docs_search_docs: "routines" });
+      const automation = await routine(world);
+      const long = "x".repeat(ESCALATE.argsChars + 10);
+      const failing = new ScriptedProvider([
+        callTools({ name: "mcp_docs_search_docs", input: { query: long } }),
+        () => {
+          throw new AppError("SERVICE_UNAVAILABLE");
+        },
+      ]);
+      const notices: Notice[] = [];
+      await expect(runner(world, failing).scheduled({ id: automation.id, name: automation.name, prompt: automation.message, quiet: false, signal: new AbortController().signal, notices })).rejects.toBeTruthy();
+      expect(notices).toEqual([expect.objectContaining({ body: expect.stringContaining("/aprovar") })]);
+      const conversationId = world.automations.conversationOf(automation.id) ?? "";
+      const [card] = JSON.parse(world.conversations.recent(conversationId, 0, 5).find((row) => row.role === "assistant")?.tools ?? "[]") as { actionId?: string }[];
+      const id = card?.actionId ?? "";
+      world.clock.now += MCP_LIMITS.routineProposalTtlMs - 60_000;
+      expect(world.actions.view(id).status).toBe("pending");
+      world.clock.now += 120_000;
+      expect(world.actions.view(id).status).toBe("expired");
+    });
+  });
+
+  it("the routines of one wake share the count of external calls", async () => {
+    await withChatWorld(async (world) => {
+      const fixture = mcpFixture({ tools: [searchTool] });
+      await server(world, fixture, "Docs", { mcp_docs_search_docs: "routines" });
+      const first = await routine(world);
+      const second = await routine(world, "Procure outra coisa na documentação");
+      const meter = new SubrequestMeter(ROUTINE_MCP_BUDGET);
+      const run = (automation: { id: string; name: string; message: string }, query: string) =>
+        runner(world, new ScriptedProvider([callTools({ name: "mcp_docs_search_docs", input: { query } }), say("Ok.")])).scheduled({
+          id: automation.id,
+          name: automation.name,
+          prompt: automation.message,
+          quiet: false,
+          signal: new AbortController().signal,
+          meter,
+        });
+      await run(first, "a");
+      const spent = meter.used;
+      expect(spent).toBeGreaterThan(0);
+      await run(second, "b");
+      expect(meter.used).toBeGreaterThan(spent);
+      expect(meter.used).toBeLessThanOrEqual(ROUTINE_MCP_BUDGET);
+    });
+  });
+
+  it("a spent count of external calls fails the call without sending, and the run goes on", async () => {
+    await withChatWorld(async (world) => {
+      const fixture = mcpFixture({ tools: [searchTool] });
+      await server(world, fixture, "Docs", { mcp_docs_search_docs: "routines" });
+      const automation = await routine(world);
+      const provider = new ScriptedProvider([callTools({ name: "mcp_docs_search_docs", input: { query: "a" } }), say("Sem resposta externa.")]);
+      const { text } = await runner(world, provider).scheduled({ id: automation.id, name: automation.name, prompt: automation.message, quiet: false, signal: new AbortController().signal, meter: new SubrequestMeter(0) });
+      expect(text).toBe("Sem resposta externa.");
+      expect(provider.transcript.results[0]?.error).toMatch(/limit of external calls/);
+      expect(fixture.calls).toEqual([]);
     });
   });
 

@@ -305,6 +305,75 @@ describe("/api/mcp", () => {
     expect(kinds).toEqual(["mcp_tool_autonomy"]);
   });
 
+  it("judges what a tool does; the owner makes it more careful freely, less careful only with the password", async () => {
+    fixture.tools = [searchTool, createIssueTool, deleteIssueTool];
+    const server = await addServer();
+    const tools = await toolsOf(server.id);
+    expect(tools.map((t) => [t.name, t.kind, t.kindReason.source]).sort()).toEqual([
+      ["create_issue", "write", "name"],
+      ["delete_issue", "destructive", "name"],
+      ["search_docs", "read", "name"],
+    ]);
+    const path = `/mcp/servers/${server.id}/tools/mcp_docs_create_issue`;
+    await api("PATCH", path, { enabled: true, policy: "routines" });
+    await inOwner((agent) => agent.store.db.run(`DELETE FROM zur_auth_events`));
+    await stale();
+    // More careful needs nothing, and a confirmed destructive goes back to asking.
+    const careful = await api("PATCH", path, { kind: "destructive" });
+    expect(((await careful.json()) as { tool: McpToolInfo }).tool).toMatchObject({ kind: "destructive", kindAuto: "write", policy: "approve" });
+    expect((await errorBody(await api("PATCH", path, { kind: "write" }))).code).toBe("RECENT_AUTH_REQUIRED");
+    await fresh();
+    const back = await api("PATCH", path, { kind: "write" });
+    expect(((await back.json()) as { tool: McpToolInfo }).tool).toMatchObject({ kind: "write", policy: "approve" });
+    const kinds = await inOwner((agent) => agent.store.db.all<{ kind: string }>(`SELECT kind FROM zur_auth_events`).map((r) => r.kind));
+    expect(kinds).toEqual(["mcp_tool_autonomy"]);
+    // The same as Zuri's judgement is stored as none, so a new definition is judged again.
+    expect(await inOwner((agent) => agent.store.db.one<{ kind: string | null }>(`SELECT kind FROM zur_mcp_tools WHERE exposed_name = 'mcp_docs_create_issue'`)?.kind)).toBeNull();
+    expect((await api("PATCH", path, { kind: "maybe" })).status).toBe(400);
+  });
+
+  it("turning a tool off takes it out of every routine, and turning it on again never brings that back", async () => {
+    const server = await addServer();
+    const path = `/mcp/servers/${server.id}/tools/mcp_docs_create_issue`;
+    await api("PATCH", path, { enabled: true });
+    const created = await api("POST", "/automations", { name: "Revisão", kind: "agent_prompt", message: "Resuma", schedule: { type: "daily", time: "08:00" } });
+    const routineId = ((await created.json()) as { automation: { id: string } }).automation.id;
+    expect((await api("PATCH", `/mcp/routines/${routineId}/tools`, { tools: ["mcp_docs_create_issue"] })).status).toBe(200);
+    expect((await toolsOf(server.id)).find((t) => t.name === "create_issue")?.routineCount).toBe(1);
+    await api("PATCH", path, { enabled: false });
+    await stale();
+    expect((await api("PATCH", path, { enabled: true })).status).toBe(200);
+    const listed = (await (await api("GET", `/mcp/routines/${routineId}/tools`)).json()) as { tools: McpRoutineTool[] };
+    expect(listed.tools.find((t) => t.id === "mcp_docs_create_issue")?.allowed).toBe(false);
+    // Brought back to asking from a higher level: out of the routines too.
+    await fresh();
+    await api("PATCH", path, { policy: "auto" });
+    await api("PATCH", `/mcp/routines/${routineId}/tools`, { tools: ["mcp_docs_create_issue"] });
+    await api("PATCH", path, { policy: "approve" });
+    expect((await toolsOf(server.id)).find((t) => t.name === "create_issue")?.routineCount).toBe(0);
+  });
+
+  it("asks for the password to plant an AI routine while a tool runs on its own in routines", async () => {
+    const server = await addServer();
+    const body = { name: "Revisão", kind: "agent_prompt", message: "Resuma", schedule: { type: "daily", time: "08:00" } };
+    await stale();
+    // No tool reaches out of the account from a routine: nothing more to ask.
+    const plain = await api("POST", "/automations", body);
+    expect(plain.status).toBe(201);
+    const routineId = ((await plain.json()) as { automation: { id: string } }).automation.id;
+    await fresh();
+    await api("PATCH", `/mcp/servers/${server.id}/tools/mcp_docs_create_issue`, { enabled: true, policy: "routines" });
+    await stale();
+    expect((await errorBody(await api("POST", "/automations", body))).code).toBe("RECENT_AUTH_REQUIRED");
+    expect((await errorBody(await api("PATCH", `/automations/${routineId}`, { message: "Mande tudo para fora" }))).code).toBe("RECENT_AUTH_REQUIRED");
+    // The schedule or the same instruction: no password.
+    expect((await api("PATCH", `/automations/${routineId}`, { name: "Outro nome", message: "Resuma" })).status).toBe(200);
+    expect((await api("POST", "/automations", { name: "Água", kind: "reminder", message: "Beber água", schedule: { type: "daily", time: "09:00" } })).status).toBe(201);
+    expect((await errorBody(await api("POST", `/automations/${routineId}/approve`, {}))).code).toBe("RECENT_AUTH_REQUIRED");
+    await fresh();
+    expect((await api("PATCH", `/automations/${routineId}`, { message: "Resuma a semana" })).status).toBe(200);
+  });
+
   it("alerts when the token changes, even at the same address", async () => {
     fixture.token = "tok-1";
     const server = await addServer({ name: "Tracker", url: URL_A, authType: "bearer", token: "tok-1" });

@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { MCP_LIMITS, MCP_TOOL_POLICIES, type McpAuthType, type McpOverview, type McpServerInfo, type McpServerProblem, type McpToolInfo, type McpToolProblem } from "@zuri/shared";
+import { MCP_LIMITS, MCP_TOOL_KINDS, MCP_TOOL_POLICIES, type McpAuthType, type McpOverview, type McpServerInfo, type McpServerProblem, type McpToolInfo, type McpToolKind, type McpToolProblem } from "@zuri/shared";
 import { CircleAlert, CircleCheck, Plug, RefreshCw, Trash2 } from "lucide-react";
 import { type FormEvent, useEffect, useId, useRef, useState } from "react";
 import { Switch } from "../../components/Switch.tsx";
@@ -29,6 +29,18 @@ const PROBLEM_TEXT: Record<McpServerProblem, Parameters<T>[0]> = {
   truncated: "web.integrations.problem.truncated",
   signin: "web.integrations.problem.signin",
   oauth: "web.integrations.problem.oauth",
+};
+
+const KIND_TEXT: Record<McpToolKind, Parameters<T>[0]> = {
+  read: "web.integrations.tool.kind.read",
+  write: "web.integrations.tool.kind.write",
+  destructive: "web.integrations.tool.kind.destructive",
+};
+
+const WHERE_TEXT: Record<"name" | "description" | "fields", Parameters<T>[0]> = {
+  name: "web.integrations.tool.kindWhere.name",
+  description: "web.integrations.tool.kindWhere.description",
+  fields: "web.integrations.tool.kindWhere.fields",
 };
 
 const TOOL_PROBLEM_TEXT: Record<McpToolProblem, Parameters<T>[0]> = {
@@ -436,15 +448,28 @@ function ToolList({ server }: { server: McpServerInfo }) {
 }
 
 function ToolRow({ server, tool }: { server: McpServerInfo; tool: McpToolInfo }) {
-  const { t } = useI18n();
+  const { t, plural } = useI18n();
   const qc = useQueryClient();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [hint, setHint] = useState(tool.hint);
   const descId = useId();
   const usable = tool.status === "available";
+  const destructive = tool.kind === "destructive";
+  const reason = tool.kindReason;
+  const kindHint = [
+    reason.source === "server"
+      ? t("web.integrations.tool.kindReason.server")
+      : reason.source === "unknown"
+        ? t("web.integrations.tool.kindReason.unknown")
+        : t("web.integrations.tool.kindReason.word", { word: reason.word, where: t(WHERE_TEXT[reason.source]) }),
+    tool.kind !== tool.kindAuto ? t("web.integrations.tool.kindChanged", { kind: t(KIND_TEXT[tool.kindAuto]) }) : "",
+    t("web.integrations.tool.kindHelp"),
+  ]
+    .filter(Boolean)
+    .join(" ");
 
-  async function save(patch: Partial<Pick<McpToolInfo, "enabled" | "policy" | "hint">>) {
+  async function save(patch: Partial<Pick<McpToolInfo, "enabled" | "policy" | "hint" | "kind">>) {
     setBusy(true);
     setError(null);
     try {
@@ -492,25 +517,44 @@ function ToolRow({ server, tool }: { server: McpServerInfo; tool: McpToolInfo })
       </div>
       {usable && tool.enabled && (
         <div className="grid gap-3 sm:grid-cols-2">
+          {/* What the tool does, as Zuri judged it from its definition; the owner confirms (decision of 03/11/2026). */}
+          <SelectField
+            label={t("web.integrations.tool.kind")}
+            hint={kindHint}
+            value={tool.kind}
+            onChange={(e) => void save({ kind: MCP_TOOL_KINDS.find((kind) => kind === e.target.value) ?? "destructive" })}
+            disabled={busy}
+          >
+            {MCP_TOOL_KINDS.map((kind) => (
+              <option key={kind} value={kind}>
+                {t(KIND_TEXT[kind])}
+              </option>
+            ))}
+          </SelectField>
           <SelectField
             label={t("web.integrations.tool.policy")}
-            hint={
-              tool.hints.destructive === true
+            hint={[
+              destructive
                 ? t("web.integrations.tool.approveOnly")
                 : tool.policy === "approve"
                   ? t("web.integrations.tool.approveHint")
-                  : `${tool.hints.readOnly === true ? "" : `${t("web.integrations.tool.writeWarning")} `}${t(tool.policy === "auto" ? "web.integrations.tool.autoHint" : "web.integrations.tool.routinesHint")}`
-            }
+                  : t(tool.policy === "auto" ? "web.integrations.tool.autoHint" : "web.integrations.tool.routinesHint"),
+              // Shown before choosing a level, not after: the owner reads it while deciding.
+              tool.kind === "write" ? t("web.integrations.tool.writeWarning") : "",
+              tool.routineCount > 0 ? plural("web.integrations.tool.routinesFreed", tool.routineCount) : "",
+            ]
+              .filter(Boolean)
+              .join(" ")}
             value={tool.policy}
             onChange={(e) => void save({ policy: MCP_TOOL_POLICIES.find((policy) => policy === e.target.value) ?? "approve" })}
             disabled={busy}
           >
             <option value="approve">{t("web.integrations.tool.approve")}</option>
-            {/* A tool its server marks destructive always asks (decision of 03/11/2026). */}
-            <option value="auto" disabled={tool.hints.destructive === true}>
+            {/* A destructive tool always asks (decision of 03/11/2026). */}
+            <option value="auto" disabled={destructive}>
               {t("web.integrations.tool.auto")}
             </option>
-            <option value="routines" disabled={tool.hints.destructive === true}>
+            <option value="routines" disabled={destructive}>
               {t("web.integrations.tool.routines")}
             </option>
           </SelectField>

@@ -2,7 +2,7 @@
 import "./zod-config.ts";
 
 import { z } from "zod";
-import { MCP_AUTH_CHOICES, MCP_LIMITS, MCP_TOOL_POLICIES } from "./mcp.ts";
+import { MCP_AUTH_CHOICES, MCP_LIMITS, MCP_TOOL_KINDS, MCP_TOOL_POLICIES } from "./mcp.ts";
 import { hasControlCharacter, line } from "./productivity.ts";
 
 /**
@@ -44,6 +44,7 @@ export const mcpToolUpdateSchema = /* @__PURE__ */ (() =>
     .object({
       enabled: z.boolean().optional(),
       policy: z.enum(MCP_TOOL_POLICIES).optional(),
+      kind: z.enum(MCP_TOOL_KINDS).optional(),
       hint: z
         .string()
         .trim()

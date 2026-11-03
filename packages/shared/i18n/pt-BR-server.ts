@@ -488,7 +488,7 @@ export const ptBRServer = {
   "error.mcpServerOff": "Ligue o servidor antes de conectar.",
   "error.mcpSignInExpired": "Esse login venceu ou já foi usado. Comece de novo em Configurações › Integrações.",
   "error.mcpToolUnavailable": "Esta ferramenta não pode ser ligada: o serviço não oferece mais ou ela é incompatível.",
-  "error.mcpToolDestructive": "O serviço marca esta ferramenta como destrutiva, então ela sempre pede a sua aprovação.",
+  "error.mcpToolDestructive": "Esta ferramenta apaga ou sobrescreve, então sempre pede a sua aprovação.",
   "error.mcpRoutineOnly": "Só rotinas com IA usam ferramentas externas.",
   "error.mcpToolLimit": "Você já tem o máximo de ferramentas ligadas. Desligue uma antes.",
   "notice.security.mcp_server_added.title": "Serviço externo adicionado",

@@ -81,7 +81,7 @@ export const ptBRAutomations = {
   "web.automations.mcp.title": "Ferramentas externas",
   "web.automations.mcp.help": "Marque as que esta rotina pode usar sem perguntar. Liberar uma pede a sua senha e gera um aviso de segurança. Mudar a instrução desmarca todas.",
   "web.automations.mcp.everywhere": "Liberada para todas as rotinas em Integrações",
-  "web.automations.mcp.destructive": "Sempre pergunta: o serviço marca como destrutiva",
+  "web.automations.mcp.destructive": "Sempre pergunta: apaga ou sobrescreve",
   "web.automations.form.save": "Salvar",
   "web.automations.form.create": "Criar automação",
   "web.automations.form.cancel": "Cancelar",

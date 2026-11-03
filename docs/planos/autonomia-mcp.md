@@ -159,3 +159,4 @@ Automações.
 | Data | Pergunta | Resposta |
 | --- | --- | --- |
 | 03/11/2026 | Onde se configura, ferramentas que escrevem, rotina que esbarra numa trava (3 perguntas) | "Ok para as 3", e rotina ou workflow que precisar de mais liberdade tem de poder ser ajustado |
+| 03/11/2026 | Ferramenta sem marcação do servidor; prazo da proposta de rotina | A marcação do servidor não decide: a Zuri avalia a ferramenta (regra fixa sobre nome, descrição e campos, `mcp/classify.ts`, dono confirma). Proposta de rotina vale 24 h |

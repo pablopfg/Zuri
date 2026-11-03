@@ -345,3 +345,4 @@ acrescente aqui cada armadilha nova que encontrar (sem dados pessoais).
 - `new Request(input, init)` consome o corpo de um `Request` passado como
   `input`: num fetch de teste que só lê a URL e repassa `input`/`init`, o
   servidor recebe o corpo vazio. Monte o `Request` uma vez e repasse ele.
+- CHECK numa coluna acrescentada por ALTER TABLE em zur_mcp_tools fez cada INSERT do catálogo ler 3 linhas em vez de 1 (free-tier-budget, MCP 100 ferramentas: 436 > 260). Validar o valor no código (03/11/2026, autonomia MCP).

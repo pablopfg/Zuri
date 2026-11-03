@@ -625,11 +625,15 @@ então o servidor externo é tratado como não confiável em tudo:
   `mcp_server_changed`). Toda ferramenta nasce desligada e em "Perguntar
   sempre". Subir de nível ("Sem perguntar na conversa" ou "Sem perguntar,
   também em rotinas e workflows", decisão de 03/11/2026) pede a senha digitada
-  agora e gera o aviso `mcp_tool_autonomy`. Uma ferramenta que escreve pode
-  subir, com aviso a mais na tela; a que o servidor marca como destrutiva
-  (`destructiveHint: true`) sempre pergunta, mesmo com a linha mexida no
-  banco: o executor confere a marca de novo. A marca faz parte da definição
-  revisada, então não muda sem a ferramenta sair de uso.
+  agora e gera o aviso `mcp_tool_autonomy`. Quem diz o que a ferramenta faz é
+  a Zuri, com uma regra fixa sobre nome, descrição e campos
+  (`mcp/classify.ts`), sem IA: uma descrição escrita para convencer um modelo
+  não tem com quem falar. Na dúvida vale o tipo mais perigoso, e a marcação do
+  servidor só deixa mais cautelosa. O dono confirma no cartão; deixar menos
+  cautelosa pede a senha e gera o aviso. Uma ferramenta que altera dados pode
+  subir, com aviso a mais na tela; a que apaga ou sobrescreve sempre pergunta,
+  mesmo com a linha mexida no banco: o executor confere de novo. A definição
+  mudou? A ferramenta sai de uso e é classificada de novo.
 - **Sem SSRF.** Só `https` na porta padrão, sem usuário e senha no endereço,
   sem nome de rede particular (`localhost`, `.local`, `.internal`…) e sem IP
   particular, reservado ou de metadados, inclusive IPv4 embutido em IPv6. Antes
@@ -701,10 +705,20 @@ então o servidor externo é tratado como não confiável em tudo:
   "também em rotinas" e as que o dono liberou para ela (senha digitada agora,
   aviso, até 10, nunca destrutiva). Mudar a instrução da rotina desfaz a
   liberação, para uma sessão roubada não trocar o trabalho de uma rotina já
-  liberada; a definição mudada também. Os tetos de 1.000 e 4.000 caracteres e
+  liberada; a definição mudada, desligar a ferramenta e baixá-la para
+  "Perguntar sempre" também, e religar nunca devolve a liberação. Enquanto
+  uma ferramenta roda sozinha em rotinas, criar, mudar a instrução ou aprovar
+  uma rotina com IA pede a senha digitada agora: uma sessão roubada não planta
+  uma rotina que manda dados para fora. Mudar só o horário não pede (a
+  frequência mínima de 1 hora e o teto diário de execuções limitam). Os tetos de 1.000 e 4.000 caracteres e
   a regra de outro servidor valem igual: a chamada barrada não sai, vira
   proposta na conversa da rotina com aviso no app e no Telegram, e a rotina
-  segue. No máximo 3 propostas e 12 subrequisições externas por execução.
+  segue; a proposta vale 24 horas e fica presa ao hash. No máximo 3 propostas
+  por execução, e as rotinas de um despertar do alarme dividem 12
+  subrequisições externas (regra P9). Risco aceito: numa rotina, texto de
+  terceiros lido por uma ferramenta da Zuri (agenda, eventos remotos) não
+  conta como "outro servidor respondeu"; os tetos de 1.000 e 4.000 caracteres
+  continuam valendo.
 - **Credencial cifrada.** AES-256-GCM com chave derivada do segredo
   `MCP_CREDENTIAL_KEY` e o id do servidor como dado associado. O token nunca
   volta à interface, ao log nem ao prompt. Trocar de endereço descarta o token.

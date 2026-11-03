@@ -87,11 +87,13 @@ export class McpTurnTools {
       budget?: number;
       /** The triage by meaning (step 18b): how far above the floor each tool is from the message. */
       meaning?: ReadonlyMap<string, number>;
+      /** A meter shared with other runs of the same invocation (the alarm's routines); else one of `budget`. */
+      meter?: SubrequestMeter;
       /** An AI routine's run: its automation id and the tools set free for it. */
       routine?: { id: string; allowed: ReadonlySet<string> };
     } = {},
   ) {
-    this.#turn = service.newTurn(new SubrequestMeter(opts.budget ?? MCP_SUBREQUEST_BUDGET));
+    this.#turn = service.newTurn(opts.meter ?? new SubrequestMeter(opts.budget ?? MCP_SUBREQUEST_BUDGET));
     this.#routine = opts.routine?.id;
     const routine = opts.routine;
     for (const id of opts.answered ?? []) this.#answered.add(id);

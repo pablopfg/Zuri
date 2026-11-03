@@ -5,7 +5,8 @@ import type { AutomationService } from "../automations/service.ts";
 import type { ClientInfo } from "../auth/client.ts";
 import { AppError } from "../http/errors.ts";
 import type { McpService } from "../mcp/service.ts";
-import { levelOf } from "../mcp/repository.ts";
+import { kindRank } from "../mcp/classify.ts";
+import { kindOf, levelOf } from "../mcp/repository.ts";
 import type { ApiEnv } from "./app.ts";
 import { readJson } from "./http.ts";
 
@@ -96,7 +97,9 @@ export function registerMcpRoutes(app: Hono<ApiEnv>, deps: () => McpRouteDeps, c
     // (or turning on again a tool set that way, which also accepts a changed definition) needs the password and tells the owner.
     const level = patch.policy ?? levelOf(before);
     const enabling = patch.enabled === true && (before.enabled !== 1 || before.reviewed_hash !== before.schema_hash);
-    const raised = RANK[level] > RANK[levelOf(before)] || (enabling && level !== "approve");
+    // Calling a tool less dangerous than Zuri or the owner judged it lets it climb: the same password and alert.
+    const loosened = patch.kind !== undefined && kindRank(patch.kind) < kindRank(kindOf(before));
+    const raised = RANK[level] > RANK[levelOf(before)] || (enabling && level !== "approve") || loosened;
     if (raised) auth.requireRecentAuth(c.get("session"));
     const updated = service.updateTool(id, tool, patch);
     if (raised) auth.events.record("mcp_tool_autonomy", client(c), { alert: true });

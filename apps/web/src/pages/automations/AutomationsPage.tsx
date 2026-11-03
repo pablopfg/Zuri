@@ -424,11 +424,11 @@ function AutomationForm({ editing, onClose }: { editing: Editing; onClose: () =>
       if (current) {
         // A finished one-time reminder given a new moment starts again.
         await api(`/automations/${current.id}`, { method: "PATCH", body: { ...fields, ...(current.status === "completed" ? { paused: false } : {}) } });
-        // Another instruction lets go of the tools set free (on the server), so the list is sent again after it.
-        if (routineTools.data && (allowed !== null || (freed.length > 0 && message.trim() !== current.message))) {
+        // Another instruction lets go of the tools set free (on the server): only a list the owner touched is sent again.
+        if (routineTools.data && allowed !== null) {
           const result = await api<{ tools: McpRoutineTool[] }>(`/mcp/routines/${current.id}/tools`, { method: "PATCH", body: { tools: freed } });
           qc.setQueryData(toolsKey, result);
-        }
+        } else if (message.trim() !== current.message) void qc.invalidateQueries({ queryKey: toolsKey });
       } else {
         await api("/automations", { method: "POST", body: { kind, ...fields } });
       }
