@@ -1302,6 +1302,7 @@ export const en: Messages = {
   "notice.security.telegram_unlocked.body": "Reading through the bot was unlocked for 12 h, with your passkey or a code sent to your e-mail. If it wasn't you, unlink Telegram in Settings › Notifications and change your password.",
   "notice.security.telegram_approved.title": "Proposal approved through Telegram",
   "notice.security.telegram_approved.body": "A proposal from Zuri was approved through the bot, with your passkey or a code sent to your e-mail. If it wasn't you, unlink Telegram in Settings › Notifications and change your password.",
+  "auth.lockdown.recovery": "Lockdown mode is on, so the password can't be reset by e-mail until it ends. Sign in with your password and a recovery code to leave it.",
   "auth.lockdown.strict": "Lockdown mode was turned on less than an hour ago. For now, only a recovery code signs in: tap Use a recovery code.",
   "auth.lockdown.active": "Lockdown mode is on. Leave it to use the app.",
   "auth.lockdown.none": "Lockdown mode is not on.",

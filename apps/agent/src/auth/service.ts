@@ -884,6 +884,12 @@ export class AuthService {
     await this.assertHuman(input.turnstileToken, client);
     const matches = await this.checkEmail(input.email);
     const mail = this.deps.recoveryMail;
+    // SEC-A3-01: a lockdown means the phone (e-mail and authenticator) may be someone else's, so no
+    // link goes out while it lasts. Same answer as ever: the request never says the lockdown is on.
+    if (matches && this.lockdown.active()) {
+      this.events.record("recovery_requested", client, { reason: "lockdown" });
+      return;
+    }
     if (!matches || !this.ownerExists() || !mail?.available()) {
       // Folded per network, and into one row under a flood: refusals can't push the log's history out.
       this.events.record("recovery_requested", client, { reason: matches ? "email_off" : "wrong_email", everyNetwork: this.limiter.underPressure() });
@@ -907,6 +913,7 @@ export class AuthService {
   async checkRecovery(token: string): Promise<{ secondStep: boolean }> {
     await this.sync();
     if (!(await this.#recovery.valid(token))) throw this.recoveryExpired();
+    if (this.lockdown.active()) throw this.recoveryLocked();
     return { secondStep: this.twoStep.enabled() };
   }
 
@@ -921,6 +928,9 @@ export class AuthService {
     await this.sync();
     const fingerprint = await this.#recovery.fingerprint(input.token);
     if (!this.#recovery.matches(fingerprint)) throw this.recoveryExpired();
+    // SEC-A3-01: a link sent before the lockdown changes no password during it (the way out is
+    // the password plus a recovery code, or the installation code).
+    if (this.lockdown.active()) throw this.recoveryLocked();
     // The password first: a weak or leaked one must not spend a one-time code.
     const hash = await this.acceptablePassword(input.password, this.personalWords());
     if (this.twoStep.enabled()) {
@@ -941,7 +951,7 @@ export class AuthService {
     // request, may have won during the awaits, and only one of them changes the password.
     let used = false;
     this.deps.db.transaction(() => {
-      if (!this.#recovery.matches(fingerprint)) return;
+      if (!this.#recovery.matches(fingerprint) || this.lockdown.active()) return;
       used = true;
       this.deps.state.set("auth_password_hash", hash);
       this.deps.state.delete("auth_password_change_required");
@@ -953,6 +963,10 @@ export class AuthService {
       this.events.record("password_recovered", client, { alert: true });
     });
     if (!used) throw this.recoveryExpired();
+  }
+
+  private recoveryLocked(): AppError {
+    return new AppError("LOCKDOWN_ACTIVE", "auth.lockdown.recovery");
   }
 
   private recoveryExpired(): AppError {

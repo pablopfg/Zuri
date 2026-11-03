@@ -126,6 +126,13 @@ e o e-mail do dono); sem ele, a página aponta para o código de instalação.
   resposta. Antes de olhar o e-mail, passa pelo limite de 3 pedidos por rede em
   15 minutos (no máximo 200 redes lembradas) e pela verificação de robô, que
   falha fechada como no login.
+- **Durante o modo de bloqueio** (etapa 16b) a recuperação por e-mail fica
+  parada: o pedido responde 202 como sempre, mas não envia link (motivo
+  `lockdown` no registro), e um link enviado antes responde
+  `LOCKDOWN_ACTIVE` na conferência e na troca, com qualquer código. O bloqueio
+  existe porque o celular (e-mail e app autenticador) pode estar em outras
+  mãos; a saída é a senha com um código de recuperação, ou o código de
+  instalação (SEC-A3-01).
 - De todas as redes juntas, saem no máximo 3 links em 24 horas, com pelo menos
   10 minutos entre um e outro. Um pedido fora disso não envia nada e mantém o
   link anterior (motivo "link anterior mantido" no registro de acessos). Assim,
