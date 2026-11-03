@@ -256,7 +256,7 @@ describe("the proposal's card", () => {
     await linkOwner();
     await addPasskey();
     const { card, taskId } = await proposeDelete();
-    expect(String(card?.body.text)).toMatch(/^Proposta da Zuri: apagar a tarefa\nItem: Academia\nVale até \d{2}:\d{2}\.$/);
+    expect(String(card?.body.text)).toMatch(/^Proposta da Zuri: apagar a tarefa\nItem: Academia\nVale até (\d{2}\/\d{2}, )?\d{2}:\d{2}\.$/);
     expect(card?.body.parse_mode).toBeUndefined();
     expect(buttons(card)).toEqual([{ text: "Aprovar", callback_data: expect.stringMatching(/^v1:approve:[A-Za-z0-9_-]{16}$/) }]);
     expect(texts()).not.toContain("Deixei uma proposta para você conferir e aprovar no app.");
@@ -307,7 +307,7 @@ describe("the proposal's card", () => {
       const card = sent().find((c) => String(c.body.text).startsWith("Proposta da Zuri"));
       const lines = String(card?.body.text).split("\n");
       expect(lines.slice(0, -1), tool).toEqual(expected);
-      expect(lines.at(-1), tool).toMatch(/^Vale até \d{2}:\d{2}\.$/);
+      expect(lines.at(-1), tool).toMatch(/^Vale até (\d{2}\/\d{2}, )?\d{2}:\d{2}\.$/);
       expect(buttons(card).map((b) => b.text), tool).toEqual(["Aprovar"]);
     }
   });

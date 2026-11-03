@@ -688,7 +688,7 @@ describe("the edges of a turn", () => {
     await deliver(text(`call delete_task {"task":"${taskId}"}`));
     const last = sent().at(-1);
     // The preview from the database, never the model's words (step 16).
-    expect(String(last?.body.text)).toMatch(/^Proposta da Zuri: apagar a tarefa\nItem: Academia\nVale até \d{2}:\d{2}\.$/);
+    expect(String(last?.body.text)).toMatch(/^Proposta da Zuri: apagar a tarefa\nItem: Academia\nVale até (\d{2}\/\d{2}, )?\d{2}:\d{2}\.$/);
     const conversationId = (await json<{ conversations: { id: string }[] }>(await api("GET", "/conversations"), 200)).conversations[0]?.id;
     expect(buttons(last)).toEqual([{ text: "Abrir no app", url: `${ORIGIN}/conversa/${conversationId}` }]);
     // Nothing was deleted: the approval stays in the app.
