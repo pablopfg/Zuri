@@ -31,3 +31,12 @@
 
 - Ao voltar do login de um serviço MCP, o cartão às vezes continuava em "Falta
   entrar" até recarregar a página. Agora mostra "Conectado" na hora.
+
+### Atualização
+
+- O banco ganha a migration 22 (a conta do Google e as agendas, com o modo de
+  cada uma). Ela roda sozinha na primeira requisição e só acrescenta.
+- Para usar a Agenda, cadastre os secrets `GOOGLE_CLIENT_ID` e
+  `GOOGLE_CLIENT_SECRET` do seu cliente OAuth e tenha o `MCP_CREDENTIAL_KEY`.
+  O passo a passo está em `docs/google-agenda.md`. Sem eles, o cartão do Google
+  explica o que falta e nada mais muda.
