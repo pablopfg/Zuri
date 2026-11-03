@@ -291,3 +291,19 @@ test("a drawer left open closes when the screen widens, and the page stays usabl
   await page.locator("aside").getByRole("link", { name: "Notas" }).click();
   await expect(page).toHaveURL(/\/notas$/);
 });
+
+test("the bell over 99 unread says 99+ in its name too, as the badge shows @mobile", async ({ page }) => {
+  await openHome(page);
+  await page.route("**/api/auth/session", async (route) => {
+    const res = await route.fetch();
+    if (!res.ok()) return route.fulfill({ response: res });
+    return route.fulfill({ response: res, json: { ...(await res.json()), unreadNotices: 150 } });
+  });
+  await page.reload();
+  // The greeting fades in after the reload: axe checks it once it has arrived.
+  await expect(page.getByRole("heading", { level: 1, name: /^(Bom dia|Boa tarde|Boa noite)/ })).toBeVisible();
+  const bell = page.getByRole("button", { name: "Abrir avisos, 99+ sem ler" });
+  await expect(bell).toBeVisible();
+  await expect(bell).toHaveText("99+");
+  await expectAccessible(page, "sino-99");
+});

@@ -37,7 +37,7 @@ test("a reminder's run reaches the bell: open, read, delete and read all @mobile
   const id = await reminderNotice(page, name, "Beber um copo de água");
   // The count comes with the session check, as when the owner comes back to the tab.
   await page.reload();
-  const bell = page.getByRole("button", { name: /^Abrir avisos, \d+ sem ler$/ }).first();
+  const bell = page.getByRole("button", { name: /^Abrir avisos, \d+\+? sem ler$/ }).first();
   await expect(bell).toBeVisible();
   await bell.click();
 
