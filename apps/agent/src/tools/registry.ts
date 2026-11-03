@@ -447,7 +447,8 @@ export async function runApprovedAction(tools: readonly ToolDefinition[], ctx: T
     } catch (error) {
       if (error instanceof TargetGone) {
         actions.fail(actionId, error.gone ? "gone" : "changed");
-        throw new AppError("TARGET_CHANGED", error.gone ? "error.actionTargetGone" : "error.actionTargetChanged");
+        if (error.gone) throw new AppError("TARGET_CHANGED", "error.actionTargetGone");
+        throw new AppError("TARGET_CHANGED", "error.actionTargetChanged");
       }
       actions.fail(actionId, "failed");
       throw error;

@@ -61,7 +61,8 @@ async function s256(verifier: string): Promise<string> {
 const GOOGLE_HOSTS = new Set(["oauth2.googleapis.com", "www.googleapis.com"]);
 const SCOPES = ["https://www.googleapis.com/auth/calendar.calendarlist.readonly", "https://www.googleapis.com/auth/calendar.events"];
 
-export function devGoogle(options: { clientId?: string | undefined; clientSecret?: string | undefined; calendars?: DevCalendar[] } = {}): DevGoogle {
+export function devGoogle(options: { clientId?: string | undefined; clientSecret?: string | undefined; calendars?: DevCalendar[]; clock?: () => number } = {}): DevGoogle {
+  const clock = options.clock ?? Date.now;
   let version = 1;
   const nextEtag = () => `"${version++}"`;
   const google: DevGoogle = {
@@ -176,7 +177,7 @@ export function devGoogle(options: { clientId?: string | undefined; clientSecret
       const input = JSON.parse(body || "{}") as { id: string; token: string; address: string };
       const resourceId = `res-${random()}`;
       google.channels.set(input.id, { calendarId, resourceId, token: input.token, address: input.address });
-      return json({ kind: "api#channel", id: input.id, resourceId, expiration: String(Date.now() + 7 * 86_400_000) });
+      return json({ kind: "api#channel", id: input.id, resourceId, expiration: String(clock() + 7 * 86_400_000) });
     }
     if (!eventId) {
       if (method === "GET") {

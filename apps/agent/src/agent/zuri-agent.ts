@@ -525,7 +525,16 @@ export class ZuriAgent extends Agent<WorkerEnv> {
               return null;
             }
           })();
-          const due = [tries, watch, indexing, tools].filter((at): at is string => Boolean(at)).sort()[0] ?? watch;
+          // The Google Calendar's push channels (step 19), made further down too.
+          const channels = (() => {
+            try {
+              const at = google.watchDue();
+              return at === null ? null : new Date(at).toISOString();
+            } catch {
+              return null;
+            }
+          })();
+          const due = [tries, watch, indexing, tools, channels].filter((at): at is string => Boolean(at)).sort()[0] ?? watch;
           // Work already past due is only left there when its step failed on the last
           // alarm (a full disk, say): wait a minute before trying again, never at once,
           // so a step that keeps failing can't spin the alarm through the day's quota.

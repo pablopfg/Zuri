@@ -63,6 +63,7 @@ const ACTION: Record<ApprovalPreview["tool"], MessageKey> = {
   delete_note: "web.approve.action.delete_note",
   forget_memory: "web.approve.action.forget_memory",
   cancel_automation: "web.approve.action.cancel_automation",
+  delete_calendar_event: "web.approve.action.delete_calendar_event",
   mcp_call: "web.approve.action.mcp_call",
 };
 

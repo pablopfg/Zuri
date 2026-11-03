@@ -106,7 +106,7 @@ export function withChatWorld<T>(fn: (world: ChatWorld) => T | Promise<T>): Prom
     const automations = new AutomationService(db, productivity.storage, new InternalState(db), { timeZone: () => TIME_ZONE, alarm, clock: tick });
     const mcpLockdown = { active: false };
     const mcp = new McpService({ db, credentialKey: testEnv.MCP_CREDENTIAL_KEY, development: () => false, lockdown: () => mcpLockdown.active, redirectUrl: () => "https://zuri.exemplo.com.br/configuracoes/integracoes", clock: tick });
-    const googleSim = devGoogle({ clientId: testEnv.GOOGLE_CLIENT_ID, clientSecret: testEnv.GOOGLE_CLIENT_SECRET });
+    const googleSim = devGoogle({ clientId: testEnv.GOOGLE_CLIENT_ID, clientSecret: testEnv.GOOGLE_CLIENT_SECRET, clock: tick });
     const google = new GoogleCalendar({
       db,
       state: new InternalState(db),

@@ -217,3 +217,52 @@ describe("delete_calendar_event", () => {
       expect(await refused(exec.execute("delete_calendar_event", { calendar: PRIMARY, event_id: "d1" }, "d1"))).toMatch(/changed this item earlier/);
     }));
 });
+
+describe("the push channels the alarm keeps", () => {
+  it("opens them with the calendar, renews one near its end, retries a refusal an hour later, and costs nothing between", () =>
+    withChatWorld(async (world) => {
+      expect(world.google.watchDue()).toBeNull();
+      await connect(world);
+      // Opening a calendar opens its channel at once: nothing left for the alarm until the channels near their end.
+      expect(world.googleSim.channels.size).toBe(2);
+      const due = world.google.watchDue();
+      expect(due).toBeGreaterThan(world.clock.now + 5 * 86_400_000);
+      expect(await world.google.renewWatches()).toBe(0);
+      // Between wakes the answer comes from memory: no row read.
+      const before = world.db.usage.rowsRead;
+      expect(world.google.watchDue()).toBe(due);
+      expect(world.db.usage.rowsRead).toBe(before);
+
+      world.clock.now = (due ?? 0) + 1_000;
+      const old = new Set(world.googleSim.channels.keys());
+      expect(await world.google.renewWatches()).toBe(2);
+      const now = [...world.googleSim.channels.keys()];
+      // The new channels replaced the old ones, which Google was told to stop.
+      expect(now).toHaveLength(2);
+      expect(now.some((id) => old.has(id))).toBe(false);
+      expect(world.google.watchDue()).toBeGreaterThan(world.clock.now + 5 * 86_400_000);
+
+      // Google refuses: the alarm comes back in an hour, not on every wake.
+      world.clock.now = (world.google.watchDue() ?? 0) + 1_000;
+      world.googleSim.outage = 503;
+      expect(await world.google.renewWatches()).toBe(0);
+      expect(world.google.watchDue()).toBe(world.clock.now + 3_600_000);
+      expect(await world.google.renewWatches()).toBe(0);
+      world.googleSim.outage = null;
+      world.clock.now += 3_600_000;
+      expect(await world.google.renewWatches()).toBe(2);
+
+      // Locked down: nothing goes out, and the wait is an hour too.
+      world.clock.now = (world.google.watchDue() ?? 0) + 1_000;
+      world.mcpLockdown.active = true;
+      const seen = world.googleSim.seen.length;
+      expect(await world.google.renewWatches()).toBe(0);
+      expect(world.googleSim.seen.length).toBe(seen);
+      expect(world.google.watchDue()).toBe(world.clock.now + 3_600_000);
+
+      // Disconnected: nothing due at all.
+      world.mcpLockdown.active = false;
+      await world.google.disconnect();
+      expect(world.google.watchDue()).toBeNull();
+    }));
+});

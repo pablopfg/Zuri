@@ -46,6 +46,8 @@ const WATCH_TTL_S = 7 * 24 * 3_600;
 const WATCH_RENEW_MS = 24 * 3_600_000;
 /** Channels the alarm opens or renews per wake (rule P9: the wake shares its 50 subrequests). */
 const WATCH_RENEW_PER_WAKE = 4;
+/** How long the alarm waits after a channel it couldn't open (or during a lockdown). */
+const WATCH_RETRY_MS = 3_600_000;
 /** Open calendars with a push channel at most; more are still read, the screen just refreshes on focus. */
 export const WATCHED_CALENDARS_MAX = 10;
 /** At most one notice a day that the connection needs the owner. */
@@ -175,6 +177,12 @@ export class GoogleCalendar {
   network: GoogleNetwork = { fetch: (input, init) => fetch(input, init) };
   private readonly credentials: McpCredentials;
   private readonly clock: () => number;
+  /**
+   * When the alarm next has a push channel to open or renew (ms), kept in
+   * memory: the alarm runs on every wake and reading the calendars each time
+   * would cost rows for nothing (rule P8). `undefined` reads it again.
+   */
+  #due: number | null | undefined;
 
   constructor(private readonly deps: GoogleDeps) {
     this.credentials = new McpCredentials(deps.credentialKey, "google-v1");
@@ -405,6 +413,7 @@ export class GoogleCalendar {
     this.deps.db.run(`UPDATE zur_google_calendars SET mode = 'off' WHERE access_role = 'freeBusyReader' AND mode != 'off'`);
     if (ids.length) this.deps.db.run(`DELETE FROM zur_google_calendars WHERE id NOT IN (${ids.map(() => "?").join(",")})`, ...ids);
     else this.deps.db.run(`DELETE FROM zur_google_calendars`);
+    this.#due = undefined;
   }
 
   /** Reads the calendar list again (new or removed calendars, changed roles). */
@@ -423,6 +432,7 @@ export class GoogleCalendar {
     if (mode === "write" && !WRITABLE_ROLES.has(row.access_role)) throw new GoogleError("read_only");
     if (mode !== "off" && row.access_role === "freeBusyReader") throw new GoogleError("free_busy");
     this.deps.db.run(`UPDATE zur_google_calendars SET mode = ?, updated_at = ? WHERE id = ?`, mode, new Date(this.clock()).toISOString(), id);
+    this.#due = undefined;
     const meter = new GoogleMeter(4);
     try {
       if (mode === "off" && row.watch_id) await this.stopWatch(row, meter);
@@ -443,6 +453,7 @@ export class GoogleCalendar {
       this.deps.db.run(`DELETE FROM zur_google_account`);
       this.deps.state.delete("google_oauth_pending");
     });
+    this.#due = undefined;
     if (!account || this.deps.lockdown()) return;
     const meter = new GoogleMeter(8);
     try {
@@ -519,6 +530,7 @@ export class GoogleCalendar {
       problem,
       ...(notify ? [new Date(now).toISOString()] : []),
     );
+    this.#due = undefined;
     if (notify) this.deps.onProblem?.(problem);
   }
 
@@ -726,10 +738,12 @@ export class GoogleCalendar {
     const expiration = Number(body?.expiration);
     const expires = Number.isFinite(expiration) && expiration > this.clock() ? expiration : this.clock() + WATCH_TTL_S * 1000;
     this.deps.db.run(`UPDATE zur_google_calendars SET watch_id = ?, watch_resource = ?, watch_expires = ? WHERE id = ?`, id, resource, expires, row.id);
+    this.#due = undefined;
   }
 
   private async stopWatch(row: CalendarRow, meter: GoogleMeter): Promise<void> {
     this.deps.db.run(`UPDATE zur_google_calendars SET watch_id = NULL, watch_resource = NULL, watch_expires = NULL WHERE id = ?`, row.id);
+    this.#due = undefined;
     if (!row.watch_id || !row.watch_resource) return;
     await this.sendChannelStop(row, await this.accessToken(meter), meter).catch(() => undefined);
   }
@@ -754,15 +768,23 @@ export class GoogleCalendar {
    * Nothing without an account in order, a public address or during a lockdown.
    */
   async renewWatches(meter = new GoogleMeter(WATCH_RENEW_PER_WAKE * 2 + 1)): Promise<number> {
-    if (!this.pushable() || !this.configured || this.deps.lockdown() || this.account()?.status !== "connected") return 0;
-    const due = this.deps.db.all<CalendarRow>(
+    const due = this.watchDue();
+    if (due === null || due > this.clock()) return 0;
+    if (this.deps.lockdown()) {
+      // Nothing goes to Google during a lockdown; look again in an hour, not on every wake.
+      this.#due = this.clock() + WATCH_RETRY_MS;
+      return 0;
+    }
+    // The channels near their end first; then the open calendars still without one.
+    const rows = this.deps.db.all<CalendarRow>(
       `SELECT * FROM zur_google_calendars WHERE mode != 'off' AND (watch_id IS NULL OR watch_expires IS NULL OR watch_expires < ?)
-       ORDER BY is_primary DESC, name LIMIT ?`,
+       ORDER BY watch_id IS NULL, watch_expires, is_primary DESC, name LIMIT ?`,
       this.clock() + WATCH_RENEW_MS,
       WATCH_RENEW_PER_WAKE,
     );
     let renewed = 0;
-    for (const row of due) {
+    let failed = false;
+    for (const row of rows) {
       try {
         const old = row.watch_id ? { ...row } : null;
         if (old) this.deps.db.run(`UPDATE zur_google_calendars SET watch_id = NULL, watch_resource = NULL, watch_expires = NULL WHERE id = ?`, row.id);
@@ -770,12 +792,35 @@ export class GoogleCalendar {
         if (old) await this.sendChannelStop(old, await this.accessToken(meter), meter).catch(() => undefined);
         renewed++;
       } catch (error) {
+        failed = true;
         if (error instanceof GoogleError && (error.kind === "budget" || error.kind === "revoked" || error.kind === "lockdown")) break;
         log("warn", "google_watch_failed", { error });
       }
     }
+    // A channel Google refused is tried again in an hour: a failure never spins the alarm.
+    this.#due = failed ? this.clock() + WATCH_RETRY_MS : undefined;
     return renewed;
   }
+
+  /**
+   * When the alarm has a channel to open or renew (ms), or null: none while
+   * the account is not in order or the address is not public. A calendar
+   * without a channel counts only while there is room for one more.
+   */
+  watchDue(): number | null {
+    if (this.#due !== undefined) return this.#due;
+    let due: number | null = null;
+    if (this.pushable() && this.configured && this.account()?.status === "connected") {
+      const row = this.deps.db.one<{ expires: number | null; watched: number; bare: number | null }>(
+        `SELECT min(watch_expires) AS expires, count(watch_id) AS watched, sum(watch_id IS NULL) AS bare FROM zur_google_calendars WHERE mode != 'off'`,
+      );
+      if (row && (row.bare ?? 0) > 0 && row.watched < WATCHED_CALENDARS_MAX) due = this.clock();
+      else if (row?.expires != null) due = row.expires - WATCH_RENEW_MS;
+    }
+    this.#due = due;
+    return due;
+  }
+
 
   /**
    * A push notice Google sent (the Worker already checked its token): the
