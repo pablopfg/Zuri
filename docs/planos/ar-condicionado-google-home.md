@@ -178,16 +178,30 @@ exemplo 2 h), com o mínimo e o máximo testados. Só muda limite, sem tela nova
 
 ## 8. Perguntas ao Pablo
 
-1. **Qual a marca e o modelo do ar, e como ele aparece no Google Home?** (app
-   do fabricante, controle infravermelho tipo Broadlink/Tuya, ou outro).
-   Recomendação: se tiver Wi-Fi de marca conhecida, integração direta no Home
-   Assistant.
+1. ~~Qual a marca e o modelo do ar, e como ele aparece no Google Home?~~
+   **Respondida em 03/11/2026:** controle infravermelho Tuya, pelo app Smart
+   Life, ligado ao Google Home. Ver 8.1.
 2. **Você já usa Home Assistant, ou tem um computador ligado 24 h em casa?**
    Recomendação: Home Assistant num Raspberry Pi ou mini PC, acessado por
    Cloudflare Tunnel (⚠ recurso novo, sem custo).
 3. **Prefere começar já pela rotina com IA (seção 4) ou esperar a versão sem
    IA da 22c?** Recomendação: começar pela rotina, que só precisa do teste do
    token (5.1) e do prazo curto (5.2).
+
+### 8.1 Caso do Pablo: hub infravermelho Tuya pelo Smart Life
+
+O ar é comandado por um hub infravermelho Tuya (categoria `wnykq`, com o ar
+como "controle virtual" no Smart Life). O que isso muda:
+
+| Caminho até o ar | Contas extras | Confiável? | Observação |
+| --- | --- | --- | --- |
+| **Home Assistant + Google Assistant SDK** (4.1, caminho 3): manda "ligar o ar" ao Google, que já conhece o ar pelo Smart Life | Projeto no Google Cloud (grátis) | Média: depende do nome do aparelho e da frase | Mais rápido de montar, nada novo na Tuya. **Começar por aqui** |
+| **Home Assistant + integração `tuya_smart_ir_ac`** (da comunidade) | Conta de desenvolvedor na Tuya IoT, com teste gratuito que precisa ser renovado a cada 6 meses | Boa enquanto a renovação valer | A integração oficial Tuya do Home Assistant mostra hubs `wnykq` como "não suportado" ([issue 116023](https://github.com/home-assistant/core/issues/116023)); a da comunidade ([tuya-smart-ir-ac](https://github.com/EnzoD86/tuya-smart-ir-ac)) usa a nuvem da Tuya |
+| **Zuri direto na nuvem Tuya** pelo motor de fluxos | A mesma conta Tuya IoT | Média | ❌ hoje: a Tuya exige pedido assinado com HMAC e token renovado; as conexões dos fluxos só têm token fixo ou cabeçalho |
+| **Trocar o hub por um ESPHome infravermelho** (cerca de R$ 50 a R$ 100) | Nenhuma | **Alta**: funciona só na rede de casa, sem nuvem | Melhor a longo prazo, se o caminho pelo Google falhar |
+
+Em qualquer linha, o Zuri faz a mesma coisa: fala com o Home Assistant por
+MCP e pede aprovação no Telegram. Muda só como o Home Assistant chega ao ar.
 
 ## 9. Próximos passos sugeridos
 
