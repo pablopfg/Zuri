@@ -133,6 +133,36 @@ turno (`AI_TURN_DEADLINE_MS`).
   restrita que a do Talorys). O bot do Telegram pode aprovar uma chamada MCP
   proposta no chat, mas nunca conectar um servidor nem trocar a URL dele.
 
+### 7. Autonomia por ferramenta (aprovada pelo Pablo em 03/11/2026)
+
+O Pablo pediu (03/11) que "Usar sem perguntar" dependa da ferramenta, e não
+da marca `readOnlyHint`: algumas ferramentas devem rodar sozinhas também em
+rotinas e workflows, outras sempre pedir aprovação. Proposta:
+
+- **Três níveis por ferramenta**, escolhidos no cartão da ferramenta em
+  Integrações: "Perguntar sempre" (padrão), "Sem perguntar na conversa" e
+  "Sem perguntar, também em rotinas e workflows". Só o dono muda, com a senha
+  digitada agora e aviso de segurança; o agente e o bot nunca mudam.
+- **Ferramenta que escreve** pode subir de nível, com um aviso a mais na tela.
+  A que o próprio servidor marca como destrutiva (`destructiveHint: true`)
+  fica sempre em "Perguntar sempre" (regra 3).
+- **Nas rotinas**, só as ferramentas do terceiro nível. Uma chamada que
+  pediria cartão (dados demais, resposta de outro servidor já no contexto)
+  não roda: vira proposta pendente com aviso no app e no Telegram.
+- **Valem sempre:** bloqueio (`auth.lockdown.active()`) corta tudo; definição
+  mudada volta a ferramenta para "Perguntar sempre"; os tetos de 1.000 e
+  4.000 caracteres e de subrequisições continuam.
+- **Ajuste por rotina e por workflow (pedido do Pablo na aprovação):** quando
+  uma rotina ou um workflow precisar de mais liberdade, o dono libera
+  ferramentas só para ele, na tela da rotina (e do workflow, na etapa 22),
+  com a mesma senha digitada agora e o mesmo aviso. A liberação vale só
+  naquela rotina e nunca alcança ferramenta marcada como destrutiva pelo
+  servidor. O modelo de dados guarda a liberação por rotina desde já, para a
+  etapa 22 reaproveitar.
+- **Entrega:** numa PR própria logo depois da 18b (a 18b já passou por QA e
+  auditoria), antes da etapa 19. Substitui a regra antiga "Nenhuma ferramenta
+  MCP roda em execução agendada" do item 6 e da especificação.
+
 ## Como fica contra as regras invioláveis
 
 | Regra | Como o desenho atende |

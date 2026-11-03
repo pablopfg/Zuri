@@ -9,6 +9,7 @@ import {
 } from "@zuri/shared";
 import type { Database } from "../db/database.ts";
 import { AppError } from "../http/errors.ts";
+import { visibleJson } from "../mcp/visible.ts";
 
 /** Proposals are kept this long, whatever became of them. */
 export const ACTION_RETENTION_MS = 30 * 86_400_000;
@@ -195,8 +196,9 @@ function previewOf(row: ActionRow): string | undefined {
       // Never cut: the executor already refused more than 4,000 characters, compact. When the indented form
       // is longer than that (many short items), the compact one goes instead, whole.
       const args = payload?.args ?? {};
-      const text = JSON.stringify(args, null, 2);
-      return text.length > ARGS_PREVIEW_MAX ? JSON.stringify(args) : text;
+      // Hidden characters (bidi, zero width) are shown as escapes: the owner sees what is really sent.
+      const text = visibleJson(args, 2);
+      return text.length > ARGS_PREVIEW_MAX ? visibleJson(args) : text;
     } catch {
       return undefined;
     }

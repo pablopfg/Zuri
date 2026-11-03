@@ -8,6 +8,7 @@ import { McpBudgetSpent, SubrequestMeter } from "../src/mcp/session.ts";
 import { findTools, stems, type TriageTool, toolCost, triage } from "../src/mcp/triage.ts";
 import { developmentMcpNetwork } from "../src/mcp/dev-mcp.ts";
 import { assertPublicHost, dohResolver, endpointUrl, isPrivateAddress, isPrivateHost, McpEndpointError } from "../src/mcp/url.ts";
+import { visibleJson } from "../src/mcp/visible.ts";
 
 // Step 18: the pieces that keep a remote MCP server at arm's length.
 
@@ -436,6 +437,30 @@ describe("guardedFetch with OAuth (step 18b)", () => {
     expect(seen[1]?.headers.get("authorization")).toBe("Bearer tok-x");
   });
 
+  it("gives up on a sign-in server that never answers, but leaves the SDK's own deadline alone", async () => {
+    const hang = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const request = new Request(input, init);
+      return new Promise<Response>((_, reject) => {
+        request.signal.addEventListener("abort", () => reject(new DOMException("timed out", "TimeoutError")));
+      });
+    }) as typeof fetch;
+    const f = guardedFetch(endpoint, { kind: "oauth", provider, allowOrigin: async () => undefined }, hang, undefined, 30);
+    const started = Date.now();
+    await expect(f("https://entrar.exemplo.com.br/token", { method: "POST", body: "x" })).rejects.toThrow();
+    expect(Date.now() - started).toBeLessThan(5_000);
+    // A request with a signal of its own (the MCP calls) gets no deadline added.
+    const own = new AbortController();
+    const pending = f("https://mcp.exemplo.com.br/mcp", { method: "POST", body: "{}", signal: own.signal });
+    let settled = false;
+    void pending.catch(() => undefined).finally(() => {
+      settled = true;
+    });
+    await new Promise((resolve) => setTimeout(resolve, 80));
+    expect(settled).toBe(false);
+    own.abort();
+    await expect(pending).rejects.toThrow();
+  });
+
   it("a refused sign-in origin sends nothing", async () => {
     let calls = 0;
     const base = (async () => {
@@ -462,9 +487,13 @@ describe("guardedFetch with OAuth (step 18b)", () => {
     await expect(f("https://entrar.exemplo.com.br/token")).rejects.toMatchObject({ problem: "blocked" });
   });
 
-  it("names the SDK's OAuth failures", () => {
-    expect(classifyMcpError(new Error("OAuth error: invalid_grant")).problem).toBe("oauth");
-    expect(classifyMcpError(new Error("Incompatible auth server: does not support dynamic client registration")).problem).toBe("oauth");
+  it("flags the SDK's OAuth failures without calling a third party's error text a sign-in problem", () => {
+    expect(classifyMcpError(new Error("OAuth error: invalid_grant"))).toMatchObject({ problem: "protocol", oauthLike: true });
+    expect(classifyMcpError(new Error("Incompatible auth server: does not support dynamic client registration"))).toMatchObject({ oauthLike: true });
+    // A tool's own error that happens to say "registration" or "issuer" stays a passing protocol error.
+    expect(classifyMcpError(new Error("ProtocolError Invalid params: vehicle registration not found"))).toMatchObject({ problem: "protocol" });
+    expect(classifyMcpError(new Error("Card issuer declined")).problem).toBe("protocol");
+    expect(classifyMcpError(new Error("plain failure")).oauthLike).toBe(false);
   });
 });
 
@@ -527,6 +556,17 @@ describe("ZuriOAuthProvider", () => {
     expect(await make(true, s).clientInformation()).toEqual({ client_id: "old" });
   });
 
+  it("outside the owner's action never registers: no registration for this callback is a sign-in to start", async () => {
+    const s = store();
+    await expect(make(false, s).clientInformation()).rejects.toMatchObject({ problem: "signin" });
+    s.saved.client = { client_id: "old" };
+    s.saved.redirect_url = "https://antigo.exemplo.com.br/configuracoes/integracoes";
+    await expect(make(false, s).clientInformation()).rejects.toMatchObject({ problem: "signin" });
+    // A registration for this callback still serves a refresh in a turn.
+    s.saved.redirect_url = "https://zuri.exemplo.com.br/configuracoes/integracoes";
+    expect(await make(false, s).clientInformation()).toEqual({ client_id: "old" });
+  });
+
   it("forgets what the service says is no longer valid", async () => {
     const s = store();
     Object.assign(s.saved, { client: { client_id: "c" }, tokens: { access_token: "a", token_type: "Bearer" }, verifier: "v" });
@@ -546,3 +586,18 @@ describe("ZuriOAuthProvider", () => {
     expect(stateServerId("")).toBe("");
   });
 });
+
+describe("visibleJson", () => {
+  it("writes hidden characters as escapes and stays the same JSON value", () => {
+    const value = { a: "x\u202ey\u2066z\u200b", tag: "\u{E0041}", plain: "olá · ok", line: "a\u2028b" };
+    const shown = visibleJson(value, 2);
+    expect(shown).not.toMatch(/[\u202a-\u202e\u2066-\u2069\u200b\u2028]/u);
+    expect(shown).not.toMatch(/\u{E0041}/u);
+    expect(shown).toContain("x\\u202Ey\\u2066z\\u200B");
+    expect(shown).toContain("\\uDB40\\uDC41");
+    expect(shown).toContain("olá · ok");
+    expect(JSON.parse(shown)).toEqual(value);
+    expect(visibleJson({ n: 1 })).toBe('{"n":1}');
+  });
+});
+

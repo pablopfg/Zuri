@@ -17,7 +17,7 @@ import { stableStringify } from "../tools/stable.ts";
 import { CATALOG_LIMITS, type CallResult, type CatalogEntry, checkTool, clip, parseHints, resultText, toZod } from "./catalog.ts";
 import { McpCredentials } from "./credentials.ts";
 import type { McpMeaning } from "./meaning.ts";
-import { type OAuthRecord, sameSecret, stateServerId, ZuriOAuthProvider } from "./oauth.ts";
+import { type OAuthRecord, oauthBinding, sameSecret, stateServerId, ZuriOAuthProvider } from "./oauth.ts";
 import { classifyMcpError, type FetchAuth, McpConnectionError } from "./guarded-fetch.ts";
 import { isUsable, McpRepository, presentTool, type ServerRow, type ToolRow } from "./repository.ts";
 import { McpBudgetSpent, McpTurn, type SubrequestMeter } from "./session.ts";
@@ -113,6 +113,8 @@ export class McpService {
   readonly #clock: () => number;
   /** One write of a server's OAuth record at a time: two turns refreshing at once can't lose a token. */
   readonly #saving = new Map<string, Promise<void>>();
+  /** Servers whose sign-in callback is being redeemed now. */
+  readonly #finishing = new Set<string>();
 
   constructor(private readonly deps: McpDeps) {
     this.#clock = deps.clock ?? Date.now;
@@ -145,7 +147,8 @@ export class McpService {
       url: server.url,
       authType: server.auth_type,
       // OAuth: signed in, never merely "something stored" (a sign-in that only started stores a verifier).
-      hasCredential: server.auth_type === "oauth" ? server.signed_in_at !== null : server.credential !== null,
+      // A lost sign-in (the service refused the tokens) is not signed in, even before a new sign-in starts.
+      hasCredential: server.auth_type === "oauth" ? server.signed_in_at !== null && server.problem !== "signin" : server.credential !== null,
       enabled: server.enabled === 1,
       status: server.enabled !== 1 ? "disabled" : server.status,
       problem: server.problem,
@@ -177,7 +180,7 @@ export class McpService {
   }
 
   /** Adds a server and connects it at once; a failure to connect comes back as its status. */
-  async create(input: { name: string; url: string; authType: McpAuthType; token?: string | undefined }): Promise<McpServerInfo> {
+  async create(input: { name: string; url: string; authType: McpAuthType; token?: string | undefined }, owner?: string): Promise<McpServerInfo> {
     if (this.repo.count() >= MCP_LIMITS.maxServers) throw new AppError("CONFLICT", "error.mcpServerLimit");
     const url = this.endpoint(input.url);
     // OAuth keeps its tokens encrypted like a static token: the key must be there.
@@ -190,7 +193,7 @@ export class McpService {
     if (input.authType === "bearer" && input.token) {
       this.repo.update(server.id, { credential: await this.credentials.encrypt(server.id, input.token) });
     }
-    return this.connect(server.id, { interactive: true });
+    return this.connect(server.id, { owner });
   }
 
   /**
@@ -201,6 +204,7 @@ export class McpService {
   async update(
     id: string,
     patch: { name?: string | undefined; url?: string | undefined; enabled?: boolean | undefined; authType?: McpAuthType | undefined; token?: string | undefined },
+    owner?: string,
   ): Promise<{ server: McpServerInfo; urlChanged: boolean }> {
     const server = this.require(id);
     const url = patch.url === undefined ? undefined : this.endpoint(patch.url).href;
@@ -226,7 +230,7 @@ export class McpService {
     });
     const connection = urlChanged || patch.authType !== undefined || patch.token !== undefined || patch.enabled === true;
     if (patch.enabled === false) this.repo.disconnected(id);
-    else if (connection && this.require(id).enabled === 1) return { server: await this.connect(id, { interactive: true }), urlChanged };
+    else if (connection && this.require(id).enabled === 1) return { server: await this.connect(id, { owner }), urlChanged };
     return { server: this.present(this.require(id)), urlChanged };
   }
 
@@ -235,12 +239,12 @@ export class McpService {
     this.repo.delete(id);
   }
 
-  /** How a request to the server signs in; the token is opened only now. */
-  private async fetchAuth(server: ServerRow, turn: McpTurn, interactive = false): Promise<FetchAuth> {
+  /** How a request to the server signs in; the token is opened only now. `owner`: the session id of the owner's action (connecting, signing in); none in a turn. */
+  private async fetchAuth(server: ServerRow, turn: McpTurn, owner?: string): Promise<FetchAuth> {
     if (server.auth_type === "none") return { kind: "none" };
     if (server.auth_type === "oauth") {
       if (!this.credentials.available) throw new McpConnectionError("credential_unreadable");
-      return { kind: "oauth", provider: this.oauthProvider(server.id, interactive), allowOrigin: (url) => this.allowSignInOrigin(turn, url) };
+      return { kind: "oauth", provider: await this.oauthProvider(server, owner), allowOrigin: (url) => this.allowSignInOrigin(turn, url) };
     }
     if (server.auth_type !== "bearer" || !server.credential) throw new McpConnectionError("auth");
     const token = await this.credentials.decrypt(server.id, server.credential);
@@ -259,15 +263,15 @@ export class McpService {
    * Connects and reads the tool list again. A failure is kept on the server as
    * a code and returned as its status, never thrown: the owner sees why.
    */
-  async connect(id: string, opts: { interactive: boolean } = { interactive: false }): Promise<McpServerInfo> {
+  async connect(id: string, opts: { owner?: string | undefined } = {}): Promise<McpServerInfo> {
     const server = this.require(id);
     if (server.enabled !== 1) throw new AppError("CONFLICT", "error.mcpServerOff");
     const turn = this.newTurn();
     // A new attempt replaces a sign-in still waiting: only the newest page works.
-    if (server.auth_type === "oauth" && opts.interactive && server.authorize_url) await this.clearSignIn(id);
+    if (server.auth_type === "oauth" && opts.owner !== undefined && server.authorize_url) await this.clearSignIn(server);
     try {
       const target = this.target(server);
-      const client = await turn.client(server.id, target.url, await this.fetchAuth(server, turn, opts.interactive), () => target.verify());
+      const client = await turn.client(server.id, target.url, await this.fetchAuth(server, turn, opts.owner), () => target.verify());
       const { tools, truncated } = await turn.listTools(client).catch((error: unknown) => {
         throw classifyMcpError(error);
       });
@@ -327,34 +331,56 @@ export class McpService {
   /** Why a connection or call failed, as a code; for an OAuth server, a refused token means signing in again. */
   private problemOf(server: ServerRow, error: unknown): McpServerProblem {
     if (error instanceof McpBudgetSpent) return "unavailable";
-    const { problem } = classifyMcpError(error);
+    const { problem, oauthLike } = classifyMcpError(error);
     if (server.auth_type !== "oauth") return problem;
     if (problem === "auth" || problem === "signin") return "signin";
+    // A timeout or a size cut stays what it is; a refused code, refresh or registration is the sign-in's.
+    if (oauthLike && (problem === "protocol" || problem === "unavailable")) return "oauth";
     return problem;
   }
 
-  private async loadOAuth(serverId: string): Promise<OAuthRecord> {
-    const stored = this.repo.get(serverId)?.credential;
-    if (!stored) return {};
-    const plain = await this.credentials.decrypt(serverId, stored);
+  /** The address and way of signing in the server has now. */
+  private bindingOf(serverId: string): string | null {
+    const row = this.repo.get(serverId);
+    return row ? oauthBinding(row.url, row.auth_type) : null;
+  }
+
+  /**
+   * The record, only while the server still has the address and way of
+   * signing in it was made for (`binding`, taken when the work started): a
+   * refresh that ends after the owner changed the address finds nothing.
+   */
+  private async loadOAuth(serverId: string, binding: string): Promise<OAuthRecord> {
+    const row = this.repo.get(serverId);
+    if (!row?.credential || oauthBinding(row.url, row.auth_type) !== binding) return {};
+    const plain = await this.credentials.decrypt(serverId, row.credential);
     if (plain === null) return {};
     try {
       const parsed = JSON.parse(plain) as unknown;
-      return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as OAuthRecord) : {};
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return {};
+      const record = parsed as OAuthRecord;
+      return record.bound_to === binding ? record : {};
     } catch {
       return {};
     }
   }
 
-  /** Merges a patch into the record, one write per server at a time. */
-  private saveOAuth(serverId: string, patch: Partial<OAuthRecord>): Promise<void> {
+  /**
+   * Merges a patch into the record, one write per server at a time. Dropped
+   * when the server changed address or way of signing in since `binding`, so
+   * old tokens never land on the new address (nor over a static token).
+   */
+  private saveOAuth(serverId: string, patch: Partial<OAuthRecord>, binding: string): Promise<void> {
     const previous = this.#saving.get(serverId) ?? Promise.resolve();
     const next = previous
       .catch(() => undefined)
       .then(async () => {
-        if (!this.repo.get(serverId)) return;
-        const record: OAuthRecord = { ...(await this.loadOAuth(serverId)), ...patch };
-        this.repo.update(serverId, { credential: await this.credentials.encrypt(serverId, JSON.stringify(record)) });
+        if (this.bindingOf(serverId) !== binding) return;
+        const record: OAuthRecord = { ...(await this.loadOAuth(serverId, binding)), ...patch, bound_to: binding };
+        const credential = await this.credentials.encrypt(serverId, JSON.stringify(record));
+        // Checked again after the await: the owner may have changed the server meanwhile.
+        if (this.bindingOf(serverId) !== binding) return;
+        this.repo.update(serverId, { credential });
       });
     this.#saving.set(serverId, next);
     return next.finally(() => {
@@ -362,22 +388,32 @@ export class McpService {
     });
   }
 
-  private async clearSignIn(serverId: string): Promise<void> {
-    this.repo.pendingSignIn(serverId, null, null);
-    await this.saveOAuth(serverId, { state: undefined, state_expires: undefined, verifier: undefined });
+  private async clearSignIn(server: ServerRow): Promise<void> {
+    this.repo.pendingSignIn(server.id, null, null);
+    await this.saveOAuth(server.id, { state: undefined, state_expires: undefined, state_session: undefined, verifier: undefined }, oauthBinding(server.url, server.auth_type));
   }
 
-  private oauthProvider(serverId: string, interactive: boolean): ZuriOAuthProvider {
+  /** The session that started a sign-in, as stored: a hash, never the session's id itself. */
+  private sessionMark(owner: string): Promise<string> {
+    return sha256Hex(`mcp-oauth-session|${owner}`);
+  }
+
+  private async oauthProvider(server: ServerRow, owner?: string): Promise<ZuriOAuthProvider> {
+    const serverId = server.id;
+    const binding = oauthBinding(server.url, server.auth_type);
     return new ZuriOAuthProvider(
       serverId,
       this.deps.redirectUrl(),
       {
-        load: () => this.loadOAuth(serverId),
-        save: (patch) => this.saveOAuth(serverId, patch),
-        pending: (url, expires) => this.repo.pendingSignIn(serverId, url, expires),
+        load: () => this.loadOAuth(serverId, binding),
+        save: (patch) => this.saveOAuth(serverId, patch, binding),
+        pending: (url, expires) => {
+          if (this.bindingOf(serverId) === binding) this.repo.pendingSignIn(serverId, url, expires);
+        },
       },
       {
-        interactive,
+        interactive: owner !== undefined,
+        session: owner === undefined ? undefined : await this.sessionMark(owner),
         // The owner's browser goes there: only a public https address, never one inside a network.
         checkAuthorizeUrl: (url) => {
           if (!endpointUrl(url.href, { development: this.deps.development() })) throw new McpConnectionError("oauth");
@@ -397,32 +433,62 @@ export class McpService {
 
   /**
    * Finishes a sign-in from the app's callback page. The state is single use,
-   * expires, and must match the one stored (encrypted) for the server it
-   * names; then the code is redeemed with PKCE and the server connects. Any
-   * failure leaves the server waiting for a new sign-in. Returns whether the
-   * sign-in went through.
+   * expires, must match the one stored (encrypted) for the server it names,
+   * and only the app session that started the sign-in can finish it (`owner`,
+   * the session's id). Then the code is redeemed with PKCE and the server
+   * connects. Any failure leaves the server waiting for a new sign-in.
+   * Returns whether the sign-in went through.
    */
-  async finishSignIn(input: { state: string; code?: string | undefined; iss?: string | undefined; error?: string | undefined }): Promise<{ server: McpServerInfo; signedIn: boolean }> {
+  async finishSignIn(
+    input: { state: string; code?: string | undefined; iss?: string | undefined; error?: string | undefined },
+    owner: string,
+  ): Promise<{ server: McpServerInfo; signedIn: boolean }> {
     const expired = () => new AppError("VALIDATION_FAILED", "error.mcpSignInExpired");
     const server = this.repo.get(stateServerId(input.state));
     if (server?.auth_type !== "oauth" || server.enabled !== 1) throw expired();
-    const record = await this.loadOAuth(server.id);
-    const valid = record.state !== undefined && sameSecret(record.state, input.state) && record.state_expires !== undefined && record.state_expires > this.now();
+    // One callback per server at a time, taken before the first await: the second of two at once never redeems.
+    if (this.#finishing.has(server.id)) throw expired();
+    this.#finishing.add(server.id);
+    try {
+      return await this.redeem(server, input, owner, expired);
+    } finally {
+      this.#finishing.delete(server.id);
+    }
+  }
+
+  private async redeem(
+    server: ServerRow,
+    input: { state: string; code?: string | undefined; iss?: string | undefined; error?: string | undefined },
+    owner: string,
+    expired: () => AppError,
+  ): Promise<{ server: McpServerInfo; signedIn: boolean }> {
+    const binding = oauthBinding(server.url, server.auth_type);
+    const record = await this.loadOAuth(server.id, binding);
+    const mark = await this.sessionMark(owner);
+    const valid =
+      record.state !== undefined &&
+      sameSecret(record.state, input.state) &&
+      record.state_expires !== undefined &&
+      record.state_expires > this.now() &&
+      record.state_session !== undefined &&
+      sameSecret(record.state_session, mark);
+    // Another session's sign-in is refused and left alone: it stays that session's to finish.
     if (!valid) throw expired();
     // Used once, right or wrong: the verifier stays only for this redemption.
     this.repo.pendingSignIn(server.id, null, null);
-    await this.saveOAuth(server.id, { state: undefined, state_expires: undefined });
+    await this.saveOAuth(server.id, { state: undefined, state_expires: undefined, state_session: undefined }, binding);
     const done = async (problem: McpServerProblem) => {
-      await this.saveOAuth(server.id, { verifier: undefined });
-      this.repo.failed(server.id, problem, { pauseAfter: Number.POSITIVE_INFINITY, pauseMs: 0, keepConnected: false });
+      await this.saveOAuth(server.id, { verifier: undefined }, binding);
+      if (this.bindingOf(server.id) === binding) this.repo.failed(server.id, problem, { pauseAfter: Number.POSITIVE_INFINITY, pauseMs: 0, keepConnected: false });
       return { server: this.present(this.require(server.id)), signedIn: false };
     };
     if (input.error !== undefined || !input.code) return done("signin");
     const turn = this.newTurn();
     try {
       const target = this.target(server);
-      await target.verify();
-      const auth = await this.fetchAuth(server, turn, true);
+      // The MCP server's own address, checked in DNS, counted in this request's subrequests.
+      await turn.vetOrigin(target.url, () => target.verify());
+      const auth = await this.fetchAuth(server, turn, owner);
       if (auth.kind !== "oauth") throw expired();
       await turn.finishSignIn(target.url, auth, input.code, input.iss);
     } catch (error) {
@@ -433,7 +499,9 @@ export class McpService {
     } finally {
       await turn.closeAll();
     }
-    await this.saveOAuth(server.id, { verifier: undefined });
+    await this.saveOAuth(server.id, { verifier: undefined }, binding);
+    // The owner changed the server while the code was redeemed: that sign-in is void.
+    if (this.bindingOf(server.id) !== binding) throw expired();
     this.repo.signedIn(server.id, this.now());
     return { server: await this.connect(server.id), signedIn: true };
   }

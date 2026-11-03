@@ -7,6 +7,7 @@ import { runApprovedAction, targetState, type ToolContext, type ToolDefinition }
 import type { CommandButtons } from "./callbacks.ts";
 import { disarm } from "./channel.ts";
 import type { Button, Out } from "./commands.ts";
+import { visibleJson } from "../mcp/visible.ts";
 
 /**
  * The proposals the bot may approve (spec, "Aprovação pelo bot"), written out
@@ -147,7 +148,8 @@ export class TelegramApprovals {
     const preview: ApprovalPreview = {
       tool: "mcp_call",
       target: `${toolLabel(server, tool)} (${host})`,
-      after: JSON.stringify(args, null, 2),
+      // Hidden characters (bidi, zero width) are shown as escapes, as on the app's card.
+      after: visibleJson(args, 2),
       expiresAt: row.expires_at,
     };
     return { status: "ok", preview, targetHash: hash, row };

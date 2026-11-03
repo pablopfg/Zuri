@@ -74,7 +74,7 @@ docs.
    a tela tira os parâmetros da barra, mostra "Terminando o login…", pede a
    senha se ela não for recente e mostra "Pronto, a Zuri entrou na conta do
    serviço." O servidor conecta e lista as ferramentas.
-4. Erro ou link vencido: toast "O login não terminou…" e o botão de novo.
+4. Erro ou link vencido: toast "O login não terminou. Toque em Reconectar para gerar um link novo."; **Reconectar** prepara outro link e o botão volta.
    Teclado e leitor de tela: o botão é um link comum com nome; o estado é uma
    linha `role="status"`. Claro, escuro e celular seguem o cartão da 18a.
 
@@ -112,19 +112,19 @@ docs.
 | Regra | Valor | No limite | Erro |
 | --- | --- | --- | --- |
 | Validade do `state` | 10 min (`MCP_LIMITS.oauthStateMs`) | vencido ou gasto: recusa | 400 `VALIDATION_FAILED` (`error.mcpSignInExpired`) |
-| Corpo da volta do login | 8 KB; `code` ≤ 2.048, `error` ≤ 200 | maior: recusa | 413 / 400 |
+| Corpo da volta do login | 8 KB; `code` ≤ 2.048, `error` ≤ 200 | maior: recusa | 400 `VALIDATION_FAILED` |
 | Formato do `state` | `<uuid>.<32 bytes base64url>` | outro: recusa | 400 |
 | Senha recente na volta | a da 18a | sem ela | 403 `RECENT_AUTH_REQUIRED` |
 | Subrequisições na aprovação pelo bot | 12 | passa: a chamada falha sem repetir | — |
 | Argumentos no cartão do bot | 600 caracteres | mais: só passkey | — |
 | Resposta no bot | 600 caracteres | corta e diz quanto ficou de fora | — |
 | Pontos por significado | 3 no piso, até 6 | abaixo do piso: 0 | — |
-| Espera após falha de vetores | 15 min | — | — |
+| Espera após falha de vetores | 15 min; 3 seguidas no dia ou teto de Neurons: até o dia seguinte | — | — |
 | Prazo da chamada de vetores | 30 s, fatia de Neurons da indexação | — | — |
 
 Concorrência: as gravações do registro OAuth de um servidor são em fila
-(`#saving`); duas voltas de login com o mesmo `state` deixam só a primeira
-passar, porque o `state` é gasto antes de trocar o código.
+(`#saving`) e descartadas se o endereço ou o tipo de acesso mudou; duas
+voltas de login ao mesmo tempo deixam só a primeira passar (`#finishing`).
 
 ## 7. Desenho técnico
 
@@ -173,7 +173,7 @@ turno usa `semantic.known(message)` (vetor que a busca de memórias já fez).
 | Neurons (vetores) | 1 chamada quando uma ferramenta muda | 1 por 15 min em falha | fatia da indexação | `SEMANTIC_LIMITS.indexNeuronShare` |
 | Neurons por turno | 0 a mais | 0 a mais | — | `semantic.known()` |
 | Subrequisições no login | ~6 (metadados, registro, token, DNS) | 24 no app | 50 do Free | `MCP_SUBREQUEST_BUDGET` |
-| SQLite | 1 escrita por vetor e por login | — | — | migration 19 |
+| SQLite | 1 escrita por vetor; 6 a 8 por login (state, verificador, descoberta, cliente, tokens, `signed_in_at`) | — | ação rara do dono | migration 19 |
 | JS inicial | 0 B (tela de Integrações é lazy) | — | ver PR | `scripts/orcamento-do-bundle` |
 
 Nenhum recurso pago.
@@ -184,7 +184,10 @@ Nenhum recurso pago.
 | --- | --- | --- |
 | Token enviado a outra origem | `Authorization`/DPoP tirados fora da origem cadastrada | `mcp-units.test.ts` |
 | SSRF pelo servidor de login | origem do login conferida (https, DNS, IP público), uma vez por turno | `mcp-oauth.test.ts` |
-| CSRF / login trocado | `state` de 32 bytes, 10 min, uso único, gasto antes do código; senha recente | `mcp-oauth.test.ts`, `mcp-routes` |
+| CSRF / login trocado | `state` de 32 bytes, 10 min, uso único, gasto antes do código, preso à sessão que começou o login; senha recente | `mcp-oauth.test.ts` |
+| Caracteres invisíveis na prévia | `visibleJson` escreve `\uXXXX` no bot, no e-mail, em `/aprovar` e no chat | `telegram-approvals.test.ts`, `mcp-units.test.ts` |
+| Tokens velhos no endereço novo | registro preso a endereço e tipo de acesso | `mcp-oauth.test.ts` |
+| Servidor de login que não responde | 15 s nos pedidos sem prazo próprio | `mcp-units.test.ts` |
 | Emissor falso | o SDK confere o `issuer` (RFC 8414/9207) | `mcp-oauth.test.ts` |
 | Turno abrindo login | provedor não interativo lança `signin` | `mcp-oauth.test.ts` |
 | Resposta do serviço como ordem | citação desarmada no bot; `<data>` no prompt | `telegram-approvals.test.ts` |

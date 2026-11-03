@@ -9,6 +9,8 @@ import { McpEndpointError } from "./url.ts";
  */
 export const FETCH_LIMITS = {
   connectTimeoutMs: 10_000,
+  /** A request the SDK sends with no deadline of its own (the OAuth sign-in's): this long at most (rule P5). */
+  unsignedTimeoutMs: 15_000,
   listTimeoutMs: 15_000,
   callTimeoutMs: 30_000,
   /** The longest any one response body may stay open. */
@@ -18,7 +20,15 @@ export const FETCH_LIMITS = {
 
 /** A failure with a code the interface words; the server's own text is never kept or shown. */
 export class McpConnectionError extends Error {
-  constructor(readonly problem: McpServerProblem) {
+  /**
+   * @param oauthLike the text looked like one of the SDK's OAuth failures; it
+   * only counts for a server that signs in with OAuth (another server's error
+   * text is third-party and may say "registration" or "issuer" for any reason).
+   */
+  constructor(
+    readonly problem: McpServerProblem,
+    readonly oauthLike = false,
+  ) {
     super(problem);
     this.name = "McpConnectionError";
   }
@@ -44,13 +54,14 @@ export function classifyMcpError(error: unknown): McpConnectionError {
   const status = statusOf(error);
   const text = error instanceof Error ? `${error.name} ${error.message}` : String(error);
   if (status === 401 || status === 403 || /\bUnauthorized/i.test(text)) return new McpConnectionError("auth");
-  // The SDK's OAuth failures (discovery, registration, the code or the refresh refused, another issuer).
-  if (/OAuth|InvalidGrant|InvalidClient|issuer|AuthorizationServer|registration/i.test(text)) return new McpConnectionError("oauth");
-  if (/timeout|timed out|AbortError/i.test(text)) return new McpConnectionError("timeout");
-  if (/too large/i.test(text)) return new McpConnectionError("too_large");
-  if (/redirect/i.test(text)) return new McpConnectionError("redirect");
-  if (status !== undefined || /fetch|network|connect|ECONN|socket|HTTP \d{3}/i.test(text)) return new McpConnectionError("unavailable");
-  return new McpConnectionError("protocol");
+  // The SDK's OAuth failures (discovery, registration, the code or the refresh refused, another issuer):
+  // flagged, and only an OAuth server's caller turns the flag into "oauth" (see McpService.problemOf).
+  const oauthLike = /OAuth|InvalidGrant|InvalidClient|issuer|AuthorizationServer|registration/i.test(text);
+  if (/timeout|timed out|AbortError|TimeoutError/i.test(text)) return new McpConnectionError("timeout", oauthLike);
+  if (/too large/i.test(text)) return new McpConnectionError("too_large", oauthLike);
+  if (/redirect/i.test(text)) return new McpConnectionError("redirect", oauthLike);
+  if (status !== undefined || /fetch|network|connect|ECONN|socket|HTTP \d{3}/i.test(text)) return new McpConnectionError("unavailable", oauthLike);
+  return new McpConnectionError("protocol", oauthLike);
 }
 
 /**
@@ -112,9 +123,18 @@ export interface FetchMeter {
  * stream is answered "not supported" here, so no long-lived request keeps the
  * object awake (rule P5).
  */
-export function guardedFetch(endpoint: URL, auth: FetchAuth, base: typeof fetch, meter?: FetchMeter): typeof fetch {
+export function guardedFetch(
+  endpoint: URL,
+  auth: FetchAuth,
+  base: typeof fetch,
+  meter?: FetchMeter,
+  unsignedTimeoutMs: number = FETCH_LIMITS.unsignedTimeoutMs,
+): typeof fetch {
   return (async (input: RequestInfo | URL, init?: RequestInit) => {
-    const request = new Request(input, init);
+    // The SDK's OAuth requests (discovery, registration, token) carry no signal: a third-party
+    // sign-in server that never answers must not hold the request and the object forever.
+    const signed = Boolean(init?.signal) || input instanceof Request;
+    const request = new Request(input, signed ? init : { ...init, signal: AbortSignal.timeout(unsignedTimeoutMs) });
     const url = new URL(request.url);
     const headers = new Headers(request.headers);
     headers.delete("cookie");

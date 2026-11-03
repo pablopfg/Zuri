@@ -67,14 +67,19 @@ const addOAuthServer = async () => {
 /** The owner approves on the service's page, which sends the browser back with the code. */
 const approve = (server: McpServerInfo) => oauth.approve(server.authorizeUrl ?? "");
 
-beforeAll(async () => {
+/** Signs in and returns the session cookie: each call is another app session. */
+async function signIn(): Promise<string> {
   const res = await call(`${ORIGIN}/api/auth/login`, {
     method: "POST",
     headers: headers(false),
     body: JSON.stringify({ email: TEST_EMAIL, password: TEST_PASSWORD, turnstileToken: HUMAN_TOKEN }),
   });
   expect(res.status).toBe(200);
-  cookie = res.headers.getSetCookie().find((c) => c.startsWith("__Host-zuri_session="))?.split(";")[0] ?? "";
+  return res.headers.getSetCookie().find((c) => c.startsWith("__Host-zuri_session="))?.split(";")[0] ?? "";
+}
+
+beforeAll(async () => {
+  cookie = await signIn();
 });
 
 beforeEach(async () => {
@@ -176,6 +181,76 @@ describe("MCP with OAuth sign-in", () => {
     expect(oauth.tokens.size).toBe(0);
   });
 
+  it("only the session that started the sign-in can finish it", async () => {
+    // Someone with another session (a stolen one, say) starts the sign-in and signs in with their own account…
+    const owners = cookie;
+    cookie = await signIn();
+    const server = await addOAuthServer();
+    const theirs = approve(server);
+    // …then sends the way back to the owner, whose session has the password typed recently.
+    cookie = owners;
+    await fresh();
+    const refused = await api("POST", "/mcp/oauth/callback", { ...theirs, iss: ISSUER });
+    expect(refused.status).toBe(400);
+    expect((await errorBody(refused)).message).toBe("Esse login venceu ou já foi usado. Comece de novo em Configurações › Integrações.");
+    expect(oauth.tokens.size).toBe(0);
+    // Left alone: still that session's to finish, and the owner's own attempt works.
+    expect((await record(server.id))?.state).toBe(theirs.state);
+    const mine = ((await (await api("POST", `/mcp/servers/${server.id}/connect`)).json()) as { server: McpServerInfo }).server;
+    expect((await api("POST", "/mcp/oauth/callback", { ...approve(mine), iss: ISSUER })).status).toBe(200);
+  });
+
+  it("two callbacks at once redeem the code once", async () => {
+    const server = await addOAuthServer();
+    const answer = { ...approve(server), iss: ISSUER };
+    const [a, b] = await Promise.all([api("POST", "/mcp/oauth/callback", answer), api("POST", "/mcp/oauth/callback", answer)]);
+    expect([a.status, b.status].sort()).toEqual([200, 400]);
+    expect(oauth.seen.filter((r) => r.url.endsWith("/token")).length).toBe(1);
+    const after = ((await (await api("GET", "/mcp")).json()) as { servers: McpServerInfo[] }).servers[0];
+    expect(after).toMatchObject({ status: "connected", problem: null, hasCredential: true });
+  });
+
+  it("refuses an answer from another issuer, with no token", async () => {
+    const server = await addOAuthServer();
+    const res = await api("POST", "/mcp/oauth/callback", { ...approve(server), iss: "https://outro.exemplo.com.br" });
+    expect((await res.json()) as { signedIn: boolean; server: McpServerInfo }).toMatchObject({ signedIn: false, server: { problem: "oauth", hasCredential: false } });
+    expect(oauth.tokens.size).toBe(0);
+    expect((await record(server.id))?.tokens).toBeUndefined();
+  });
+
+  it("checks the callback's size and fields at their exact limits", async () => {
+    const server = await addOAuthServer();
+    const { state } = approve(server);
+    const expiredMessage = "Esse login venceu ou já foi usado. Comece de novo em Configurações › Integrações.";
+    const fields = async (body: unknown) => ((await (await api("POST", "/mcp/oauth/callback", body)).json()) as { details?: unknown }).details;
+    // 2,049 characters of code and 201 of error never reach the service; 2,048 and 200 do (and fail there).
+    expect(await fields({ state: `${server.id}.${"B".repeat(43)}`, code: "c".repeat(2049) })).toMatchObject({ fields: ["code"] });
+    expect(await fields({ state: `${server.id}.${"B".repeat(43)}`, error: "e".repeat(201) })).toMatchObject({ fields: ["error"] });
+    expect((await errorBody(await api("POST", "/mcp/oauth/callback", { state: `${server.id}.${"B".repeat(43)}`, code: "c".repeat(2048) }))).message).toBe(expiredMessage);
+    expect((await errorBody(await api("POST", "/mcp/oauth/callback", { state: `${server.id}.${"B".repeat(43)}`, error: "e".repeat(200) }))).message).toBe(expiredMessage);
+    // A body over 8 KB is refused before it is read as JSON.
+    const big = await call(`${ORIGIN}/api/mcp/oauth/callback`, { method: "POST", headers: headers(), body: JSON.stringify({ state, code: "x".repeat(8 * 1024) }) });
+    expect(big.status).toBe(400);
+    expect(((await big.json()) as { details?: unknown }).details).toEqual({ fields: ["_body"] });
+    // None of that used the real state.
+    expect((await record(server.id))?.state).toBe(state);
+  });
+
+  it("a refresh that ends after the address changed never lands its tokens on the new address", async () => {
+    const server = await addOAuthServer();
+    await api("POST", "/mcp/oauth/callback", approve(server));
+    await api("PATCH", `/mcp/servers/${server.id}`, { url: "https://conta.exemplo.com.br/outra" });
+    await inOwner(async (agent) => {
+      const row = agent.store.mcp.repo.get(server.id);
+      expect(row?.url).toBe("https://conta.exemplo.com.br/outra");
+      // The provider a turn still holds while its refresh is on the way: made for the old address.
+      const old = { ...row, url: RESOURCE };
+      const provider = await (agent.store.mcp as unknown as { oauthProvider(row: unknown): Promise<{ saveTokens(t: unknown): Promise<void> }> }).oauthProvider(old);
+      await provider.saveTokens({ access_token: "tok-velho", token_type: "Bearer" });
+    });
+    expect((await record(server.id))?.tokens).toBeUndefined();
+  });
+
   it("the callback needs the recent password, and the state survives the prompt", async () => {
     const server = await addOAuthServer();
     const { code, state } = approve(server);
@@ -256,7 +331,7 @@ describe("MCP with OAuth sign-in", () => {
     rewriteMetadata = (meta) => ({ ...meta, authorization_endpoint: "http://entrar.exemplo.com.br/authorize" });
     const insecure = ((await (await api("POST", `/mcp/servers/${blocked.id}/connect`)).json()) as { server: McpServerInfo }).server;
     expect(insecure.authorizeUrl).toBeNull();
-    expect(insecure.problem).not.toBe("signin");
+    expect(insecure.problem).toBe("oauth");
   });
 
   it("a service that doesn't register new apps says so", async () => {

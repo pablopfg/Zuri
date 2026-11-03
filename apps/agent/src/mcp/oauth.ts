@@ -24,7 +24,18 @@ export interface OAuthRecord {
   /** The waiting sign-in: single use, good until state_expires. */
   state?: string | undefined;
   state_expires?: string | undefined;
+  /**
+   * The app session that started the waiting sign-in (a SHA-256 of its id):
+   * only that session can finish it, so a sign-in someone else started (with
+   * their own account at the service) can't be finished in the owner's browser.
+   */
+  state_session?: string | undefined;
+  /** The address and the way of signing in the record was made for: another one discards it. */
+  bound_to?: string | undefined;
 }
+
+/** What a record is bound to: the server's address and its way of signing in. */
+export const oauthBinding = (url: string, authType: string): string => `${authType} ${url}`;
 
 export interface OAuthStore {
   load(): Promise<OAuthRecord>;
@@ -61,6 +72,8 @@ export class ZuriOAuthProvider implements OAuthClientProvider {
     private readonly store: OAuthStore,
     private readonly opts: {
       interactive: boolean;
+      /** The hashed session that started an interactive sign-in. */
+      session?: string | undefined;
       /** Refuses a sign-in page that isn't a public https address. */
       checkAuthorizeUrl: (url: URL) => void;
       stateMs: number;
@@ -83,13 +96,16 @@ export class ZuriOAuthProvider implements OAuthClientProvider {
   async state(): Promise<string> {
     if (!this.opts.interactive) throw new McpConnectionError("signin");
     const state = `${this.serverId}.${toBase64Url(crypto.getRandomValues(new Uint8Array(32)))}`;
-    await this.store.save({ state, state_expires: new Date(this.opts.clock() + this.opts.stateMs).toISOString() });
+    await this.store.save({ state, state_expires: new Date(this.opts.clock() + this.opts.stateMs).toISOString(), state_session: this.opts.session });
     return state;
   }
 
   async clientInformation(): Promise<StoredOAuthClientInformation | undefined> {
     const { client, redirect_url } = await this.store.load();
-    return redirect_url === this.redirectUrl ? client : undefined;
+    if (redirect_url === this.redirectUrl && client) return client;
+    // No registration for this callback: making one is the start of a sign-in, never a turn's.
+    if (!this.opts.interactive) throw new McpConnectionError("signin");
+    return undefined;
   }
 
   async saveClientInformation(client: StoredOAuthClientInformation): Promise<void> {

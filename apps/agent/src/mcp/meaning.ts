@@ -1,6 +1,7 @@
 import { MCP_LIMITS, SEMANTIC_LIMITS } from "@zuri/shared";
 import type { MeteredAI } from "../ai/metered.ts";
 import type { InternalState } from "../db/internal-state.ts";
+import { AppError } from "../http/errors.ts";
 import { log } from "../log.ts";
 import { cosineInt8, quantize, unit } from "../semantic/vectors.ts";
 import { clip } from "./catalog.ts";
@@ -11,6 +12,16 @@ export const MEANING_RETRY_MS = 15 * 60_000;
 /** The longest the call may hold the shared alarm. */
 const DEADLINE_MS = 30_000;
 const WAIT_KEY = "mcp_meaning_wait";
+/** Failed calls in a row (in one UTC day) that stop the day's work, as the search by meaning's indexing (rule P7). */
+export const MEANING_MAX_FAILURES = 3;
+const DAY_MS = 86_400_000;
+
+/** The wait after a failure: until when, and how many failures in a row that day. */
+interface MeaningWait {
+  until: string;
+  failures: number;
+  day: number;
+}
 
 export interface McpMeaningDeps {
   repo: McpRepository;
@@ -62,6 +73,40 @@ export class McpMeaning {
     return this.deps.clock?.() ?? Date.now();
   }
 
+  private wait(): MeaningWait | null {
+    const stored = this.deps.state.get<string>(WAIT_KEY);
+    if (typeof stored !== "string") return null;
+    try {
+      const wait = JSON.parse(stored) as Partial<MeaningWait>;
+      return typeof wait.until === "string" && typeof wait.failures === "number" && typeof wait.day === "number" ? (wait as MeaningWait) : null;
+    } catch {
+      return null;
+    }
+  }
+
+  private waiting(): string | null {
+    const wait = this.wait();
+    return wait && Date.parse(wait.until) > this.now() ? wait.until : null;
+  }
+
+  /**
+   * A failed call waits 15 minutes; the third in a row in a UTC day, or the
+   * day's Neurons running out, waits until the next day (each call is charged).
+   */
+  private failed(error: unknown): void {
+    const today = Math.floor(this.now() / DAY_MS);
+    const nextDay = new Date((today + 1) * DAY_MS).toISOString();
+    if (error instanceof AppError && error.code === "AI_LIMIT_REACHED") {
+      this.deps.state.set(WAIT_KEY, JSON.stringify({ until: nextDay, failures: 0, day: today } satisfies MeaningWait));
+      return;
+    }
+    log("warn", "mcp_meaning_failed", { error });
+    const previous = this.wait();
+    const failures = (previous?.day === today ? previous.failures : 0) + 1;
+    const until = failures >= MEANING_MAX_FAILURES ? nextDay : new Date(this.now() + MEANING_RETRY_MS).toISOString();
+    this.deps.state.set(WAIT_KEY, JSON.stringify({ until, failures, day: today } satisfies MeaningWait));
+  }
+
   private model(): string | null {
     try {
       return this.deps.ai().embedding?.model ?? null;
@@ -81,7 +126,11 @@ export class McpMeaning {
   /** The tools on and reviewed whose vector is missing or was made from another text or model. */
   private stale(model: string): { tool: ToolRow; key: string; text: string }[] {
     const out: { tool: ToolRow; key: string; text: string }[] = [];
-    for (const tool of this.deps.repo.enabledTools().filter(isUsable).slice(0, MCP_LIMITS.maxEnabledTools)) {
+    const tools = this.deps.repo.enabledTools().filter(isUsable);
+    if (tools.length === 0) return out;
+    // A server turned off offers nothing: its tools aren't worth a Neuron.
+    const on = new Set(this.deps.repo.list().flatMap((server) => (server.enabled === 1 ? [server.id] : [])));
+    for (const tool of tools.filter((t) => on.has(t.server_id)).slice(0, MCP_LIMITS.maxEnabledTools)) {
       const text = meaningText(tool);
       const key = meaningKey(model, text);
       if (tool.embedding_key !== key) out.push({ tool, key, text });
@@ -91,19 +140,18 @@ export class McpMeaning {
 
   /** When the shared alarm should come back for this: now with work to do, the end of a wait, or never. */
   nextDue(): string | null {
-    if (!this.deps.enabled() || this.deps.lockdown()) return null;
+    if (!this.deps.enabled()) return null;
     const model = this.model();
     if (!model) return null;
-    const wait = this.deps.state.get<string>(WAIT_KEY);
-    if (typeof wait === "string" && Date.parse(wait) > this.now()) return wait;
-    return this.stale(model).length > 0 ? new Date(this.now()).toISOString() : null;
+    // Nothing stale (the usual case) costs no read of the lockdown or the wait.
+    if (this.stale(model).length === 0 || this.deps.lockdown()) return null;
+    return this.waiting() ?? new Date(this.now()).toISOString();
   }
 
   /** One round from the shared alarm: the stale tools (10 at most) in one embedding call. */
   async tick(): Promise<void> {
     if (this.#running || !this.deps.enabled() || this.deps.lockdown()) return;
-    const wait = this.deps.state.get<string>(WAIT_KEY);
-    if (typeof wait === "string" && Date.parse(wait) > this.now()) return;
+    if (this.waiting()) return;
     const model = this.model();
     if (!model) return;
     this.#running = true;
@@ -123,8 +171,7 @@ export class McpMeaning {
       });
       this.deps.state.delete(WAIT_KEY);
     } catch (error) {
-      log("warn", "mcp_meaning_failed", { error });
-      this.deps.state.set(WAIT_KEY, new Date(this.now() + MEANING_RETRY_MS).toISOString());
+      this.failed(error);
     } finally {
       this.#running = false;
     }

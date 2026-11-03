@@ -37,7 +37,7 @@ export function registerMcpRoutes(app: Hono<ApiEnv>, deps: () => McpRouteDeps, c
     const { service, auth } = deps();
     // A new server opens a way out of the account for the agent's calls: a stolen session alone can't add one.
     auth.requireRecentAuth(c.get("session"));
-    const server = await service.create(input);
+    const server = await service.create(input, c.get("session").id);
     auth.events.record("mcp_server_added", client(c), { alert: true });
     return Response.json({ server }, { status: 201 });
   });
@@ -48,7 +48,7 @@ export function registerMcpRoutes(app: Hono<ApiEnv>, deps: () => McpRouteDeps, c
     const { service, auth } = deps();
     // Another address or another token is the same as adding a server: the password typed recently, and the alert.
     if (patch.url !== undefined || patch.token !== undefined || patch.authType !== undefined) auth.requireRecentAuth(c.get("session"));
-    const { server, urlChanged } = await service.update(id, patch);
+    const { server, urlChanged } = await service.update(id, patch, c.get("session").id);
     // Where the calls go or how they sign in changed: the owner is told, as for a new server.
     if (urlChanged || patch.token !== undefined || patch.authType !== undefined) auth.events.record("mcp_server_changed", client(c), { alert: true });
     return Response.json({ server });
@@ -60,7 +60,7 @@ export function registerMcpRoutes(app: Hono<ApiEnv>, deps: () => McpRouteDeps, c
   });
 
   /** Connects again and reads the tool list; a failure comes back as the server's status. */
-  app.post("/mcp/servers/:id/connect", async (c) => Response.json({ server: await deps().service.connect(serverId(c.req.param("id")), { interactive: true }) }));
+  app.post("/mcp/servers/:id/connect", async (c) => Response.json({ server: await deps().service.connect(serverId(c.req.param("id")), { owner: c.get("session").id }) }));
 
   /**
    * OAuth (step 18b): the service's sign-in page sent the owner back to the
@@ -71,7 +71,8 @@ export function registerMcpRoutes(app: Hono<ApiEnv>, deps: () => McpRouteDeps, c
     const input = await readJson(c.req.raw, mcpOAuthCallbackSchema, 8 * 1024);
     const { service, auth } = deps();
     auth.requireRecentAuth(c.get("session"));
-    const result = await service.finishSignIn(input);
+    // Only the session that started the sign-in finishes it (a link someone else started is refused).
+    const result = await service.finishSignIn(input, c.get("session").id);
     if (result.signedIn) auth.events.record("mcp_server_changed", client(c), { alert: true });
     return Response.json(result);
   });

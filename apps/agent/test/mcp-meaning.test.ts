@@ -1,12 +1,15 @@
+import type { ChatEvent } from "@zuri/shared";
 import { describe, expect, it } from "vitest";
+import { AgentRunner } from "../src/agent/runner.ts";
 import { MeteredAI } from "../src/ai/metered.ts";
 import { MockAIProvider } from "../src/ai/mock.ts";
 import { InternalState } from "../src/db/internal-state.ts";
-import { MEANING_RETRY_MS, McpMeaning, meaningKey, meaningText } from "../src/mcp/meaning.ts";
+import { AppError } from "../src/http/errors.ts";
+import { MEANING_MAX_FAILURES, MEANING_RETRY_MS, McpMeaning, meaningKey, meaningText } from "../src/mcp/meaning.ts";
 import { meaningPoints, type TriageTool, triage } from "../src/mcp/triage.ts";
 import { type Embedder, MockEmbedder } from "../src/semantic/embedder.ts";
 import { SemanticSearch } from "../src/semantic/service.ts";
-import { type ChatWorld, withChatWorld } from "./chat-world.ts";
+import { type ChatWorld, collect, ScriptedProvider, withChatWorld } from "./chat-world.ts";
 
 // Step 18b: the triage of the MCP tools by meaning (docs/planos/mcp.md, item 5).
 
@@ -129,6 +132,12 @@ describe("McpMeaning", () => {
       expect(world.meaning.nextDue()).not.toBeNull();
       await world.meaning.tick();
       expect(world.embedder.calls[1]).toEqual([meaningText({ name: "news", title: null, hint: "Notícias do dia", description: "Latest headlines." })]);
+      // A server turned off: its tools wait, with no Neuron spent on them.
+      world.chat.db.run(`UPDATE zur_mcp_servers SET enabled = 0`);
+      world.chat.mcp.repo.updateTool("mcp_svc_news", { hint: "Outra dica" });
+      expect(world.meaning.nextDue()).toBeNull();
+      world.chat.db.run(`UPDATE zur_mcp_servers SET enabled = 1`);
+      await world.meaning.tick();
       // A tool turned off is never embedded.
       world.chat.mcp.repo.updateTool("mcp_svc_docs", { enabled: false });
       world.chat.mcp.repo.updateTool("mcp_svc_docs", { hint: "x" });
@@ -156,6 +165,37 @@ describe("McpMeaning", () => {
       world.chat.clock.now += MEANING_RETRY_MS + 1;
       await world.meaning.tick();
       expect(world.chat.mcp.repo.enabledTools().every((tool) => tool.embedding_key !== null)).toBe(true);
+    });
+  });
+
+  it("stops for the day after three failures in a row, or when the day's Neurons run out", async () => {
+    await withMeaning(async (world) => {
+      addTools(world, ROWS);
+      const failing = (error: Error): Embedder => ({
+        model: "mock-embedding",
+        dims: 256,
+        billable: false,
+        floor: { absolute: 0.3, relative: 0.3 },
+        embed: async () => {
+          throw error;
+        },
+      });
+      // Start of a UTC day, so the 15-minute waits stay inside it.
+      world.chat.clock.now = Date.parse("2026-11-03T00:00:00.000Z");
+      const nextDay = "2026-11-04T00:00:00.000Z";
+      world.setEmbedder(failing(new Error("model out")));
+      for (let i = 1; i < MEANING_MAX_FAILURES; i++) {
+        await world.meaning.tick();
+        expect(world.meaning.nextDue()).toBe(new Date(world.chat.clock.now + MEANING_RETRY_MS).toISOString());
+        world.chat.clock.now += MEANING_RETRY_MS + 1;
+      }
+      await world.meaning.tick();
+      expect(world.meaning.nextDue()).toBe(nextDay);
+      // The next day starts over; out of Neurons waits for the day after, with no failure counted.
+      world.chat.clock.now = Date.parse(nextDay) + 1;
+      world.setEmbedder(failing(new AppError("AI_LIMIT_REACHED")));
+      await world.meaning.tick();
+      expect(world.meaning.nextDue()).toBe("2026-11-05T00:00:00.000Z");
     });
   });
 
@@ -199,6 +239,49 @@ describe("McpMeaning", () => {
       expect(world.embedder.calls.length).toBe(calls);
       world.lockdown.on = true;
       expect(world.semantic.known(message)).toBeNull();
+    });
+  });
+});
+
+describe("the triage by meaning in a chat turn", () => {
+  it("offers the tool found by meaning, with no embedding call beyond the memory recall's", async () => {
+    await withMeaning(async (world) => {
+      addTools(world, ROWS);
+      world.semantic.enable();
+      world.chat.mcp.meaning = world.meaning;
+      await world.meaning.tick();
+      const before = world.embedder.calls.length;
+      let offered: string[] = [];
+      const provider = new ScriptedProvider([
+        (req) => {
+          offered = req.activeTools?.() ?? [];
+          return { text: "Ok." };
+        },
+      ]);
+      const runner = new AgentRunner({
+        tools: { ...world.chat.services(), semantic: world.semantic },
+        conversations: world.chat.conversations,
+        settings: () => world.chat.settings,
+        locale: () => "pt-BR",
+        ai: () =>
+          new MeteredAI(
+            provider,
+            world.chat.meter,
+            () => ({ requestsPerDay: world.chat.settings.aiRequestsPerDay, neuronsPerDay: world.chat.settings.aiNeuronsPerDay, maxOutputTokens: world.chat.settings.aiMaxOutputTokens }),
+            undefined,
+            null,
+            [],
+            world.embedder,
+          ),
+        agentName: "Zuri",
+        clock: () => world.chat.clock.now,
+      });
+      const events = await collect(runner.chat({ message: "Planejar a viagem", signal: new AbortController().signal }));
+      expect((events.at(-1) as ChatEvent).type).toBe("done");
+      // By words alone nothing matched (see above): only the meaning brought it.
+      expect(offered).toContain("mcp_svc_booking");
+      // One embedding call in the turn: the memory recall's, reused by the triage.
+      expect(world.embedder.calls.length - before).toBe(1);
     });
   });
 });

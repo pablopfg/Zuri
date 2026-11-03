@@ -549,6 +549,9 @@ describe("Aprovar", () => {
     expect(edited.split("\n\n")[0]).toBe(`Feito: usar a ferramenta externa «create_issue · Docs (${disarmed("mcp.exemplo.com.br")})».`);
     // The service's answer, as third-party text in a quoted block.
     expect(edited).toContain("Resposta do serviço (conteúdo de fora, só para ler):\n│ Created issue #42: Porta");
+    // The answer's link is disarmed like the rest of the third-party text.
+    expect(edited).not.toContain("https://exemplo.com.br/x");
+    expect(edited).toContain(disarmed("https://exemplo.com.br/x"));
     // Once: the page's token and the proposal are spent.
     expect((await page("options", { token })).status).toBe(410);
     expect(fixture.calls).toHaveLength(1);
@@ -580,6 +583,42 @@ describe("Aprovar", () => {
     const { question } = await askApproval(card);
     // The e-mail would show a cut copy: only the page, which shows the arguments whole.
     expect(buttons(question).map((b) => b.text)).toEqual(["Confirmar com passkey"]);
+  });
+
+  it("cuts a long answer from the service at 600 characters and says so", async () => {
+    await linkOwner();
+    const key = await addPasskey();
+    await mcpServer();
+    botCalls.length = 0;
+    // "Created issue #42: " (19) plus 700: 719 characters of answer.
+    await deliver(text(`call mcp_docs_create_issue {"title":"${"b".repeat(700)}"}`));
+    const card = sent().find((c) => String(c.body.text).startsWith("Proposta da Zuri"));
+    const { token } = await askApproval(card);
+    botCalls.length = 0;
+    await confirmWithPasskey(key, token);
+    const edited = String(sent("editMessageText")[0]?.body.text);
+    const answer = edited.split("Resposta do serviço (conteúdo de fora, só para ler):\n")[1] ?? "";
+    const quoted = answer.split("\n").filter((line) => line.startsWith("│ "));
+    expect(quoted.map((line) => line.slice(2)).join("")).toBe(`Created issue #42: ${"b".repeat(581)}`);
+    expect(answer).toContain("(e mais 119 caracteres; o texto inteiro está no app)");
+  });
+
+  it("shows hidden characters in the arguments as visible escapes, on the bot and on the page", async () => {
+    await linkOwner();
+    const key = await addPasskey();
+    const fixture = await mcpServer();
+    botCalls.length = 0;
+    // A right-to-left override would make "00001" read as "10000".
+    await deliver(text(`call mcp_docs_create_issue {"title":"valor \u202e00001\u202c"}`));
+    const card = String(sent().find((c) => String(c.body.text).startsWith("Proposta da Zuri"))?.body.text);
+    expect(card).not.toMatch(/[\u202a-\u202e\u2066-\u2069]/);
+    expect(card).toContain("\\u202E00001\\u202C");
+    const { token } = await askApproval(sent().find((c) => String(c.body.text).startsWith("Proposta da Zuri")));
+    const { options } = await confirmWithPasskey(key, token);
+    expect(String(options.approval?.after)).toContain("\\u202E00001\\u202C");
+    expect(String(options.approval?.after)).not.toMatch(/[\u202a-\u202e]/);
+    // What goes out is the real value.
+    expect(fixture.calls).toEqual([{ name: "create_issue", args: { title: "valor \u202e00001\u202c" } }]);
   });
 });
 
