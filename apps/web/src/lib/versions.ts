@@ -1,5 +1,5 @@
 import type { QueryClient, QueryKey } from "@tanstack/react-query";
-import { AREAS, type Area, type AreaVersions } from "@zuri/shared";
+import { AREAS, type Area, type AreaVersions, LIVE_CLOSE, LIVE_LIMITS, LIVE_PATH, LIVE_PING } from "@zuri/shared";
 
 /**
  * Refreshes only the screen areas that changed (nova UI, PR 2). The server
@@ -78,11 +78,131 @@ function apply(qc: QueryClient, next: AreaVersions, share: boolean): Area[] {
 export function seen(qc: QueryClient, input: unknown, share = true): Area[] {
   client = qc;
   bus();
-  return apply(qc, cleanVersions(input), share);
+  const next = cleanVersions(input);
+  // No numbers (lockdown, a password to change, a second step to set up): the server would refuse the channel too.
+  if (Object.keys(next).length > 0) startLive(qc);
+  return apply(qc, next, share);
+}
+
+/** The tab holding this lock keeps the browser's one live channel; the others wait their turn. */
+const LIVE_LOCK = "zuri-live";
+/** Refused this many times in a row without ever opening: back to the heartbeat until its next numbers. */
+const LIVE_MAX_FAILURES = 5;
+
+let live: { stop(): void } | null = null;
+/** Replaced by a newer channel, or blocked by the browser: the heartbeat alone until the page reloads. */
+let benched = false;
+
+/** Signed in, as the app knows it (SESSION_KEY, written out to keep this file out of the first load's imports). */
+function signedIn(qc: QueryClient): boolean {
+  return Boolean(qc.getQueryData(["session"]));
+}
+
+/**
+ * Real-time updates (nova UI, PR 3). One tab per browser (the Web Lock's
+ * holder) opens a WebSocket; the server writes on it only when an area's
+ * number moved, and the numbers go through `seen` like the heartbeat's (which
+ * passes them to the other tabs). The heartbeat keeps running every minute, so
+ * if the channel falls nothing else changes: it tries again with a growing
+ * wait (up to a minute) while there is a session, and stops after a sign-out.
+ * A newer channel elsewhere taking this one's place (`replaced`) leaves this
+ * tab on the heartbeat alone until the page reloads.
+ * Started by the first `seen`, so it loads after the first screen (rule P11).
+ */
+export function startLive(qc: QueryClient, retryBaseMs = 1000): void {
+  if (live || benched || typeof WebSocket === "undefined" || typeof location === "undefined") return;
+  let socket: WebSocket | null = null;
+  let attempt = 0;
+  /** Tries in a row that never opened: a refusal the browser only sees as 1006. */
+  let failures = 0;
+  let retry: ReturnType<typeof setTimeout> | undefined;
+  let ping: ReturnType<typeof setInterval> | undefined;
+  let release: () => void = () => undefined;
+  const handle = {
+    stop() {
+      if (live === handle) live = null;
+      clearTimeout(retry);
+      clearInterval(ping);
+      socket?.close(1000);
+      socket = null;
+      release();
+    },
+  };
+  live = handle;
+
+  const connect = () => {
+    if (live !== handle) return;
+    if (!signedIn(qc)) return handle.stop();
+    const url = new URL(LIVE_PATH, location.href);
+    url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
+    let ws: WebSocket;
+    try {
+      ws = new WebSocket(url);
+    } catch {
+      // Blocked before it started (an old browser's content policy): the heartbeat alone.
+      benched = true;
+      return handle.stop();
+    }
+    socket = ws;
+    let opened = false;
+    ws.addEventListener("open", () => {
+      opened = true;
+      attempt = 0;
+      failures = 0;
+      // Answered by the runtime without waking the object: only keeps the connection from looking idle.
+      ping = setInterval(() => ws.readyState === WebSocket.OPEN && ws.send(LIVE_PING), LIVE_LIMITS.pingMs);
+    });
+    ws.addEventListener("message", (event: MessageEvent<unknown>) => {
+      if (typeof event.data !== "string" || !event.data.startsWith("{")) return;
+      try {
+        // Only known areas with whole numbers are kept (cleanVersions): anything else is dropped.
+        seen(qc, (JSON.parse(event.data) as { versions?: unknown }).versions);
+      } catch {
+        // Not JSON: ignored.
+      }
+    });
+    ws.addEventListener("close", (event: CloseEvent) => {
+      clearInterval(ping);
+      if (socket !== ws) return;
+      socket = null;
+      if (event.code === LIVE_CLOSE.replaced) benched = true;
+      if (!opened) failures += 1;
+      // Lockdown and the other gates (4403), or refused again and again: stop until the next numbers
+      // from the server (seen) start it over, at most once a heartbeat.
+      if (benched || !signedIn(qc) || event.code === LIVE_CLOSE.closed || failures >= LIVE_MAX_FAILURES) return handle.stop();
+      const wait = Math.min(LIVE_LIMITS.retryMaxMs, retryBaseMs * 2 ** attempt);
+      attempt += 1;
+      // Some spread, so many devices never come back in the same second.
+      retry = setTimeout(connect, wait / 2 + Math.random() * (wait / 2));
+    });
+  };
+
+  if (typeof navigator !== "undefined" && navigator.locks) {
+    navigator.locks
+      .request(LIVE_LOCK, () => {
+        if (live !== handle) return;
+        // The release is in place before connect(): a connect that stops at once must still let the lock go.
+        const held = new Promise<void>((resolve) => {
+          release = resolve;
+        });
+        connect();
+        return live === handle ? held : undefined;
+      })
+      .catch(() => handle.stop());
+  } else {
+    connect();
+  }
+}
+
+/** Tests and sign-out: closes the channel and lets another tab take it. */
+export function stopLive(): void {
+  live?.stop();
 }
 
 /** Tests only: forget the base and the channel. */
 export function resetVersions(): void {
+  stopLive();
+  benched = false;
   known = null;
   client = null;
   channel?.close();

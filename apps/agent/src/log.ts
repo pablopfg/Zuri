@@ -51,6 +51,7 @@ export const LOG_EVENTS = [
   "mcp_meaning_failed",
   "mcp_call_failed",
   "mcp_tool_skipped",
+  "live_notify_failed",
 ] as const;
 export type LogEvent = (typeof LOG_EVENTS)[number];
 
@@ -99,7 +100,7 @@ const METHOD = /^[A-Z]{3,7}$/;
 export const ROUTE_WORDS: ReadonlySet<string> = new Set([
   "acknowledge", "api", "activity", "actions", "ai", "alerts", "approvals", "approve", "auth", "automations", "callback",
   "routines", "cancel", "chat", "check", "client", "code", "confirm", "connect", "conversations", "correct", "counts", "devices", "diagnostics", "disable",
-  "empty", "enable", "exit", "group", "mcp", "health", "heartbeat", "history", "learning", "lockdown", "login", "login-options", "logout", "memories", "mfa", "mute",
+  "empty", "enable", "exit", "group", "mcp", "health", "heartbeat", "history", "learning", "live", "lockdown", "login", "login-options", "logout", "memories", "mfa", "mute",
   "notes", "notices", "oauth", "read", "resolve", "options", "owner", "passkey", "passkeys", "password", "plans", "projects", "push", "recover", "recovery-codes", "reindex", "request", "restore", "reviews", "run", "runs",
   "search", "semantic", "servers", "session", "settings", "setup", "status", "tasks", "telegram", "test", "tools", "transcribe", "trash", "usage", "verify", "webhook",
 ]);

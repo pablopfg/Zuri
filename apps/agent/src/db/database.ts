@@ -15,6 +15,12 @@ export class Database {
    */
   readonly usage = { rowsRead: 0, rowsWritten: 0 };
 
+  /**
+   * Called after every statement that wrote a row, whatever wrote it (the live
+   * channel looks then whether an area's number moved; nova UI, PR 3).
+   */
+  onWrite: (() => void) | null = null;
+
   constructor(private readonly storage: DurableObjectStorage) {}
 
   all<T = Row>(query: string, ...params: SqlValue[]): T[] {
@@ -40,6 +46,7 @@ export class Database {
   private count(cursor: SqlStorageCursor<Record<string, SqlStorageValue>>): void {
     this.usage.rowsRead += cursor.rowsRead;
     this.usage.rowsWritten += cursor.rowsWritten;
+    if (cursor.rowsWritten > 0) this.onWrite?.();
   }
 
   /** Runs `fn` atomically: throwing rolls every write back. */

@@ -7,6 +7,7 @@ import { MockTranscriber, type Transcriber, WorkersAITranscriber } from "../ai/t
 import type { AiLimits } from "../ai/usage.ts";
 import { createApi } from "../api/app.ts";
 import { readAreaVersions } from "../db/area-versions.ts";
+import { LiveChannel } from "../live/channel.ts";
 import { SSE_PING_MS } from "../api/chat.ts";
 import { AuthService } from "../auth/service.ts";
 import { automationExecutor } from "../automations/executor.ts";
@@ -140,6 +141,14 @@ export class ZuriAgent extends Agent<WorkerEnv> {
   testEmbedder: Embedder | null = null;
   /** How often a running chat stream writes a ping (SSE_PING_MS); the tests shorten it. */
   streamPingMs = SSE_PING_MS;
+  /** The real-time channel (nova UI, PR 3): WebSockets held while the object hibernates. */
+  readonly #live = new LiveChannel({
+    ctx: this.ctx,
+    auth: () => this.store.auth,
+    versions: () => readAreaVersions(this.store.db),
+    origin: () => this.publicUrl().origin,
+    locale: () => this.locale(),
+  });
   readonly #api = createApi({
     locale: () => this.locale(),
     auth: () => this.store.auth,
@@ -411,6 +420,8 @@ export class ZuriAgent extends Agent<WorkerEnv> {
     if (!this.#store) {
       const db = new Database(this.ctx.storage);
       migrate(db);
+      // Any write may move an area's number: the live channel looks once the work is done (nova UI, PR 3).
+      db.onWrite = () => this.#live.schedule();
       const settings = new SettingsRepository(db, { timeZone: this.env.DEFAULT_TIMEZONE });
       const env = this.env;
       const auth = new AuthService({
@@ -689,14 +700,36 @@ export class ZuriAgent extends Agent<WorkerEnv> {
   }
 
   /**
-   * WebSocket upgrades and sub-agent paths are refused here too, in case a
-   * request ever reaches the object without the Worker's gates.
+   * A WebSocket upgrade goes to the live channel and nowhere else: never to the
+   * Agents SDK's own sockets (state sync, callable methods), which Zuri doesn't
+   * use. The channel refuses any path but LIVE_PATH, in case a request ever
+   * reaches the object without the Worker's gates; so do sub-agent paths.
    */
   override async fetch(request: Request): Promise<Response> {
     if (request.headers.get("upgrade")?.toLowerCase() === "websocket") {
-      return errorResponse(new AppError("FORBIDDEN", "error.websocketNotSupported"));
+      const response = await this.#live.open(request);
+      // Same follow-up as a request: an object woken cold by the channel still checks its alarm.
+      if (this.#store) await this.afterRequest();
+      return response;
     }
     return super.fetch(request);
+  }
+
+  /**
+   * The runtime's hibernation handlers, defined here so the Agents SDK leaves
+   * them alone (it installs its own only where the class has none): only the
+   * live channel's sockets ever exist.
+   */
+  override webSocketMessage(ws: WebSocket): void {
+    this.#live.message(ws);
+  }
+
+  override webSocketClose(ws: WebSocket): void {
+    this.#live.closed(ws);
+  }
+
+  override webSocketError(ws: WebSocket): void {
+    this.#live.closed(ws);
   }
 
   override async onRequest(request: Request): Promise<Response> {

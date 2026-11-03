@@ -1,4 +1,4 @@
-import { AGENT_INSTANCE_NAME, LOGIN_OPTIONS_PATH, type LoginOptions, TELEGRAM_LIMITS } from "@zuri/shared";
+import { AGENT_INSTANCE_NAME, LIVE_PATH, LOGIN_OPTIONS_PATH, type LoginOptions, TELEGRAM_LIMITS } from "@zuri/shared";
 import { checkCsrf, readBodyLimited } from "./api/http.ts";
 import { CLIENT_GEO_HEADER, geoFromCf } from "./auth/client.ts";
 import { TURNSTILE_ORIGIN, turnstileSiteKey } from "./auth/turnstile.ts";
@@ -26,7 +26,7 @@ export { ZuriAgent } from "./agent/zuri-agent.ts";
  * 5. authentication, inside the Durable Object's API (api/app.ts);
  * 6. the request goes to the single agent instance, whose name is fixed here.
  *
- * WebSocket upgrades are refused for every path.
+ * WebSocket upgrades are refused for every path but the live channel's (LIVE_PATH).
  */
 export default {
   async fetch(request, env): Promise<Response> {
@@ -50,7 +50,9 @@ async function handle(request: Request, env: WorkerEnv): Promise<Response> {
   const plainHttp = url.protocol !== "https:";
   if (plainHttp && !config.allowPlainHttp) return toHttps(request, url, config);
 
-  if (request.headers.get("upgrade")?.toLowerCase() === "websocket") {
+  // The live channel (nova UI, PR 3) is the one WebSocket: a GET to its exact path. The
+  // object checks the session and the Origin; every other upgrade stops here.
+  if (request.headers.get("upgrade")?.toLowerCase() === "websocket" && !(request.method === "GET" && url.pathname === LIVE_PATH)) {
     return refuse(new AppError("FORBIDDEN", "error.websocketNotSupported"));
   }
 
