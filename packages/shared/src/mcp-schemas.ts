@@ -55,6 +55,18 @@ export const mcpToolUpdateSchema = /* @__PURE__ */ (() =>
     .refine((patch) => Object.keys(patch).length > 0))();
 export type McpToolUpdate = z.input<typeof mcpToolUpdateSchema>;
 
+/** The tools set free for one routine: its whole list, replaced. */
+export const mcpRoutineToolsSchema = /* @__PURE__ */ (() =>
+  z
+    .object({
+      tools: z
+        .array(z.string().regex(/^mcp_[a-z0-9_]{1,60}$/))
+        .max(MCP_LIMITS.routineTools)
+        .refine((list) => new Set(list).size === list.length),
+    })
+    .strict())();
+export type McpRoutineTools = z.input<typeof mcpRoutineToolsSchema>;
+
 /**
  * What the service's sign-in page sent back (step 18b): the app's callback
  * page posts the query it got. `state` is `<server id>.<secret>`.

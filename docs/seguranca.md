@@ -594,7 +594,9 @@ limite real está no servidor:
 | Ferramenta que sai dos dados do dono | `chat-tools.test.ts`, "offers nothing that reaches outside the owner's data" |
 | Resposta de serviço MCP com `</data>` e ordens | `mcp-chat.test.ts`, "returns its answer as third-party data" |
 | Dados de um serviço levados a outro sem o dono ver | `mcp-chat.test.ts`, "asks first when a call carries a lot, or follows another server's answer", "…from an earlier turn" |
-| "Usar sem perguntar" numa ferramenta que escreve | `mcp-routes.test.ts`, "refuses 'run without asking' for a tool that does not say it only reads"; `mcp-chat.test.ts`, "never runs on its own a tool its server doesn't declare read-only" |
+| Ferramenta destrutiva sem perguntar | `mcp-routes.test.ts`, "lets a tool that writes go up a level, with the password and an alert, but never a destructive one"; `mcp-chat.test.ts`, "never runs on its own a tool its server marks destructive, even if stored as such" |
+| Rotina manda dados para fora sem o dono escolher | `mcp-chat.test.ts`, "offers a routine only the tools at 'also in routines' and the ones set free for it", "turns a call that needs the owner into a proposal…", "sends nothing out of a routine during a lockdown" |
+| Sessão roubada libera ferramenta para rotina | `mcp-routes.test.ts`, "sets tools free for one AI routine: the password, an alert, never a destructive one, at most 10"; `mcp-chat.test.ts`, "an edited instruction or a deleted routine lets go of the tools set free for it" |
 | Descrição de ferramenta com `</data>` ou link | `mcp-units.test.ts`, "makes third-party text inert"; `mcp-chat.test.ts`, "gives the model the server's text with no tag or bracket of its own" |
 | Definição de ferramenta MCP trocada depois da aprovação | `mcp-chat.test.ts`, "refuses an approval when the tool, its definition or the server changed" |
 
@@ -621,10 +623,13 @@ então o servidor externo é tratado como não confiável em tudo:
   ou liga ferramenta. Adicionar, trocar endereço, acesso ou token pede a senha
   digitada agora e gera aviso de segurança (`mcp_server_added`,
   `mcp_server_changed`). Toda ferramenta nasce desligada e em "Perguntar
-  sempre"; "Usar sem perguntar" também pede a senha digitada agora e só vale
-  para ferramenta que o servidor marca como de consulta (`readOnlyHint`). Uma
-  ferramenta que escreve sempre pergunta, mesmo com a linha mexida no banco: o
-  executor confere a marca de novo.
+  sempre". Subir de nível ("Sem perguntar na conversa" ou "Sem perguntar,
+  também em rotinas e workflows", decisão de 03/11/2026) pede a senha digitada
+  agora e gera o aviso `mcp_tool_autonomy`. Uma ferramenta que escreve pode
+  subir, com aviso a mais na tela; a que o servidor marca como destrutiva
+  (`destructiveHint: true`) sempre pergunta, mesmo com a linha mexida no
+  banco: o executor confere a marca de novo. A marca faz parte da definição
+  revisada, então não muda sem a ferramenta sair de uso.
 - **Sem SSRF.** Só `https` na porta padrão, sem usuário e senha no endereço,
   sem nome de rede particular (`localhost`, `.local`, `.internal`…) e sem IP
   particular, reservado ou de metadados, inclusive IPv4 embutido em IPv6. Antes
@@ -647,14 +652,14 @@ então o servidor externo é tratado como não confiável em tudo:
   terceiros. A
   resposta entra em `<data source="mcp">` e não muda regra nenhuma. A
   descrição mudou? A ferramenta sai de uso até o dono religar (hash revisado).
-- **Os dados não passeiam.** Mesmo em "Usar sem perguntar", a chamada vira
+- **Os dados não passeiam.** Mesmo sem perguntar, a chamada vira
   cartão quando leva mais de 1.000 caracteres, quando o turno passaria de 4.000
   enviados ou quando outro servidor já respondeu na conversa, neste turno ou
   num anterior (as aprovações com resposta e as chamadas automáticas recentes
   contam). O cartão mostra os
   argumentos exatos; a aprovação fica presa ao hash do servidor, do token
   cifrado (num servidor com OAuth, da hora do login, para a renovação do token
-  não anular as propostas abertas), da definição, da política e dos
+  não anular as propostas abertas), da definição, do nível e dos
   argumentos, roda uma vez e nunca é repetida.
 - **Aprovação pelo Telegram (etapa 18b).** O cartão do bot é montado pelo
   servidor, com a ferramenta, o servidor e os argumentos exatos que vão sair,
@@ -691,8 +696,15 @@ então o servidor externo é tratado como não confiável em tudo:
   soma pontos na escolha das ferramentas oferecidas; não libera nenhuma
   ferramenta desligada nem pula aprovação.
 - **Bloqueio e rotinas.** Durante o bloqueio da conta nenhuma ferramenta
-  externa é oferecida nem chamada, e as rotas do MCP ficam fechadas. Rotinas
-  agendadas nunca recebem ferramentas externas.
+  externa é oferecida nem chamada, na conversa ou numa rotina, e as rotas do
+  MCP ficam fechadas. Uma rotina com IA recebe só as ferramentas no nível
+  "também em rotinas" e as que o dono liberou para ela (senha digitada agora,
+  aviso, até 10, nunca destrutiva). Mudar a instrução da rotina desfaz a
+  liberação, para uma sessão roubada não trocar o trabalho de uma rotina já
+  liberada; a definição mudada também. Os tetos de 1.000 e 4.000 caracteres e
+  a regra de outro servidor valem igual: a chamada barrada não sai, vira
+  proposta na conversa da rotina com aviso no app e no Telegram, e a rotina
+  segue. No máximo 3 propostas e 12 subrequisições externas por execução.
 - **Credencial cifrada.** AES-256-GCM com chave derivada do segredo
   `MCP_CREDENTIAL_KEY` e o id do servidor como dado associado. O token nunca
   volta à interface, ao log nem ao prompt. Trocar de endereço descarta o token.

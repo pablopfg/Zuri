@@ -173,7 +173,7 @@ export class ZuriAgent extends Agent<WorkerEnv> {
       automations: this.store.automations,
       rearm: () => this.store.automations.rearm(),
     }),
-    mcp: () => ({ service: this.store.mcp, auth: this.store.auth }),
+    mcp: () => ({ service: this.store.mcp, auth: this.store.auth, automations: this.store.automations }),
     telegram: () => ({
       telegram: this.store.telegram,
       auth: this.store.auth,

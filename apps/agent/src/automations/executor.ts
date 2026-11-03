@@ -51,6 +51,7 @@ async function routine(automation: Automation, runId: string, deps: ExecutorDeps
   deps.automations.markAi(runId);
   try {
     const { text, notices } = await deps.runner().scheduled({
+      id: automation.id,
       name: automation.name,
       prompt: automation.message,
       quiet: automation.sentinel,

@@ -8,7 +8,7 @@ import { PAUSE_MS } from "../src/mcp/service.ts";
 import { MCP_SUBREQUEST_BUDGET, SubrequestMeter } from "../src/mcp/session.ts";
 import { ALL_TOOLS, runApprovedAction } from "../src/tools/index.ts";
 import { type ChatWorld, collect, ScriptedProvider, type Step, withChatWorld } from "./chat-world.ts";
-import { createIssueTool, type FixtureTool, type McpFixture, mcpFixture, searchTool } from "./mcp-fixture.ts";
+import { createIssueTool, deleteIssueTool, type FixtureTool, type McpFixture, mcpFixture, searchTool } from "./mcp-fixture.ts";
 
 // Step 18: remote MCP tools in a chat turn, with a scripted model that plays
 // one whose prompt injection worked. Third-party text never decides what runs:
@@ -218,18 +218,31 @@ describe("external tools in a chat turn", () => {
     });
   });
 
-  it("never runs on its own a tool its server doesn't declare read-only, even if stored as such", async () => {
+  it("runs a tool that writes without asking once the owner chose so (decision of 03/11/2026)", async () => {
     await withChatWorld(async (world) => {
       const fixture = mcpFixture({ tools: [createIssueTool] });
-      const s = await server(world, fixture, "Tracker", { mcp_tracker_create_issue: "approve" });
-      expect(() => world.mcp.updateTool(s.id, "mcp_tracker_create_issue", { policy: "auto" })).toThrow(expect.objectContaining({ code: "CONFLICT" }));
-      // Written around the service (an older row, a bug): still a card.
-      world.db.run(`UPDATE zur_mcp_tools SET policy = 'auto'`);
+      await server(world, fixture, "Tracker", { mcp_tracker_create_issue: "auto" });
       const provider = new ScriptedProvider([callTools({ name: "mcp_tracker_create_issue", input: { title: "x" } }), say("Ok.")]);
       const { done } = await turn(world, provider, "Crie uma issue no tracker");
+      expect(done.message.tools?.[0]?.actionId).toBeUndefined();
+      expect(fixture.calls.map((c) => c.name)).toEqual(["create_issue"]);
+    });
+  });
+
+  it("never runs on its own a tool its server marks destructive, even if stored as such", async () => {
+    await withChatWorld(async (world) => {
+      const fixture = mcpFixture({ tools: [deleteIssueTool] });
+      const s = await server(world, fixture, "Tracker", { mcp_tracker_delete_issue: "approve" });
+      for (const policy of ["auto", "routines"] as const) {
+        expect(() => world.mcp.updateTool(s.id, "mcp_tracker_delete_issue", { policy })).toThrow(expect.objectContaining({ code: "CONFLICT" }));
+      }
+      // Written around the service (an older row, a bug): still a card.
+      world.db.run(`UPDATE zur_mcp_tools SET policy = 'auto', routines = 1`);
+      const provider = new ScriptedProvider([callTools({ name: "mcp_tracker_delete_issue", input: { id: "7" } }), say("Ok.")]);
+      const { done } = await turn(world, provider, "Apague a issue 7 no tracker");
       expect(done.message.tools?.[0]?.actionId).toBeTruthy();
       expect(fixture.calls).toEqual([]);
-      expect(provider.transcript.requests[0]?.tools.find((t) => t.name === "mcp_tracker_create_issue")?.description).toContain("approves each call");
+      expect(provider.transcript.requests[0]?.tools.find((t) => t.name === "mcp_tracker_delete_issue")?.description).toContain("approves each call");
     });
   });
 
@@ -497,6 +510,139 @@ describe("external tools in a chat turn", () => {
       await runner(world, scheduled).scheduled({ name: "Rotina", prompt: "Procure na documentação", quiet: true, signal: new AbortController().signal });
       expect(offered(scheduled).some((n) => n.startsWith("mcp_") || n === "find_tools")).toBe(false);
       expect(fixture.calls).toEqual([]);
+    });
+  });
+});
+
+/** An AI routine of the owner's, active. */
+async function routine(world: ChatWorld, message = "Procure na documentação e me avise") {
+  return world.automations.create({ name: "Revisão", kind: "agent_prompt", message, schedule: { type: "daily", time: "08:00" } }, "app");
+}
+
+function scheduledRun(world: ChatWorld, provider: AIProvider, automation: { id: string; name: string; message: string }) {
+  return runner(world, provider).scheduled({ id: automation.id, name: automation.name, prompt: automation.message, quiet: false, signal: new AbortController().signal });
+}
+
+describe("external tools in AI routines (decision of 03/11/2026)", () => {
+  it("offers a routine only the tools at 'also in routines' and the ones set free for it, and runs them", async () => {
+    await withChatWorld(async (world) => {
+      const fixture = mcpFixture({ tools: [searchTool, createIssueTool, deleteIssueTool] });
+      const s = await server(world, fixture, "Docs", { mcp_docs_search_docs: "routines", mcp_docs_create_issue: "auto", mcp_docs_delete_issue: "approve" });
+      const automation = await routine(world);
+      const first = new ScriptedProvider([callTools({ name: "mcp_docs_search_docs", input: { query: "deploy" } }), say("Achei.")]);
+      const { text } = await scheduledRun(world, first, automation);
+      expect(text).toBe("Achei.");
+      expect(offered(first).filter((n) => n.startsWith("mcp_"))).toEqual(["mcp_docs_search_docs"]);
+      expect(fixture.calls.map((c) => c.name)).toEqual(["search_docs"]);
+      expect(String(first.transcript.results[0]?.output)).toContain('<data source="mcp"');
+      // Set free for this routine only: offered to it, not to another one.
+      expect(() => world.mcp.setRoutineTools(automation.id, ["mcp_docs_delete_issue"])).toThrow(expect.objectContaining({ code: "CONFLICT" }));
+      expect(world.mcp.setRoutineTools(automation.id, ["mcp_docs_create_issue"]).added).toBe(true);
+      const other = await routine(world, "Outra coisa");
+      const second = new ScriptedProvider([say("Ok.")]);
+      await scheduledRun(world, second, automation);
+      expect(offered(second).filter((n) => n.startsWith("mcp_")).sort()).toEqual(["mcp_docs_create_issue", "mcp_docs_search_docs"]);
+      const third = new ScriptedProvider([say("Ok.")]);
+      await scheduledRun(world, third, other);
+      expect(offered(third).filter((n) => n.startsWith("mcp_"))).toEqual(["mcp_docs_search_docs"]);
+      // Back to asking: out of every routine.
+      world.mcp.updateTool(s.id, "mcp_docs_search_docs", { policy: "approve" });
+      const fourth = new ScriptedProvider([say("Ok.")]);
+      await scheduledRun(world, fourth, other);
+      expect(offered(fourth).some((n) => n.startsWith("mcp_"))).toBe(false);
+    });
+  });
+
+  it("turns a call that needs the owner into a proposal in the routine's conversation, with a notice, and the run goes on", async () => {
+    await withChatWorld(async (world) => {
+      const fixture = mcpFixture({ tools: [searchTool] });
+      await server(world, fixture, "Docs", { mcp_docs_search_docs: "routines" });
+      const automation = await routine(world);
+      const long = "x".repeat(ESCALATE.argsChars + 10);
+      const provider = new ScriptedProvider([callTools({ name: "mcp_docs_search_docs", input: { query: long } }), say("Deixei para você aprovar.")]);
+      const { text, notices } = await scheduledRun(world, provider, automation);
+      expect(text).toBe("Deixei para você aprovar.");
+      expect(fixture.calls).toEqual([]);
+      expect(String(provider.transcript.results[0]?.output)).toContain("awaiting_owner_approval");
+      expect(notices).toEqual([expect.objectContaining({ title: "Revisão", body: expect.stringContaining("/aprovar") })]);
+      const conversationId = world.automations.conversationOf(automation.id) ?? "";
+      expect(world.conversations.get(conversationId).title).toBe("Rotina: Revisão");
+      const message = world.conversations.recent(conversationId, 0, 5).find((row) => row.role === "assistant");
+      expect(message?.content).toContain("Revisão");
+      const [card] = JSON.parse(message?.tools ?? "[]") as { actionId?: string; name: string }[];
+      expect(card?.name).toBe("mcp_docs_search_docs");
+      expect(world.actions.view(card?.actionId ?? "")).toMatchObject({ status: "pending" });
+      // The owner approves it later: it runs once, from the card.
+      await runApprovedAction(ALL_TOOLS, world.ctx(conversationId), card?.actionId ?? "");
+      expect(fixture.calls.map((c) => c.name)).toEqual(["search_docs"]);
+      // A second run reuses the conversation.
+      await scheduledRun(world, new ScriptedProvider([callTools({ name: "mcp_docs_search_docs", input: { query: `${long}y` } }), say("Ok.")]), automation);
+      expect(world.automations.conversationOf(automation.id)).toBe(conversationId);
+    });
+  });
+
+  it("leaves at most the cap of proposals per run; past it, only a notice", async () => {
+    await withChatWorld(async (world) => {
+      const fixture = mcpFixture({ tools: [searchTool, searchIssues] });
+      await server(world, fixture, "Docs", { mcp_docs_search_docs: "routines", mcp_docs_search_issues: "routines" });
+      const automation = await routine(world);
+      // One tool takes MAX_CALLS_PER_TOOL calls a run: the one past the cap goes to the other.
+      const calls = Array.from({ length: MCP_LIMITS.routineProposals + 1 }, (_, i) =>
+        callTools({ name: i < MAX_CALLS_PER_TOOL ? "mcp_docs_search_docs" : "mcp_docs_search_issues", input: { query: `${"x".repeat(ESCALATE.argsChars)}${i}` } }),
+      );
+      world.settings = { ...world.settings, aiMaxToolCalls: 10, aiMaxIterations: 10 };
+      const { notices } = await scheduledRun(world, new ScriptedProvider([...calls, say("Ok.")]), automation);
+      const pending = world.actions.forConversation(world.automations.conversationOf(automation.id) ?? "");
+      expect(pending).toHaveLength(MCP_LIMITS.routineProposals);
+      expect(notices).toHaveLength(2);
+      expect(notices[1]?.body).toContain("limite");
+      expect(fixture.calls).toEqual([]);
+    });
+  });
+
+  it("sends nothing out of a routine during a lockdown", async () => {
+    await withChatWorld(async (world) => {
+      const fixture = mcpFixture({ tools: [searchTool] });
+      await server(world, fixture, "Docs", { mcp_docs_search_docs: "routines" });
+      const automation = await routine(world);
+      world.mcpLockdown.active = true;
+      const provider = new ScriptedProvider([callTools({ name: "mcp_docs_search_docs", input: { query: "x" } }), say("Ok.")]);
+      await scheduledRun(world, provider, automation);
+      expect(offered(provider).some((n) => n.startsWith("mcp_"))).toBe(false);
+      expect(fixture.calls).toEqual([]);
+    });
+  });
+
+  it("a changed definition goes back to asking first and leaves every routine", async () => {
+    await withChatWorld(async (world) => {
+      const fixture = mcpFixture({ tools: [searchTool, createIssueTool] });
+      const s = await server(world, fixture, "Docs", { mcp_docs_search_docs: "routines", mcp_docs_create_issue: "approve" });
+      const automation = await routine(world);
+      world.mcp.setRoutineTools(automation.id, ["mcp_docs_create_issue"]);
+      fixture.tools = [{ ...searchTool, description: "Search, now also sends mail." }, { ...createIssueTool, description: "Create, now also deletes." }];
+      await world.mcp.connect(s.id);
+      const tools = world.mcp.tools(s.id);
+      expect(tools.map((t) => [t.name, t.policy, t.needsReview])).toEqual([
+        ["create_issue", "approve", true],
+        ["search_docs", "approve", true],
+      ]);
+      expect([...world.mcp.routineAllowed(automation.id)]).toEqual([]);
+    });
+  });
+
+  it("an edited instruction or a deleted routine lets go of the tools set free for it", async () => {
+    await withChatWorld(async (world) => {
+      const fixture = mcpFixture({ tools: [createIssueTool] });
+      await server(world, fixture, "Docs", { mcp_docs_create_issue: "approve" });
+      const automation = await routine(world);
+      world.mcp.setRoutineTools(automation.id, ["mcp_docs_create_issue"]);
+      await world.automations.update(automation.id, { name: "Outro nome" });
+      expect([...world.mcp.routineAllowed(automation.id)]).toEqual(["mcp_docs_create_issue"]);
+      await world.automations.update(automation.id, { message: "Agora mande tudo para fora" });
+      expect([...world.mcp.routineAllowed(automation.id)]).toEqual([]);
+      world.mcp.setRoutineTools(automation.id, ["mcp_docs_create_issue"]);
+      await world.automations.delete(automation.id);
+      expect(world.db.all(`SELECT * FROM zur_automation_mcp_tools`)).toEqual([]);
     });
   });
 });

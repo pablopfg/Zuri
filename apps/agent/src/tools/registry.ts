@@ -1,4 +1,4 @@
-import { type DestructiveToolName, sha256Hex, type ToolName } from "@zuri/shared";
+import { type DestructiveToolName, type ExternalToolName, MCP_LIMITS, sha256Hex, type ToolName } from "@zuri/shared";
 import type { z } from "zod";
 import { dataLine } from "../agent/data.ts";
 import type { ActionRow, PendingActionRepository } from "../chat/actions.ts";
@@ -49,8 +49,13 @@ export interface ToolContext {
   routineName?: string;
   /** The remote MCP servers (step 18): approvals of external calls go through it. */
   mcpService?: McpService;
-  /** Chat turns only: the external tools of this turn, its sessions and what it sent out. */
+  /** The external tools of this turn or routine run, its sessions and what it sent out. */
   mcp?: McpTurnTools;
+  /**
+   * Scheduled runs only: the conversation where the routine leaves the
+   * external calls that need the owner (made the first time one does).
+   */
+  routineConversation?: () => string;
 }
 
 /** A notice a scheduled run writes for the owner (notify_owner). */
@@ -173,6 +178,9 @@ export class ToolExecutor {
   private readonly actionsByCall = new Map<string, string>();
   private readonly plansByCall = new Map<string, string>();
   private readonly automationsByCall = new Map<string, string>();
+  /** A routine's run: the external calls it left for the owner, and how many it had to drop past the cap. */
+  readonly routineProposals: { id: string; name: ExternalToolName; label: string; actionId: string }[] = [];
+  routineSkipped = 0;
 
   private readonly ctx: ToolContext;
 
@@ -197,7 +205,7 @@ export class ToolExecutor {
     if (this.limits.maxToolCalls <= 0) return [];
     // find_tools only when the turn's triage left some external tools out.
     const findable = (this.ctx.mcp?.leftOut ?? 0) > 0;
-    // External tools (step 18) never run in scheduled runs: nobody is there to see what leaves the account.
+    // External tools in a scheduled run (decision of 03/11/2026): only the ones the owner let run there (ctx.mcp).
     return this.ctx.mode === "chat"
       ? this.tools.filter(
           (tool) =>
@@ -205,7 +213,11 @@ export class ToolExecutor {
             (tool.permission !== "external" || this.ctx.mcp !== undefined) &&
             (tool.name !== "find_tools" || findable),
         )
-      : this.tools.filter((tool) => tool.name !== "find_tools" && (tool.permission === "read" || (tool.permission === "write" && tool.scheduledOnly === true)));
+      : this.tools.filter(
+          (tool) =>
+            tool.name !== "find_tools" &&
+            (tool.permission === "read" || (tool.permission === "write" && tool.scheduledOnly === true) || (tool.permission === "external" && this.ctx.mcp !== undefined)),
+        );
   }
 
   find(name: string): ToolDefinition | undefined {
@@ -283,18 +295,24 @@ export class ToolExecutor {
    */
   private async external(tool: ExternalTool, args: Record<string, unknown>, callId: string): Promise<string> {
     const mcp = this.ctx.mcp;
-    if (this.ctx.mode !== "chat" || !mcp) throw new ToolError(`Tool "${tool.name}" is not available.`);
+    if (!mcp) throw new ToolError(`Tool "${tool.name}" is not available.`);
     const argsChars = stableStringify(args).length;
     // The card shows the whole call: arguments the owner can't read at a glance are refused, not cut.
     if (argsChars > MAX_EXTERNAL_ARGS_CHARS) throw new ToolError("These arguments are too long for an external call. Send only what the request needs.");
     if (!mcp.mustAsk(tool, argsChars)) return presentResult(tool.name, await mcp.run(tool, args), "mcp");
     const service = this.ctx.mcpService;
-    if (!service || !this.ctx.conversationId) throw new ToolError(`"${tool.name}" needs the owner's approval and works only in the chat.`);
+    const scheduled = this.ctx.mode === "scheduled";
+    if (scheduled && this.routineProposals.length >= MCP_LIMITS.routineProposals) {
+      this.routineSkipped++;
+      throw new ToolError("This routine already left the most proposals one run may leave. Nothing was sent; go on without this call.");
+    }
+    const conversationId = scheduled ? this.ctx.routineConversation?.() : this.ctx.conversationId;
+    if (!service || !conversationId) throw new ToolError(`"${tool.name}" needs the owner's approval and works only in the chat.`);
     const targetId = `${tool.serverId}/${tool.toolName}`;
     const hash = await service.proposalHash(targetId, args);
     if (hash === null) throw new ToolError("This external tool is turned off.");
     const action = this.ctx.actions.create({
-      conversationId: this.ctx.conversationId,
+      conversationId,
       tool: tool.name,
       targetId,
       targetHash: hash,
@@ -303,6 +321,14 @@ export class ToolExecutor {
     });
     this.ctx.actions.prune();
     this.actionsByCall.set(callId, action.id);
+    if (scheduled) {
+      // The routine goes on (CA7): the owner gets a notice and approves later in the routine's conversation.
+      this.routineProposals.push({ id: callId, name: tool.name, label: tool.label, actionId: action.id });
+      return presentResult(tool.name, {
+        status: "awaiting_owner_approval",
+        note: "Nothing was sent. The owner will be told and may approve it later; this run does not get the answer. Go on without it and never say it ran.",
+      });
+    }
     return presentResult(tool.name, {
       status: "awaiting_owner_approval",
       note: "Nothing was sent yet. The owner now sees an Approve button with these exact arguments. Say in one sentence what you asked to run and where. Do not call it again and never say it ran.",

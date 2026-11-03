@@ -238,6 +238,8 @@ export class AutomationService {
       const message = patch.message ?? current.message;
       const sentinel = patch.sentinel ?? current.sentinel;
       checkContent(current.kind, message, sentinel);
+      // Another instruction is another job: the tools set free for this one (with the password) go back to the owner.
+      if (message !== current.message) this.db.run(`DELETE FROM zur_automation_mcp_tools WHERE automation_id = ?`, id);
       const schedule = patch.schedule ?? current.schedule;
       let status = current.status;
       let next = row.next_run;
@@ -318,6 +320,15 @@ export class AutomationService {
   }
 
   /** Deletes for good; the history keeps its runs (with the name they had) until they age out. */
+  /** The conversation where the routine leaves external calls for the owner (migration 20). */
+  conversationOf(id: string): string | null {
+    return this.db.one<{ conversation_id: string | null }>(`SELECT conversation_id FROM zur_automations WHERE id = ?`, id)?.conversation_id ?? null;
+  }
+
+  setConversation(id: string, conversationId: string): void {
+    this.db.run(`UPDATE zur_automations SET conversation_id = ? WHERE id = ?`, conversationId, id);
+  }
+
   async delete(id: string): Promise<void> {
     this.db.transaction(() => this.deleteNow(id));
     await this.rearm();
@@ -330,6 +341,7 @@ export class AutomationService {
   deleteNow(id: string): void {
     const row = this.row(id);
     this.db.run(`DELETE FROM zur_automations WHERE id = ?`, id);
+    this.db.run(`DELETE FROM zur_automation_mcp_tools WHERE automation_id = ?`, id);
     // What the priority that learns kept for it goes too: nothing will raise that source again.
     this.db.run(`DELETE FROM zur_alert_learning WHERE key = ?`, `automation:${id}`);
     recordActivity(this.db, "automation.deleted", { kind: row.kind });

@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { MCP_LIMITS, type McpAuthType, type McpOverview, type McpServerInfo, type McpServerProblem, type McpToolInfo, type McpToolProblem } from "@zuri/shared";
+import { MCP_LIMITS, MCP_TOOL_POLICIES, type McpAuthType, type McpOverview, type McpServerInfo, type McpServerProblem, type McpToolInfo, type McpToolProblem } from "@zuri/shared";
 import { CircleAlert, CircleCheck, Plug, RefreshCw, Trash2 } from "lucide-react";
 import { type FormEvent, useEffect, useId, useRef, useState } from "react";
 import { Switch } from "../../components/Switch.tsx";
@@ -495,19 +495,23 @@ function ToolRow({ server, tool }: { server: McpServerInfo; tool: McpToolInfo })
           <SelectField
             label={t("web.integrations.tool.policy")}
             hint={
-              tool.policy === "auto"
-                ? t("web.integrations.tool.autoHint")
-                : tool.hints.readOnly === true
+              tool.hints.destructive === true
+                ? t("web.integrations.tool.approveOnly")
+                : tool.policy === "approve"
                   ? t("web.integrations.tool.approveHint")
-                  : t("web.integrations.tool.approveOnly")
+                  : `${tool.hints.readOnly === true ? "" : `${t("web.integrations.tool.writeWarning")} `}${t(tool.policy === "auto" ? "web.integrations.tool.autoHint" : "web.integrations.tool.routinesHint")}`
             }
             value={tool.policy}
-            onChange={(e) => void save({ policy: e.target.value === "auto" ? "auto" : "approve" })}
+            onChange={(e) => void save({ policy: MCP_TOOL_POLICIES.find((policy) => policy === e.target.value) ?? "approve" })}
             disabled={busy}
           >
             <option value="approve">{t("web.integrations.tool.approve")}</option>
-            <option value="auto" disabled={tool.hints.readOnly !== true}>
+            {/* A tool its server marks destructive always asks (decision of 03/11/2026). */}
+            <option value="auto" disabled={tool.hints.destructive === true}>
               {t("web.integrations.tool.auto")}
+            </option>
+            <option value="routines" disabled={tool.hints.destructive === true}>
+              {t("web.integrations.tool.routines")}
             </option>
           </SelectField>
           <TextField

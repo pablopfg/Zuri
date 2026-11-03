@@ -48,6 +48,7 @@ export const AUTH_EVENT_KINDS = [
   "lockdown_exited",
   "mcp_server_added",
   "mcp_server_changed",
+  "mcp_tool_autonomy",
   "setup_failure",
   "setup_locked",
   "owner_created",

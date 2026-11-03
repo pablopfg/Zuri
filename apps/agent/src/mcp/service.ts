@@ -5,6 +5,7 @@ import {
   type McpOverview,
   type McpServerInfo,
   type McpServerProblem,
+  type McpRoutineTool,
   type McpToolInfo,
   type McpToolPolicy,
   sha256Hex,
@@ -19,7 +20,7 @@ import { McpCredentials } from "./credentials.ts";
 import type { McpMeaning } from "./meaning.ts";
 import { type OAuthRecord, oauthBinding, sameSecret, stateServerId, ZuriOAuthProvider } from "./oauth.ts";
 import { classifyMcpError, type FetchAuth, McpConnectionError } from "./guarded-fetch.ts";
-import { isUsable, McpRepository, presentTool, type ServerRow, type ToolRow } from "./repository.ts";
+import { isUsable, levelOf, McpRepository, presentTool, type ServerRow, type ToolRow } from "./repository.ts";
 import { McpBudgetSpent, McpTurn, type SubrequestMeter } from "./session.ts";
 import { type TriageTool, toolCost } from "./triage.ts";
 import { assertPublicHost, dohResolver, endpointUrl, McpEndpointError, type Resolver } from "./url.ts";
@@ -83,15 +84,24 @@ const host = (url: string) => {
 
 /** "tool · server": how the owner sees an external tool in the chat. */
 /**
- * Only a tool its server declares read-only may run without asking: the spec's
- * rule 3 (a tool that changes something never runs in the agent's turn). The
- * declaration is part of what the owner reviewed (the hash), so it can't flip
- * after the owner turned the tool on.
+ * A tool its server marks destructive always asks (decision of 03/11/2026):
+ * the owner may let a tool that writes run on its own, never one that deletes
+ * or overwrites. The mark is part of what the owner reviewed (the hash), so it
+ * can't flip after the tool was turned on.
  */
-export const readOnly = (tool: ToolRow) => parseHints(tool.annotations).readOnly === true;
+export const destructive = (tool: ToolRow) => parseHints(tool.annotations).destructive === true;
 
-/** The policy that really applies: "auto" on a tool that may write still asks. */
-export const effectivePolicy = (tool: ToolRow): McpToolPolicy => (tool.policy === "auto" && readOnly(tool) ? "auto" : "approve");
+/**
+ * What really applies to a call: in the chat, the levels "auto" and
+ * "routines" run without asking; in a routine (`routine` given), "routines"
+ * or a tool set free for that routine. A destructive tool always asks.
+ */
+export function effectivePolicy(tool: ToolRow, routine?: { allowed: boolean }): "approve" | "auto" {
+  if (destructive(tool)) return "approve";
+  const level = levelOf(tool);
+  if (!routine) return level === "approve" ? "approve" : "auto";
+  return level === "routines" || routine.allowed ? "auto" : "approve";
+}
 
 /** Failures of a server that otherwise works: it stays listed, and three in a row pause it. */
 const TRANSIENT: ReadonlySet<McpServerProblem> = new Set(["timeout", "too_large", "unavailable", "protocol"]);
@@ -313,7 +323,7 @@ export class McpService {
   updateTool(serverId: string, toolId: string, patch: { enabled?: boolean | undefined; policy?: McpToolPolicy | undefined; hint?: string | undefined }): McpToolInfo {
     const tool = this.storedTool(serverId, toolId);
     if (patch.enabled === true && tool.status !== "available") throw new AppError("CONFLICT", "error.mcpToolUnavailable");
-    if (patch.policy === "auto" && !readOnly(tool)) throw new AppError("CONFLICT", "error.mcpToolNotReadOnly");
+    if (patch.policy !== undefined && patch.policy !== "approve" && destructive(tool)) throw new AppError("CONFLICT", "error.mcpToolDestructive");
     if (patch.enabled === true && tool.enabled !== 1) {
       const on = this.repo.enabledTools().filter((t) => t.status === "available").length;
       if (on >= MCP_LIMITS.maxEnabledTools) throw new AppError("CONFLICT", "error.mcpToolLimit");
@@ -324,6 +334,48 @@ export class McpService {
       ...(patch.hint === undefined ? {} : { hint: patch.hint }),
     });
     return presentTool(this.storedTool(serverId, toolId));
+  }
+
+  // ---------- Autonomy per routine (decision of 03/11/2026) ----------
+
+  /** The tools on in Integrations, as the routine's form lists them, with the ones set free for it. */
+  routineTools(automationId: string): McpRoutineTool[] {
+    const allowed = this.repo.routineTools(automationId);
+    const servers = new Map(this.repo.list().map((server) => [server.id, server]));
+    const out: McpRoutineTool[] = [];
+    for (const tool of this.repo.enabledTools().filter(isUsable)) {
+      const server = servers.get(tool.server_id);
+      if (server?.enabled !== 1) continue;
+      out.push({ id: tool.exposed_name, label: toolLabel(server, tool), policy: levelOf(tool), destructive: destructive(tool), allowed: allowed.has(tool.exposed_name) });
+    }
+    return out;
+  }
+
+  /**
+   * Replaces the routine's list. Each one must be on, reviewed and not
+   * destructive. Says whether any was added, for the route's password check.
+   */
+  setRoutineTools(automationId: string, names: readonly string[]): { tools: McpRoutineTool[]; added: boolean } {
+    const before = this.repo.routineTools(automationId);
+    const usable = new Map(this.routineTools(automationId).map((tool) => [tool.id, tool]));
+    for (const name of names) {
+      const tool = usable.get(name);
+      if (!tool) throw new AppError("NOT_FOUND", "error.mcpToolNotFound");
+      if (tool.destructive) throw new AppError("CONFLICT", "error.mcpToolDestructive");
+    }
+    if (names.length > MCP_LIMITS.routineTools) throw new AppError("VALIDATION_FAILED", undefined, { fields: ["tools"] });
+    this.repo.setRoutineTools(automationId, names);
+    return { tools: this.routineTools(automationId), added: names.some((name) => !before.has(name)) };
+  }
+
+  /** The names set free for one routine. */
+  routineAllowed(automationId: string): Set<string> {
+    return this.repo.routineTools(automationId);
+  }
+
+  /** A deleted routine leaves nothing behind. */
+  forgetRoutine(automationId: string): void {
+    this.repo.setRoutineTools(automationId, []);
   }
 
   // ---------- OAuth (step 18b) ----------
@@ -536,10 +588,15 @@ export class McpService {
    * connected and not paused, never during a lockdown. Two reads of local
    * SQLite and no network; never throws, so a broken setup can't break the chat.
    */
-  turnTools(): TurnTool[] {
+  turnTools(routine?: string): TurnTool[] {
     try {
       if (this.deps.lockdown()) return [];
-      const enabled = this.repo.enabledTools().filter(isUsable);
+      let enabled = this.repo.enabledTools().filter(isUsable);
+      // A routine gets only what runs on its own there (CA5): the ones at "routines" and the ones set free for it.
+      if (routine !== undefined && enabled.length > 0) {
+        const allowed = this.repo.routineTools(routine);
+        enabled = enabled.filter((tool) => effectivePolicy(tool, { allowed: allowed.has(tool.exposed_name) }) === "auto");
+      }
       if (enabled.length === 0) return [];
       const now = this.now();
       const servers = new Map(
@@ -595,7 +652,7 @@ export class McpService {
     if (!server || !tool || server.enabled !== 1 || !isUsable(tool)) return null;
     // OAuth: the sign-in, not the token, which a refresh replaces without the owner doing anything.
     const credential = server.auth_type === "oauth" ? server.signed_in_at : server.credential;
-    return { server: server.id, url: server.url, auth: server.auth_type, credential, tool: tool.name, schema: tool.schema_hash, policy: tool.policy };
+    return { server: server.id, url: server.url, auth: server.auth_type, credential, tool: tool.name, schema: tool.schema_hash, policy: levelOf(tool) };
   }
 
   /** The hash a proposal stores: the snapshot and the exact arguments together. */
@@ -613,14 +670,15 @@ export class McpService {
     turn: McpTurn,
     target: { serverId: string; toolName: string },
     args: Record<string, unknown>,
-    opts: { signal?: AbortSignal | undefined; unattended: boolean },
+    opts: { signal?: AbortSignal | undefined; unattended: boolean; routine?: string | undefined },
   ): Promise<CallOutcome> {
     if (this.deps.lockdown()) throw new McpToolError("External tools are paused while the account is locked down.");
     const server = this.repo.get(target.serverId);
     const tool = server ? this.repo.toolByName(server.id, target.toolName) : null;
     if (!server || !tool || server.enabled !== 1 || !isUsable(tool)) throw new McpToolError("This external tool is turned off.");
     // The list of a turn is built once: a tool switched to asking first meanwhile must not run on its own.
-    if (opts.unattended && effectivePolicy(tool) !== "auto") throw new McpToolError("The owner changed this tool to ask first; it no longer runs without approval.");
+    const routine = opts.routine === undefined ? undefined : { allowed: this.repo.routineTools(opts.routine).has(tool.exposed_name) };
+    if (opts.unattended && effectivePolicy(tool, routine) !== "auto") throw new McpToolError("The owner changed this tool to ask first; it no longer runs without approval.");
     try {
       const where = this.target(server);
       const client = await turn.client(server.id, where.url, await this.fetchAuth(server, turn), () => where.verify(opts.signal), opts.signal);

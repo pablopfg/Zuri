@@ -97,4 +97,5 @@ export const ptBRSecurity = {
   "web.activity.kind.access_recovered": "Acesso recuperado com código de instalação",
   "web.activity.kind.mcp_server_added": "Serviço externo adicionado",
   "web.activity.kind.mcp_server_changed": "Endereço de serviço externo trocado",
+  "web.activity.kind.mcp_tool_autonomy": "Ferramenta externa com mais autonomia",
 } as const;

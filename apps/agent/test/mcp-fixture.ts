@@ -138,3 +138,11 @@ export const createIssueTool: FixtureTool = {
   annotations: { readOnlyHint: false, destructiveHint: false },
   run: (args) => `Created issue #42: ${String(args.title)}`,
 };
+
+export const deleteIssueTool: FixtureTool = {
+  name: "delete_issue",
+  description: "Delete an issue in the tracker.",
+  inputSchema: { type: "object", properties: { id: { type: "string" } }, required: ["id"] },
+  annotations: { readOnlyHint: false, destructiveHint: true },
+  run: (args) => `Deleted issue ${String(args.id)}`,
+};

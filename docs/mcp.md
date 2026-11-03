@@ -19,19 +19,45 @@ Em **Configurações > Integrações**:
    ferramentas.
 2. Em **Ver ferramentas**, cada ferramenta começa **desligada**. Ligue só as
    que fizerem sentido. Para cada uma ligada:
-   - **Antes de usar**: **Perguntar sempre** (padrão) mostra no chat um cartão
-     com os dados exatos que vão para o serviço, e a chamada só roda se você
-     aprovar. **Usar sem perguntar** roda direto e pede a senha digitada
-     agora. Só fica disponível para ferramentas que o servidor marca como de
-     consulta (`readOnlyHint`); as outras sempre perguntam, e a API recusa
-     com `409` uma tentativa de mudar isso.
+   - **Antes de usar**, em três níveis (decisão de 03/11/2026):
+     - **Perguntar sempre** (padrão) mostra no chat um cartão com os dados
+       exatos que vão para o serviço, e a chamada só roda se você aprovar.
+     - **Sem perguntar na conversa** roda direto nas suas conversas.
+     - **Sem perguntar, também em rotinas e workflows** roda direto também
+       nas rotinas com IA (e nos workflows da etapa 22).
+
+     Subir de nível pede a senha digitada agora e gera o aviso de segurança
+     `mcp_tool_autonomy`; descer não pede nada. Uma ferramenta que pode mudar
+     dados sobe com um aviso a mais na tela. A que o servidor marca como
+     destrutiva (`destructiveHint: true`) fica sempre em "Perguntar sempre": a
+     tela desativa as outras opções, a API recusa com `409` e a execução
+     confere de novo.
    - **Quando usar**: uma dica sua, até 200 caracteres, que ajuda a Zuri a
      escolher a ferramenta certa.
 3. **Reconectar** lê a lista de novo. Se o serviço mudar a descrição ou a
-   entrada de uma ferramenta ligada, ela sai de uso e aparece "Mudou: ligue de
-   novo para revisar".
+   entrada de uma ferramenta ligada, ela sai de uso, aparece "Mudou: ligue de
+   novo para revisar", volta para "Perguntar sempre" e sai das rotinas em que
+   estava liberada.
 
-Mesmo em **Usar sem perguntar**, a Zuri pergunta quando a chamada leva mais de
+### Ferramentas externas nas rotinas
+
+Uma rotina com IA recebe só as ferramentas no terceiro nível e as que você
+liberou para ela. Para liberar, edite a rotina em Automações: a seção
+**Ferramentas externas** lista as ferramentas ligadas. As do terceiro nível
+aparecem marcadas e travadas; as outras podem ser marcadas só para aquela
+rotina (até 10), com a senha digitada agora e o aviso de segurança. Uma
+ferramenta destrutiva nunca é liberada. Mudar a instrução da rotina, ou
+apagá-la, desfaz a liberação.
+
+Numa rotina valem os mesmos limites da conversa (mais de 1.000 caracteres na
+chamada, mais de 4.000 na execução, outro serviço já respondeu). Quando um
+deles barra a chamada, nada é enviado: a chamada vira proposta na conversa
+"Rotina: <nome>", criada na primeira vez, você recebe um aviso no app e no
+Telegram (onde `/aprovar` também mostra a proposta) e a rotina segue sem a
+resposta. Cada execução deixa no máximo 3 propostas e usa no máximo 12
+subrequisições externas.
+
+Mesmo sem perguntar, a Zuri pergunta quando a chamada leva mais de
 1.000 caracteres, quando o turno já mandou mais de 4.000, ou quando outro
 serviço já respondeu na mesma conversa, neste turno ou num anterior (os dados
 de um serviço não passam para outro sem você ver).
@@ -151,8 +177,9 @@ endereço ou outro tipo de acesso sim.
   seguidas ele pausa por 15 minutos. Token recusado ou ilegível desconecta até
   você editar o servidor.
 - **Bloqueio e rotinas**: durante o bloqueio da conta (etapa 16b) nenhuma
-  ferramenta externa é oferecida nem chamada. Rotinas agendadas nunca recebem
-  ferramentas externas nem `find_tools`.
+  ferramenta externa é oferecida nem chamada, na conversa ou numa rotina.
+  Rotinas recebem só as ferramentas do terceiro nível e as liberadas para
+  elas, nunca `find_tools`.
 
 ## Credenciais
 
@@ -199,7 +226,9 @@ durante o bloqueio da conta.
 | `POST /api/mcp/servers/:id/connect` | Conecta e lê a lista de novo; a falha volta como estado do servidor |
 | `GET /api/mcp/servers/:id/tools` | As ferramentas do servidor |
 | `POST /api/mcp/oauth/callback` | Termina um login OAuth com `state`, `code` (ou `error`) e `iss`. Pede a senha digitada agora; registra `mcp_server_changed` com aviso. `state` errado, vencido ou já usado: `400` |
-| `PATCH /api/mcp/servers/:id/tools/:tool` | Liga, desliga, política e dica. Pôr em "Usar sem perguntar" (ou religar uma assim) pede a senha digitada agora; numa ferramenta que não é só de consulta, `409` |
+| `PATCH /api/mcp/servers/:id/tools/:tool` | Liga, desliga, nível (`approve`, `auto`, `routines`) e dica. Subir de nível (ou religar uma acima de "Perguntar sempre") pede a senha digitada agora e registra `mcp_tool_autonomy` com aviso; numa ferramenta destrutiva, `409` |
+| `GET /api/mcp/routines/:id/tools` | As ferramentas ligadas, com nível, se é destrutiva e se está liberada para a rotina. Rotina que não é com IA: `409` |
+| `PATCH /api/mcp/routines/:id/tools` | Troca a lista liberada (`{ tools: [...] }`, até 10). Liberar uma nova pede a senha digitada agora e registra `mcp_tool_autonomy` com aviso; destrutiva, `409`; desligada ou inexistente, `404` |
 
 ## Desenvolvimento local
 

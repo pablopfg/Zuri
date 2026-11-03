@@ -7,6 +7,8 @@ import {
   type AutomationKind,
   type AutomationPriority,
   type AutomationRun,
+  MCP_LIMITS,
+  type McpRoutineTool,
   ptBRAutomations,
   type Settings,
   SCHEDULE_TYPES,
@@ -401,6 +403,16 @@ function AutomationForm({ editing, onClose }: { editing: Editing; onClose: () =>
   const needsMessage = kind !== "task_digest";
   const ready = name.trim() !== "" && schedule !== null && (!needsMessage || message.trim() !== "");
   const set = (patch: Partial<ScheduleDraft>) => setDraft((d) => ({ ...d, ...patch }));
+  // The external tools this routine may use on its own (decision of 03/11/2026): only an AI routine that exists.
+  const toolsKey = ["automation-mcp-tools", current?.id] as const;
+  const routineTools = useQuery({
+    queryKey: toolsKey,
+    queryFn: () => api<{ tools: McpRoutineTool[] }>(`/mcp/routines/${current?.id}/tools`),
+    enabled: current?.kind === "agent_prompt",
+    staleTime: 30_000,
+  });
+  const [allowed, setAllowed] = useState<string[] | null>(null);
+  const freed = allowed ?? routineTools.data?.tools.filter((tool) => tool.allowed).map((tool) => tool.id) ?? [];
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -412,6 +424,11 @@ function AutomationForm({ editing, onClose }: { editing: Editing; onClose: () =>
       if (current) {
         // A finished one-time reminder given a new moment starts again.
         await api(`/automations/${current.id}`, { method: "PATCH", body: { ...fields, ...(current.status === "completed" ? { paused: false } : {}) } });
+        // Another instruction lets go of the tools set free (on the server), so the list is sent again after it.
+        if (routineTools.data && (allowed !== null || (freed.length > 0 && message.trim() !== current.message))) {
+          const result = await api<{ tools: McpRoutineTool[] }>(`/mcp/routines/${current.id}/tools`, { method: "PATCH", body: { tools: freed } });
+          qc.setQueryData(toolsKey, result);
+        }
       } else {
         await api("/automations", { method: "POST", body: { kind, ...fields } });
       }
@@ -505,6 +522,9 @@ function AutomationForm({ editing, onClose }: { editing: Editing; onClose: () =>
           <>
             <Checkbox label={t("web.automations.form.quiet")} hint={t("web.automations.form.quietHint")} checked={sentinel} onChange={setSentinel} />
             <p className="text-xs leading-5 text-fg-muted">{t("web.automations.form.aiNote", { count: settings.data?.aiScheduledRunsPerDay ?? 0 })}</p>
+            {routineTools.data && routineTools.data.tools.length > 0 && (
+              <RoutineTools tools={routineTools.data.tools} freed={freed} onChange={setAllowed} />
+            )}
           </>
         )}
         {schedule && (
@@ -532,6 +552,36 @@ function AutomationForm({ editing, onClose }: { editing: Editing; onClose: () =>
         </div>
       </form>
     </Dialog>
+  );
+}
+
+/**
+ * The external tools on in Integrations: the ones at "also in routines" come
+ * checked and locked; the others can be set free for this routine alone
+ * (password and a security notice); a destructive one never.
+ */
+function RoutineTools({ tools, freed, onChange }: { tools: McpRoutineTool[]; freed: string[]; onChange: (ids: string[]) => void }) {
+  const { t } = useI18n();
+  const full = freed.length >= MCP_LIMITS.routineTools;
+  return (
+    <fieldset className="space-y-2 rounded-xl border border-border p-3">
+      <legend className="px-1 text-sm font-medium">{t("web.automations.mcp.title")}</legend>
+      <p className="text-xs leading-5 text-fg-muted">{t("web.automations.mcp.help")}</p>
+      {tools.map((tool) => {
+        const everywhere = tool.policy === "routines" && !tool.destructive;
+        const on = everywhere || freed.includes(tool.id);
+        return (
+          <Checkbox
+            key={tool.id}
+            label={tool.label}
+            hint={tool.destructive ? t("web.automations.mcp.destructive") : everywhere ? t("web.automations.mcp.everywhere") : ""}
+            checked={on}
+            disabled={tool.destructive || everywhere || (!on && full)}
+            onChange={(value) => onChange(value ? [...freed, tool.id] : freed.filter((id) => id !== tool.id))}
+          />
+        );
+      })}
+    </fieldset>
   );
 }
 
@@ -567,18 +617,28 @@ function DayPicker({ days, onChange }: { days: number[]; onChange: (days: number
   );
 }
 
-function Checkbox({ label, hint, checked, onChange }: { label: string; hint: string; checked: boolean; onChange: (value: boolean) => void }) {
+function Checkbox({ label, hint, checked, onChange, disabled }: { label: string; hint: string; checked: boolean; onChange: (value: boolean) => void; disabled?: boolean }) {
   const id = useId();
   return (
     <div className="flex items-start gap-3">
-      <input id={id} type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} aria-describedby={`${id}-hint`} className="mt-0.5 h-5 w-5 shrink-0 accent-accent" />
+      <input
+        id={id}
+        type="checkbox"
+        checked={checked}
+        disabled={disabled}
+        onChange={(e) => onChange(e.target.checked)}
+        {...(hint ? { "aria-describedby": `${id}-hint` } : {})}
+        className="mt-0.5 h-5 w-5 shrink-0 accent-accent disabled:opacity-60"
+      />
       <div className="space-y-0.5">
         <label htmlFor={id} className="text-sm font-medium">
           {label}
         </label>
-        <p id={`${id}-hint`} className="text-xs leading-5 text-fg-muted">
-          {hint}
-        </p>
+        {hint && (
+          <p id={`${id}-hint`} className="text-xs leading-5 text-fg-muted">
+            {hint}
+          </p>
+        )}
       </div>
     </div>
   );

@@ -885,6 +885,27 @@ export const MIGRATIONS: readonly Migration[] = [
       `ALTER TABLE zur_mcp_tools ADD COLUMN embedding_key TEXT`,
     ],
   },
+  {
+    version: 20,
+    name: "mcp_autonomy",
+    statements: [
+      // Autonomy per tool (decision of 03/11/2026). The third level, "also in
+      // routines", is `policy = 'auto'` with this flag, so the CHECK of 18 stays.
+      `ALTER TABLE zur_mcp_tools ADD COLUMN routines INTEGER NOT NULL DEFAULT 0 CHECK (routines IN (0, 1))`,
+      // Tools set free for one AI routine only. A changed definition, a new
+      // address or a deleted routine or server takes them out (the code does,
+      // since an exposed name may come back on another tool).
+      `CREATE TABLE IF NOT EXISTS zur_automation_mcp_tools (
+        automation_id TEXT NOT NULL,
+        exposed_name TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        PRIMARY KEY (automation_id, exposed_name)
+      )`,
+      `CREATE INDEX IF NOT EXISTS zur_automation_mcp_tools_tool ON zur_automation_mcp_tools (exposed_name)`,
+      // The conversation where a routine leaves its proposals, made the first time one needs it.
+      `ALTER TABLE zur_automations ADD COLUMN conversation_id TEXT`,
+    ],
+  },
 ];
 
 export const LATEST_SCHEMA_VERSION = MIGRATIONS.at(-1)?.version ?? 0;

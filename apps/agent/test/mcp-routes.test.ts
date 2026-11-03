@@ -1,11 +1,11 @@
-import { AGENT_INSTANCE_NAME, type McpOverview, type McpServerInfo, type McpToolInfo } from "@zuri/shared";
+import { AGENT_INSTANCE_NAME, type McpOverview, type McpRoutineTool, type McpServerInfo, type McpToolInfo } from "@zuri/shared";
 import { runInDurableObject } from "cloudflare:test";
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import type { ZuriAgent } from "../src/agent/zuri-agent.ts";
 import { InternalState } from "../src/db/internal-state.ts";
 import { McpCredentials } from "../src/mcp/credentials.ts";
 import { call, CSRF, errorBody, HUMAN_TOKEN, ORIGIN, TEST_EMAIL, TEST_PASSWORD, testEnv } from "./helpers.ts";
-import { createIssueTool, type McpFixture, mcpFixture, searchTool } from "./mcp-fixture.ts";
+import { createIssueTool, deleteIssueTool, type McpFixture, mcpFixture, searchTool } from "./mcp-fixture.ts";
 
 // Step 18: the owner's MCP servers through the Worker, as Settings > Integrations calls them.
 
@@ -52,7 +52,7 @@ afterEach(async () => {
     const { db } = agent.store;
     new InternalState(db).delete("lockdown_until");
     Object.assign(agent.store.mcp, { credentials: new McpCredentials(testEnv.MCP_CREDENTIAL_KEY) });
-    for (const table of ["zur_mcp_tools", "zur_mcp_servers", "zur_auth_events", "zur_notices"]) db.run(`DELETE FROM ${table}`);
+    for (const table of ["zur_mcp_tools", "zur_mcp_servers", "zur_auth_events", "zur_notices", "zur_automation_mcp_tools", "zur_automations"]) db.run(`DELETE FROM ${table}`);
   });
 });
 
@@ -242,14 +242,67 @@ describe("/api/mcp", () => {
     const back = ((await (await api("POST", `/mcp/servers/${server.id}/connect`)).json()) as { server: McpServerInfo }).server;
     expect(back).toMatchObject({ status: "connected", pausedUntil: null });
   });
-  it("refuses 'run without asking' for a tool that does not say it only reads", async () => {
+  it("lets a tool that writes go up a level, with the password and an alert, but never a destructive one", async () => {
+    fixture.tools = [searchTool, createIssueTool, deleteIssueTool];
     const server = await addServer();
+    await inOwner((agent) => agent.store.db.run(`DELETE FROM zur_auth_events`));
     const path = `/mcp/servers/${server.id}/tools/mcp_docs_create_issue`;
     expect((await api("PATCH", path, { enabled: true })).status).toBe(200);
-    const auto = await api("PATCH", path, { policy: "auto" });
-    expect(auto.status).toBe(409);
-    expect(((await auto.json()) as { message: string }).message).toBeTruthy();
-    expect((await toolsOf(server.id)).find((t) => t.name === "create_issue")?.policy).toBe("approve");
+    await stale();
+    for (const policy of ["auto", "routines"]) expect((await api("PATCH", path, { policy })).status, policy).toBe(403);
+    await fresh();
+    const routines = await api("PATCH", path, { policy: "routines" });
+    expect(((await routines.json()) as { tool: McpToolInfo }).tool.policy).toBe("routines");
+    // Down a level needs nothing and tells nobody.
+    await stale();
+    expect((await api("PATCH", path, { policy: "auto" })).status).toBe(200);
+    expect((await toolsOf(server.id)).find((t) => t.name === "create_issue")?.policy).toBe("auto");
+    const kinds = await inOwner((agent) => agent.store.db.all<{ kind: string }>(`SELECT kind FROM zur_auth_events`).map((r) => r.kind));
+    expect(kinds).toEqual(["mcp_tool_autonomy"]);
+    await fresh();
+    const destructive = `/mcp/servers/${server.id}/tools/mcp_docs_delete_issue`;
+    expect((await api("PATCH", destructive, { enabled: true })).status).toBe(200);
+    for (const policy of ["auto", "routines"]) {
+      const refused = await api("PATCH", destructive, { policy });
+      expect(refused.status, policy).toBe(409);
+      expect(((await refused.json()) as { message: string }).message).toBeTruthy();
+    }
+    expect((await toolsOf(server.id)).find((t) => t.name === "delete_issue")?.policy).toBe("approve");
+  });
+
+  it("sets tools free for one AI routine: the password, an alert, never a destructive one, at most 10", async () => {
+    fixture.tools = [searchTool, createIssueTool, deleteIssueTool];
+    const server = await addServer();
+    for (const tool of ["mcp_docs_search_docs", "mcp_docs_create_issue", "mcp_docs_delete_issue"]) await api("PATCH", `/mcp/servers/${server.id}/tools/${tool}`, { enabled: true });
+    const created = await api("POST", "/automations", { name: "Revisão", kind: "agent_prompt", message: "Resuma a documentação", schedule: { type: "daily", time: "08:00" } });
+    const routineId = ((await created.json()) as { automation: { id: string } }).automation.id;
+    const reminder = await api("POST", "/automations", { name: "Água", kind: "reminder", message: "Beber água", schedule: { type: "daily", time: "09:00" } });
+    const reminderId = ((await reminder.json()) as { automation: { id: string } }).automation.id;
+    const path = `/mcp/routines/${routineId}/tools`;
+    const listed = (await (await api("GET", path)).json()) as { tools: McpRoutineTool[] };
+    expect(listed.tools.map((t) => [t.id, t.destructive, t.allowed]).sort()).toEqual([
+      ["mcp_docs_create_issue", false, false],
+      ["mcp_docs_delete_issue", true, false],
+      ["mcp_docs_search_docs", false, false],
+    ]);
+    await inOwner((agent) => agent.store.db.run(`DELETE FROM zur_auth_events`));
+    await stale();
+    expect((await errorBody(await api("PATCH", path, { tools: ["mcp_docs_create_issue"] }))).code).toBe("RECENT_AUTH_REQUIRED");
+    // Taking all away needs nothing.
+    expect((await api("PATCH", path, { tools: [] })).status).toBe(200);
+    await fresh();
+    const freed = await api("PATCH", path, { tools: ["mcp_docs_create_issue"] });
+    expect(((await freed.json()) as { tools: McpRoutineTool[] }).tools.find((t) => t.id === "mcp_docs_create_issue")?.allowed).toBe(true);
+    expect((await api("PATCH", path, { tools: ["mcp_docs_delete_issue"] })).status).toBe(409);
+    expect((await api("PATCH", path, { tools: ["mcp_docs_nope"] })).status).toBe(404);
+    for (const body of [{}, { tools: "x" }, { tools: ["a"] }, { tools: ["mcp_docs_create_issue", "mcp_docs_create_issue"] }, { tools: Array.from({ length: 11 }, (_, i) => `mcp_docs_t${i}`) }, { tools: [], extra: 1 }]) {
+      expect((await api("PATCH", path, body)).status, JSON.stringify(body)).toBe(400);
+    }
+    expect((await api("GET", `/mcp/routines/${reminderId}/tools`)).status).toBe(409);
+    expect((await api("GET", "/mcp/routines/00000000-0000-4000-8000-000000000000/tools")).status).toBe(404);
+    expect((await api("GET", "/mcp/routines/nao-e-id/tools")).status).toBe(404);
+    const kinds = await inOwner((agent) => agent.store.db.all<{ kind: string }>(`SELECT kind FROM zur_auth_events`).map((r) => r.kind));
+    expect(kinds).toEqual(["mcp_tool_autonomy"]);
   });
 
   it("alerts when the token changes, even at the same address", async () => {
