@@ -95,6 +95,21 @@ as seções do `CHANGELOG.md`. Essa PR tem auto-merge e o rótulo
 `sem-atualizacao-automatica`; trate-a como qualquer outra PR verde e nunca
 edite a branch `chore/versao` à mão (`docs/agente/versionamento.md`).
 
+O merge dessas PRs automáticas (a `chore(release):` e a
+`docs(readme): … (automático)`) é feito pelo `GITHUB_TOKEN`, e o GitHub não
+dispara workflow nenhum por evento que esse token causou: a `develop` anda sem
+execução de `push`. Os agendamentos também não cobrem; o GitHub descarta
+quase todos (em 03/11/2026, 4 execuções agendadas do `Update PRs` em 26 horas,
+em vez de umas 100). Por isso o `README` e o `Versão` terminam toda execução
+chamando o workflow `Seguir merge` (`.github/workflows/seguir-merge.yml`,
+`scripts/seguir-merge.ts`). Ele espera a PR da própria branch entrar (até
+40 minutos, lendo a cada 30 s) e chama por `workflow_dispatch`, o único evento
+que o `GITHUB_TOKEN` sempre consegue disparar, o `Update PRs`, o `Branches` e o
+outro workflow automático, cuja PR também ficou atrás. Sem PR aberta, termina
+na hora; PR fechada sem merge não chama nada. Ele só lê PRs e dispara
+workflows na `develop`. Caso que motivou: #140 e #141 atrás da `develop`
+depois da #139.
+
 O workflow `Update PRs` (`.github/workflows/update-prs.yml`) cuida da maior
 parte sozinho. Cada vez que a `develop` muda, ele roda
 `scripts/atualizar-prs.ts` a partir da `develop` e, para cada PR aberta com

@@ -5,8 +5,9 @@ name: README
 # (scripts/readme.ts, .claude/rules/readme.md). When something changed, it keeps
 # one pull request "docs(readme): …" on chore/readme-automatico with auto-merge
 # (Pablo authorized these merges). Its own merge starts no run (a merge by
-# GITHUB_TOKEN never does) and the next run finds nothing to change, so it
-# cannot loop. A stage pull request opened or merged shows within 10 minutes.
+# GITHUB_TOKEN never does), so seguir-merge.yml waits for it and starts
+# update-prs.yml and the others; a run with nothing to change opens no pull
+# request, so it cannot loop. A stage pull request opened or merged shows within 10 minutes.
 # Never pushes to develop or main. GITHUB_TOKEN only; nothing here costs.
 on:
   push:
@@ -50,6 +51,14 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           node scripts/readme.ts --publicar
+      # Its merge by GITHUB_TOKEN starts no push run: seguir-merge.yml waits for it
+      # and starts the push-driven workflows. Also after a failure, since the
+      # pull request may be open; with no open pull request it ends at once.
+      - name: Follow the merge of the pull request
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run seguir-merge.yml --repo "$GITHUB_REPOSITORY" --ref develop -f branch=chore/readme-automatico
 
   report-failure:
     needs: update

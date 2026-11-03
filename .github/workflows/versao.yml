@@ -11,7 +11,8 @@ on:
   push:
     branches: [develop]
   # A merge made by GITHUB_TOKEN (the release pull request itself) starts no
-  # push run: the hourly run catches anything left behind.
+  # push run: seguir-merge.yml starts update-prs.yml and the others after it.
+  # The hourly run is only a fallback; GitHub drops most scheduled runs.
   schedule:
     - cron: "17 * * * *"
   workflow_dispatch:
@@ -53,6 +54,14 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           node scripts/publicar-versao.ts
+      # Its merge by GITHUB_TOKEN starts no push run: seguir-merge.yml waits for it
+      # and starts the push-driven workflows. Also after a failure, since the
+      # pull request may be open; with no open pull request it ends at once.
+      - name: Follow the merge of the pull request
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run seguir-merge.yml --repo "$GITHUB_REPOSITORY" --ref develop -f branch=chore/versao
 
   report-failure:
     needs: version

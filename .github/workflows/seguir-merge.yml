@@ -1,0 +1,56 @@
+name: Seguir merge
+
+# readme.yml and versao.yml merge their own pull request by auto-merge, set
+# with GITHUB_TOKEN. GitHub starts no workflow for an event that GITHUB_TOKEN
+# caused, so that merge moves develop with no push run: update-prs.yml never
+# brought develop into the open pull requests and the green ones sat "behind"
+# (#140 and #141 after #139, 03/11/2026), and the schedules almost never fire.
+# Both workflows start this one at the end of each run. It waits for their
+# pull request to merge and starts the push-driven workflows again by
+# workflow_dispatch, the one event GITHUB_TOKEN can always start
+# (scripts/seguir-merge.ts). It reads pull requests and starts workflows on
+# develop; it never merges, pushes or approves. GITHUB_TOKEN only; nothing here
+# costs. docs/agente/merge-de-prs.md.
+on:
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: Branch whose pull request to follow
+        type: choice
+        required: true
+        options:
+          - chore/readme-automatico
+          - chore/versao
+
+permissions: {}
+
+# A newer run follows the same pull request (or finds it closed): it replaces the one still waiting.
+concurrency:
+  group: seguir-merge-${{ inputs.branch }}
+  cancel-in-progress: true
+
+jobs:
+  follow:
+    # A dispatch from another branch would run that branch's copy with write access.
+    if: github.ref == 'refs/heads/develop'
+    runs-on: ubuntu-26.04
+    # The script waits up to 40 minutes; a bot pull request takes about 15 to merge.
+    timeout-minutes: 45
+    # pull-requests: read the state of the pull request; actions: start the workflows on develop.
+    permissions:
+      contents: read
+      pull-requests: read
+      actions: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: develop
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+      - name: Wait for the merge and start the push workflows
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BRANCH: ${{ inputs.branch }}
+        run: node scripts/seguir-merge.ts "$BRANCH"
