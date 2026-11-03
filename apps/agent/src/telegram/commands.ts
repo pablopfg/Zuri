@@ -1,3 +1,4 @@
+import { GoogleMeter, type GoogleCalendar } from "../google/service.ts";
 import {
   APP_VERSION,
   type Automation,
@@ -47,6 +48,8 @@ const SNIPPET_MAX = 100;
 const LINE_MAX = 80;
 /** Rows read to count what is past the 5 shown ("e mais N no app"). */
 const COUNT_MAX = 100;
+/** Google calls of one /hoje: the bot's update also sends through Telegram (rule P9). */
+const TODAY_GOOGLE_BUDGET = 4;
 const DEFAULT_HOUR = 9;
 
 /** The commands this module answers (the others are the service's: /start, /ajuda, /destravar, /nova_conversa). */
@@ -109,6 +112,8 @@ export interface CommandDeps {
   aiAvailable(): boolean;
   /** MCP servers waiting for the owner to sign in (step 18b), for /status. */
   mcpSignIn?: () => number;
+  /** The Google Calendar (step 19): /hoje lists today's events of the calendars open to Zuri. */
+  calendar?: GoogleCalendar;
   buttons: CommandButtons;
   state: InternalState;
   locale(): Locale;
@@ -141,7 +146,7 @@ export class TelegramCommands {
     try {
       switch (name) {
         case "hoje":
-          return [this.#today()];
+          return [await this.#today()];
         case "tarefas":
           return [this.#tasks(args)];
         case "nova":
@@ -174,8 +179,31 @@ export class TelegramCommands {
 
   // --- Reading ------------------------------------------------------------------
 
-  /** /hoje: overdue, due today and today's reminders, 5 of each at most. */
-  #today(): Out {
+  /**
+   * Today's events of the calendars open to Zuri (step 19), or null when there
+   * is no calendar to read. Google's titles are third-party text: disarmed and
+   * on one line like everything else here. A failure is a line, never an error.
+   */
+  /** Calendars the last /hoje left unread (past its Google calls). */
+  #agendaSkipped = 0;
+
+  async #agenda(start: string, end: string): Promise<string[] | null> {
+    const calendar = this.deps.calendar;
+    if (!calendar?.status().connected || calendar.readable().length === 0) return null;
+    if (!calendar.usable()) return [];
+    // The bot's update also sends its answer through Telegram: a small share of the 50 subrequests (rule P9).
+    // With many calendars open, the ones past the budget are left out and said so (the main one comes first).
+    const { events, skipped } = await calendar.events(calendar.readable(), new Date(start), new Date(end), new GoogleMeter(TODAY_GOOGLE_BUDGET), {
+      timeZone: this.deps.timeZone(),
+      perCalendar: 20,
+      max: COUNT_MAX,
+    });
+    this.#agendaSkipped = skipped.length;
+    return events.map((event) => `• ${event.allDay ? this.#t("telegram.cmd.hoje.diaInteiro") : this.#hour(event.start)} · ${this.#line(event.title || "—")}`);
+  }
+
+  /** /hoje: overdue, due today, today's reminders and today's events, 5 of each at most. */
+  async #today(): Promise<Out> {
     const now = this.#clock();
     const zone = this.deps.timeZone();
     const { end } = localDayBounds(zone, new Date(now));
@@ -187,7 +215,19 @@ export class TelegramCommands {
       (item) => item.kind === "reminder" && item.nextRunAt !== null && item.nextRunAt >= nowIso && item.nextRunAt < end,
     );
     const title = this.#t("telegram.cmd.hoje.titulo", { data: this.#day(now) });
-    if (overdue.length + dueToday.length + reminders.length === 0) return { text: `${title}\n\n${this.#t("telegram.cmd.hoje.vazio")}` };
+    let agenda: string[] | null;
+    let agendaDown = false;
+    this.#agendaSkipped = 0;
+    try {
+      agenda = await this.#agenda(localDayBounds(zone, new Date(now)).start, end);
+      agendaDown = agenda !== null && agenda.length === 0 && !this.deps.calendar?.usable();
+    } catch {
+      agenda = [];
+      agendaDown = true;
+    }
+    if (overdue.length + dueToday.length + reminders.length + (agenda?.length ?? 0) === 0 && !agendaDown) {
+      return { text: `${title}\n\n${this.#t("telegram.cmd.hoje.vazio")}` };
+    }
     const blocks = [title];
     const block = (key: MessageKey, lines: string[]) => {
       if (lines.length === 0) return;
@@ -207,6 +247,9 @@ export class TelegramCommands {
       "telegram.cmd.hoje.lembretes",
       reminders.map((item) => `• ${this.#line(item.name)} · ${this.#hour(item.nextRunAt ?? nowIso)}`),
     );
+    if (agendaDown) blocks.push(this.#t("telegram.cmd.hoje.agenda_indisponivel"));
+    else block("telegram.cmd.hoje.agenda", agenda ?? []);
+    if (!agendaDown && this.#agendaSkipped > 0) blocks.push(this.#t("telegram.cmd.hoje.agenda_parcial", { n: this.#agendaSkipped }));
     return { text: blocks.join("\n\n") };
   }
 

@@ -37,8 +37,15 @@ etapas ficam detalhadas; as mais antigas viram uma linha na tabela.
 | 17 | mesclada (02/11/2026) | #99 | Busca por significado opcional: vetores `bge-m3` em `int8` no SQLite do objeto, fila por gatilhos, preparo no alarme único com tetos diários, busca híbrida na paleta, na recordação, na ferramenta `search` e no `/buscar` |
 | 18a | mesclada (03/11/2026) | #105 | Servidores MCP remotos (sem login ou token fixo): fetch protegido contra SSRF, token cifrado, catálogo revisado pelo dono, triagem por turno com `find_tools`, cartão com os dados exatos, tela Configurações › Integrações |
 | 18b | mesclada (03/11/2026) | #111 | Login OAuth nos servidores MCP (PKCE, registro dinâmico, botão **Entrar no serviço**), triagem das ferramentas pelo significado, aprovação de chamadas externas pelo bot e pela página `/aprovar` |
+| 19 | em revisão (03/11/2026) | — | Google Agenda: OAuth próprio do dono, agendas fechada/só ler/ler e editar, 4 ferramentas (apagar é proposta), `/hoje` com agenda, modelos de rotina, tela **Agenda** (dia, semana, mês) em tempo real por push do Google |
 
 ## Últimas etapas (detalhe)
+
+### Etapa 19 · Google Agenda
+- Entregou: `apps/agent/src/google/` (`service.ts` `GoogleCalendar`: OAuth PKCE com cliente confidencial, tokens cifrados com `McpCredentials(MCP_CREDENTIAL_KEY, "google-v1")`, agendas, eventos com `If-Match`, canais de push `events.watch` renovados no alarme com prazo em memória; `events.ts`; `errors.ts`; `dev-google.ts` Google simulado no local), `gates/google-push.ts` (token HMAC do `SESSION_SECRET`, exceção do Access), rotas em `api/google.ts`, `tools/calendar.ts` (4 ferramentas; `commitAsync` e `TargetGone` no registry; `offered(ctx)`), `/hoje` com agenda, modelos de rotina em `AutomationsPage.tsx`, tela `pages/agenda/AgendaPage.tsx` e `lib/agenda.ts`, cartão `pages/settings/GoogleCard.tsx`. Doc: `docs/google-agenda.md`. Plano: `docs/planos/etapa-19-google-agenda.md` (seção 15: tela Agenda, pedido do Pablo).
+- Migrations: 22 (`zur_google_account`, `zur_google_calendars`, coluna `calendar` em `zur_area_versions`). A próxima livre é a 23.
+- Decisões: tela Agenda só mexe em eventos, nunca em agendas ("Só eventos", 03/11/2026); escopos `calendar.events` + `calendar.calendarlist.readonly`; volta do OAuth em `/configuracoes/integracoes` com `state` prefixado `g.`; eventos nunca guardados no banco.
+- Para as próximas: a 19b pede `contacts.readonly` na mesma conexão (`include_granted_scopes`; `scopes` guarda o que o Google deu); a 22c usa `GoogleCalendar` para os nós da agenda.
 
 ### Ajuste da 18 · Autonomia por ferramenta MCP (#120, 03/11/2026)
 - Entregou: três níveis por ferramenta (`approve`, `auto`, `routines`; no banco `policy` + coluna `routines`, lidos por `levelOf`); `mcp/classify.ts` (a Zuri classifica cada ferramenta em `read`/`write`/`destructive` por palavras no nome, descrição e campos, sem IA; na dúvida `write`; a marcação do servidor só deixa mais cauteloso; o dono confirma na coluna `kind`); ferramentas externas nas rotinas com IA (`AgentRunner.scheduled` com `turnTools(automationId)`), liberação por rotina (`zur_automation_mcp_tools`, até 10, nunca destrutiva), propostas de rotina na conversa "Rotina: <nome>" com validade de 24 h (`MCP_LIMITS.routineProposalTtlMs`), até 3 por execução, 12 subrequisições externas por despertar (`ROUTINE_MCP_BUDGET`). Senha recente para subir nível, baixar a cautela do tipo, liberar para rotina e criar/mudar/aprovar rotina com IA enquanto algo roda sozinho em rotinas. Plano: `docs/planos/autonomia-mcp.md`.
@@ -51,17 +58,11 @@ etapas ficam detalhadas; as mais antigas viram uma linha na tabela.
 - Decisões técnicas: volta do login em `/configuracoes/integracoes` (rota em português, nada no JS inicial); problema `signin` nunca pausa o servidor; hash de aprovação de servidor OAuth usa `signed_in_at` (renovar token não anula proposta); fora da origem cadastrada só o servidor de login, sem `Authorization`; `find_tools` segue por palavras.
 - Para as próximas: a 19 tem OAuth próprio do Google (cliente do dono, confidencial), não o `ZuriOAuthProvider`; pode cifrar com `MCP_CREDENTIAL_KEY` usando outro `info` no HKDF ou chave própria.
 
-### Etapa 18a · Servidores MCP remotos
-- Entregou: `apps/agent/src/mcp/` (`url.ts` endereço e DNS sobre HTTPS contra rede particular; `guarded-fetch.ts` `guardedFetch`/`limitBody`/`classifyMcpError`, reaproveitável pelo monitor de sites da 22; `credentials.ts` AES-GCM com `MCP_CREDENTIAL_KEY`; `catalog.ts`; `repository.ts`; `triage.ts`; `session.ts` `McpTurn` com teto de 24 subrequisições; `service.ts` `McpService`; `agent.ts` `McpTurnTools` e `runApprovedExternal`; `dev-mcp.ts` servidor simulado em `*.exemplo.com.br` no local), `find_tools`, `activeTools` no provedor, rotas em `api/mcp.ts`, tela `IntegrationsTab.tsx`, `packages/shared/src/mcp.ts` (constantes, sem Zod) e `mcp-schemas.ts`. Doc: `docs/mcp.md`. Plano: `docs/planos/etapa-18a-mcp-remoto.md`.
-- Migrations: 18 (`zur_mcp_servers`, `zur_mcp_tools`, coluna `result` em `zur_pending_actions`). A próxima livre é a 19.
-- Decisões técnicas: OAuth, triagem por embeddings e aprovação de chamadas externas pelo bot ficam para a 18b; proposta `mcp_<…>` é `app_only` no Telegram; constante importada pela interface não pode morar em módulo com Zod (puxava 5,9 kB para o JS inicial).
-- Para as próximas: a 18b reaproveita `McpService` (tipo de acesso `oauth` já previsto no CHECK) e liga as aprovações externas no bot; a 19 pode usar o mesmo `MCP_CREDENTIAL_KEY` com outro `info` no HKDF; a 22 usa `guardedFetch`/`assertPublicHost` para sair para a internet.
-
 ### Notas que continuam valendo
 - Um alarme só (P8): use `AutomationService.rearm()`/`otherDue`, nunca outro alarme. O runner aceita `context: "scheduled"` (ferramentas da Zuri só leem; externas só as liberadas para rotinas, o resto vira proposta de 24 h). Toda IA por `agent.ai()`.
 - Bloqueio (16b): a etapa 20 liga os tokens no `RemoteTokenHook` (`suspendAll`/`resumeAll`/`active`) e põe **Revogar** em `/tokens`; IA, MCP e workflows em segundo plano consultam `auth.lockdown.active()`; rota que precise funcionar no bloqueio entra em `WHILE_LOCKDOWN`.
 - Busca por significado (17): item novo com texto pesquisável ganha entrada em `KIND_SOURCES` e migration nova em `SEMANTIC_MIGRATIONS`.
-- JS inicial em ~138,2 kB (teto 139,1): tela nova sob demanda, textos via `addMessages`; tela que trava o app vai no chunk de `PasswordChangePage`.
+- JS inicial em ~138,2 kB (teto 139,4): tela nova sob demanda, textos via `addMessages`; tela que trava o app vai no chunk de `PasswordChangePage`.
 
 <!-- Modelo, até 10 linhas por etapa:
 ### Etapa NN · <nome>
@@ -95,6 +96,6 @@ etapas ficam detalhadas; as mais antigas viram uma linha na tabela.
 
 ## Próxima etapa
 
-- Número e nome: 19 · Google Agenda
-- Dependências mescladas: 9, 10, 15b (#89), 18a (#105), 18b (#111), autonomia MCP (#120)
-- Precisa de algo do Pablo antes: o app OAuth do Google (cliente do próprio dono) só no deploy; o desenvolvimento usa um Google simulado
+- Número e nome: 19b · Google Contatos
+- Dependências mescladas: 19 (Google Agenda)
+- Precisa de algo do Pablo antes: nada novo; o cliente OAuth do Google já existe (ganha o escopo `contacts.readonly`). Plano: `docs/planos/google-contatos.md`

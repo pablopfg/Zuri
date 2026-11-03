@@ -55,6 +55,7 @@ import { registerProductivityRoutes } from "./productivity.ts";
 import { registerApprovalRoutes } from "./approvals.ts";
 import { registerSemanticRoutes, type SemanticDeps } from "./semantic.ts";
 import { type McpRouteDeps, registerMcpRoutes } from "./mcp.ts";
+import { type GoogleRouteDeps, registerGooglePush, registerGoogleRoutes } from "./google.ts";
 import { registerTelegramRoutes, registerTelegramWebhook, type TelegramDeps } from "./telegram.ts";
 import { log, rayOf, routeLabel } from "../log.ts";
 
@@ -89,6 +90,8 @@ export interface ApiDeps {
   semantic?(): SemanticDeps;
   /** The remote MCP servers (step 18). Absent only in tests of other routes. */
   mcp?(): McpRouteDeps;
+  /** The Google Calendar (step 19). Absent only in tests of other routes. */
+  google?(): GoogleRouteDeps;
   /** The number of each screen area, sent with the session check and the heartbeat (nova UI, PR 2). Absent only in tests of other routes. */
   versions?(): AreaVersions;
   /** True when a password secret is set, so the health check can answer without opening the database. */
@@ -166,6 +169,9 @@ export function createApi(deps: ApiDeps) {
   // Telegram's webhook: no cookie and no Origin, only the secret header (checked inside).
   const telegram = deps.telegram;
   if (telegram) registerTelegramWebhook(app, () => telegram());
+  // Google's push notices (step 19): no cookie and no Origin, only the channel's token (checked inside).
+  const google = deps.google;
+  if (google) registerGooglePush(app, () => google());
 
   app.use("*", async (c, next) => {
     checkCsrf(c.req.raw, deps.origin());
@@ -484,6 +490,7 @@ export function createApi(deps: ApiDeps) {
   if (semantic) registerSemanticRoutes(app, () => semantic());
   const mcp = deps.mcp;
   if (mcp) registerMcpRoutes(app, () => mcp(), client);
+  if (google) registerGoogleRoutes(app, () => google(), client);
 
   // Step 8: what the AI used today and the last 7 days. Read only: the limits change through /settings.
   app.get("/usage", () => Response.json(deps.aiUsage()));

@@ -5,6 +5,7 @@ import type { ZuriAgent } from "../src/agent/zuri-agent.ts";
 import type { RaiseInput } from "../src/alerts/service.ts";
 import { MockAIProvider, type RecordedPrompt } from "../src/ai/mock.ts";
 import { telegramWebhookSecret } from "../src/gates/telegram.ts";
+import { devGoogle, googleNetwork } from "../src/google/dev-google.ts";
 import { MockEmbedder } from "../src/semantic/embedder.ts";
 import startCode from "./fixtures/telegram/start-code.json?raw";
 import { call, CSRF, HUMAN_TOKEN, ORIGIN, TEST_EMAIL, TEST_PASSWORD, testEnv } from "./helpers.ts";
@@ -17,6 +18,8 @@ import { call, CSRF, HUMAN_TOKEN, ORIGIN, TEST_EMAIL, TEST_PASSWORD, testEnv } f
 const IP = "192.0.2.25";
 const OWNER = 424242;
 const HOUR = 3_600_000;
+/** The owner's calendar date of an instant (São Paulo, as in the tests' settings). */
+const localDate = (ms: number) => new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(new Date(ms));
 const LOCKED = "Faz um tempo que você não usa o bot, então travei a leitura por segurança. Toque em Destravar ou mande /destravar para liberar.";
 let cookie = "";
 let secret = "";
@@ -217,6 +220,63 @@ describe("reading", () => {
     expect(out).not.toContain("Para depois");
     expect(out).not.toContain("Concluída ontem");
     expect((await audit()).at(-1)).toEqual({ kind: "command", name: "hoje", result: "ok" });
+  });
+
+  it("/hoje: today's events of the open calendars, a calendar left hidden out, and a word when Google is down", async () => {
+    await linkOwner();
+    const sim = devGoogle({ clientId: testEnv.GOOGLE_CLIENT_ID, clientSecret: testEnv.GOOGLE_CLIENT_SECRET });
+    const { start, end } = localDayBounds("America/Sao_Paulo");
+    const mid = Date.parse(start) + Math.floor((Date.parse(end) - Date.parse(start)) / 2);
+    const at = (ms: number) => ({ dateTime: new Date(ms).toISOString() });
+    sim.events.set("dono@exemplo.com.br", [
+      { id: "e1", etag: '"1"', summary: "Dentista", start: at(mid), end: at(mid + HOUR) },
+      { id: "e2", etag: '"1"', summary: "Feriado", start: { date: localDate(mid) }, end: { date: localDate(mid + 24 * HOUR) } },
+    ]);
+    sim.events.set("trabalho@exemplo.com.br", [{ id: "e3", etag: '"1"', summary: "Agenda oculta", start: at(mid), end: at(mid + HOUR) }]);
+    await inOwner(async (agent) => {
+      const google = agent.store.google;
+      google.network = googleNetwork(sim, { fetch: () => Promise.reject(new Error("no network in tests")) });
+      const url = new URL(await google.begin("sessao"));
+      await google.finish({ state: url.searchParams.get("state") ?? "", code: `dev.${url.searchParams.get("code_challenge") ?? ""}` }, "sessao");
+      await google.setMode("dono@exemplo.com.br", "read");
+    });
+    const out = await command("/hoje");
+    expect(out).toContain("Agenda (2)");
+    expect(out).toContain("• dia inteiro · Feriado");
+    expect(out).toMatch(/• \d{2}:\d{2} · Dentista/);
+    expect(out).not.toContain("Agenda oculta");
+    sim.outage = 503;
+    expect(await command("/hoje")).toContain("Agenda indisponível agora.");
+    sim.outage = null;
+    await inOwner((agent) => agent.store.google.disconnect());
+    expect(await command("/hoje")).not.toContain("Agenda");
+  });
+
+  it("/hoje: more than 5 events, and more calendars than its Google calls cover, said so", async () => {
+    await linkOwner();
+    const sim = devGoogle({ clientId: testEnv.GOOGLE_CLIENT_ID, clientSecret: testEnv.GOOGLE_CLIENT_SECRET });
+    for (let i = 0; i < 4; i++) sim.calendars.push({ id: `extra${i}@exemplo.com.br`, summary: `Extra ${i}`, accessRole: "reader" });
+    const { start, end } = localDayBounds("America/Sao_Paulo");
+    const mid = Date.parse(start) + Math.floor((Date.parse(end) - Date.parse(start)) / 2);
+    const at = (ms: number) => ({ dateTime: new Date(ms).toISOString() });
+    sim.events.set(
+      "dono@exemplo.com.br",
+      Array.from({ length: 7 }, (_, i) => ({ id: `e${i}`, etag: '"1"', summary: `Evento ${i}`, start: at(mid + i * 60_000), end: at(mid + HOUR) })),
+    );
+    await inOwner(async (agent) => {
+      const google = agent.store.google;
+      google.network = googleNetwork(sim, { fetch: () => Promise.reject(new Error("no network in tests")) });
+      const url = new URL(await google.begin("sessao"));
+      await google.finish({ state: url.searchParams.get("state") ?? "", code: `dev.${url.searchParams.get("code_challenge") ?? ""}` }, "sessao");
+      for (const id of ["dono@exemplo.com.br", "consultorio@exemplo.com.br", "extra0@exemplo.com.br", "extra1@exemplo.com.br", "extra2@exemplo.com.br", "extra3@exemplo.com.br"]) await google.setMode(id, "read");
+    });
+    const out = await command("/hoje");
+    expect(out).toContain("Agenda (7)");
+    expect(out).toContain("• ");
+    expect(out).toContain("e mais 2 no app");
+    // Four calls: the main calendar first, then three more; two left for the app.
+    expect(out).toContain("Agendas que ficaram sem ler agora: 2. Veja no app.");
+    await inOwner((agent) => agent.store.google.disconnect());
   });
 
   it("/tarefas: up to 10 open tasks numbered, each with Feito and Adiar; by project; empty", async () => {
@@ -711,17 +771,20 @@ describe("edges", () => {
 
   it("Pausar on a routine already paused or deleted", async () => {
     await linkOwner();
-    const first = await inOwner((agent) => agent.store.automations.create({ name: "A", kind: "task_digest", schedule: { type: "daily", time: "07:00" } }, "app"));
-    const second = await inOwner((agent) => agent.store.automations.create({ name: "B", kind: "task_digest", schedule: { type: "daily", time: "08:00" } }, "app"));
+    const first = await inOwner((agent) => agent.store.automations.create({ name: "Alfa", kind: "task_digest", schedule: { type: "daily", time: "07:00" } }, "app"));
+    const second = await inOwner((agent) => agent.store.automations.create({ name: "Beta", kind: "task_digest", schedule: { type: "daily", time: "08:00" } }, "app"));
     await command("/rotinas");
     const rows = keyboard(lastSent());
+    // The list goes by the next run, which depends on the hour the test runs at.
+    const text = String(lastSent()?.body.text ?? "");
+    const [alfa, beta] = text.indexOf("Alfa") < text.indexOf("Beta") ? [rows[0], rows[1]] : [rows[1], rows[0]];
     await inOwner(async (agent) => {
       await agent.store.automations.update(first.id, { paused: true });
       await agent.store.automations.delete(second.id);
     });
     botCalls.length = 0;
-    await tap(rows[0]?.[0]?.callback_data ?? "", rows);
-    await tap(rows[1]?.[0]?.callback_data ?? "", rows);
+    await tap(alfa?.[0]?.callback_data ?? "", rows);
+    await tap(beta?.[0]?.callback_data ?? "", rows);
     expect(answers()).toEqual(["Essa rotina já não está ativa.", "Esse item não existe mais."]);
   });
 

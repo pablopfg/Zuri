@@ -9,6 +9,7 @@ import {
 } from "@zuri/shared";
 import type { Database } from "../db/database.ts";
 import { AppError } from "../http/errors.ts";
+import { changePreview } from "../google/change.ts";
 import { visibleJson } from "../mcp/visible.ts";
 
 /** Proposals are kept this long, whatever became of them. */
@@ -199,6 +200,13 @@ function previewOf(row: ActionRow): string | undefined {
       // Hidden characters (bidi, zero width) are shown as escapes: the owner sees what is really sent.
       const text = visibleJson(args, 2);
       return text.length > ARGS_PREVIEW_MAX ? visibleJson(args) : text;
+    } catch {
+      return undefined;
+    }
+  }
+  if (row.tool === "change_shared_calendar_event") {
+    try {
+      return changePreview((JSON.parse(row.payload ?? "null") as { text?: string } | null)?.text);
     } catch {
       return undefined;
     }

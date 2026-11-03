@@ -80,7 +80,10 @@ export type InternalKey =
   // generation the vectors belong to, the full pass's place, today's counts and the wait after a failure).
   | "semantic"
   // Step 18b, the triage by meaning of the MCP tools: after a failed embedding call, when to try again (ISO).
-  | "mcp_meaning_wait";
+  | "mcp_meaning_wait"
+  // Step 19, the Google Calendar: the sign-in waiting for Google's answer (the state's hash, the sealed
+  // PKCE verifier, the session that started it and its end).
+  | "google_oauth_pending";
 
 export class InternalState {
   constructor(private readonly db: Database) {}

@@ -17,6 +17,7 @@ import { ptBRShell } from "./pt-BR-shell.ts";
 import { ptBRSettingsTabs } from "./pt-BR-settings-tabs.ts";
 import { ptBRHome } from "./pt-BR-home.ts";
 import { ptBRLive } from "./pt-BR-live.ts";
+import { ptBRAgenda } from "./pt-BR-agenda.ts";
 
 // Default and fallback catalog. Every key must also exist in en.ts and be used in the code (npm run lint).
 // The texts of the lazy screens live in their own files (pt-BR-memory.ts, pt-BR-productivity.ts,
@@ -102,6 +103,7 @@ export const ptBRCore = {
   "web.nav.memory": "Memória",
   "web.nav.chat": "Conversa",
   "web.nav.automations": "Automações",
+  "web.nav.agenda": "Agenda",
 } as const;
 
 /** The intersection of every part's type, so each key stays a literal key. */
@@ -140,4 +142,5 @@ export const ptBR = /* @__PURE__ */ join(
   ptBRSettingsTabs,
   ptBRHome,
   ptBRLive,
+  ptBRAgenda,
 );

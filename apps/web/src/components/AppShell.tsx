@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { APP_VERSION, type Settings } from "@zuri/shared";
 import {
   Brain,
+  CalendarDays,
   ChevronRight,
   Clock,
   House,
@@ -194,6 +195,7 @@ function Sidebar({ collapsed, onToggle, onClose, onSearch }: { collapsed: boolea
     { to: "/", label: t("web.nav.home"), icon: House, end: true },
     { to: "/conversa", label: t("web.nav.chat"), icon: MessageCircle },
     { to: "/tarefas", label: t("web.nav.tasks"), icon: ListTodo, count: today },
+    { to: "/agenda", label: t("web.nav.agenda"), icon: CalendarDays },
     { to: "/notas", label: t("web.nav.notes"), icon: NotebookPen },
     { to: "/memoria", label: t("web.nav.memory"), icon: Brain },
     { to: "/automacoes", label: t("web.nav.automations"), icon: Clock },

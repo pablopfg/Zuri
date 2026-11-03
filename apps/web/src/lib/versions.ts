@@ -23,6 +23,8 @@ const AREA_KEYS: Record<Area, readonly { queryKey: QueryKey; exact?: boolean }[]
   automations: [{ queryKey: ["automations"] }],
   // Only the recent list: an open conversation follows its own stream.
   conversations: [{ queryKey: ["conversations"], exact: true }],
+  // The Agenda screen and the Google card in Integrations (step 19).
+  calendar: [{ queryKey: ["calendar"] }],
 };
 
 const CHANNEL = "zuri-versions";

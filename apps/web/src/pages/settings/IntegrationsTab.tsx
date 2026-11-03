@@ -7,6 +7,7 @@ import { useToast } from "../../components/Toaster.tsx";
 import { Button, buttonClass, Card, cn, Dialog, EmptyState, ErrorNotice, Notice, PasswordField, SelectField, Loading, TextField } from "../../components/ui.tsx";
 import { api, errorMessage } from "../../lib/api.ts";
 import { useI18n } from "../../lib/i18n.tsx";
+import { GoogleCard, isGoogleReturn } from "./GoogleCard.tsx";
 
 /** The query of the whole tab: the servers with their counts (one request, no polling, rule P11). */
 const MCP_KEY = ["mcp"] as const;
@@ -78,6 +79,7 @@ export function IntegrationsTab() {
   const full = (overview.data?.servers.length ?? 0) >= MCP_LIMITS.maxServers;
   return (
     <div className="space-y-6">
+      <GoogleCard />
       <Card
         title={t("web.integrations.title")}
         description={t("web.integrations.description")}
@@ -144,7 +146,8 @@ function useSignInCallback(): boolean {
     if (started.current) return;
     const query = new URLSearchParams(window.location.search);
     const state = query.get("state");
-    if (!state) return;
+    // Google's return is the Google card's (GoogleCard.tsx).
+    if (!state || isGoogleReturn(state)) return;
     started.current = true;
     window.history.replaceState(window.history.state, "", window.location.pathname);
     const body: Record<string, string> = { state };
@@ -154,9 +157,11 @@ function useSignInCallback(): boolean {
     }
     setFinishing(true);
     api<{ server: McpServerInfo; signedIn: boolean }>("/mcp/oauth/callback", { method: "POST", body })
-      .then((result) => {
+      .then(async (result) => {
+        // The list may still be on its way (this page just opened), with the state from before the sign-in. A first
+        // reading still on its way is joined, not restarted, by invalidateQueries: cancel it, then read again.
+        await qc.cancelQueries({ queryKey: MCP_KEY, exact: true });
         update(result.server);
-        // The list may still be on its way (this page just opened), with the state from before the sign-in: read it again.
         void qc.invalidateQueries({ queryKey: MCP_KEY, exact: true });
         toast(result.signedIn ? t("web.integrations.signedIn") : t("web.integrations.signinFailed"));
       })

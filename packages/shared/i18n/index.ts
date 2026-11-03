@@ -19,6 +19,7 @@ import { ptBRShell } from "./pt-BR-shell.ts";
 import { ptBRSettingsTabs } from "./pt-BR-settings-tabs.ts";
 import { ptBRHome } from "./pt-BR-home.ts";
 import { ptBRLive } from "./pt-BR-live.ts";
+import { ptBRAgenda } from "./pt-BR-agenda.ts";
 
 export type MessageKey = keyof typeof ptBR;
 export type Messages = Record<MessageKey, string>;
@@ -57,6 +58,7 @@ export {
   ptBRSettingsTabs,
   ptBRHome,
   ptBRLive,
+  ptBRAgenda,
 };
 
 export type Params = Record<string, string | number>;

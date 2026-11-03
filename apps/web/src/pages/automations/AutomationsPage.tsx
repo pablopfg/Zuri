@@ -405,6 +405,26 @@ function RunHistory() {
   );
 }
 
+/**
+ * Ready-made AI routines (step 19): the morning briefing every day at 07:00 and
+ * the end of the day on weekdays at 19:00, in the owner's zone. They fill the
+ * form; the owner may change anything before saving.
+ */
+const ROUTINE_TEMPLATES = [
+  {
+    id: "briefing",
+    name: "web.automations.template.briefing.name",
+    message: "web.automations.template.briefing.message",
+    schedule: { type: "daily", time: "07:00" },
+  },
+  {
+    id: "closing",
+    name: "web.automations.template.closing.name",
+    message: "web.automations.template.closing.message",
+    schedule: { type: "weekly", time: "19:00", days: [1, 2, 3, 4, 5] },
+  },
+] as const satisfies readonly { id: string; name: Parameters<ReturnType<typeof useI18n>["t"]>[0]; message: Parameters<ReturnType<typeof useI18n>["t"]>[0]; schedule: Partial<ScheduleDraft> }[];
+
 const capitalizeFirst = (text: string) => (text ? (text[0] as string).toLocaleUpperCase() + text.slice(1) : text);
 
 /** Creating or changing an automation, with the next runs shown as the fields change. */
@@ -480,6 +500,26 @@ function AutomationForm({ editing, onClose }: { editing: Editing; onClose: () =>
               </option>
             ))}
           </SelectField>
+        )}
+        {!current && kind === "agent_prompt" && (
+          <div className="space-y-2">
+            <p className="text-sm font-medium">{t("web.automations.template.label")}</p>
+            <div className="flex flex-wrap gap-2">
+              {ROUTINE_TEMPLATES.map((template) => (
+                <Button
+                  key={template.id}
+                  variant="secondary"
+                  onClick={() => {
+                    setName(t(template.name));
+                    setMessage(t(template.message));
+                    setDraft((d) => ({ ...d, ...template.schedule }));
+                  }}
+                >
+                  {t(template.name)}
+                </Button>
+              ))}
+            </div>
+          </div>
         )}
         <TextField
           label={t("web.automations.form.name")}

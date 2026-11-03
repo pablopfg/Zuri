@@ -30,7 +30,9 @@ chegar aos arquivos estáticos. Os portões rodam nesta ordem:
    definidos. O Worker confere a assinatura do token `Cf-Access-Jwt-Assertion`,
    o público, o emissor e a validade. A única exceção é o webhook do Telegram
    (`POST /api/telegram/webhook`), que passa só com o cabeçalho secreto certo
-   e sem cookie nem `Authorization`.
+   e sem cookie nem `Authorization`, e o aviso de mudança do Google Agenda
+   (`POST /api/google/push`, etapa 19), que passa só com o token certo do
+   canal (HMAC do `SESSION_SECRET`), também sem cookie nem `Authorization`.
 4. **Cabeçalhos de segurança** em toda resposta. A interface recebe CSP
    estrita, HSTS, `frame-ancestors 'none'` e `Permissions-Policy`, os mesmos de
    `apps/web/public/_headers` (um teste confere que os dois são iguais). Com o
@@ -216,14 +218,16 @@ objeto fica carregado a sessão inteira:
 | Uso contínuo até o máximo permitido (24 h) | 24 h | cerca de 11.000 GB-s (85%) |
 
 A batida também leva um número por área da tela (tarefas, projetos, notas,
-lixeira, memórias, automações e conversas recentes), na tabela de uma linha
-`zur_area_versions` (migration 21). Gatilhos no banco sobem o número da área a
+lixeira, memórias, automações, conversas recentes e, desde a etapa 19, a
+agenda), na tabela de uma linha `zur_area_versions` (migrations 21 e 22). Gatilhos no banco sobem o número da área a
 cada mudança, venha ela de onde vier (app, conversa, bot, rotina, restauração),
 e a interface busca de novo só a área cujo número mudou (`apps/web/src/lib/versions.ts`).
 A aba que bate repassa os números às outras pelo `BroadcastChannel`. Custa uma
 linha lida por batida e uma linha escrita por mudança, sem requisição nova. Os
 eventos de ferramenta da conversa trazem os mesmos números, então o que a Zuri
-cria aparece na hora. Só números: nenhum conteúdo viaja com eles, e no modo de
+cria aparece na hora. A agenda não guarda eventos aqui: o número dela sobe
+quando muda o que a tela mostra das agendas (`zur_google_calendars`) ou
+quando o Google avisa uma mudança (coluna `changed`, docs/google-agenda.md). Só números: nenhum conteúdo viaja com eles, e no modo de
 bloqueio eles nem são enviados.
 
 O intervalo da batida não pode passar do limite mínimo de presença (3 min).

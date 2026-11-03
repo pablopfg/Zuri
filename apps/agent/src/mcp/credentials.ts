@@ -14,7 +14,11 @@ const encoder = new TextEncoder();
 export class McpCredentials {
   #key: Promise<CryptoKey> | null = null;
 
-  constructor(private readonly secret: string | undefined) {}
+  /** `info` keeps each use's key apart: the Google Calendar (step 19) derives its own from the same secret. */
+  constructor(
+    private readonly secret: string | undefined,
+    private readonly info = "credentials-v1",
+  ) {}
 
   get available(): boolean {
     return typeof this.secret === "string" && this.secret.trim().length >= MCP_LIMITS.credentialKeyMin;
@@ -26,7 +30,7 @@ export class McpCredentials {
       .importKey("raw", encoder.encode(this.secret?.trim()), "HKDF", false, ["deriveKey"])
       .then((base) =>
         crypto.subtle.deriveKey(
-          { name: "HKDF", hash: "SHA-256", salt: encoder.encode("zuri-mcp"), info: encoder.encode("credentials-v1") },
+          { name: "HKDF", hash: "SHA-256", salt: encoder.encode("zuri-mcp"), info: encoder.encode(this.info) },
           base,
           { name: "AES-GCM", length: 256 },
           false,

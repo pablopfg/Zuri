@@ -34,7 +34,10 @@ export type WorkerEnv = Env & {
    * on the domain with Email Routing. Both or neither.
    */
   SEND_EMAIL?: SendEmail;
-  /** Encrypts the MCP servers' tokens (step 18) and, later, Google's (step 19): 32+ random characters. */
+  /** Encrypts the MCP servers' tokens (step 18) and Google's (step 19): 32+ random characters. */
   MCP_CREDENTIAL_KEY?: string;
+  /** The owner's own OAuth client in Google Cloud (step 19): the Google Calendar works only with both. */
+  GOOGLE_CLIENT_ID?: string;
+  GOOGLE_CLIENT_SECRET?: string;
   ALERT_EMAIL_FROM?: string;
 };
