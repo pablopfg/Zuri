@@ -13,6 +13,7 @@ import {
   stageOfBranch,
   stageStatus,
   toStagePullRequests,
+  VERSION_BADGE,
 } from "../../scripts/readme.ts";
 import { README_SUBJECT } from "../../scripts/versao.ts";
 import { readText } from "./helpers.ts";
@@ -22,6 +23,7 @@ const progressText = (rows: string) =>
 
 const readme = (rows: string) =>
   [
+    VERSION_BADGE,
     "[![Etapas](https://img.shields.io/badge/etapas-1%20de%209-22c55e)](#mapa)",
     "",
     "> A Zuri sai em 9 etapas. As etapas 0 a 0 estão na `develop`.",
@@ -153,6 +155,7 @@ describe("renderMap and renderReadme", () => {
     expect(() => renderReadme(readme(""), new Map())).toThrow(/no rows/);
     expect(() => renderReadme(readme(rows).replace("badge/etapas-1%20de%209-", "badge/x-"), new Map())).toThrow(/badge/);
     expect(() => renderReadme(readme(rows).replace("sai em 9 etapas", "sai em etapas"), new Map())).toThrow(/sai em/);
+    expect(() => renderReadme(readme(rows).replace(VERSION_BADGE, ""), new Map())).toThrow(/version badge/);
     expect(() => renderReadme(readme(rows).replace("steps 0 to 0 are merged", "steps"), new Map())).toThrow(/steps/);
   });
 });
