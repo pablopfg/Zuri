@@ -482,3 +482,169 @@ describe("the development Google", () => {
     expect((await network.fetch("https://www.googleapis.com/calendar/v3/users/me/calendarList")).status).toBe(401);
   });
 });
+
+describe("the connection's odd paths", () => {
+  /** Google's token endpoint answers with `token`; everything else is the simulator's. */
+  function tokenAnswer(world: ChatWorld, token: (body: URLSearchParams) => Response | null): string[] {
+    const seen: string[] = [];
+    const sim = googleNetwork(world.googleSim);
+    world.google.network = {
+      fetch: (async (input: RequestInfo | URL, init?: RequestInit) => {
+        const request = new Request(input, init);
+        const url = new URL(request.url);
+        seen.push(url.pathname);
+        if (url.href === "https://oauth2.googleapis.com/token") {
+          const answer = token(new URLSearchParams(await request.clone().text()));
+          if (answer) return answer;
+        }
+        return sim.fetch(request);
+      }) as typeof fetch,
+    };
+    return seen;
+  }
+
+  async function finishWith(world: ChatWorld) {
+    const url = new URL(await world.google.begin("sessao"));
+    return world.google.finish({ state: url.searchParams.get("state") ?? "", code: `dev.${url.searchParams.get("code_challenge") ?? ""}` }, "sessao");
+  }
+
+  it("a grant without a refresh token or a scope is refused, and given back only when no account is connected", () =>
+    withChatWorld(async (world) => {
+      const seen = tokenAnswer(world, () => Response.json({ access_token: "ya29.x", expires_in: 3599 }));
+      expect(await kindOf(finishWith(world))).toBe("scopes");
+      expect(seen).toContain("/revoke");
+      world.google.network = googleNetwork(world.googleSim);
+      await connect(world);
+      const again = tokenAnswer(world, () => Response.json({ access_token: "ya29.x", refresh_token: "1//x", scope: "openid", expires_in: 3599 }));
+      expect(await kindOf(finishWith(world))).toBe("scopes");
+      expect(again).not.toContain("/revoke");
+      expect(world.google.status().connected).toBe(true);
+    }));
+
+  it("an account with no main calendar is not stored; odd roles and names are read safely", () =>
+    withChatWorld(async (world) => {
+      const primary = world.googleSim.calendars.find((c) => c.primary);
+      if (primary) primary.primary = false;
+      expect(await kindOf(finishWith(world))).toBe("unavailable");
+      expect(world.google.status().connected).toBe(false);
+      if (primary) primary.primary = true;
+      world.googleSim.calendars.push({ id: "sem-nome@exemplo.com.br", summary: "", accessRole: "dono" as "owner" });
+      await connect(world, {});
+      expect(world.google.status().calendars.find((c) => c.id === "sem-nome@exemplo.com.br")).toMatchObject({ name: "sem-nome@exemplo.com.br", accessRole: "reader" });
+      expect(await kindOf(world.google.setMode("nao-existe@exemplo.com.br", "read"))).toBe("not_found");
+    }));
+
+  it("a token endpoint that answers no JSON is a refusal", () =>
+    withChatWorld(async (world) => {
+      tokenAnswer(world, () => new Response("<html>", { status: 500 }));
+      expect(await kindOf(finishWith(world))).toBe("refused");
+    }));
+
+  it("an account marked as refused answers 'revoked' at once, and notices once a day at most", () =>
+    withChatWorld(async (world) => {
+      let notices = 0;
+      await connect(world);
+      (world.google as unknown as { deps: { onProblem?: () => void } }).deps.onProblem = () => notices++;
+      world.db.run("UPDATE zur_google_account SET access_token = NULL WHERE id = 1");
+      tokenAnswer(world, () => Response.json({ error: "invalid_grant" }, { status: 400 }));
+      expect(await kindOf(world.google.api(path, new GoogleMeter(4)))).toBe("revoked");
+      expect(await kindOf(world.google.api(path, new GoogleMeter(4)))).toBe("revoked");
+      expect(notices).toBe(1);
+      // Connected again and refused again the same day: no second notice.
+      world.db.run("UPDATE zur_google_account SET status = 'connected' WHERE id = 1");
+      expect(await kindOf(world.google.api(path, new GoogleMeter(4)))).toBe("revoked");
+      expect(notices).toBe(1);
+      world.clock.now += 25 * 3_600_000;
+      world.db.run("UPDATE zur_google_account SET status = 'connected' WHERE id = 1");
+      expect(await kindOf(world.google.api(path, new GoogleMeter(4)))).toBe("revoked");
+      expect(notices).toBe(2);
+    }));
+
+  it("a cached token that no longer opens is replaced by a new one", () =>
+    withChatWorld(async (world) => {
+      await connect(world);
+      world.db.run("UPDATE zur_google_account SET access_token = 'v1.estragado' WHERE id = 1");
+      expect(await world.google.accessToken(new GoogleMeter(4))).toMatch(/^ya29\./);
+    }));
+
+  it("disconnecting during a lockdown sends nothing; with a live token it closes the channels first", () =>
+    withChatWorld(async (world) => {
+      await connect(world);
+      world.mcpLockdown.active = true;
+      const quiet = tokenAnswer(world, () => null);
+      await world.google.disconnect();
+      expect(quiet).toEqual([]);
+      world.mcpLockdown.active = false;
+      world.google.network = googleNetwork(world.googleSim);
+      await connect(world);
+      const seen = tokenAnswer(world, () => null);
+      await world.google.disconnect();
+      expect(seen).toContain("/calendar/v3/channels/stop");
+      expect(seen).toContain("/revoke");
+    }));
+});
+
+describe("the simulated Google refuses what the real one would", () => {
+  const form = (fields: Record<string, string>) => ({ method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" }, body: new URLSearchParams(fields).toString() });
+  const status = async (world: ChatWorld, url: string, init?: RequestInit) => (await world.googleSim.handle(new Request(url, init)))?.status;
+
+  it("the token endpoint: unknown path, wrong client, bad code, bad return address, unknown refresh token", () =>
+    withChatWorld(async (world) => {
+      const client = { client_id: world.googleSim.clientId, client_secret: world.googleSim.clientSecret ?? "" };
+      expect(await status(world, "https://oauth2.googleapis.com/outra", form({}))).toBe(404);
+      expect(await status(world, "https://oauth2.googleapis.com/token", form({ grant_type: "authorization_code", client_id: "x", client_secret: "y" }))).toBe(401);
+      expect(await status(world, "https://oauth2.googleapis.com/token", form({ ...client, grant_type: "authorization_code", code: "dev.x", code_verifier: "y" }))).toBe(400);
+      expect(await status(world, "https://oauth2.googleapis.com/token", form({ ...client, grant_type: "refresh_token", refresh_token: "1//nada" }))).toBe(400);
+      expect(await status(world, "https://oauth2.googleapis.com/revoke", form({}))).toBe(200);
+    }));
+
+  it("the Calendar API: no token, a free/busy calendar, a reader writing, searching and a full page", () =>
+    withChatWorld(async (world) => {
+      await connect(world);
+      const token = await world.google.accessToken(new GoogleMeter(2));
+      const auth = { authorization: `Bearer ${token}` };
+      const base = "https://www.googleapis.com/calendar/v3";
+      expect(await status(world, `${base}/calendars/${encodeURIComponent(PRIMARY)}/events`)).toBe(401);
+      expect(await status(world, `${base}/outra`, { headers: auth })).toBe(404);
+      expect(await status(world, `${base}/calendars/${encodeURIComponent("livre@exemplo.com.br")}/events`, { headers: auth })).toBe(404);
+      expect(await status(world, `${base}/calendars/${encodeURIComponent(READER)}/events`, { method: "POST", headers: auth, body: "{}" })).toBe(403);
+      expect(await status(world, `${base}/channels/stop`, { method: "POST", headers: auth, body: "" })).toBe(204);
+      world.googleSim.events.set(PRIMARY, [
+        { id: "a", etag: '"a"', summary: "Dentista", start: { dateTime: "2026-11-03T15:00:00Z" }, end: { dateTime: "2026-11-03T16:00:00Z" } },
+        { id: "b", etag: '"b"', summary: "Feriado", start: { date: "2026-11-03" }, end: { date: "2026-11-04" } },
+      ]);
+      const search = await world.googleSim.handle(new Request(`${base}/calendars/${encodeURIComponent(PRIMARY)}/events?q=dentista&timeMin=2026-11-01T00:00:00Z&timeMax=2026-11-10T00:00:00Z`, { headers: auth }));
+      expect(((await search?.json()) as { items: unknown[] }).items).toHaveLength(1);
+      const page = await world.googleSim.handle(new Request(`${base}/calendars/${encodeURIComponent(PRIMARY)}/events?maxResults=1&timeMin=2026-11-01T00:00:00Z&timeMax=2026-11-10T00:00:00Z`, { headers: auth }));
+      expect(await page?.json()).toMatchObject({ nextPageToken: "more" });
+    }));
+});
+
+describe("the tools' remaining shapes", () => {
+  it("lists with a search, events of several days, notes, guests and repeats, and an untitled one", () =>
+    withChatWorld(async (world) => {
+      await connect(world);
+      world.googleSim.events.set(PRIMARY, [
+        { id: "a", etag: '"a"', summary: "Viagem", description: "Levar documentos", attendees: [{}], recurringEventId: "r", start: { dateTime: "2026-11-02T22:00:00-03:00" }, end: { dateTime: "2026-11-04T10:00:00-03:00" } },
+        { id: "b", etag: '"b"', start: { date: "2026-11-03" }, end: { date: "2026-11-06" } },
+      ]);
+      const exec = executor(world, world.conversations.create("x").id);
+      const line = await exec.execute("list_calendar_events", { from: "2026-11-01", to: "2026-11-07", calendar: PRIMARY }, "l1");
+      expect(line).toContain("2026-11-02 22:00 – 2026-11-04 10:00");
+      expect(line).toContain('"guests":1');
+      expect(line).toContain('"repeats":true');
+      expect(line).toContain("(no title)");
+      expect(line).toContain("2026-11-03 – 2026-11-05");
+      expect(await exec.execute("list_calendar_events", { query: "viagem" }, "l2")).toContain("Viagem");
+    }));
+
+  it("asks which calendar when none is the main one, and says when Google isn't connected", () =>
+    withChatWorld(async (world) => {
+      await connect(world, { [PRIMARY]: "write", [WORK]: "write" });
+      world.db.run("UPDATE zur_google_calendars SET is_primary = 0");
+      const ctx = world.ctx(world.conversations.create("x").id);
+      const create = ALL_TOOLS.find((tool) => tool.name === "create_calendar_event") as unknown as { execute: (input: unknown, ctx: unknown) => Promise<unknown> };
+      await expect(create.execute({ title: "x", start: "2026-11-06T15:00" }, ctx)).rejects.toThrow(/Say which calendar/);
+      await expect(create.execute({ title: "x", start: "2026-11-06T15:00" }, { ...ctx, calendar: undefined })).rejects.toThrow(/not connected/);
+    }));
+});
