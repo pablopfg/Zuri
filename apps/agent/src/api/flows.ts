@@ -86,6 +86,14 @@ export function registerFlowRoutes(app: Hono<ApiEnv>, deps: () => FlowRouteDeps,
     return Response.json({ connection: flows.list().connections.find((entry) => entry.id === id) });
   });
 
+  // The chat's suggestions (step 22b): saving one is POST /flows with its id; dropping one asks nothing.
+  app.delete("/flows/drafts/:id", (c) => {
+    const id = c.req.param("id");
+    if (!RECORD_ID.test(id)) throw new AppError("NOT_FOUND", "error.flowDraftNotFound");
+    deps().flows.removeDraft(id);
+    return Response.json({ deleted: true });
+  });
+
   app.delete("/flows/connections/:id", (c) => {
     deps().flows.removeConnection(connectionId(c.req.param("id")));
     return Response.json({ deleted: true });

@@ -142,6 +142,8 @@ export const ptBRAutomations = {
   "web.automations.template.briefing.message": "Monte meu briefing da manhã: os eventos de hoje na agenda, as tarefas que vencem hoje ou estão atrasadas e os lembretes do dia. Seja breve e comece pelo que merece atenção primeiro.",
   "web.automations.template.closing.name": "Fechamento do dia",
   "web.automations.template.closing.message": "Faça o fechamento do meu dia: as tarefas que ficaram pendentes, o que ainda tem na agenda hoje à noite e os eventos de amanhã. Sugira no máximo três prioridades para amanhã.",
+  "web.automations.template.funnel.name": "Resumo do funil",
+  "web.automations.template.funnel.message": "Resuma o funil do meu CRM: quantos clientes há em cada etapa, os retornos atrasados e os desta semana, e quem entrou nos últimos 7 dias. Termine com os três clientes que mais pedem atenção agora.",
   // The tabs of the screen (step 22a): the routines and the flows.
   "web.automations.tabs": "Tipos de automação",
   "web.automations.tab.routines": "Rotinas",

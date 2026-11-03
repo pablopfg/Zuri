@@ -132,7 +132,7 @@ export function App() {
           }
         />
         <Route
-          path="contatos"
+          path="contatos/:aba?"
           element={
             <Suspense fallback={<ScreenLoading />}>
               <ContactsPage />

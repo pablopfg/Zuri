@@ -21,6 +21,7 @@ import { testEnv } from "./helpers.ts";
 import { type DevGoogle, devGoogle, googleNetwork } from "../src/google/dev-google.ts";
 import { GoogleCalendar } from "../src/google/service.ts";
 import { type ContactNotice, GoogleContacts } from "../src/google/contacts.ts";
+import { type CrmNotice, CrmService } from "../src/crm/service.ts";
 
 export const TIME_ZONE = "America/Sao_Paulo";
 
@@ -49,6 +50,11 @@ export interface ChatWorld {
   contacts: GoogleContacts;
   contactNotices: ContactNotice[];
   contactTasks: { name: string; dueAt: string }[];
+  /** The internal CRM (step 22b); its notices land in `crmNotices`. */
+  crm: CrmService;
+  crmNotices: CrmNotice[];
+  /** What propose_flow left (step 22b): only drafts, through the narrow handle the chat gets. */
+  flowDrafts: { name: string; definition: unknown }[];
   /** The tools' context for a conversation (the chat), or for a scheduled run. */
   ctx(conversationId: string | null, mode?: ToolContext["mode"]): ToolContext;
   services(): Omit<ToolContext, "conversationId" | "mode" | "timeZone">;
@@ -134,7 +140,17 @@ export function withChatWorld<T>(fn: (world: ChatWorld) => T | Promise<T>): Prom
       createTask: (name, dueAt) => contactTasks.push({ name, dueAt }),
       clock: tick,
     });
-    const services = () => ({ db, productivity, memories, conversations, plans, actions, automations, mcpService: mcp, calendar: google, contacts });
+    const crmNotices: CrmNotice[] = [];
+    const crm = new CrmService({ db, timeZone: () => world.settings.timeZone, locale: () => "pt-BR", notify: (notice) => crmNotices.push(notice), clock: tick });
+    const flowDrafts: { name: string; definition: unknown }[] = [];
+    const flowHandle = {
+      save: (input: { name: string; definition: unknown }) => {
+        flowDrafts.push(input);
+        return { id: `draft-${flowDrafts.length}` };
+      },
+      connectionIds: () => [],
+    };
+    const services = () => ({ db, productivity, memories, conversations, plans, actions, automations, mcpService: mcp, calendar: google, contacts, crm, flowDrafts: flowHandle });
     const world: ChatWorld = {
       db,
       productivity,
@@ -154,6 +170,9 @@ export function withChatWorld<T>(fn: (world: ChatWorld) => T | Promise<T>): Prom
       contacts,
       contactNotices,
       contactTasks,
+      crm,
+      crmNotices,
+      flowDrafts,
       services,
       ctx: (conversationId, mode = "chat") => ({ ...services(), timeZone: TIME_ZONE, mode, conversationId }),
       ai: (provider) =>

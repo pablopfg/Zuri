@@ -154,5 +154,20 @@ export async function seed(page: Page, base: string): Promise<{ conversationId: 
     },
   })) as unknown as { flow: { id: string } };
   await post(`/api/flows/${proposals.flow.id}/run`, {});
+
+  // The CRM (step 22b): a few clients across the funnel, one follow-up late, one today.
+  const overview = await page.request.get(`${base}/api/crm`, { headers: CSRF });
+  const stages = ((await overview.json()) as { stages: { id: string }[] }).stages.map((stage) => stage.id);
+  const clients: [string, number, string[], object?][] = [
+    ["Mariana Costa", 0, ["lead", "instagram"]],
+    ["Rafael Lima", 1, ["retorno"], { followUp: { at: dueIn(-1), note: "Mandar o orçamento" } }],
+    ["Beatriz Rocha", 2, ["vip"], { followUp: { at: dueIn(0), note: "Confirmar a consulta" } }],
+    ["Carlos Mendes", 3, ["vip", "indicação"], { birthday: "1985-04-12", phone: "+55 11 97777-1234" }],
+    ["Juliana Alves", 1, ["lead"]],
+    ["Paulo Nunes", 4, []],
+  ];
+  for (const [name, stage, tags, extra] of clients) {
+    await post("/api/crm/clients", { name, stageId: stages[stage], tags, ...(extra ?? {}) });
+  }
   return { conversationId };
 }

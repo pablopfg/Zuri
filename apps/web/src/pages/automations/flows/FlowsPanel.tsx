@@ -1,5 +1,5 @@
 import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
-import { FLOW_LIMITS, type Flow, type FlowConnection, type FlowList, type FlowRun, type FlowRunPage, type FlowSite, ptBRFlows, type Schedule } from "@zuri/shared";
+import { FLOW_LIMITS, type Flow, type FlowConnection, type FlowDraft, type FlowList, type FlowRun, type FlowRunPage, type FlowSite, ptBRFlows, type Schedule } from "@zuri/shared";
 import { History, KeyRound, Pause, Pencil, Play, Plus, Trash2, Radar, Workflow, Zap } from "lucide-react";
 import { useEffect, useId, useState } from "react";
 import { useToast } from "../../../components/Toaster.tsx";
@@ -149,6 +149,7 @@ export function FlowsPanel() {
               </section>
             )}
             <FlashStatus count={flash.remote} />
+            <Drafts drafts={data.drafts} full={full} onReview={(draft) => setEditing({ mode: "draft", draft })} />
             <Connections
               list={data}
               onNew={() => setConnection({ mode: "new" })}
@@ -163,6 +164,44 @@ export function FlowsPanel() {
       {connection && data && <ConnectionDialog editing={connection} credentialsAvailable={data.credentialsAvailable} onClose={() => setConnection(null)} />}
       <RemoveDialog removing={removing} onClose={() => setRemoving(null)} />
     </div>
+  );
+}
+
+/** The flows the chat suggested (step 22b): nothing runs until the owner reviews one and saves it. */
+function Drafts({ drafts, full, onReview }: { drafts: FlowDraft[]; full: boolean; onReview: (draft: FlowDraft) => void }) {
+  const { t, dateTime } = useI18n();
+  const { busy, act } = useFlowAction();
+  if (drafts.length === 0) return null;
+  return (
+    <section aria-labelledby="fluxos-sugestoes" className="space-y-3">
+      <div className="space-y-1">
+        <h2 id="fluxos-sugestoes" className="text-base font-semibold">
+          {t("web.flows.drafts.title")}
+        </h2>
+        <p className="text-sm text-fg-muted">{t("web.flows.drafts.body")}</p>
+      </div>
+      <ul className="divide-y divide-border overflow-hidden rounded-2xl border border-dashed border-border bg-surface">
+        {drafts.map((draft) => (
+          <li key={draft.id} className="flex flex-col gap-2 p-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0">
+              <p className="truncate font-medium">{draft.name}</p>
+              <p className="text-xs text-fg-muted">{t("web.flows.drafts.expires", { when: dateTime(draft.expiresAt) })}</p>
+            </div>
+            <div className="flex shrink-0 gap-2">
+              <Button variant="secondary" disabled={busy !== null} loading={busy === draft.id} onClick={() => void act(draft.id, async () => {
+                await api(`/flows/drafts/${draft.id}`, { method: "DELETE" });
+                return t("web.flows.drafts.dropped");
+              })}>
+                {t("web.flows.drafts.drop")}
+              </Button>
+              <Button disabled={full} onClick={() => onReview(draft)}>
+                {t("web.flows.drafts.review")}
+              </Button>
+            </div>
+          </li>
+        ))}
+      </ul>
+    </section>
   );
 }
 

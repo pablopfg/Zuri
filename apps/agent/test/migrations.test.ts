@@ -105,6 +105,7 @@ describe("the migration list", () => {
       22: "710250c6a5ac9b1b789ba436657e0013925b1c44b409bde00a784c5e0778159a",
       23: "5a2aa2b2a2bed010c38ab88ef70332d8f0e26857c4e03d98f8b2fc043509fb60",
       24: "02637c24812ac7cc5acd9322e995a05e0859f73f66f5e1f895c58f6f61221746",
+      25: "ce608a49fa98841c41f6e75c05fb6af4a60fee7cf274f7b9d3627385b7380eb5",
     };
     for (const m of MIGRATIONS) {
       const digest = createHash("sha256").update(statementText(m).replace(/\r\n/g, "\n")).digest("hex");
@@ -120,7 +121,7 @@ describe("migrate", () => {
       expect(zurObjects(db)).toEqual([]);
 
       expect(migrate(db)).toBe(LATEST_SCHEMA_VERSION);
-      expect(schemaVersion(db)).toBe(24);
+      expect(schemaVersion(db)).toBe(25);
       // FTS5 keeps shadow tables of its own (zur_notes_fts_data and others): only ours are listed.
       expect(zurObjects(db).filter((name) => !/^table:zur_(notes|memories)_fts_/.test(name))).toEqual([
         "table:zur_activity",
@@ -152,9 +153,24 @@ describe("migrate", () => {
         "trigger:zur_area_conversations_conversations_delete",
         "trigger:zur_area_conversations_conversations_insert",
         "trigger:zur_area_conversations_conversations_update",
+        "trigger:zur_area_crm_crm_clients_delete",
+        "trigger:zur_area_crm_crm_clients_insert",
+        "trigger:zur_area_crm_crm_clients_update",
+        "trigger:zur_area_crm_crm_settings_delete",
+        "trigger:zur_area_crm_crm_settings_insert",
+        "trigger:zur_area_crm_crm_settings_update",
+        "trigger:zur_area_crm_crm_stages_delete",
+        "trigger:zur_area_crm_crm_stages_insert",
+        "trigger:zur_area_crm_crm_stages_update",
+        "trigger:zur_area_crm_crm_tags_delete",
+        "trigger:zur_area_crm_crm_tags_insert",
+        "trigger:zur_area_crm_crm_tags_update",
         "trigger:zur_area_flows_flow_connections_delete",
         "trigger:zur_area_flows_flow_connections_insert",
         "trigger:zur_area_flows_flow_connections_update",
+        "trigger:zur_area_flows_flow_drafts_delete",
+        "trigger:zur_area_flows_flow_drafts_insert",
+        "trigger:zur_area_flows_flow_drafts_update",
         "trigger:zur_area_flows_flow_sites_delete",
         "trigger:zur_area_flows_flow_sites_insert",
         "trigger:zur_area_flows_flow_sites_update",
@@ -217,6 +233,8 @@ describe("migrate", () => {
         "trigger:zur_counts_automations_insert",
         "trigger:zur_counts_conversations_delete",
         "trigger:zur_counts_conversations_insert",
+        "trigger:zur_counts_crm_clients_delete",
+        "trigger:zur_counts_crm_clients_insert",
         "trigger:zur_counts_flow_runs_delete",
         "trigger:zur_counts_flow_runs_insert",
         "trigger:zur_counts_memories_delete",
@@ -243,6 +261,29 @@ describe("migrate", () => {
         "trigger:zur_counts_unread_insert",
         "trigger:zur_counts_unread_read",
         "trigger:zur_counts_unread_unread",
+        "table:zur_crm_clients",
+        "index:zur_crm_clients_birthday",
+        "index:zur_crm_clients_created",
+        "index:zur_crm_clients_follow_up",
+        "index:zur_crm_clients_follow_up_at",
+        "index:zur_crm_clients_name",
+        "index:zur_crm_clients_stage",
+        "table:zur_crm_counts",
+        "table:zur_crm_history",
+        "index:zur_crm_history_client",
+        "table:zur_crm_inbox",
+        "index:zur_crm_inbox_received",
+        "table:zur_crm_settings",
+        "table:zur_crm_stages",
+        "trigger:zur_crm_stages_clients_delete",
+        "trigger:zur_crm_stages_clients_insert",
+        "trigger:zur_crm_stages_clients_update",
+        "table:zur_crm_tag_counts",
+        "trigger:zur_crm_tag_counts_delete",
+        "trigger:zur_crm_tag_counts_insert",
+        "index:zur_crm_tag_counts_used",
+        "table:zur_crm_tags",
+        "index:zur_crm_tags_tag",
         "table:zur_devices",
         "table:zur_diagnostics",
         "index:zur_diagnostics_last",
@@ -250,6 +291,7 @@ describe("migrate", () => {
         "table:zur_flow_days",
         "trigger:zur_flow_days_insert",
         "trigger:zur_flow_days_update",
+        "table:zur_flow_drafts",
         "table:zur_flow_runs",
         "index:zur_flow_runs_flow",
         "index:zur_flow_runs_open",
@@ -628,7 +670,7 @@ describe("migrate", () => {
     await withEmptyDatabase("from-23", (db) => {
       expect(migrate(db, MIGRATIONS.slice(0, 23))).toBe(23);
       db.run(`UPDATE zur_area_versions SET contacts = 3`);
-      expect(migrate(db)).toBe(24);
+      expect(migrate(db, MIGRATIONS.slice(0, 24))).toBe(24);
       expect(db.one(`SELECT contacts, flows FROM zur_area_versions`)).toEqual({ contacts: 3, flows: 0 });
       db.run(`INSERT INTO zur_flows (id, name, definition, created_at, updated_at) VALUES ('f', 'Monitor', '{}', 'x', 'x')`);
       expect(db.one(`SELECT enabled, uses_ai, failures FROM zur_flows`)).toEqual({ enabled: 0, uses_ai: 0, failures: 0 });
@@ -660,6 +702,56 @@ describe("migrate", () => {
       expect(db.one(`SELECT runs, neurons FROM zur_flow_days WHERE day = '2026-11-03'`)).toEqual({ runs: 0, neurons: 7.5 });
       db.run(`DELETE FROM zur_flow_runs`);
       expect(db.one(`SELECT n FROM zur_counts WHERE kind = 'flow_runs'`)).toEqual({ n: 0 });
+    });
+  });
+
+  it("upgrades a database at version 24 to 25: the CRM, one settings row with events off, its area moved only by what the Clients tab shows", async () => {
+    await withEmptyDatabase("from-24", (db) => {
+      expect(migrate(db, MIGRATIONS.slice(0, 24))).toBe(24);
+      db.run(`UPDATE zur_area_versions SET flows = 4`);
+      expect(migrate(db)).toBe(25);
+      expect(db.one(`SELECT flows, crm FROM zur_area_versions`)).toEqual({ flows: 4, crm: 0 });
+      // Events start off; every notice starts on.
+      expect(db.one(`SELECT events_key, last_event_at, follow_ups, birthdays, new_clients, next_reminder FROM zur_crm_settings`)).toEqual({
+        events_key: null,
+        last_event_at: null,
+        follow_ups: 1,
+        birthdays: 1,
+        new_clients: 1,
+        next_reminder: null,
+      });
+      expect(() => db.run(`INSERT INTO zur_crm_settings (id) VALUES (2)`)).toThrow();
+      expect(db.one(`SELECT n FROM zur_counts WHERE kind = 'crm_clients'`)).toEqual({ n: 0 });
+      db.run(`INSERT INTO zur_crm_stages (id, name, position) VALUES ('s', 'Novo', 0)`);
+      expect(db.one(`SELECT crm FROM zur_area_versions`)).toEqual({ crm: 1 });
+      db.run(
+        `INSERT INTO zur_crm_clients (id, ref, name, search_name, stage_id, source, created_at, updated_at) VALUES ('c', 'r1', 'Ana', 'ana', 's', 'n8n', 'x', 'x')`,
+      );
+      expect(db.one(`SELECT crm FROM zur_area_versions`)).toEqual({ crm: 2 });
+      expect(db.one(`SELECT n FROM zur_counts WHERE kind = 'crm_clients'`)).toEqual({ n: 1 });
+      // The alarm's bookkeeping moves nothing; a new follow-up does.
+      db.run(`UPDATE zur_crm_clients SET follow_up_noticed = 1, search_name = 'ana'`);
+      expect(db.one(`SELECT crm FROM zur_area_versions`)).toEqual({ crm: 2 });
+      db.run(`UPDATE zur_crm_clients SET follow_up_at = 'y'`);
+      expect(db.one(`SELECT crm FROM zur_area_versions`)).toEqual({ crm: 3 });
+      // The checks hold: one ref per client, a known source, 0 or 1.
+      expect(() =>
+        db.run(`INSERT INTO zur_crm_clients (id, ref, name, search_name, stage_id, source, created_at, updated_at) VALUES ('d', 'r1', 'B', 'b', 's', 'app', 'x', 'x')`),
+      ).toThrow();
+      expect(() =>
+        db.run(`INSERT INTO zur_crm_clients (id, name, search_name, stage_id, source, created_at, updated_at) VALUES ('e', 'B', 'b', 's', 'mcp', 'x', 'x')`),
+      ).toThrow();
+      expect(() => db.run(`UPDATE zur_crm_clients SET follow_up_noticed = 2`)).toThrow();
+      // The timestamp of the last event moves nothing; turning events on does.
+      db.run(`UPDATE zur_crm_settings SET last_event_at = 'z', next_reminder = 1`);
+      expect(db.one(`SELECT crm FROM zur_area_versions`)).toEqual({ crm: 3 });
+      db.run(`UPDATE zur_crm_settings SET events_key = 'k'`);
+      expect(db.one(`SELECT crm FROM zur_area_versions`)).toEqual({ crm: 4 });
+      // A flow suggestion moves the Flows tab.
+      db.run(`INSERT INTO zur_flow_drafts (id, name, definition, created_at, expires_at) VALUES ('f', 'M', '{}', 'x', 'y')`);
+      expect(db.one(`SELECT flows FROM zur_area_versions`)).toEqual({ flows: 5 });
+      db.run(`DELETE FROM zur_crm_clients`);
+      expect(db.one(`SELECT n FROM zur_counts WHERE kind = 'crm_clients'`)).toEqual({ n: 0 });
     });
   });
 

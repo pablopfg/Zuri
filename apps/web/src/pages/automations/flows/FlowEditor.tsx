@@ -8,6 +8,7 @@ import {
   type Flow,
   type FlowConnection,
   type FlowDefinition,
+  type FlowDraft,
   type FlowFilterOp,
   type FlowNode,
   type FlowNodeType,
@@ -26,7 +27,8 @@ import { DAY_SHORT } from "../labels.ts";
 import { Check, IconButton } from "../parts.tsx";
 import { NODE_LABEL, OP_LABEL, PRIORITY_LABEL, TRANSFORM_LABEL } from "./labels.ts";
 
-export type Editing = { mode: "new" } | { mode: "monitor" } | { mode: "edit"; flow: Flow };
+/** "draft": a flow the chat suggested (step 22b), opened to review; saving makes it a flow (off) and drops the suggestion. */
+export type Editing = { mode: "new" } | { mode: "monitor" } | { mode: "edit"; flow: Flow } | { mode: "draft"; draft: FlowDraft };
 
 const FLOWS_KEY = ["flows"] as const;
 const WEEK = [1, 2, 3, 4, 5, 6, 0] as const;
@@ -116,7 +118,9 @@ export function FlowEditor({ editing, connections, onClose }: { editing: Editing
   const { t } = useI18n();
   const qc = useQueryClient();
   const toast = useToast();
-  const current = editing.mode === "edit" ? editing.flow : null;
+  // A suggestion's definition was checked by the server when the chat left it; saving checks it again.
+  const suggested = editing.mode === "draft" ? (editing.draft.definition as FlowDefinition) : null;
+  const current = editing.mode === "edit" ? editing.flow : suggested ? { id: null, name: editing.mode === "draft" ? editing.draft.name : "", definition: suggested } : null;
   const [name, setName] = useState(current?.name ?? (editing.mode === "monitor" ? t("web.flows.template.monitorName") : ""));
   const [trigger, setTrigger] = useState<TriggerDraft>(() => triggerDraft(current?.definition.trigger ?? null));
   const [touched, setTouched] = useState(false);
@@ -148,10 +152,10 @@ export function FlowEditor({ editing, connections, onClose }: { editing: Editing
     setError(null);
     try {
       const definition: FlowDefinition = { version: 1, trigger: builtTrigger, nodes: cleanNodes(nodes) };
-      if (current) await api(`/flows/${current.id}`, { method: "PATCH", body: { name: name.trim(), definition } });
-      else await api("/flows", { method: "POST", body: { name: name.trim(), definition } });
+      if (current?.id) await api(`/flows/${current.id}`, { method: "PATCH", body: { name: name.trim(), definition } });
+      else await api("/flows", { method: "POST", body: { name: name.trim(), definition, ...(editing.mode === "draft" ? { draft: editing.draft.id } : {}) } });
       await qc.invalidateQueries({ queryKey: FLOWS_KEY });
-      toast(t(current ? "web.flows.saved" : "web.flows.created"));
+      toast(t(current?.id ? "web.flows.saved" : "web.flows.created"));
       onClose();
     } catch (err) {
       setError(err);
@@ -161,7 +165,7 @@ export function FlowEditor({ editing, connections, onClose }: { editing: Editing
   }
 
   return (
-    <Dialog open onClose={onClose} title={t(current ? "web.flows.form.editTitle" : "web.flows.form.newTitle")}>
+    <Dialog open onClose={onClose} title={t(current?.id ? "web.flows.form.editTitle" : editing.mode === "draft" ? "web.flows.drafts.reviewTitle" : "web.flows.form.newTitle")}>
       <form onSubmit={submit} className="space-y-4" noValidate>
         <TextField
           label={t("web.flows.form.name")}
@@ -239,14 +243,14 @@ export function FlowEditor({ editing, connections, onClose }: { editing: Editing
             </div>
           )}
         </fieldset>
-        {!current && <p className="text-xs leading-5 text-fg-muted">{t("web.flows.form.offNote")}</p>}
+        {!current?.id && <p className="text-xs leading-5 text-fg-muted">{t("web.flows.form.offNote")}</p>}
         {error !== null && <ErrorNotice error={error} />}
         <div className="flex flex-wrap justify-end gap-2">
           <Button variant="ghost" onClick={onClose}>
             {t("web.flows.cancel")}
           </Button>
           <Button type="submit" loading={saving} disabled={!ready}>
-            {t(current ? "web.flows.form.save" : "web.flows.form.create")}
+            {t(current?.id ? "web.flows.form.save" : "web.flows.form.create")}
           </Button>
         </div>
       </form>

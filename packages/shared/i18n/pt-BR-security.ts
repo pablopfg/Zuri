@@ -99,6 +99,7 @@ export const ptBRSecurity = {
   "web.activity.kind.mcp_server_changed": "Endereço de serviço externo trocado",
   "web.activity.kind.flow_connection_added": "Conexão de fluxo adicionada",
   "web.activity.kind.flow_connection_changed": "Conexão de fluxo alterada",
+  "web.activity.kind.crm_events_key": "Segredo dos eventos do n8n gerado",
   "web.activity.kind.mcp_tool_autonomy": "Ferramenta externa com mais autonomia",
   "web.activity.kind.google_connected": "Google Agenda conectada",
   "web.activity.kind.google_calendar_write": "Agenda do Google liberada para escrita",

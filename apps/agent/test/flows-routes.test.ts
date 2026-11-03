@@ -232,9 +232,15 @@ describe("/api/flows/connections", () => {
 });
 
 describe("the agent's other ways in", () => {
-  it("the chat's tool context carries no flows", async () => {
-    const keys = await inOwner((agent) => Object.keys((agent as unknown as { toolServices(): object }).toolServices()));
-    expect(keys).not.toContain("flows");
-    expect(keys.join(",")).not.toMatch(/flow/i);
+  it("the chat's tool context carries no flows: only a handle that leaves drafts (step 22b)", async () => {
+    const seen = await inOwner((agent) => {
+      const services = (agent as unknown as { toolServices(): Record<string, unknown> }).toolServices();
+      const handle = services.flowDrafts as Record<string, unknown>;
+      return { keys: Object.keys(services), handle: Object.keys(handle).sort(), connections: (handle.connectionIds as () => unknown)() };
+    });
+    expect(seen.keys).not.toContain("flows");
+    expect(seen.keys.filter((key) => /flow/i.test(key))).toEqual(["flowDrafts"]);
+    expect(seen.handle).toEqual(["connectionIds", "save"]);
+    expect(seen.connections).toEqual([]);
   });
 });

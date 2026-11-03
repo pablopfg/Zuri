@@ -20,6 +20,7 @@ import { ptBRLive } from "./pt-BR-live.ts";
 import { ptBRAgenda } from "./pt-BR-agenda.ts";
 import { ptBRContacts } from "./pt-BR-contacts.ts";
 import { ptBRFlows } from "./pt-BR-flows.ts";
+import { ptBRCrm } from "./pt-BR-crm.ts";
 
 // Default and fallback catalog. Every key must also exist in en.ts and be used in the code (npm run lint).
 // The texts of the lazy screens live in their own files (pt-BR-memory.ts, pt-BR-productivity.ts,
@@ -148,4 +149,5 @@ export const ptBR = /* @__PURE__ */ join(
   ptBRAgenda,
   ptBRContacts,
   ptBRFlows,
+  ptBRCrm,
 );

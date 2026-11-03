@@ -1,9 +1,9 @@
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import { type ContactDetail, type ContactPage, type ContactsStatus, ptBRContacts } from "@zuri/shared";
 import { ExternalLink, Search, Users } from "lucide-react";
-import { type ReactNode, useEffect, useState } from "react";
-import { Link } from "react-router";
-import { Button, Dialog, EmptyState, ErrorNotice, Loading, PageHeader, SelectField, TextField } from "../../components/ui.tsx";
+import { lazy, type ReactNode, Suspense, useEffect, useState } from "react";
+import { Link, Navigate, NavLink, useParams } from "react-router";
+import { Button, cn, Dialog, EmptyState, ErrorNotice, Loading, PageHeader, SelectField, TextField } from "../../components/ui.tsx";
 import { api } from "../../lib/api.ts";
 import { CONTACTS_STATUS_KEY, contactKey, contactsListKey } from "../../lib/contacts.ts";
 import { addMessages, useI18n } from "../../lib/i18n.tsx";
@@ -29,11 +29,56 @@ const birthdayText = (value: string, locale: string) => {
   return new Intl.DateTimeFormat(locale, { day: "numeric", month: "long", ...(year ? { year: "numeric" } : {}), timeZone: "UTC" }).format(date);
 };
 
+// The Clients tab (step 22b) comes only when opened: its code and texts stay out of this screen's download (rule P11).
+const ClientsPanel = lazy(() => import("./crm/ClientsPanel.tsx").then((m) => ({ default: m.ClientsPanel })));
+
 /**
- * Contacts (step 19b): the read-only copy of the owner's Google contacts in
- * the labels they chose. Searched in Zuri's own database; nothing here writes.
+ * Contacts: the Google copy (step 19b) and the internal CRM's clients (step
+ * 22b), each a tab with its own address.
  */
 export function ContactsPage() {
+  const { t } = useI18n();
+  const { aba } = useParams();
+  if (aba !== undefined && aba !== "clientes") return <Navigate to="/contatos" replace />;
+  return (
+    <div className="space-y-6">
+      <PageHeader title={t("web.contacts.title")} description={t("web.contacts.tabsDescription")} />
+      <Tabs />
+      {aba === "clientes" ? (
+        <Suspense fallback={<Loading rows={4} />}>
+          <ClientsPanel />
+        </Suspense>
+      ) : (
+        <GoogleTab />
+      )}
+    </div>
+  );
+}
+
+function Tabs() {
+  const { t } = useI18n();
+  const tab = ({ isActive }: { isActive: boolean }) =>
+    cn(
+      "inline-flex min-h-11 items-center border-b-2 px-3 text-sm font-medium transition-colors",
+      isActive ? "border-accent text-fg" : "border-transparent text-fg-muted hover:text-fg",
+    );
+  return (
+    <nav aria-label={t("web.contacts.tabs")} className="flex gap-1 border-b border-border">
+      <NavLink to="/contatos" end className={tab}>
+        {t("web.contacts.tab.google")}
+      </NavLink>
+      <NavLink to="/contatos/clientes" className={tab}>
+        {t("web.contacts.tab.clients")}
+      </NavLink>
+    </nav>
+  );
+}
+
+/**
+ * The read-only copy of the owner's Google contacts in the labels they
+ * chose. Searched in Zuri's own database; nothing here writes.
+ */
+function GoogleTab() {
   const { t, locale } = useI18n();
   const [query, setQuery] = useState("");
   const [label, setLabel] = useState("");
@@ -56,7 +101,7 @@ export function ContactsPage() {
     getNextPageParam: (page) => page.next ?? undefined,
   });
 
-  const header = <PageHeader title={t("web.contacts.title")} description={t("web.contacts.description")} />;
+  const header = <p className="max-w-prose text-sm leading-6 text-fg-muted">{t("web.contacts.description")}</p>;
   if (status.isPending) {
     return (
       <div className="space-y-6">
