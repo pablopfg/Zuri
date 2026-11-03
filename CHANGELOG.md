@@ -19,6 +19,78 @@ funciona: [docs/agente/versionamento.md](docs/agente/versionamento.md).
 
 O que já entrou na `develop` e ainda não ganhou número fica em [`changelog/nao-lancado/`](changelog/nao-lancado/) por alguns minutos, até o workflow de versão escrever a seção.
 
+## [0.27.3] - 2026-11-03
+
+Mesclada às 15:33 (UTC-3) · commit [`e0902dc`](https://github.com/pablopfg/Zuri/commit/e0902dc960614863b474582ea5751418b1b0f43d) · PR [#149](https://github.com/pablopfg/Zuri/pull/149) · Etapa 19b mesclada (#144)
+
+### Alterado
+
+- Sem mudança visível: etapa 19b mesclada (#144).
+
+## [0.27.2] - 2026-11-03
+
+Mesclada às 15:16 (UTC-3) · commit [`1052bc0`](https://github.com/pablopfg/Zuri/commit/1052bc094cc57a693ad0c728bdebde88f6ca58d5) · PR [#150](https://github.com/pablopfg/Zuri/pull/150) · Diálogo fecha junto com o conteúdo e não deixa a página inerte
+
+### Corrigido
+
+- Ao fechar uma janela de confirmação, como "Sair sem salvar?" das notas,
+  a tela de trás volta a responder na hora. Antes, por um instante, a janela
+  já tinha sumido mas ainda bloqueava a página, e um `Ctrl+S` ou um toque
+  logo em seguida podia não fazer nada. Isso também deixava instável um
+  teste de notas no celular.
+
+## [0.27.1] - 2026-11-03
+
+Mesclada às 14:38 (UTC-3) · commit [`978eff4`](https://github.com/pablopfg/Zuri/commit/978eff4b8c2afa8c2cc5559c2cddf52c5862acb7) · PR [#138](https://github.com/pablopfg/Zuri/pull/138) · Planeja as avaliações do Google Business Profile (etapas 19c e 19d)
+
+### Adicionado
+
+- Plano das avaliações do perfil da empresa no Google em
+  `docs/planos/google-business-profile.md`, que vira as etapas 19c e 19d,
+  depois da Google Contatos: a Zuri lê as avaliações novas a cada 15 minutos,
+  avisa a equipe pelo Telegram quando chega uma negativa e prepara respostas
+  para as positivas no padrão do dono. Nada é publicado sem aprovação até o
+  dono liberar o modo automático, que vale só para as positivas. Gratuito, sem
+  segredo novo.
+
+## [0.27.0] - 2026-11-03
+
+Mesclada às 14:20 (UTC-3) · commit [`19f1b6b`](https://github.com/pablopfg/Zuri/commit/19f1b6bfe01ff9c06e2e9b2a47957ac44507726e) · PR [#144](https://github.com/pablopfg/Zuri/pull/144) · Sincroniza os contatos do Google por etiqueta (etapa 19b)
+
+### Adicionado
+
+- Google Contatos: no cartão Google Agenda e Contatos, em Configurações >
+  Integrações, ligue os contatos e escolha quais etiquetas a Zuri copia. Ela
+  só lê: nunca muda um contato no Google e não manda mensagem para ninguém.
+- A cópia se atualiza de hora em hora, só com o que mudou, até 5.000 contatos.
+  O botão Sincronizar agora atualiza na hora.
+- Tela Contatos no menu lateral e na paleta Ctrl/⌘K, com busca por nome,
+  apelido, pedaço do telefone ou e-mail, filtro por etiqueta e os detalhes de
+  cada contato, com atalho para abrir no Google Contatos.
+- Avisos de aniversário do dia e, se você ligar, de datas especiais (com
+  antecedência de até 30 dias e filtro por rótulo, como "Retorno"), no horário
+  que você escolher. Quando alguém entra numa etiqueta, a Zuri pode avisar e
+  criar uma tarefa.
+- Na conversa e nas rotinas com IA, a Zuri busca contatos e lê os detalhes de
+  um contato, inclusive os aniversários de hoje ou da semana.
+
+### Segurança
+
+- Ligar os contatos e acrescentar uma etiqueta pedem a senha digitada há
+  pouco, e a permissão nova gera alerta de segurança. Nome, telefone, e-mail e
+  observações dos contatos nunca vão para o log, e o que a Zuri lê deles entra
+  na conversa como dado, nunca como ordem.
+- Desligar os contatos apaga a cópia inteira. Desconectar o Google também
+  retira a permissão no Google. No modo de bloqueio nada sai para o Google.
+
+### Atualização
+
+- O banco ganha a migration 23 (a cópia dos contatos, as etiquetas e o estado
+  da sincronização). Ela roda sozinha na primeira requisição e só acrescenta.
+- Para usar os contatos, ligue a People API no projeto do Google Cloud do seu
+  cliente OAuth e acrescente o escopo `contacts.readonly` na tela de
+  consentimento. O passo a passo está em `docs/google-contatos.md`.
+
 ## [0.26.2] - 2026-11-03
 
 Mesclada às 11:49 (UTC-3) · commit [`ffb703d`](https://github.com/pablopfg/Zuri/commit/ffb703d02c5a7e6f5f85d08a8c1e5a345051fd2f) · PR [#142](https://github.com/pablopfg/Zuri/pull/142) · PRs não ficam atrás da develop depois do merge do bot
@@ -2089,7 +2161,11 @@ Mesclada às 22:15 (UTC-3) · commit [`360a79e`](https://github.com/pablopfg/Zur
   `npm audit`), CodeQL, Dependabot e rulesets para a `develop` e a `main`.
 - `LICENSE` (MIT), `NOTICE.md`, `SECURITY.md` e `CONTRIBUTING.md`.
 
-[Não lançado]: https://github.com/pablopfg/Zuri/compare/v0.26.2...develop
+[Não lançado]: https://github.com/pablopfg/Zuri/compare/v0.27.3...develop
+[0.27.3]: https://github.com/pablopfg/Zuri/releases/tag/v0.27.3
+[0.27.2]: https://github.com/pablopfg/Zuri/releases/tag/v0.27.2
+[0.27.1]: https://github.com/pablopfg/Zuri/releases/tag/v0.27.1
+[0.27.0]: https://github.com/pablopfg/Zuri/releases/tag/v0.27.0
 [0.26.2]: https://github.com/pablopfg/Zuri/releases/tag/v0.26.2
 [0.26.1]: https://github.com/pablopfg/Zuri/releases/tag/v0.26.1
 [0.26.0]: https://github.com/pablopfg/Zuri/releases/tag/v0.26.0
