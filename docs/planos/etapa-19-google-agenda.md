@@ -312,7 +312,7 @@ Nenhum recurso pago. ⚠️ nada.
 ## 13. Suposições
 
 - Atualização (03/11/2026, pedido do dono): o Google volta em
-  `/rest/oauth2-credential/call-back`; o Worker repassa `state`, `code` e
+  `/rest/oauth2-credential/callback`; o Worker repassa `state`, `code` e
   `error` para `/configuracoes/integracoes`, que termina a conexão como antes.
 - Redirecionamento em `/configuracoes/integracoes` (a mesma página da 18b), em
   vez de `/settings/google-oauth` da especificação: as rotas da interface são

@@ -248,8 +248,8 @@ segredos** (ou com `npx wrangler secret put` dentro de `apps/agent`):
 
 O `MCP_CREDENTIAL_KEY` (seção acima) também é preciso: ele cifra os tokens do
 Google. O endereço de volta cadastrado no Google é
-`https://exemplo.com.br/rest/oauth2-credential/call-back`, com o domínio da sua
-Zuri (exatamente assim, com o hífen em `call-back`).
+`https://exemplo.com.br/rest/oauth2-credential/callback`, com o domínio da sua
+Zuri (exatamente assim, `callback` sem hífen).
 Os avisos de mudança do Google chegam em `/api/google/push`; se você usa o
 Cloudflare Access, nada a fazer: a rota só passa sem login com o token certo
 do canal.

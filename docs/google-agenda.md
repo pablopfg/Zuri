@@ -111,9 +111,9 @@ A Zuri usa o seu próprio app do Google, gratuito. Faça uma vez:
    aparece só para você.
 4. Em **APIs e serviços > Credenciais > Criar credenciais > ID do cliente
    OAuth**: tipo **Aplicativo da Web**. Em **URIs de redirecionamento
-   autorizados**, ponha `https://exemplo.com.br/rest/oauth2-credential/call-back`
+   autorizados**, ponha `https://exemplo.com.br/rest/oauth2-credential/callback`
    (troque pelo endereço da sua Zuri, o mesmo de `PUBLIC_URL`, e mantenha o
-   resto igual, com o hífen em `call-back`). A Zuri recebe a volta nesse
+   resto igual, `callback` sem hífen). A Zuri recebe a volta nesse
    endereço e leva você para **Configurações > Integrações**, onde a conexão
    termina.
 5. Grave o ID e a chave secreta como **Secrets** do Worker, em **Workers e

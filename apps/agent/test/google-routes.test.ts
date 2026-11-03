@@ -110,7 +110,7 @@ describe("/api/google: connecting", () => {
     expect(target.origin + target.pathname).toBe("https://accounts.google.com/o/oauth2/v2/auth");
     const p = target.searchParams;
     expect(p.get("client_id")).toBe(testEnv.GOOGLE_CLIENT_ID);
-    expect(p.get("redirect_uri")).toBe(`${ORIGIN}/rest/oauth2-credential/call-back`);
+    expect(p.get("redirect_uri")).toBe(`${ORIGIN}/rest/oauth2-credential/callback`);
     expect(p.get("scope")?.split(" ").sort()).toEqual(["https://www.googleapis.com/auth/calendar.calendarlist.readonly", "https://www.googleapis.com/auth/calendar.events"]);
     expect(p.get("code_challenge_method")).toBe("S256");
     expect(p.get("code_challenge")).toMatch(/^[A-Za-z0-9_-]{43}$/);

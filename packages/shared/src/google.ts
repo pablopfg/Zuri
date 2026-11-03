@@ -16,7 +16,7 @@ export type CalendarMode = (typeof CALENDAR_MODES)[number];
  * connection as for the MCP sign-ins (step 18b). The state starts with this
  * prefix, so the page knows the answer is Google's.
  */
-export const GOOGLE_CALLBACK_PATH = "/rest/oauth2-credential/call-back";
+export const GOOGLE_CALLBACK_PATH = "/rest/oauth2-credential/callback";
 export const GOOGLE_RETURN_PAGE = "/configuracoes/integracoes";
 export const GOOGLE_STATE_PREFIX = "g.";
 
