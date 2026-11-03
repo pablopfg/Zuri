@@ -53,12 +53,16 @@ jobs:
           node scripts/readme.ts --publicar
       # Its merge by GITHUB_TOKEN starts no push run: seguir-merge.yml waits for it
       # and starts the push-driven workflows. Also after a failure, since the
-      # pull request may be open; with no open pull request it ends at once.
+      # pull request may be open. With no open pull request no runner starts.
       - name: Follow the merge of the pull request
         if: always()
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh workflow run seguir-merge.yml --repo "$GITHUB_REPOSITORY" --ref develop -f branch=chore/readme-automatico
+        run: |
+          open=$(gh pr list --repo "$GITHUB_REPOSITORY" --head chore/readme-automatico --base develop --state open --json number --jq length)
+          if [ "$open" != "0" ]; then
+            gh workflow run seguir-merge.yml --repo "$GITHUB_REPOSITORY" --ref develop -f branch=chore/readme-automatico
+          fi
 
   report-failure:
     needs: update

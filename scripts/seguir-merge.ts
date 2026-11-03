@@ -31,7 +31,7 @@ export const AFTER_MERGE: Record<string, readonly string[]> = {
 };
 
 export type PullState = "OPEN" | "MERGED" | "CLOSED";
-export type Outcome = "no-pull-request" | "merged" | "closed" | "timeout";
+export type Outcome = "no-pull-request" | "merged" | "dispatch-failed" | "closed" | "timeout";
 
 export interface Follow {
   /** Workflow files to start once the pull request merged. */
@@ -69,9 +69,19 @@ export function followMerge(
       io.log(`::warning::#${pull}: could not read the state: ${(error as Error).message.split("\n")[0]}`);
     }
     if (state === "MERGED") {
-      for (const workflow of io.workflows) io.dispatch(workflow);
-      io.log(`#${pull}: merged; started ${io.workflows.join(", ")}`);
-      return "merged";
+      // One failed dispatch does not keep the others from starting; the run still ends red.
+      const failed: string[] = [];
+      for (const workflow of io.workflows) {
+        try {
+          io.dispatch(workflow);
+        } catch (error) {
+          failed.push(workflow);
+          io.log(`::error::${workflow}: not started: ${(error as Error).message.split("\n")[0]}`);
+        }
+      }
+      const started = io.workflows.filter((w) => !failed.includes(w));
+      io.log(`#${pull}: merged; started ${started.join(", ") || "none"}`);
+      return failed.length ? "dispatch-failed" : "merged";
     }
     if (state === "CLOSED") {
       io.log(`#${pull}: closed without merging`);
@@ -93,7 +103,7 @@ function main(args: string[]): number {
   const workflows = Object.hasOwn(AFTER_MERGE, branch) ? AFTER_MERGE[branch] : undefined;
   if (!workflows) throw new Error(`branch must be one of ${Object.keys(AFTER_MERGE).join(", ")}`);
   const gh = (a: string[]) => run("gh", a);
-  followMerge({
+  const outcome = followMerge({
     workflows,
     findOpen: () => {
       const open = JSON.parse(
@@ -107,7 +117,7 @@ function main(args: string[]): number {
     now: Date.now,
     log: (line) => console.log(line),
   });
-  return 0;
+  return outcome === "dispatch-failed" ? 1 : 0;
 }
 
 if (import.meta.main) {

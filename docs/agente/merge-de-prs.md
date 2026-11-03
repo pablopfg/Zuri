@@ -105,8 +105,10 @@ chamando o workflow `Seguir merge` (`.github/workflows/seguir-merge.yml`,
 `scripts/seguir-merge.ts`). Ele espera a PR da própria branch entrar (até
 40 minutos, lendo a cada 30 s) e chama por `workflow_dispatch`, o único evento
 que o `GITHUB_TOKEN` sempre consegue disparar, o `Update PRs`, o `Branches` e o
-outro workflow automático, cuja PR também ficou atrás. Sem PR aberta, termina
-na hora; PR fechada sem merge não chama nada. Ele só lê PRs e dispara
+outro workflow automático, cuja PR também ficou atrás. Só é chamado quando há
+PR aberta na branch; PR fechada sem merge não chama nada. A execução que está
+esperando nunca é cancelada por uma mais nova (ela pode estar a segundos de ver
+o merge), e falha abre a issue `[falha automática] Seguir merge`. Ele só lê PRs e dispara
 workflows na `develop`. Caso que motivou: #140 e #141 atrás da `develop`
 depois da #139.
 

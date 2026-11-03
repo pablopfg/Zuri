@@ -24,10 +24,12 @@ on:
 
 permissions: {}
 
-# A newer run follows the same pull request (or finds it closed): it replaces the one still waiting.
+# One waiter per branch. Never cancel the one running: the merge may have
+# landed a moment ago, and a newer run would find no open pull request and
+# start nothing. GitHub keeps only the newest pending run, so they never pile up.
 concurrency:
   group: seguir-merge-${{ inputs.branch }}
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   follow:
@@ -54,3 +56,27 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           BRANCH: ${{ inputs.branch }}
         run: node scripts/seguir-merge.ts "$BRANCH"
+
+  # Nobody owns a failed dispatch run: it opens (or updates) one standard issue
+  # (scripts/issue-de-falha.ts, docs/agente/issues.md).
+  report-failure:
+    needs: follow
+    if: always() && github.ref == 'refs/heads/develop' && (needs.follow.result == 'failure' || needs.follow.result == 'cancelled')
+    runs-on: ubuntu-26.04
+    timeout-minutes: 5
+    # issues: create the issue, its labels and the repeat comment; actions: read the failed steps.
+    permissions:
+      issues: write
+      actions: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: develop
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version-file: .nvmrc
+      - name: Open or update the failure issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/issue-de-falha.ts

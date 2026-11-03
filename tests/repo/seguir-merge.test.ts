@@ -5,7 +5,12 @@ import { AFTER_MERGE, type Follow, followMerge, type PullState } from "../../scr
 import { loadWorkflow, readText, triggers } from "./helpers.ts";
 
 /** A fake GitHub: the pull request goes through `states`, one per read; time moves only on sleep. */
-function fake(open: number | null, states: (PullState | Error)[], workflows: readonly string[] = ["update-prs.yml", "branches.yml"]) {
+function fake(
+  open: number | null,
+  states: (PullState | Error)[],
+  workflows: readonly string[] = ["update-prs.yml", "branches.yml"],
+  broken: readonly string[] = [],
+) {
   let clock = 0;
   let reads = 0;
   const dispatched: string[] = [];
@@ -19,6 +24,7 @@ function fake(open: number | null, states: (PullState | Error)[], workflows: rea
       return next;
     },
     dispatch: (w) => {
+      if (broken.includes(w)) throw new Error("HTTP 403\nbody");
       dispatched.push(w);
     },
     sleep: (ms) => {
@@ -46,6 +52,14 @@ describe("followMerge", () => {
     expect(f.dispatched).toEqual(["update-prs.yml", "branches.yml"]);
     expect(f.clock()).toBe(60_000);
     expect(f.logs.at(-1)).toBe("#139: merged; started update-prs.yml, branches.yml");
+  });
+
+  it("still starts the other workflows when one dispatch fails, and reports it", () => {
+    const f = fake(139, ["MERGED"], ["update-prs.yml", "branches.yml", "versao.yml"], ["branches.yml"]);
+    expect(followMerge(f.io)).toBe("dispatch-failed");
+    expect(f.dispatched).toEqual(["update-prs.yml", "versao.yml"]);
+    expect(f.logs).toContain("::error::branches.yml: not started: HTTP 403");
+    expect(f.logs.at(-1)).toBe("#139: merged; started update-prs.yml, versao.yml");
   });
 
   it("starts nothing when the pull request closes without merging", () => {
@@ -139,9 +153,17 @@ describe("seguir-merge.yml", () => {
     expect(readText(file)).not.toMatch(/secrets\./);
   });
 
-  it("outlasts the script's 40-minute wait and replaces a run still waiting on the same branch", () => {
+  it("outlasts the script's 40-minute wait and never cancels a waiter that may be about to see the merge", () => {
     expect(job["timeout-minutes"]).toBeGreaterThan(40);
-    expect((wf as { concurrency?: unknown }).concurrency).toEqual({ group: `seguir-merge-\${{ inputs.branch }}`, "cancel-in-progress": true });
+    // Cancelling it right after the merge would leave the newer run with no open pull request to follow.
+    expect((wf as { concurrency?: unknown }).concurrency).toEqual({ group: `seguir-merge-\${{ inputs.branch }}`, "cancel-in-progress": false });
+  });
+
+  it("opens an issue when it fails", () => {
+    const report = wf.jobs["report-failure"] as (typeof wf.jobs)[string] & { needs?: string; if?: string };
+    expect(report.needs).toBe("follow");
+    expect(report.if).toBe("always() && github.ref == 'refs/heads/develop' && (needs.follow.result == 'failure' || needs.follow.result == 'cancelled')");
+    expect(report.permissions).toEqual({ issues: "write", actions: "read" });
   });
 
   it("runs the script from develop, with the branch through the environment", () => {
@@ -159,6 +181,8 @@ describe("seguir-merge.yml", () => {
     const steps = loadWorkflow(source).jobs[id]?.steps ?? [];
     const last = steps.at(-1) as (typeof steps)[number] & { if?: string };
     expect(last.if).toBe("always()");
-    expect(last.run).toBe(`gh workflow run seguir-merge.yml --repo "$GITHUB_REPOSITORY" --ref develop -f branch=${branch}`);
+    // Only with an open pull request, so a run with nothing to follow starts no runner.
+    expect(last.run).toContain(`gh pr list --repo "$GITHUB_REPOSITORY" --head ${branch} --base develop --state open --json number --jq length`);
+    expect(last.run).toContain(`gh workflow run seguir-merge.yml --repo "$GITHUB_REPOSITORY" --ref develop -f branch=${branch}`);
   });
 });
