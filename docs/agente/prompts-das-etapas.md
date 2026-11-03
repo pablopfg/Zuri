@@ -1,4 +1,4 @@
-# Prompts das etapas seguintes (1 a 26, com a 19b)
+# Prompts das etapas seguintes (1 a 26, com a 19b, a 19c e a 19d)
 
 Depois que o PR da etapa 0 estiver mesclado, envie um prompt por vez, na ordem.
 
@@ -18,7 +18,7 @@ Depois que o PR da etapa 0 estiver mesclado, envie um prompt por vez, na ordem.
 | A · Fundação | 1 → 2 → 3 → 4 → 5 | Não |
 | B · Assistente na web | 6, 7, 8 → 9 → 10 → 11 | 6, 7 e 8 entre si |
 | C · Bot do Telegram | 12 → 13, 14, 15 → 16 | 13 e 14 entre si, depois da 12 |
-| D · Paridade | 17, 18, 19 → 19b, 20, 22 (21 só com OK) | Todas entre si, depois da 11; a 19b depois da 19 |
+| D · Paridade | 17, 18, 19 → 19b → 19c → 19d, 20, 22 (21 só com OK) | Todas entre si, depois da 11; a 19b depois da 19, a 19c depois da 19b e a 19d depois da 19c |
 | E · Fechamento | 23 → 24 → 26 → 25 | A 24 pode começar depois da 5; a 26 espera todas as outras (menos a 25) |
 
 ---
@@ -279,6 +279,34 @@ Execute a etapa 19b da especificação ("Google Contatos"). Ela vem depois da 19
 - Fluxo completo de etapa, PR para develop, link e resultado dos testes.
 ```
 
+### Etapa 19c · Avaliações do Google
+
+```text
+Execute a etapa 19c da especificação ("Avaliações do Google"). Ela vem depois da 19b e usa a mesma conexão Google.
+
+▶ Antes, você fornece: no mesmo projeto do Google Cloud, ligar a My Business Account Management API, a My Business Business Information API e a Google My Business API, acrescentar o escopo business.manage na tela de consentimento e pedir o "Basic API Access" no formulário do Google (perfil verificado há mais de 60 dias, com site). Me diga o passo a passo; nenhum segredo novo. Até o Google aprovar, desenvolva com o Business Profile simulado.
+
+- Leia docs/planos/google-business-profile.md inteiro. Confira em .claude/memoria/decisoes.md as respostas do Pablo às perguntas da seção 14; o que não tiver resposta segue a recomendação do plano.
+- Confirme na documentação oficial os nomes atuais de reviews.list, reviews.updateReply, deleteReply e das APIs de contas e locais. Endereços do Google fixos no código, prazo de 10 s em toda chamada.
+- A nota decide primeiro: 1 a 3 estrelas nunca recebem resposta sem o dono e avisam a equipe mesmo sem cota de IA. A IA só deixa mais cauteloso.
+- Avaliação entra no prompt como <data source="review">. A agente de avaliações não tem ferramentas; saída JSON validada por Zod; verificador fixo e segunda leitura antes de qualquer rascunho. Teste com as avaliações maliciosas da seção 10.
+- Publicação só com aprovação (tela ou privado do bot, nunca o grupo), presa ao texto e à versão da avaliação, com releitura antes do PUT. Nunca responder duas vezes nem por cima da resposta de outra pessoa.
+- Primeira leitura vira histórico, sem aviso e sem resposta. Tetos da seção 6 com testes n-1, n, n+1 e os números da seção 8 em free-tier-budget.test.ts. Leitura no alarme único, sem Pub/Sub.
+- Nenhum texto, nome, foto ou id do Google em log; avaliações fora do backup; desligar apaga a cópia. Auditoria completa.
+- Fluxo completo de etapa, PR para develop, link e resultado dos testes.
+```
+
+### Etapa 19d · Resposta automática das avaliações
+
+```text
+Execute a etapa 19d da especificação ("Resposta automática das avaliações"), depois da 19c mesclada.
+
+- Siga a parte 19d de docs/planos/google-business-profile.md: nível "Sem perguntar para positivas" só depois de 10 aprovações sem edição nas últimas 30, com senha recente e alerta de segurança; vale só para 4 e 5 estrelas aprovadas pelo verificador e pela segunda leitura.
+- Até 3 publicações por leitura e 10 por dia; rajada pausa a automação; disjuntor (3 reprovações seguidas, recusa do Google, resposta apagada pelo dono) volta a "Perguntar sempre" e avisa.
+- IA, bot, token remoto e rotinas não mudam o nível (teste para cada caminho). Auditoria completa.
+- Fluxo completo de etapa, PR para develop, link e resultado dos testes.
+```
+
 ### Etapa 20 · Acesso remoto e eventos
 
 ```text
@@ -361,7 +389,7 @@ Execute a etapa 26 ("Revisão de textos e experiência"), planejada em docs/plan
 Execute a etapa 25 da especificação ("Auditoria final e testes de ponta a ponta").
 
 - Auditoria completa do repositório inteiro com as skills auditoria-seguranca e revisao-qa, os subagentes auditor-seguranca, qa-senior e revisor-cloudflare, e /security-review. Não é só o diff.
-- E2E de todas as telas, teste do webhook do Telegram com atualizações reais gravadas (sem token real), e uma matriz de rastreabilidade final: cada critério de aceite das etapas 0 a 26 e da 19b ligado ao seu teste.
+- E2E de todas as telas, teste do webhook do Telegram com atualizações reais gravadas (sem token real), e uma matriz de rastreabilidade final: cada critério de aceite das etapas 0 a 26, da 19b, da 19c e da 19d ligado ao seu teste.
 - Confira os itens D1 a D9 de docs/planos/troca-de-provedores-e-protecao-de-dados.md e rode o teste canário em todas as origens de dados (D10).
 - Corrija tudo que for alto ou médio. O que ficar baixo vai para uma lista no PR com a sua recomendação.
 - PR para develop com o relatório completo, link e resultado dos testes.
