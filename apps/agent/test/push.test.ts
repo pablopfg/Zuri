@@ -158,7 +158,7 @@ describe("push devices", () => {
       expect(w.devices.list("b2").map((d) => d.current)).toEqual([false, true, false]);
       expect(w.devices.list(null).some((d) => d.current)).toBe(false);
       // The list never carries the endpoint, the keys or the browser id.
-      expect(JSON.stringify(w.devices.list("b1"))).not.toMatch(/fcm\.googleapis|b1"/);
+      expect(JSON.stringify(w.devices.list("b1"))).not.toMatch(/fcm\.googleapis|"b1"/);
     });
   });
 
