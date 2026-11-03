@@ -173,4 +173,10 @@ export const ptBRChat = {
   "web.chat.approval.mcpFailed": "A chamada falhou. Confira no serviço antes de pedir de novo.",
   "web.chat.tool.search_contacts": "Procurar nos contatos",
   "web.chat.tool.get_contact": "Abrir um contato",
+  "web.chat.tool.search_clients": "Procurar nos clientes",
+  "web.chat.tool.get_client": "Abrir um cliente",
+  "web.chat.tool.crm_summary": "Ver o resumo do funil",
+  "web.chat.tool.add_client": "Cadastrar um cliente",
+  "web.chat.tool.update_client": "Atualizar um cliente",
+  "web.chat.tool.propose_flow": "Sugerir um fluxo",
 } as const;

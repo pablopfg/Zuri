@@ -207,4 +207,11 @@ export const ptBRFlows = {
   "web.flows.connection.passwordNote": "A Zuri pede a sua senha se você não a digitou nos últimos 15 minutos.",
   "web.flows.connection.save": "Salvar",
   "web.flows.connection.create": "Criar conexão",
+  "web.flows.drafts.title": "Sugestões da Zuri",
+  "web.flows.drafts.body": "Fluxos que a Zuri sugeriu na conversa. Nada roda até você revisar e salvar; o fluxo salvo começa desligado.",
+  "web.flows.drafts.expires": "Some em {when} se você não salvar",
+  "web.flows.drafts.review": "Revisar",
+  "web.flows.drafts.drop": "Descartar",
+  "web.flows.drafts.dropped": "Sugestão descartada",
+  "web.flows.drafts.reviewTitle": "Revisar sugestão da Zuri",
 } as const;

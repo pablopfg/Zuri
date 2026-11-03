@@ -29,6 +29,8 @@ const AREA_KEYS: Record<Area, readonly { queryKey: QueryKey; exact?: boolean }[]
   contacts: [{ queryKey: ["contacts"] }],
   // The Flows tab in Automations (step 22a).
   flows: [{ queryKey: ["flows"] }],
+  // The Clients tab in Contacts (step 22b).
+  crm: [{ queryKey: ["crm"] }],
 };
 
 const CHANNEL = "zuri-versions";

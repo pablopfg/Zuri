@@ -433,6 +433,13 @@ const ROUTINE_TEMPLATES = [
     message: "web.automations.template.closing.message",
     schedule: { type: "weekly", time: "19:00", days: [1, 2, 3, 4, 5] },
   },
+  // Step 22b: the CRM's funnel, read on Monday mornings (routines only read the CRM).
+  {
+    id: "funnel",
+    name: "web.automations.template.funnel.name",
+    message: "web.automations.template.funnel.message",
+    schedule: { type: "weekly", time: "08:00", days: [1] },
+  },
 ] as const satisfies readonly { id: string; name: Parameters<ReturnType<typeof useI18n>["t"]>[0]; message: Parameters<ReturnType<typeof useI18n>["t"]>[0]; schedule: Partial<ScheduleDraft> }[];
 
 const capitalizeFirst = (text: string) => (text ? (text[0] as string).toLocaleUpperCase() + text.slice(1) : text);

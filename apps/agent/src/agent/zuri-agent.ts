@@ -59,6 +59,8 @@ import { FlowConnections } from "../flows/connections.ts";
 import { developmentFlowNetwork } from "../flows/dev-flows.ts";
 import { SiteStates } from "../flows/monitor.ts";
 import { type FlowNotice, FlowService } from "../flows/service.ts";
+import { CrmEvents } from "../crm/events.ts";
+import { type CrmNotice, CrmService } from "../crm/service.ts";
 import { McpCredentials } from "../mcp/credentials.ts";
 import { dohResolver } from "../mcp/url.ts";
 import { ALL_TOOLS } from "../tools/index.ts";
@@ -125,6 +127,9 @@ interface Store {
   contacts: GoogleContacts;
   /** The flows and the site monitor (step 22a). */
   flows: FlowService;
+  /** The internal CRM (step 22b) and n8n's signed events. */
+  crm: CrmService;
+  crmEvents: CrmEvents;
 }
 
 /**
@@ -205,6 +210,7 @@ export class ZuriAgent extends Agent<WorkerEnv> {
     }),
     mcp: () => ({ service: this.store.mcp, auth: this.store.auth, automations: this.store.automations }),
     flows: () => ({ flows: this.store.flows, connections: this.store.flows.connections, auth: this.store.auth, development: () => this.development() }),
+    crm: () => ({ crm: this.store.crm, events: this.store.crmEvents, auth: this.store.auth, rearm: () => this.store.automations.rearm() }),
     google: () => ({
       google: this.store.google,
       contacts: this.store.contacts,
@@ -233,8 +239,10 @@ export class ZuriAgent extends Agent<WorkerEnv> {
   }
 
   private toolServices(): Omit<ToolContext, "conversationId" | "mode" | "timeZone"> {
-    const { db, productivity, memories, conversations, plans, actions, automations, semantic, mcp, google, contacts } = this.store;
-    return { db, productivity, memories, conversations, plans, actions, automations, semantic, mcpService: mcp, calendar: google, contacts };
+    const { db, productivity, memories, conversations, plans, actions, automations, semantic, mcp, google, contacts, crm, flows } = this.store;
+    // Only a draft handle: the 22a rule (only the screen changes flows) holds for every tool.
+    const flowDrafts = { save: (input: { name: string; definition: unknown }) => flows.saveDraft(input), connectionIds: () => flows.connections.rows().map((row) => row.id) };
+    return { db, productivity, memories, conversations, plans, actions, automations, semantic, mcpService: mcp, calendar: google, contacts, crm, flowDrafts };
   }
 
   /** How an automation runs: reminders and the digest without AI, routines through the runner. */
@@ -338,6 +346,12 @@ export class ZuriAgent extends Agent<WorkerEnv> {
       await this.store.flows.tick();
     } catch (error) {
       log("error", "flow_failed", { error });
+    }
+    // The CRM's follow-ups and birthdays (step 22b): set the alarm again when they moved.
+    try {
+      if (this.store.crm.tick()) await automations.rearm();
+    } catch (error) {
+      log("error", "crm_alarm_failed", { error });
     }
     await alerts.settled();
     // Some work found no room in this wake: the alarm comes back for it, a minute out (otherDue's floor, and the
@@ -604,7 +618,16 @@ export class ZuriAgent extends Agent<WorkerEnv> {
               return null;
             }
           })();
-          const due = [tries, watch, indexing, tools, channels, people, flowsDue].filter((at): at is string => Boolean(at)).sort()[0] ?? watch;
+          // The CRM's follow-ups and birthdays (step 22b).
+          const crmDue = (() => {
+            try {
+              const at = crm.nextDue();
+              return at === null ? null : new Date(at).toISOString();
+            } catch {
+              return null;
+            }
+          })();
+          const due = [tries, watch, indexing, tools, channels, people, flowsDue, crmDue].filter((at): at is string => Boolean(at)).sort()[0] ?? watch;
           // Work already past due is only left there when its step failed on the last
           // alarm (a full disk, say): wait a minute before trying again, never at once,
           // so a step that keeps failing can't spin the alarm through the day's quota.
@@ -693,6 +716,15 @@ export class ZuriAgent extends Agent<WorkerEnv> {
       );
       // Local development never reaches a real site (src/flows/dev-flows.ts).
       if (this.development()) flows.network = developmentFlowNetwork(flows.network);
+      // The internal CRM (step 22b): its notices go to the center; nothing in it ever reaches a log.
+      const crm = new CrmService({ db, timeZone: () => settings.field("timeZone"), locale: () => this.locale(), notify: (notice) => crmNotice(alerts, notice), assertBytes: () => productivity.storage.assertBytes() });
+      const crmEvents = new CrmEvents({
+        db,
+        crm,
+        sessionSecret: () => env.SESSION_SECRET,
+        origin: () => this.publicUrl().origin,
+        lockdown: () => auth.lockdown.active(),
+      });
       // The owner's conversation in the bot (step 14): the same runner, meter and turns as the app.
       const telegramConversation = new TelegramConversation({
         db,
@@ -819,7 +851,7 @@ export class ZuriAgent extends Agent<WorkerEnv> {
         // Local development never reaches Telegram (src/telegram/dev-telegram.ts).
         ...(this.development() ? { fetcher: developmentTelegramFetcher as typeof fetch } : {}),
       });
-      this.#store = { db, settings, auth, productivity, memories, usage, conversations, actions, plans, automations, alerts, watchers, diagnostics, push, telegram, telegramConversation, semantic, mcp, google, contacts, flows };
+      this.#store = { db, settings, auth, productivity, memories, usage, conversations, actions, plans, automations, alerts, watchers, diagnostics, push, telegram, telegramConversation, semantic, mcp, google, contacts, flows, crm, crmEvents };
     }
     return this.#store;
   }
@@ -912,6 +944,41 @@ function flowNotice(alerts: AlertService, diagnostics: DiagnosticsService, notic
       return;
     case "paused":
       alerts.raise({ kind: "flow.paused", category: "system", priority: "high", params: { name: notice.flowName }, source, link: "/automacoes/fluxos" });
+      return;
+  }
+}
+
+/** A notice of the CRM (step 22b): a client's name only in the notice itself, never in a log. */
+function crmNotice(alerts: AlertService, notice: CrmNotice): void {
+  switch (notice.kind) {
+    case "crm.followUp":
+      alerts.raise({
+        kind: notice.kind,
+        category: "reminders",
+        priority: "normal",
+        params: { name: notice.name },
+        body: notice.note || null,
+        link: "/contatos/clientes",
+        dedupeKey: `crm-follow-up-${notice.clientId}`,
+        dedupeMs: 3_600_000,
+      });
+      return;
+    case "crm.followUps":
+      alerts.raise({ kind: notice.kind, category: "reminders", priority: "normal", params: { count: notice.count }, link: "/contatos/clientes" });
+      return;
+    case "crm.birthdays":
+      alerts.raise({
+        kind: notice.kind,
+        category: "reminders",
+        priority: "normal",
+        params: { names: notice.more > 0 ? `${notice.names} (+${notice.more})` : notice.names },
+        link: "/contatos/clientes",
+        dedupeKey: `crm-birthdays-${notice.day}`,
+        dedupeMs: 36 * 3_600_000,
+      });
+      return;
+    case "crm.newClient":
+      alerts.raise({ kind: notice.kind, category: "reminders", priority: "normal", params: { name: notice.name }, link: "/contatos/clientes" });
       return;
   }
 }

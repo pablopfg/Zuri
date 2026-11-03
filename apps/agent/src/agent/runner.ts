@@ -1,3 +1,4 @@
+import { CRM_TOOL_NAMES } from "../tools/crm.ts";
 import { type ApiErrorCode, type AreaVersions, type ChatEvent, type ChatMessage, type Conversation, type Locale, MCP_LIMITS, type MessageKey, type Settings, type ToolActivity } from "@zuri/shared";
 import { t } from "@zuri/shared";
 import { z } from "zod";
@@ -315,6 +316,8 @@ export class AgentRunner {
     const serverOf = new Map(available.map((t) => [t.tool.exposed_name, t.server.id]));
     const answered = new Set(this.deps.tools.actions.externalAnswered(conversationId));
     for (const list of used) for (const tool of list) if (tool.status === "success" && !tool.actionId && serverOf.has(tool.name)) answered.add(serverOf.get(tool.name) ?? "");
+    // The CRM read in a recent message (step 22b): its strangers' text may still steer the model.
+    const thirdParty = used.some((list) => list.some((tool) => tool.status === "success" && CRM_TOOL_NAMES.has(tool.name)));
     // Nothing is embedded here: only the vector the memory recall made of this message, if any.
     let meaning: ReadonlyMap<string, number> | undefined;
     try {
@@ -325,6 +328,7 @@ export class AgentRunner {
     }
     return new McpTurnTools(service, available, input.message, recent, input.signal, {
       answered,
+      thirdParty,
       ...(meaning ? { meaning } : {}),
       // The bot's turn also sends its answer through the Telegram API within the same invocation.
       budget: input.source === "telegram" ? MCP_TELEGRAM_BUDGET : MCP_SUBREQUEST_BUDGET,

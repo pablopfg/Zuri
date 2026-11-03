@@ -1184,6 +1184,126 @@ export const MIGRATIONS: readonly Migration[] = [
       ...areaTriggers("flows", "zur_flow_sites", "OF state"),
     ],
   },
+  {
+    version: 25,
+    name: "crm",
+    statements: [
+      // The internal CRM (step 22b). A client may carry `ref`, its id in the
+      // system n8n talks to; events find it by that. Names and phones are
+      // searched through `search_name` and `phone_digits`, never logged.
+      // `clients` is kept by triggers, so the funnel never counts the clients (rule P1).
+      `CREATE TABLE IF NOT EXISTS zur_crm_stages (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        position INTEGER NOT NULL,
+        clients INTEGER NOT NULL DEFAULT 0
+      )`,
+      `CREATE TABLE IF NOT EXISTS zur_crm_clients (
+        id TEXT PRIMARY KEY,
+        ref TEXT UNIQUE,
+        name TEXT NOT NULL,
+        search_name TEXT NOT NULL,
+        phone TEXT,
+        phone_digits TEXT NOT NULL DEFAULT '',
+        email TEXT,
+        birthday TEXT,
+        birthday_md TEXT,
+        stage_id TEXT NOT NULL,
+        notes TEXT NOT NULL DEFAULT '',
+        follow_up_at TEXT,
+        follow_up_note TEXT NOT NULL DEFAULT '',
+        follow_up_noticed INTEGER NOT NULL DEFAULT 0 CHECK (follow_up_noticed IN (0, 1)),
+        source TEXT NOT NULL CHECK (source IN ('app', 'n8n')),
+        last_activity_at TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      )`,
+      `CREATE INDEX IF NOT EXISTS zur_crm_clients_name ON zur_crm_clients (search_name, id)`,
+      `CREATE INDEX IF NOT EXISTS zur_crm_clients_stage ON zur_crm_clients (stage_id, search_name, id)`,
+      `CREATE INDEX IF NOT EXISTS zur_crm_clients_birthday ON zur_crm_clients (birthday_md) WHERE birthday_md IS NOT NULL`,
+      // The follow-ups still to tell: the alarm reads only these.
+      `CREATE INDEX IF NOT EXISTS zur_crm_clients_follow_up ON zur_crm_clients (follow_up_noticed, follow_up_at) WHERE follow_up_at IS NOT NULL`,
+      // The funnel summary's and the filters' ranges of follow-ups.
+      `CREATE INDEX IF NOT EXISTS zur_crm_clients_follow_up_at ON zur_crm_clients (follow_up_at) WHERE follow_up_at IS NOT NULL`,
+      `CREATE INDEX IF NOT EXISTS zur_crm_clients_created ON zur_crm_clients (created_at)`,
+      `CREATE TABLE IF NOT EXISTS zur_crm_tags (
+        client_id TEXT NOT NULL,
+        tag TEXT NOT NULL,
+        PRIMARY KEY (client_id, tag)
+      ) WITHOUT ROWID`,
+      `CREATE INDEX IF NOT EXISTS zur_crm_tags_tag ON zur_crm_tags (tag, client_id)`,
+      // How many clients carry each tag, kept by triggers: the tag list reads this, not every client's tags.
+      // A tag at zero stays until CrmService clears it (no DELETE in a migration).
+      `CREATE TABLE IF NOT EXISTS zur_crm_tag_counts (
+        tag TEXT PRIMARY KEY,
+        n INTEGER NOT NULL DEFAULT 0
+      ) WITHOUT ROWID`,
+      `CREATE INDEX IF NOT EXISTS zur_crm_tag_counts_used ON zur_crm_tag_counts (n, tag)`,
+      `CREATE TRIGGER IF NOT EXISTS zur_crm_tag_counts_insert AFTER INSERT ON zur_crm_tags BEGIN
+        INSERT OR IGNORE INTO zur_crm_tag_counts (tag, n) VALUES (NEW.tag, 0);
+        UPDATE zur_crm_tag_counts SET n = n + 1 WHERE tag = NEW.tag;
+      END`,
+      `CREATE TRIGGER IF NOT EXISTS zur_crm_tag_counts_delete AFTER DELETE ON zur_crm_tags BEGIN
+        UPDATE zur_crm_tag_counts SET n = n - 1 WHERE tag = OLD.tag;
+      END`,
+      // What happened with each client, newest kept (100 a client).
+      `CREATE TABLE IF NOT EXISTS zur_crm_history (
+        id TEXT PRIMARY KEY,
+        client_id TEXT NOT NULL,
+        kind TEXT NOT NULL,
+        text TEXT NOT NULL DEFAULT '',
+        at TEXT NOT NULL
+      )`,
+      `CREATE INDEX IF NOT EXISTS zur_crm_history_client ON zur_crm_history (client_id, at, id)`,
+      // One row: the events' key (public, in the address; the secret is derived from SESSION_SECRET) and the notices.
+      `CREATE TABLE IF NOT EXISTS zur_crm_settings (
+        id INTEGER PRIMARY KEY CHECK (id = 1),
+        events_key TEXT,
+        last_event_at TEXT,
+        follow_ups INTEGER NOT NULL DEFAULT 1 CHECK (follow_ups IN (0, 1)),
+        birthdays INTEGER NOT NULL DEFAULT 1 CHECK (birthdays IN (0, 1)),
+        new_clients INTEGER NOT NULL DEFAULT 1 CHECK (new_clients IN (0, 1)),
+        next_reminder INTEGER
+      )`,
+      `INSERT INTO zur_crm_settings (id) VALUES (1) ON CONFLICT (id) DO NOTHING`,
+      // Ids of events already applied (a repeat writes nothing), kept 7 days.
+      `CREATE TABLE IF NOT EXISTS zur_crm_inbox (
+        id TEXT PRIMARY KEY,
+        received_at INTEGER NOT NULL
+      )`,
+      `CREATE INDEX IF NOT EXISTS zur_crm_inbox_received ON zur_crm_inbox (received_at)`,
+      // Events per UTC hour ("h:2026-11-03T20") and day ("d:2026-11-03"), and new-client notices per day ("n:…").
+      `CREATE TABLE IF NOT EXISTS zur_crm_counts (
+        bucket TEXT PRIMARY KEY,
+        n INTEGER NOT NULL DEFAULT 0
+      ) WITHOUT ROWID`,
+      `INSERT INTO zur_counts (kind, n) VALUES ('crm_clients', 0) ON CONFLICT (kind) DO NOTHING`,
+      `CREATE TRIGGER IF NOT EXISTS zur_counts_crm_clients_insert AFTER INSERT ON zur_crm_clients BEGIN UPDATE zur_counts SET n = n + 1 WHERE kind = 'crm_clients'; END`,
+      `CREATE TRIGGER IF NOT EXISTS zur_counts_crm_clients_delete AFTER DELETE ON zur_crm_clients BEGIN UPDATE zur_counts SET n = n - 1 WHERE kind = 'crm_clients'; END`,
+      `CREATE TRIGGER IF NOT EXISTS zur_crm_stages_clients_insert AFTER INSERT ON zur_crm_clients BEGIN UPDATE zur_crm_stages SET clients = clients + 1 WHERE id = NEW.stage_id; END`,
+      `CREATE TRIGGER IF NOT EXISTS zur_crm_stages_clients_delete AFTER DELETE ON zur_crm_clients BEGIN UPDATE zur_crm_stages SET clients = clients - 1 WHERE id = OLD.stage_id; END`,
+      `CREATE TRIGGER IF NOT EXISTS zur_crm_stages_clients_update AFTER UPDATE OF stage_id ON zur_crm_clients WHEN OLD.stage_id IS NOT NEW.stage_id BEGIN
+        UPDATE zur_crm_stages SET clients = clients - 1 WHERE id = OLD.stage_id;
+        UPDATE zur_crm_stages SET clients = clients + 1 WHERE id = NEW.stage_id;
+      END`,
+      // A client's tags and history go with the client: CrmService.remove deletes them (no DELETE in a migration).
+      // The flows the chat suggests (step 22b): only a draft, until the owner saves it on the Flows tab.
+      `CREATE TABLE IF NOT EXISTS zur_flow_drafts (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        definition TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        expires_at TEXT NOT NULL
+      )`,
+      ...areaTriggers("flows", "zur_flow_drafts"),
+      // The Clients tab follows this number; the history only moves it through its client's row.
+      `ALTER TABLE zur_area_versions ADD COLUMN crm INTEGER NOT NULL DEFAULT 0`,
+      ...areaTriggers("crm", "zur_crm_clients", "OF name, phone, email, birthday, stage_id, notes, follow_up_at, follow_up_note, last_activity_at, updated_at"),
+      ...areaTriggers("crm", "zur_crm_stages", "OF name, position"),
+      ...areaTriggers("crm", "zur_crm_tags"),
+      ...areaTriggers("crm", "zur_crm_settings", "OF events_key, follow_ups, birthdays, new_clients"),
+    ],
+  },
 ];
 
 /** The three triggers that move an area's number when a row of `table` is added, changed or removed. Frozen: migration 21 is built from it. */

@@ -57,6 +57,7 @@ import { registerSemanticRoutes, type SemanticDeps } from "./semantic.ts";
 import { type McpRouteDeps, registerMcpRoutes } from "./mcp.ts";
 import { type GoogleRouteDeps, registerGooglePush, registerGoogleRoutes } from "./google.ts";
 import { type FlowRouteDeps, registerFlowRoutes } from "./flows.ts";
+import { type CrmRouteDeps, registerCrmEvents, registerCrmRoutes } from "./crm.ts";
 import { registerTelegramRoutes, registerTelegramWebhook, type TelegramDeps } from "./telegram.ts";
 import { log, rayOf, routeLabel } from "../log.ts";
 
@@ -95,6 +96,8 @@ export interface ApiDeps {
   google?(): GoogleRouteDeps;
   /** The flows and the site monitor (step 22a). Absent only in tests of other routes. */
   flows?(): FlowRouteDeps;
+  /** The internal CRM and n8n's events (step 22b). Absent only in tests of other routes. */
+  crm?(): CrmRouteDeps;
   /** The number of each screen area, sent with the session check and the heartbeat (nova UI, PR 2). Absent only in tests of other routes. */
   versions?(): AreaVersions;
   /** True when a password secret is set, so the health check can answer without opening the database. */
@@ -175,6 +178,9 @@ export function createApi(deps: ApiDeps) {
   // Google's push notices (step 19): no cookie and no Origin, only the channel's token (checked inside).
   const google = deps.google;
   if (google) registerGooglePush(app, () => google());
+  // n8n's events for the CRM (step 22b): no cookie and no Origin, only the signature (checked inside).
+  const crm = deps.crm;
+  if (crm) registerCrmEvents(app, () => crm());
 
   app.use("*", async (c, next) => {
     checkCsrf(c.req.raw, deps.origin());
@@ -496,6 +502,7 @@ export function createApi(deps: ApiDeps) {
   if (google) registerGoogleRoutes(app, () => google(), client);
   const flows = deps.flows;
   if (flows) registerFlowRoutes(app, () => flows(), client);
+  if (crm) registerCrmRoutes(app, () => crm(), client);
 
   // Step 8: what the AI used today and the last 7 days. Read only: the limits change through /settings.
   app.get("/usage", () => Response.json(deps.aiUsage()));

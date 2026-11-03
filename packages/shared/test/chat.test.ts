@@ -27,9 +27,10 @@ describe("the chat's constants", () => {
   it("are the specification's", () => {
     expect(CHAT_MESSAGE_MAX).toBe(8_000);
     expect(CONVERSATION_TITLE_MAX).toBe(120);
-    // 26 of step 9 and later, plus find_tools (step 18), the four calendar tools (step 19) and the two contacts tools (step 19b).
-    expect(TOOL_NAMES).toHaveLength(34);
-    expect(new Set(TOOL_NAMES).size).toBe(34);
+    // 26 of step 9 and later, plus find_tools (step 18), the four calendar tools (step 19), the two contacts tools (step 19b),
+    // and the five CRM tools with propose_flow (step 22b).
+    expect(TOOL_NAMES).toHaveLength(40);
+    expect(new Set(TOOL_NAMES).size).toBe(40);
     for (const name of DESTRUCTIVE_TOOLS) expect(TOOL_NAMES).toContain(name);
     expect(PENDING_ACTION_TTL_MS).toBe(30 * 60_000);
     expect(TASK_PLAN_TTL_MS).toBe(24 * 3_600_000);

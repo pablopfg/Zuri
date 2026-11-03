@@ -196,7 +196,7 @@ test("loading, empty and error states of the tab", async ({ page }) => {
     if (answer === "error") return route.fulfill({ status: 500, contentType: "application/json", body: JSON.stringify({ code: "INTERNAL", message: "Algo deu errado." }) });
     return route.fulfill({
       contentType: "application/json",
-      body: JSON.stringify({ flows: [], connections: [], counts: { flows: 0, enabled: 0, connections: 0, sites: 0, runsToday: 0, neuronsToday: 0 }, credentialsAvailable: false }),
+      body: JSON.stringify({ flows: [], drafts: [], connections: [], counts: { flows: 0, enabled: 0, connections: 0, sites: 0, runsToday: 0, neuronsToday: 0 }, credentialsAvailable: false }),
     });
   });
   await page.goto("/automacoes/fluxos");
@@ -211,4 +211,39 @@ test("loading, empty and error states of the tab", async ({ page }) => {
   await page.reload();
   await expect(page.getByRole("alert")).toBeVisible();
   await expect(page.getByRole("button", { name: "Tentar de novo" })).toBeVisible();
+});
+
+test("a flow the chat suggests waits on the tab; saved by the owner, it starts off (step 22b)", async ({ page }) => {
+  const name = `Sugerido ${tag()}`;
+  await page.goto("/conversa");
+  await signIn(page);
+  const definition = { version: 1, trigger: { type: "manual" }, nodes: [{ type: "monitor", sites: ["https://loja.exemplo.com.br"] }] };
+  const box = page.getByRole("textbox", { name: "Mensagem" });
+  await box.fill(`call propose_flow ${JSON.stringify({ name, definition })}`);
+  const done = page.waitForResponse((r) => r.url().endsWith("/api/chat") && r.request().method() === "POST");
+  await box.press("Enter");
+  expect((await done).status()).toBe(200);
+  await expect(page.getByRole("button", { name: "Parar" })).toHaveCount(0);
+
+  await page.goto("/automacoes/fluxos");
+  await expect(page.getByRole("heading", { level: 1, name: "Automações" })).toBeVisible();
+  const drafts = page.getByRole("region", { name: "Sugestões da Zuri" });
+  const draft = drafts.getByRole("listitem").filter({ hasText: name });
+  await expect(draft).toBeVisible();
+  // Nothing was made from it yet.
+  await expect(flowRow(page, name)).toHaveCount(0);
+  await expectAccessible(page, "fluxos com sugestão");
+
+  await draft.getByRole("button", { name: "Revisar" }).click();
+  const form = page.getByRole("dialog", { name: "Revisar sugestão da Zuri" });
+  await expect(form.getByLabel("Nome")).toHaveValue(name);
+  await form.getByRole("button", { name: "Criar fluxo" }).click();
+  await expect(toast(page, "Fluxo criado, ainda desligado")).toBeVisible();
+  await expect(drafts).toHaveCount(0);
+  const row = flowRow(page, name);
+  await expect(row.getByRole("button", { name: "Ligar" })).toBeVisible();
+
+  await row.getByRole("button", { name: "Apagar" }).click();
+  await page.getByRole("dialog", { name: `Apagar ${name}?` }).getByRole("button", { name: "Apagar" }).click();
+  await expect(flowRow(page, name)).toHaveCount(0);
 });

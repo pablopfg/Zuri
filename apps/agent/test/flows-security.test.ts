@@ -235,10 +235,13 @@ describe("a notice from a flow", () => {
 });
 
 describe("only the screen changes flows", () => {
-  it("no tool of the agent touches flows, connections or sites", () => {
-    for (const tool of ALL_TOOLS) {
-      expect(tool.name).not.toMatch(/flow|fluxo|monitor|connection|conex|site|webhook|http|fetch/i);
-    }
+  it("no tool of the agent touches flows, connections or sites; the chat only suggests one (step 22b)", () => {
+    const touching = ALL_TOOLS.filter((tool) => /flow|fluxo|monitor|connection|conex|site|webhook|http|fetch/i.test(tool.name));
+    expect(touching.map((tool) => tool.name)).toEqual(["propose_flow"]);
+    const propose = touching[0] as { permission: string; offered?: (ctx: never) => boolean } | undefined;
+    expect(propose?.permission).toBe("write");
+    expect(propose?.offered?.({ mode: "scheduled", flowDrafts: { save: () => ({ id: "x" }), connectionIds: () => [] } } as never)).toBe(false);
+    expect(propose?.offered?.({ mode: "chat" } as never)).toBe(false);
   });
 
   it("no bot command touches them either", () => {
