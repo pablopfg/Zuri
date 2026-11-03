@@ -19,6 +19,16 @@ funciona: [docs/agente/versionamento.md](docs/agente/versionamento.md).
 
 O que já entrou na `develop` e ainda não ganhou número fica em [`changelog/nao-lancado/`](changelog/nao-lancado/) por alguns minutos, até o workflow de versão escrever a seção.
 
+## [0.25.13] - 2026-11-03
+
+Mesclada às 09:45 (UTC-3) · commit [`03c1f5e`](https://github.com/pablopfg/Zuri/commit/03c1f5e649a67ff89cf4c64f4a0cec781a42dd75) · PR [#135](https://github.com/pablopfg/Zuri/pull/135) · Recoloca o selo de versão com atualização automática
+
+### Adicionado
+
+- O README voltou a mostrar o selo da versão. Ele lê a pré-release mais nova
+  publicada a cada merge na `develop` e se atualiza sozinho, e o workflow do
+  README falha se alguém tirar o selo de novo.
+
 ## [0.25.12] - 2026-11-03
 
 Mesclada às 08:58 (UTC-3) · commit [`54ba3fb`](https://github.com/pablopfg/Zuri/commit/54ba3fbfa669d9e8f201866aabb0d10ccbfbaba9) · PR [#134](https://github.com/pablopfg/Zuri/pull/134) · Animação de entrada não esconde o LCP do primeiro acesso
@@ -2012,7 +2022,8 @@ Mesclada às 22:15 (UTC-3) · commit [`360a79e`](https://github.com/pablopfg/Zur
   `npm audit`), CodeQL, Dependabot e rulesets para a `develop` e a `main`.
 - `LICENSE` (MIT), `NOTICE.md`, `SECURITY.md` e `CONTRIBUTING.md`.
 
-[Não lançado]: https://github.com/pablopfg/Zuri/compare/v0.25.12...develop
+[Não lançado]: https://github.com/pablopfg/Zuri/compare/v0.25.13...develop
+[0.25.13]: https://github.com/pablopfg/Zuri/releases/tag/v0.25.13
 [0.25.12]: https://github.com/pablopfg/Zuri/releases/tag/v0.25.12
 [0.25.11]: https://github.com/pablopfg/Zuri/releases/tag/v0.25.11
 [0.25.10]: https://github.com/pablopfg/Zuri/releases/tag/v0.25.10
