@@ -277,31 +277,32 @@ export class AlertService {
     const notice = this.present(row, locale);
     const message: AlertMessage = { notice, attempt, origin: row.origin };
     const counted = attempt === 1 && row.priority !== "critical" && row.category !== "reminders";
-    const sending: AlertChannel[] = [];
-    const refused: { channel: AlertChannel; reason: DeliveryReason }[] = [];
+    // Each channel in order: why it doesn't take this try, or null when it sends.
+    const plan: { channel: AlertChannel; reason: DeliveryReason | null }[] = [];
     for (const channel of this.deps.channels()) {
       if (!this.routed(channel.name, row)) continue;
       if (attempt > 1 && channel.firstTryOnly) continue;
-      const reason = this.refusal(channel, row, attempt, counted);
-      if (reason) refused.push({ channel, reason });
-      else sending.push(channel);
+      plan.push({ channel, reason: this.refusal(channel, row, attempt, counted) });
     }
     // In the shared alarm the try takes its calls from the wake's one count (issue #152, rule P9):
     // when they don't fit, the whole try waits for the next wake, a minute later, instead of failing.
     const wake = currentWake();
+    const sending = plan.filter((step) => step.reason === null);
     if (wake && sending.length > 0) {
-      const calls = sending.reduce((sum, channel) => sum + Math.max(1, channel.cost?.(message) ?? 1), 0);
+      const calls = sending.reduce((sum, { channel }) => sum + Math.max(1, channel.cost?.(message) ?? 1), 0);
       if (!wake.take(calls, true)) {
         if (this.defer({ id: row.id, attempt, insist })) return;
         // The waiting list is full: this try stays in the bell, like a channel's own cap.
-        for (const channel of sending) refused.push({ channel, reason: "channel_limit" });
-        sending.length = 0;
+        for (const step of sending) step.reason = "channel_limit";
       }
     }
-    for (const { channel, reason } of refused) this.record(row, channel.name, attempt, "skipped", reason, false);
     let reached = false;
     await Promise.all(
-      sending.map(async (channel) => {
+      plan.map(async ({ channel, reason }) => {
+        if (reason) {
+          this.record(row, channel.name, attempt, "skipped", reason, false);
+          return;
+        }
         const id = this.record(row, channel.name, attempt, "sending", null, counted);
         let result: SendResult;
         try {
