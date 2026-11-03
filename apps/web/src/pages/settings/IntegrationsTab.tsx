@@ -157,9 +157,11 @@ function useSignInCallback(): boolean {
     }
     setFinishing(true);
     api<{ server: McpServerInfo; signedIn: boolean }>("/mcp/oauth/callback", { method: "POST", body })
-      .then((result) => {
+      .then(async (result) => {
+        // The list may still be on its way (this page just opened), with the state from before the sign-in. A first
+        // reading still on its way is joined, not restarted, by invalidateQueries: cancel it, then read again.
+        await qc.cancelQueries({ queryKey: MCP_KEY, exact: true });
         update(result.server);
-        // The list may still be on its way (this page just opened), with the state from before the sign-in: read it again.
         void qc.invalidateQueries({ queryKey: MCP_KEY, exact: true });
         toast(result.signedIn ? t("web.integrations.signedIn") : t("web.integrations.signinFailed"));
       })

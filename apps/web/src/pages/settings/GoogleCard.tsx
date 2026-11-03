@@ -53,9 +53,11 @@ function useGoogleReturn(): boolean {
     if (error !== null) body.error = error.slice(0, 200);
     setFinishing(true);
     api<GoogleStatus & { replaced?: boolean }>("/google/callback", { method: "POST", body })
-      .then(({ replaced, ...status }) => {
+      .then(async ({ replaced, ...status }) => {
+        // The first reading may still be on its way (this page just opened), with the state from before. One still
+        // on its way is joined, not restarted, by invalidateQueries: cancel it, then read again.
+        await qc.cancelQueries({ queryKey: GOOGLE_STATUS_KEY, exact: true });
         qc.setQueryData(GOOGLE_STATUS_KEY, status);
-        // The first reading may still be on its way (this page just opened), with the state from before: read it again.
         void qc.invalidateQueries({ queryKey: GOOGLE_STATUS_KEY, exact: true });
         toast(t(replaced ? "web.google.replaced" : "web.google.connected"));
       })
