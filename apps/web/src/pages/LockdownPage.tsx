@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { type LockdownExit, lockdownStatusSchema, ptBRSetup } from "@zuri/shared";
+import { type LockdownExit, lockdownStatusSchema, ptBRSetup, ptBRShell } from "@zuri/shared";
 import { ShieldAlert, Unlink } from "lucide-react";
 import { type FormEvent, useEffect, useRef, useState } from "react";
 import { Logo } from "../components/Logo.tsx";
@@ -10,6 +10,8 @@ import { addMessages, useI18n } from "../lib/i18n.tsx";
 
 // The screen's texts live with the other screens that lock the app (rule P11).
 addMessages(ptBRSetup);
+// The password confirmation below says the same as the shell's.
+addMessages(ptBRShell);
 
 const STATUS_KEY = ["lockdown"] as const;
 
