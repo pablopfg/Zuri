@@ -178,6 +178,10 @@ Pré-release de desenvolvimento da `develop`, não é deploy. Todas as versões 
   (`docs/agente/issues.md`).
 - Sem mudança desde o último run, a branch `chore/versao` não é empurrada de
   novo, para a CI dela não recomeçar a cada hora.
+- O `Branches` roda no mesmo push da `develop` e pode apagar a `chore/versao`
+  antiga no meio do run de versão. Por isso o workflow lê a branch com um único
+  `git fetch`: se ela sumiu, conta como inexistente e cria a branch e a PR de
+  novo. Qualquer outra falha do fetch (rede, permissão) para o run.
 - Esquecer o marcador numa branch `feat/etapa-*` falha o `npm run lint`
   (`node scripts/changelog.ts`) na CI da própria PR.
 - Fragmento fora do formato, `CHANGELOG.md` editado à mão ou a seção mais nova
