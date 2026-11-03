@@ -19,6 +19,49 @@ funciona: [docs/agente/versionamento.md](docs/agente/versionamento.md).
 
 O que já entrou na `develop` e ainda não ganhou número fica em [`changelog/nao-lancado/`](changelog/nao-lancado/) por alguns minutos, até o workflow de versão escrever a seção.
 
+## [0.25.9] - 2026-11-03
+
+Mesclada às 04:32 (UTC-3) · commit [`1167c6b`](https://github.com/pablopfg/Zuri/commit/1167c6b4ab52c1c958c2df1f0500ad86185b37f0) · PR [#128](https://github.com/pablopfg/Zuri/pull/128) · Versão não falha quando a branch chore/versao some no meio do run
+
+### Corrigido
+
+- O workflow de versão não falha mais quando a branch da PR de versão anterior
+  é apagada no meio do run: ele cria a branch e a PR de novo. Foi o que deixou a
+  0.25.8 com tag e pré-release, mas sem a PR que atualiza o `CHANGELOG.md`.
+
+## [0.25.8] - 2026-11-03
+
+Mesclada às 04:00 (UTC-3) · commit [`01a91e9`](https://github.com/pablopfg/Zuri/commit/01a91e9b18be64a12c1c3a62c1e66a539f990884) · PR [#126](https://github.com/pablopfg/Zuri/pull/126) · Nova organização da interface, textos revistos e carregamento
+
+### Adicionado
+
+- A busca (Ctrl K) ganhou "Conversa", "Nova conversa" e, quando você digita uma
+  frase, "Perguntar à Zuri", que abre uma conversa nova com ela.
+
+### Alterado
+
+- Barra lateral nova, no jeito dos apps de conversa: a logomarca, a busca e o
+  botão de recolher no topo, "Nova conversa" como botão principal (também com
+  Ctrl ⇧ O), as seis telas e a sua conta no pé. Configurações, Acessos, o tema
+  e Sair ficam no menu da conta, junto com a versão. As cores e a logomarca
+  continuam as mesmas.
+- No celular, a barra de baixo sai: o botão de menu no topo abre a mesma barra
+  lateral como gaveta, e "Nova conversa" fica sempre à mão no topo.
+- O Início ganhou um campo para escrever para a Zuri, três ideias para começar
+  e dois cartões: o que vence hoje (com as atrasadas marcadas) e os próximos
+  dias, agrupados por dia.
+- As conversas recentes aparecem por dia (Hoje, Ontem, Últimos 7 dias e Mais
+  antigas), com uma busca própria pelo nome.
+- Configurações no computador viraram um submenu à esquerda, com uma linha
+  dizendo o que cada seção guarda.
+- Textos revistos em Tarefas, Memória, Automações, Acessos, Configurações e na
+  busca: "Rodar agora", "Apagar", "Criar automação", "Últimas execuções", "A
+  Zuri sugeriu uma rotina", entre outros.
+- Carregamento novo: linhas cinzas com um brilho suave no formato da lista, uma
+  linha verde fina no topo enquanto a tela abre e o balão "A Zuri está
+  pensando" na conversa. Nada aparece nos primeiros 300 ms, e tudo fica parado
+  com "reduzir movimento" ligado.
+
 ## [0.25.7] - 2026-11-03
 
 Mesclada às 03:07 (UTC-3) · commit [`9e97e7e`](https://github.com/pablopfg/Zuri/commit/9e97e7e31fe4a0caca76b0be11d5e67db5ad3e29) · PR [#121](https://github.com/pablopfg/Zuri/pull/121) · Correções do primeiro passe completo de pentest
@@ -1900,7 +1943,9 @@ Mesclada às 22:15 (UTC-3) · commit [`360a79e`](https://github.com/pablopfg/Zur
   `npm audit`), CodeQL, Dependabot e rulesets para a `develop` e a `main`.
 - `LICENSE` (MIT), `NOTICE.md`, `SECURITY.md` e `CONTRIBUTING.md`.
 
-[Não lançado]: https://github.com/pablopfg/Zuri/compare/v0.25.7...develop
+[Não lançado]: https://github.com/pablopfg/Zuri/compare/v0.25.9...develop
+[0.25.9]: https://github.com/pablopfg/Zuri/releases/tag/v0.25.9
+[0.25.8]: https://github.com/pablopfg/Zuri/releases/tag/v0.25.8
 [0.25.7]: https://github.com/pablopfg/Zuri/releases/tag/v0.25.7
 [0.25.6]: https://github.com/pablopfg/Zuri/releases/tag/v0.25.6
 [0.25.5]: https://github.com/pablopfg/Zuri/releases/tag/v0.25.5
