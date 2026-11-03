@@ -24,7 +24,7 @@ import {
   step,
   viewRange,
 } from "../../lib/agenda.ts";
-import { api, errorMessage } from "../../lib/api.ts";
+import { ApiError, api, errorMessage } from "../../lib/api.ts";
 import { addMessages, useI18n } from "../../lib/i18n.tsx";
 
 // This screen's pt-BR texts travel with its code, not in the first bundle (rule P11).
@@ -640,6 +640,9 @@ function EventFormDialog({ editing, calendars, onClose }: { editing: Editing; ca
       onClose();
     } catch (failure) {
       toast(errorMessage(failure));
+      // Changed or deleted at Google meanwhile: this form holds an old version, so it closes and the
+      // screen shows the event as it is now, to open again.
+      if (editing.mode === "edit" && failure instanceof ApiError && (failure.code === "TARGET_CHANGED" || failure.code === "NOT_FOUND")) onClose();
     } finally {
       setSaving(false);
       void qc.invalidateQueries({ queryKey: ["calendar", "events"] });

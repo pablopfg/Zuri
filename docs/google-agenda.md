@@ -30,6 +30,12 @@ Toda agenda começa **Fechada**. Em cada uma você escolhe:
 | **Só ler** | Os eventos aparecem na tela Agenda, no `/hoje` do bot e nas rotinas, e a Zuri consulta na conversa. Ninguém muda nada por aqui. |
 | **Ler e editar** | Além de ler, você cria, muda e apaga eventos na tela Agenda, e a Zuri cria e muda eventos na conversa. Apagar pela conversa sempre vira um cartão para você aprovar. Só aparece onde o Google deixa a sua conta editar. |
 
+Na conversa, a Zuri não mexe no que outras pessoas veem: eventos com
+convidados, eventos que outra pessoa organiza e agendas que são de outra
+pessoa (em que a sua conta só pode escrever). Esses você muda na tela Agenda
+ou no Google. Assim, o texto de um convite não consegue fazer a Zuri copiar
+os seus dados para um evento que outra pessoa lê.
+
 Abrir uma agenda pede a senha recente; fechar nunca pede. Abrir uma para
 edição gera o alerta de segurança "Agenda liberada para escrita". Agendas em
 que o Google só mostra livre/ocupado ficam sempre fechadas.
@@ -67,7 +73,9 @@ Google Agenda (decisão de 03/11/2026).
 - "O que tenho amanhã?", "Marca dentista sexta às 15h", "Muda a reunião de
   quinta para as 10h": a Zuri usa as ferramentas da agenda nas agendas
   abertas. Apagar vira cartão de aprovação, também pelo bot e pela página
-  `/aprovar`.
+  `/aprovar`. Se o Google falhar na hora de apagar (fora do ar, limite de
+  pedidos), o cartão fica como falha e nada é apagado; peça de novo na
+  conversa.
 - `/hoje` no Telegram ganha o bloco **Agenda** com os eventos do dia. Com o
   Google fora do ar, aparece "Agenda indisponível agora."
 - Em **Automações > Nova automação > Rotina com IA**, os modelos **Briefing da
@@ -81,7 +89,8 @@ para os avisos de mudança. Seus eventos continuam no Google Agenda.
 
 Se o Google recusar o acesso (você tirou a permissão na conta Google, trocou a
 senha ou o acesso venceu), o cartão mostra **Conectar de novo** e a central
-avisa uma vez por dia.
+avisa uma vez. Se o acesso voltar e cair de novo, o novo aviso só sai depois
+de um dia do anterior.
 
 ## Para quem instala: o cliente OAuth do Google
 
@@ -133,9 +142,11 @@ o Google mostra a tela de novo só com o que falta.
   o navegador, para o log nem para o backup.
 - Os eventos não ficam guardados aqui: cada leitura vai ao Google.
 - Cada chamada ao Google vai para um endereço fixo, com 10 s de prazo, sem
-  seguir redirecionamento e até 1 MB de resposta. Um turno da conversa faz no
-  máximo 8 chamadas (6 pelo bot, 4 numa rotina); uma ação da tela, 12; o
-  `/hoje`, 4.
+  seguir redirecionamento e até 1 MB de resposta (uma resposta que não é
+  JSON conta como falha). Um turno da conversa faz no máximo 8 chamadas (6
+  pelo bot, 4 numa rotina); uma ação da tela, 12; o `/hoje`, 4. Com mais
+  agendas abertas do que o teto cobre, a leitura começa pela principal e diz
+  quais ficaram de fora, em vez de falhar.
 - No modo de bloqueio (`/bloquear`), nenhuma chamada sai para o Google.
 - Títulos, locais e descrições dos eventos entram no prompt como dado
   (`<data source="calendar">`), nunca como ordem: quem convida você escreve o

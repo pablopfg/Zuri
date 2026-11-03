@@ -275,7 +275,9 @@ describe("/api/google/events: the Agenda screen", () => {
     for (const q of ["from=2026-01-01&to=2026-03-01", "from=2026-02-01&to=2026-01-01", "from=amanha&to=2026-01-01", ""]) {
       expect((await api("GET", `/google/events?${q}`)).status).toBe(400);
     }
+    // 43 days, the longest window, and not one more.
     expect((await api("GET", "/google/events?from=2026-01-01&to=2026-02-12")).status).toBe(200);
+    expect((await api("GET", "/google/events?from=2026-01-01&to=2026-02-13")).status).toBe(400);
   });
 
   it("creates, changes and deletes an event, with nobody e-mailed and the version checked", async () => {

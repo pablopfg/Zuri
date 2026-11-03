@@ -70,6 +70,7 @@ export type GoogleErrorKind =
   | "read_only"
   | "free_busy"
   | "budget"
+  | "invalid"
   | "lockdown";
 
 export class GoogleError extends Error {
@@ -573,6 +574,8 @@ export class GoogleCalendar {
     init: { method?: string; query?: Record<string, string>; body?: unknown; ifMatch?: string } = {},
   ): Promise<Record<string, unknown> | null> {
     const url = new URL(`${GOOGLE_CALENDAR_API}${path}`);
+    // An id of dots ("." or "..") would climb out of /events/ once the URL is normalized.
+    if (path.split("/").some((part) => /^\.+$/.test(part)) || !url.href.startsWith(`${GOOGLE_CALENDAR_API}/`)) throw new GoogleError("not_found");
     if (init.query) url.search = new URLSearchParams(init.query).toString();
     for (const force of [false, true]) {
       const token = await this.accessToken(meter, force);
@@ -597,7 +600,17 @@ export class GoogleCalendar {
         await res.body?.cancel();
         return null;
       }
-      if (res.ok) return await readJson(res);
+      if (res.ok) {
+        // A 2xx that isn't JSON (or is larger than 1 MB) is not an answer to trust.
+        const body = await readJson(res);
+        if (!body) throw new GoogleError("unavailable", res.status);
+        return body;
+      }
+      if (res.status === 403) {
+        // Google says "rate limit" with a 403 too; only its reason tells it from a refusal.
+        const body = await readJson(res);
+        throw rateLimited(body) ? new GoogleError("rate_limited", 403) : new GoogleError("forbidden", 403);
+      }
       await res.body?.cancel();
       throw apiError(res.status);
     }
@@ -639,22 +652,32 @@ export class GoogleCalendar {
     to: Date,
     meter: GoogleMeter,
     options: { query?: string; perCalendar?: number; max?: number; timeZone: string },
-  ): Promise<{ events: CalendarEvent[]; more: boolean }> {
+  ): Promise<{ events: CalendarEvent[]; more: boolean; skipped: string[] }> {
     const perCalendar = options.perCalendar ?? GOOGLE_LIMITS.listEvents;
     const max = options.max ?? GOOGLE_LIMITS.listEvents;
     const all: CalendarEvent[] = [];
+    const chosen = calendars.slice(0, GOOGLE_LIMITS.listCalendars);
     let more = false;
-    for (const calendar of calendars.slice(0, GOOGLE_LIMITS.listCalendars)) {
-      const body = await this.api(`/calendars/${enc(calendar.id)}/events`, meter, {
-        query: {
-          timeMin: from.toISOString(),
-          timeMax: to.toISOString(),
-          singleEvents: "true",
-          orderBy: "startTime",
-          maxResults: String(perCalendar),
-          ...(options.query ? { q: options.query } : {}),
-        },
-      });
+    let read = 0;
+    for (const calendar of chosen) {
+      let body: Record<string, unknown> | null;
+      try {
+        body = await this.api(`/calendars/${enc(calendar.id)}/events`, meter, {
+          query: {
+            timeMin: from.toISOString(),
+            timeMax: to.toISOString(),
+            singleEvents: "true",
+            orderBy: "startTime",
+            maxResults: String(perCalendar),
+            ...(options.query ? { q: options.query } : {}),
+          },
+        });
+      } catch (error) {
+        // Out of calls with some calendars read (the main one first): what was read, and which were not.
+        if (error instanceof GoogleError && error.kind === "budget" && read > 0) break;
+        throw error;
+      }
+      read++;
       if (typeof body?.nextPageToken === "string") more = true;
       for (const item of Array.isArray(body?.items) ? body.items : []) {
         const event = readEvent(item, calendar.id);
@@ -663,11 +686,14 @@ export class GoogleCalendar {
     }
     all.sort((a, b) => startMs(a, options.timeZone) - startMs(b, options.timeZone));
     if (all.length > max) more = true;
-    return { events: all.slice(0, max), more };
+    return { events: all.slice(0, max), more, skipped: chosen.slice(read).map((calendar) => calendar.id) };
   }
 
   /** One event, or "not_found" when it is gone or cancelled. */
   async event(calendarId: string, eventId: string, meter: GoogleMeter): Promise<CalendarEvent> {
+    // Only calendars open to Zuri: a closed one doesn't even say whether an id exists there.
+    const row = this.row(calendarId);
+    if (!row || row.mode === "off") throw new GoogleError("not_found");
     const body = await this.api(`/calendars/${enc(calendarId)}/events/${enc(eventId)}`, meter);
     const event = readEvent(body, calendarId);
     if (!event) throw new GoogleError("not_found", 404);
@@ -803,6 +829,12 @@ export class GoogleCalendar {
     }
     // A channel Google refused is tried again in an hour: a failure never spins the alarm.
     this.#due = failed ? this.clock() + WATCH_RETRY_MS : undefined;
+    // A channel Google gave less than a day would be due again at once: at most one renewal an hour,
+    // unless this wake left calendars for the next one.
+    if (!failed && rows.length < WATCH_RENEW_PER_WAKE) {
+      const next = this.watchDue();
+      if (next !== null && next < this.clock() + WATCH_RETRY_MS) this.#due = this.clock() + WATCH_RETRY_MS;
+    }
     return renewed;
   }
 
@@ -852,11 +884,21 @@ function safeBody(body: Record<string, unknown>): Record<string, unknown> {
 }
 
 function apiError(status: number): GoogleError {
+  if (status === 400) return new GoogleError("invalid", status);
   if (status === 401 || status === 403) return new GoogleError("forbidden", status);
   if (status === 404 || status === 410) return new GoogleError("not_found", status);
   if (status === 412) return new GoogleError("changed", status);
   if (status === 429) return new GoogleError("rate_limited", status);
   return new GoogleError("unavailable", status);
+}
+
+const RATE_REASONS = new Set(["rateLimitExceeded", "userRateLimitExceeded", "quotaExceeded"]);
+
+/** Whether a 403's body is Google's "slow down" (usageLimits), not a refusal of the access. */
+function rateLimited(body: Record<string, unknown> | null): boolean {
+  const error = body?.error as { errors?: unknown } | undefined;
+  const errors = Array.isArray(error?.errors) ? error.errors : [];
+  return errors.some((item) => !!item && typeof item === "object" && RATE_REASONS.has(String((item as { reason?: unknown }).reason)));
 }
 
 /** A JSON object read up to MAX_RESPONSE_BYTES, chunk by chunk; null when it isn't one or is larger. */

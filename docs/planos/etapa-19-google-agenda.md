@@ -61,7 +61,7 @@ custo e nenhum recurso novo da Cloudflare.
 | CA9 | Modelos de rotina Briefing da manhã (07:00 todo dia) e Fechamento do dia (19:00, seg a sex), no fuso do dono | especificação |
 | CA10 | Durante o bloqueio nenhuma chamada ao Google sai | decisões (16b) |
 | CA11 | Desconectar apaga tokens e agendas daqui e revoga no Google | plano |
-| CA12 | Acesso revogado ou vencido (`invalid_grant`) marca "Conectar de novo" e avisa uma vez por dia | plano (19b, seção 4) |
+| CA12 | Acesso revogado ou vencido (`invalid_grant`) marca "Conectar de novo" e avisa uma vez (novo aviso só um dia depois do anterior) | plano (19b, seção 4) |
 | CA13 | Chamadas só para os endereços fixos do Google, 10 s de prazo, sem seguir redirecionamento, até 1 MB; subrequisições contadas por turno | P9 |
 | CA14 | Tela **Agenda** no menu lateral, com visões dia, semana e mês, filtro por agenda, estados vazio, carregando e erro, teclado, leitor de tela, claro/escuro e celular | pedido do Pablo (03/11) |
 | CA15 | Na tela, criar, editar e apagar eventos só em agendas "Ler e editar"; agendas "Só ler" mostram sem botões; editar e apagar conferem a versão (`etag`/`If-Match`) | pedido do Pablo (03/11) |

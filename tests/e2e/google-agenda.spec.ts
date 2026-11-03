@@ -93,7 +93,8 @@ test("connects Google, opens calendars, and creates, edits and deletes an event 
   await expect(form.getByText("Dê um título ao evento.")).toBeVisible();
   await form.getByRole("textbox", { name: "Título" }).fill("Consulta de teste");
   // The same day at both ends, whatever hour the test runs at.
-  await form.getByLabel("Termina em").fill(await form.getByLabel("Começa em").inputValue());
+  const day = await form.getByLabel("Começa em").inputValue();
+  await form.getByLabel("Termina em").fill(day);
   await form.getByLabel("Hora de início").fill("20:00");
   await form.getByLabel("Hora de fim").fill("19:00");
   await form.getByRole("button", { name: "Criar evento" }).click();
@@ -104,6 +105,25 @@ test("connects Google, opens calendars, and creates, edits and deletes an event 
   await expect(page.getByRole("status").filter({ hasText: "Evento criado." })).toBeVisible();
   const created = page.getByRole("button", { name: /^Consulta de teste/ });
   await expect(created).toContainText("20:00 – 21:00 · Rua das Flores, 10");
+
+  // Changed at Google while the form is open: nothing is overwritten, the form closes, the new version shows.
+  await created.click();
+  await page.getByRole("dialog", { name: "Consulta de teste" }).getByRole("button", { name: "Editar" }).click();
+  const stale = page.getByRole("dialog", { name: "Editar evento" });
+  const window = (await (await page.request.get(`/api/google/events?from=${day}&to=${day}`)).json()) as { events: { id: string; calendarId: string; etag: string; title: string }[] };
+  const atGoogle = window.events.find((event) => event.title === "Consulta de teste");
+  expect(atGoogle).toBeTruthy();
+  const elsewhere = await page.request.patch("/api/google/events", {
+    headers: CSRF,
+    data: { calendarId: atGoogle?.calendarId, eventId: atGoogle?.id, etag: atGoogle?.etag, location: "Rua Nova, 20" },
+  });
+  expect(elsewhere.ok()).toBe(true);
+  await stale.getByRole("textbox", { name: "Título" }).fill("Não deve valer");
+  await stale.getByRole("button", { name: "Salvar" }).click();
+  await expect(page.getByRole("status").filter({ hasText: "O evento mudou no Google enquanto isso" })).toBeVisible();
+  await expect(stale).toHaveCount(0);
+  await expect(created).toContainText("Rua Nova, 20");
+  await expect(page.getByRole("button", { name: /^Não deve valer/ })).toHaveCount(0);
 
   // Edit.
   await created.click();

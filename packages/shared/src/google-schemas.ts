@@ -29,7 +29,8 @@ const localWhen = /^\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2})?$/;
 /** Calendar ids are e-mails or Google's group addresses (some with "#"); never a slash, a space or a "?". */
 const calendarId = /* @__PURE__ */ (() => z.string().regex(/^[^\s/?\\]{1,1024}$/))();
 /** Event ids are Google's base32hex, with "_" and the instant for one occurrence of a repeating event. */
-const eventId = /* @__PURE__ */ (() => z.string().regex(/^[A-Za-z0-9_@.-]{1,1024}$/))();
+// Never only dots: ".." would climb out of /events/ in Google's address.
+const eventId = /* @__PURE__ */ (() => z.string().regex(/^(?!\.+$)[A-Za-z0-9_@.-]{1,1024}$/))();
 
 /** The Agenda screen's window: local dates, `to` inclusive (step 19). */
 export const googleEventsQuerySchema = /* @__PURE__ */ (() =>

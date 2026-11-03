@@ -812,13 +812,24 @@ A etapa 19 liga a conta Google do dono pelo cliente OAuth dele mesmo
   `www.googleapis.com/calendar/v3`, prazo de 10 s, sem seguir
   redirecionamento, resposta até 1 MB e um teto de chamadas por turno, por
   ação da tela e por despertar (regra P9). No bloqueio, nada sai.
-- **Nada a terceiros.** Eventos criados e mudados sem convidados e com
+- **Nenhum e-mail a terceiros.** A Zuri nunca convida ninguém e manda tudo com
   `sendUpdates=none`; o corpo mandado ao Google passa por uma lista fixa de
   campos. Editar e apagar mandam o `etag` visto (`If-Match`): se o evento
   mudou no Google, nada é sobrescrito nem apagado (`TARGET_CHANGED`).
+- **O modelo não escreve onde outras pessoas veem.** Uma mudança num evento
+  aparece para os convidados e para quem o organiza, mesmo sem e-mail. Por
+  isso, na conversa, a Zuri não muda evento com convidados nem evento que
+  outra pessoa organiza, e não cria nem muda eventos numa agenda que é de
+  outra pessoa (papel `writer`). Isso fecha o caminho em que o texto de um
+  convite manda a Zuri copiar dados do dono para o evento (auditoria da etapa
+  19). O dono continua mudando esses eventos na tela Agenda.
+- **Ids que não saem de `/events/`.** Id de evento só de pontos (`.`, `..`) é
+  recusado no schema, na ferramenta e no serviço, antes de qualquer chamada:
+  normalizado, ele apontaria para a agenda inteira. Uma agenda fechada não
+  diz nem se um id existe nela.
 - **Apagar pela conversa é proposta.** `delete_calendar_event` vira cartão; o
-  cartão mostra título, agenda e horário lidos do Google, nunca as palavras do
-  modelo. Na aprovação a Zuri confere a conta, a agenda e o modo de novo, e o
+  cartão, no app e no bot, mostra título, agenda e horário lidos do Google,
+  nunca as palavras do modelo. Na aprovação a Zuri confere a conta, a agenda e o modo de novo, e o
   Google confere a versão. Um evento que a Zuri mudou no mesmo turno não pode
   ser proposto para apagar.
 - **Rotinas só leem.** Criar e mudar eventos existem só nas conversas do

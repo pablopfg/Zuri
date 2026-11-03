@@ -92,20 +92,30 @@ describe("list_calendar_events", () => {
       expect(await refused(exec.execute("list_calendar_events", { from: "2026-02-30" }, "5"))).toMatch(/understand/);
     }));
 
-  it("stops when the turn spent its calls to Google", () =>
+  it("reads what the turn's calls cover, says which calendars it left out, then stops", () =>
     withChatWorld(async (world) => {
-      // Three open calendars, three listings: nine calls against a turn's eight.
+      // Three open calendars per listing against a turn's eight calls: 3 + 3, then 2 of 3, then none.
       await connect(world, { [PRIMARY]: "write", [READER]: "read", [WORK]: "read" });
       const exec = executor(world, world.conversations.create("x").id);
-      for (let day = 1; day <= 3; day++) {
-        try {
-          await exec.execute("list_calendar_events", { from: `2026-11-0${day}`, to: `2026-11-0${day}` }, `c${day}`);
-        } catch (error) {
-          expect((error as Error).message).toMatch(/already made all the Google Calendar calls/);
-          return;
-        }
-      }
-      throw new Error("the meter never stopped the turn");
+      for (let day = 1; day <= 2; day++) expect(data(await exec.execute("list_calendar_events", { from: `2026-11-0${day}`, to: `2026-11-0${day}` }, `c${day}`))).not.toHaveProperty("not_read");
+      const partial = data(await exec.execute("list_calendar_events", { from: "2026-11-03", to: "2026-11-03" }, "c3"));
+      expect(partial.not_read).toEqual(["Trabalho"]);
+      expect(partial.note).toMatch(/ran out of Google Calendar calls/);
+      expect(await refused(exec.execute("list_calendar_events", { from: "2026-11-04", to: "2026-11-04" }, "c4"))).toMatch(/already made all the Google Calendar calls/);
+    }));
+
+  it("a routine with ten calendars and an expired token still reads the main one first", () =>
+    withChatWorld(async (world) => {
+      for (let i = 0; i < 7; i++) world.googleSim.calendars.push({ id: `extra${i}@exemplo.com.br`, summary: `Extra ${i}`, accessRole: "reader" });
+      const modes: Record<string, "read" | "write"> = { [PRIMARY]: "write", [READER]: "read", [WORK]: "read" };
+      for (let i = 0; i < 7; i++) modes[`extra${i}@exemplo.com.br`] = "read";
+      await connect(world, modes);
+      seed(world, PRIMARY, { id: "p1", summary: "Principal", start: { dateTime: "2026-11-03T09:00:00-03:00" }, end: { dateTime: "2026-11-03T10:00:00-03:00" } });
+      world.db.run("UPDATE zur_google_account SET access_expires_at = 0 WHERE id = 1");
+      const result = data(await executor(world, null, "scheduled").execute("list_calendar_events", { from: "2026-11-03", to: "2026-11-03" }, "r1"));
+      // Four calls: a new token, then three calendars, the main one first.
+      expect((result.events as { title: string }[]).map((event) => event.title)).toContain("Principal");
+      expect((result.not_read as string[]).length).toBe(7);
     }));
 });
 

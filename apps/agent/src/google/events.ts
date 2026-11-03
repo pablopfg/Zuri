@@ -84,8 +84,11 @@ export function eventBody(draft: EventDraft, timeZone: string, base?: { start?: 
     if (!DATE.test(endInclusive) || !localInstant(endInclusive, timeZone)) throw new EventInputError("all_day_end");
     if (endInclusive < startDate) throw new EventInputError("end_before_start");
     if (Date.parse(`${endInclusive}T00:00:00Z`) - Date.parse(`${startDate}T00:00:00Z`) >= 366 * DAY_MS) throw new EventInputError("too_long");
-    body.start = { date: startDate };
-    body.end = { date: nextDay(endInclusive) };
+    // A change (PATCH) merges into Google's start and end: the other kind of time is cleared, or an
+    // event that turns all-day would keep its hours (and Google refuses both together).
+    const clear = base ? { dateTime: null, timeZone: null } : {};
+    body.start = { date: startDate, ...clear };
+    body.end = { date: nextDay(endInclusive), ...clear };
     return body;
   }
   const baseStart = typeof base?.start?.dateTime === "string" ? new Date(base.start.dateTime) : null;
@@ -105,8 +108,9 @@ export function eventBody(draft: EventDraft, timeZone: string, base?: { start?: 
   if (!end) throw new EventInputError("date");
   if (end.getTime() <= start.getTime()) throw new EventInputError("end_before_start");
   if (end.getTime() - start.getTime() > GOOGLE_LIMITS.eventDaysMax * DAY_MS) throw new EventInputError("too_long");
-  body.start = { dateTime: start.toISOString(), timeZone };
-  body.end = { dateTime: end.toISOString(), timeZone };
+  const clear = base ? { date: null } : {};
+  body.start = { dateTime: start.toISOString(), timeZone, ...clear };
+  body.end = { dateTime: end.toISOString(), timeZone, ...clear };
   return body;
 }
 
@@ -155,6 +159,11 @@ export interface CalendarEvent {
   recurring: boolean;
   /** How many people were invited (never who). */
   guests: number;
+  /**
+   * Whether someone besides the owner sees this event: it has guests, or someone else organizes it.
+   * A change by the model to such an event reaches other people, so it is never made without the owner.
+   */
+  shared: boolean;
 }
 
 /** One of Google's events, or null when it is cancelled or has no usable time. */
@@ -176,6 +185,7 @@ export function readEvent(item: unknown, calendarId: string): CalendarEvent | nu
   } else {
     endIso = allDay ? nextDay(startValue) : startIso;
   }
+  const guests = Array.isArray(e.attendees) ? Math.min(e.attendees.length, 1_000) : 0;
   return {
     id: e.id,
     calendarId,
@@ -187,8 +197,16 @@ export function readEvent(item: unknown, calendarId: string): CalendarEvent | nu
     description: cleanBlock(e.description, GOOGLE_LIMITS.descriptionMax),
     etag: typeof e.etag === "string" ? e.etag.slice(0, 200) : "",
     recurring: typeof e.recurringEventId === "string",
-    guests: Array.isArray(e.attendees) ? Math.min(e.attendees.length, 1_000) : 0,
+    guests,
+    shared: guests > 0 || !organizedHere(e.organizer, calendarId),
   };
+}
+
+/** The owner (or this very calendar) organizes the event; no organizer at all counts as theirs. */
+function organizedHere(organizer: unknown, calendarId: string): boolean {
+  if (!organizer || typeof organizer !== "object") return true;
+  const o = organizer as { self?: unknown; email?: unknown };
+  return o.self === true || (typeof o.email === "string" && o.email.toLowerCase() === calendarId.toLowerCase());
 }
 
 /** Sort key of an event: its start as ms (an all-day one at its day's midnight in the owner's zone). */

@@ -9,7 +9,8 @@ import { defineTool, TargetGone, type ToolContext, ToolError } from "./registry.
 /**
  * The Google Calendar tools (step 19). Listing is a read (also in routines);
  * creating and changing an event are writes that run in the chat on calendars
- * the owner opened for writing; deleting is always a proposal. Events come
+ * the owner opened for writing, never on an event or a calendar other people
+ * see (those stay with the owner, on the Agenda screen); deleting is always a proposal. Events come
  * from anyone who can send an invite: they reach the model as `<data
  * source="calendar">`, and the card of a deletion shows Google's own event,
  * never the model's words. Nobody is invited or e-mailed.
@@ -18,6 +19,7 @@ import { defineTool, TargetGone, type ToolContext, ToolError } from "./registry.
 const DAY_MS = 86_400_000;
 /** Calls to Google per turn: the app's turn, the bot's (which also sends to Telegram) and a routine's. */
 const TURN_BUDGET = { app: 8, telegram: 6, scheduled: 4 } as const;
+// With more calendars open than a budget covers, a listing reads the main one first and says which it left out.
 
 const localWhen = z.string().trim().max(20).describe("Local date 'YYYY-MM-DD' or date-time 'YYYY-MM-DDTHH:MM' in the owner's time zone");
 
@@ -62,6 +64,8 @@ function forModel(error: unknown): never {
         throw new ToolError("Google refused the access. Tell the owner to connect the Google Calendar again in Settings › Integrations.");
       case "lockdown":
         throw new ToolError("The account is locked down; nothing goes to Google now.");
+      case "invalid":
+        throw new ToolError("Google Calendar didn't accept those values. Check the dates and fields; do not repeat the same call.");
       default:
         throw new ToolError("Google Calendar couldn't do that right now. Tell the owner; do not retry.");
     }
@@ -89,17 +93,19 @@ function pick(ref: string | undefined, list: GoogleCalendarInfo[], what: "read" 
   if (list.length === 0) {
     throw new ToolError(what === "write" ? "No Google calendar allows changes. The owner can allow it in Settings › Integrations." : "No Google calendar is open to you.");
   }
-  const names = list.map((calendar) => `"${calendar.name}"`).join(", ");
+  // Calendar names come from Google (a shared calendar's owner writes them): they reach the model
+  // only inside list_calendar_events' <data>, never in an error's words.
+  const names = "list_calendar_events shows their names";
   if (!ref?.trim()) {
     const main = list.find((calendar) => calendar.primary) ?? (list.length === 1 ? list[0] : undefined);
-    if (!main) throw new ToolError(`Say which calendar: ${names}.`);
+    if (!main) throw new ToolError(`Say which calendar (${names}).`);
     return main;
   }
   const needle = ref.trim().toLowerCase();
   const exact = list.filter((calendar) => calendar.id.toLowerCase() === needle || calendar.name.toLowerCase() === needle);
   const found = exact.length ? exact : list.filter((calendar) => calendar.name.toLowerCase().includes(needle));
   if (found.length !== 1 || !found[0]) {
-    throw new ToolError(what === "write" ? `"${ref.slice(0, 60)}" isn't one calendar you may change. Calendars you may change: ${names}.` : `"${ref.slice(0, 60)}" isn't one calendar you can read. Calendars: ${names}.`);
+    throw new ToolError(what === "write" ? `"${ref.slice(0, 60)}" isn't one calendar you may change (${names}).` : `"${ref.slice(0, 60)}" isn't one calendar you can read (${names}).`);
   }
   return found[0];
 }
@@ -129,6 +135,20 @@ function forList(event: CalendarEvent, calendars: Map<string, string>, timeZone:
   };
 }
 
+/**
+ * A write the model makes in the chat reaches only the owner. A calendar someone else owns (the
+ * owner may only write in it) shows its events to that person: an invite's text could otherwise
+ * have the model write the owner's data there (security audit of step 19).
+ */
+function notShared(calendar: GoogleCalendarInfo): GoogleCalendarInfo {
+  if (calendar.accessRole !== "owner") {
+    throw new ToolError(
+      "That calendar belongs to someone else, so events there are not created or changed from the conversation. Nothing was changed: tell the owner they can do it on the Agenda screen or in Google Calendar.",
+    );
+  }
+  return calendar;
+}
+
 const readable = (ctx: ToolContext) => !!ctx.calendar?.usable() && ctx.calendar.readable().length > 0;
 const writable = (ctx: ToolContext) => ctx.mode === "chat" && !!ctx.calendar?.usable() && ctx.calendar.writable().length > 0;
 
@@ -136,7 +156,8 @@ const title = z.string().trim().min(1).max(GOOGLE_LIMITS.titleMax);
 const location = z.string().trim().max(GOOGLE_LIMITS.locationMax);
 const description = z.string().trim().max(GOOGLE_LIMITS.descriptionMax);
 const calendarRef = z.string().trim().max(200);
-const eventId = z.string().trim().min(1).max(1024);
+// Google's ids are letters, digits and _@.-; never only dots ("..", out of /events/).
+const eventId = z.string().trim().min(1).max(1024).regex(/^(?!\.+$)[A-Za-z0-9_@.-]+$/);
 
 /** A destructive target: "<calendar id>\n<event id>". */
 const target = (calendarId: string, id: string) => `${calendarId}\n${id}`;
@@ -182,11 +203,14 @@ export const calendarTools = [
       const open = calendar.readable();
       const chosen = input.calendar ? [pick(input.calendar, open, "read")] : open;
       const names = new Map(open.map((item) => [item.id, item.name]));
-      const { events, more } = await google(() => calendar.events(chosen, from, to, meter(ctx), { timeZone: tz, ...(input.query ? { query: input.query } : {}) }));
+      const { events, more, skipped } = await google(() => calendar.events(chosen, from, to, meter(ctx), { timeZone: tz, ...(input.query ? { query: input.query } : {}) }));
       return {
         window: `${instantToLocal(from.toISOString(), tz)} – ${instantToLocal(to.toISOString(), tz)}`,
         count: events.length,
         ...(more ? { more: "There are more events; narrow the window or the calendar." } : {}),
+        ...(skipped.length
+          ? { not_read: skipped.map((id) => names.get(id) ?? id), note: "This request ran out of Google Calendar calls before reading these calendars. Say so; the owner can ask about them in a new message." }
+          : {}),
         events: events.map((event) => forList(event, names, tz)),
       };
     },
@@ -212,7 +236,7 @@ export const calendarTools = [
     detail: (input) => input.title,
     execute: async (input, ctx) => {
       const calendar = service(ctx);
-      const chosen = pick(input.calendar, calendar.writable(), "write");
+      const chosen = notShared(pick(input.calendar, calendar.writable(), "write"));
       const draft: EventDraft = { title: input.title, start: input.start, allDay: input.all_day ?? DATE.test(input.start) };
       if (input.end !== undefined) draft.end = input.end;
       if (input.location !== undefined) draft.location = input.location;
@@ -243,8 +267,13 @@ export const calendarTools = [
     detail: (input) => input.title,
     execute: async (input, ctx) => {
       const calendar = service(ctx);
-      const chosen = pick(input.calendar, calendar.writable(), "write");
+      const chosen = notShared(pick(input.calendar, calendar.writable(), "write"));
       const current = await google(() => calendar.event(chosen.id, input.event_id, meter(ctx)));
+      if (current.shared) {
+        throw new ToolError(
+          "Other people see this event (it has guests or someone else organizes it), so it is not changed from the conversation. Nothing was changed: tell the owner they can change it on the Agenda screen or in Google Calendar.",
+        );
+      }
       const draft: EventDraft = {};
       for (const key of ["title", "start", "end", "location", "description"] as const) if (input[key] !== undefined) draft[key] = input[key];
       if (input.all_day !== undefined) draft.allDay = input.all_day;

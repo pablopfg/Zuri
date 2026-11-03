@@ -252,6 +252,33 @@ describe("reading", () => {
     expect(await command("/hoje")).not.toContain("Agenda");
   });
 
+  it("/hoje: more than 5 events, and more calendars than its Google calls cover, said so", async () => {
+    await linkOwner();
+    const sim = devGoogle({ clientId: testEnv.GOOGLE_CLIENT_ID, clientSecret: testEnv.GOOGLE_CLIENT_SECRET });
+    for (let i = 0; i < 4; i++) sim.calendars.push({ id: `extra${i}@exemplo.com.br`, summary: `Extra ${i}`, accessRole: "reader" });
+    const { start, end } = localDayBounds("America/Sao_Paulo");
+    const mid = Date.parse(start) + Math.floor((Date.parse(end) - Date.parse(start)) / 2);
+    const at = (ms: number) => ({ dateTime: new Date(ms).toISOString() });
+    sim.events.set(
+      "dono@exemplo.com.br",
+      Array.from({ length: 7 }, (_, i) => ({ id: `e${i}`, etag: '"1"', summary: `Evento ${i}`, start: at(mid + i * 60_000), end: at(mid + HOUR) })),
+    );
+    await inOwner(async (agent) => {
+      const google = agent.store.google;
+      google.network = googleNetwork(sim, { fetch: () => Promise.reject(new Error("no network in tests")) });
+      const url = new URL(await google.begin("sessao"));
+      await google.finish({ state: url.searchParams.get("state") ?? "", code: `dev.${url.searchParams.get("code_challenge") ?? ""}` }, "sessao");
+      for (const id of ["dono@exemplo.com.br", "consultorio@exemplo.com.br", "extra0@exemplo.com.br", "extra1@exemplo.com.br", "extra2@exemplo.com.br", "extra3@exemplo.com.br"]) await google.setMode(id, "read");
+    });
+    const out = await command("/hoje");
+    expect(out).toContain("Agenda (7)");
+    expect(out).toContain("• ");
+    expect(out).toContain("e mais 2 no app");
+    // Four calls: the main calendar first, then three more; two left for the app.
+    expect(out).toContain("Agendas que ficaram sem ler agora: 2. Veja no app.");
+    await inOwner((agent) => agent.store.google.disconnect());
+  });
+
   it("/tarefas: up to 10 open tasks numbered, each with Feito and Adiar; by project; empty", async () => {
     await linkOwner();
     expect(await command("/tarefas")).toBe("Nenhuma tarefa aberta.");

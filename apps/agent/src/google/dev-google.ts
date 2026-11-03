@@ -19,6 +19,8 @@ export interface DevCalendar {
   timeZone?: string;
 }
 
+export type DevTime = { date?: string; dateTime?: string; timeZone?: string };
+
 export interface DevEvent {
   id: string;
   etag: string;
@@ -26,9 +28,10 @@ export interface DevEvent {
   summary?: string;
   location?: string;
   description?: string;
-  start: { date?: string; dateTime?: string; timeZone?: string };
-  end: { date?: string; dateTime?: string; timeZone?: string };
+  start: DevTime;
+  end: DevTime;
   attendees?: unknown[];
+  organizer?: { email?: string; self?: boolean };
   recurringEventId?: string;
 }
 
@@ -46,6 +49,8 @@ export interface DevGoogle {
   channels: Map<string, { calendarId: string; resourceId: string; token: string; address: string }>;
   /** Every request Google got, for the tests (bodies included: these are fake tokens). */
   seen: { url: string; method: string; body: string; headers: Record<string, string> }[];
+  /** How long Google keeps a push channel (a week; a test makes it shorter). */
+  watchTtlMs: number;
   /** Makes every call answer this status (a Google outage), or null. */
   outage: number | null;
   handle(request: Request): Promise<Response | null>;
@@ -81,6 +86,7 @@ export function devGoogle(options: { clientId?: string | undefined; clientSecret
     revoked: [],
     channels: new Map(),
     seen: [],
+    watchTtlMs: 7 * 86_400_000,
     outage: null,
     async handle(request) {
       const url = new URL(request.url);
@@ -177,7 +183,7 @@ export function devGoogle(options: { clientId?: string | undefined; clientSecret
       const input = JSON.parse(body || "{}") as { id: string; token: string; address: string };
       const resourceId = `res-${random()}`;
       google.channels.set(input.id, { calendarId, resourceId, token: input.token, address: input.address });
-      return json({ kind: "api#channel", id: input.id, resourceId, expiration: String(clock() + 7 * 86_400_000) });
+      return json({ kind: "api#channel", id: input.id, resourceId, expiration: String(clock() + google.watchTtlMs) });
     }
     if (!eventId) {
       if (method === "GET") {
@@ -209,7 +215,19 @@ export function devGoogle(options: { clientId?: string | undefined; clientSecret
     if (ifMatch && ifMatch !== event.etag) return json({ error: { code: 412 } }, 412);
     if (method === "PATCH") {
       const patch = JSON.parse(body || "{}") as Partial<DevEvent>;
+      // As Google does: start and end merge field by field, and a null clears a field.
+      const merge = (before: DevTime, change: unknown): DevTime => {
+        const out: Record<string, unknown> = { ...before };
+        for (const [key, value] of Object.entries((change ?? {}) as Record<string, unknown>)) {
+          if (value === null) delete out[key];
+          else out[key] = value;
+        }
+        return out as DevTime;
+      };
       const updated: DevEvent = { ...event, ...patch, id: event.id, etag: nextEtag() };
+      if (patch.start !== undefined) updated.start = merge(event.start, patch.start);
+      if (patch.end !== undefined) updated.end = merge(event.end, patch.end);
+      if ([updated.start, updated.end].some((time) => time?.date !== undefined && time.dateTime !== undefined)) return json({ error: { code: 400 } }, 400);
       events[index] = updated;
       return json(updated);
     }

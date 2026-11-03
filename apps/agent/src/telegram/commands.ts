@@ -48,6 +48,8 @@ const SNIPPET_MAX = 100;
 const LINE_MAX = 80;
 /** Rows read to count what is past the 5 shown ("e mais N no app"). */
 const COUNT_MAX = 100;
+/** Google calls of one /hoje: the bot's update also sends through Telegram (rule P9). */
+const TODAY_GOOGLE_BUDGET = 4;
 const DEFAULT_HOUR = 9;
 
 /** The commands this module answers (the others are the service's: /start, /ajuda, /destravar, /nova_conversa). */
@@ -182,16 +184,21 @@ export class TelegramCommands {
    * is no calendar to read. Google's titles are third-party text: disarmed and
    * on one line like everything else here. A failure is a line, never an error.
    */
+  /** Calendars the last /hoje left unread (past its Google calls). */
+  #agendaSkipped = 0;
+
   async #agenda(start: string, end: string): Promise<string[] | null> {
     const calendar = this.deps.calendar;
     if (!calendar?.status().connected || calendar.readable().length === 0) return null;
     if (!calendar.usable()) return [];
     // The bot's update also sends its answer through Telegram: a small share of the 50 subrequests (rule P9).
-    const { events } = await calendar.events(calendar.readable(), new Date(start), new Date(end), new GoogleMeter(4), {
+    // With many calendars open, the ones past the budget are left out and said so (the main one comes first).
+    const { events, skipped } = await calendar.events(calendar.readable(), new Date(start), new Date(end), new GoogleMeter(TODAY_GOOGLE_BUDGET), {
       timeZone: this.deps.timeZone(),
       perCalendar: 20,
       max: COUNT_MAX,
     });
+    this.#agendaSkipped = skipped.length;
     return events.map((event) => `• ${event.allDay ? this.#t("telegram.cmd.hoje.diaInteiro") : this.#hour(event.start)} · ${this.#line(event.title || "—")}`);
   }
 
@@ -210,6 +217,7 @@ export class TelegramCommands {
     const title = this.#t("telegram.cmd.hoje.titulo", { data: this.#day(now) });
     let agenda: string[] | null;
     let agendaDown = false;
+    this.#agendaSkipped = 0;
     try {
       agenda = await this.#agenda(localDayBounds(zone, new Date(now)).start, end);
       agendaDown = agenda !== null && agenda.length === 0 && !this.deps.calendar?.usable();
@@ -241,6 +249,7 @@ export class TelegramCommands {
     );
     if (agendaDown) blocks.push(this.#t("telegram.cmd.hoje.agenda_indisponivel"));
     else block("telegram.cmd.hoje.agenda", agenda ?? []);
+    if (!agendaDown && this.#agendaSkipped > 0) blocks.push(this.#t("telegram.cmd.hoje.agenda_parcial", { n: this.#agendaSkipped }));
     return { text: blocks.join("\n\n") };
   }
 

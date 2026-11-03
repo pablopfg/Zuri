@@ -120,14 +120,14 @@ export function registerGoogleRoutes(app: Hono<ApiEnv>, deps: () => GoogleRouteD
     const zone = deps().timeZone();
     const from = localInstant(query.data.from, zone);
     const to = localInstant(nextDay(query.data.to), zone);
-    if (!from || !to || to <= from || to.getTime() - from.getTime() > (AGENDA_LIMITS.windowDays + 1) * DAY_MS) throw new AppError("VALIDATION_FAILED", "error.googleEventDate");
+    if (!from || !to || to <= from || to.getTime() - from.getTime() > AGENDA_LIMITS.windowDays * DAY_MS + 2 * 3_600_000) throw new AppError("VALIDATION_FAILED", "error.googleEventDate");
     const calendars = google.readable();
     const page: AgendaPage = { events: [], more: false, calendars };
     if (calendars.length === 0 || !google.usable()) return Response.json(page);
-    const { events, more } = await owner(() =>
+    const { events, more, skipped } = await owner(() =>
       google.events(calendars, from, to, new GoogleMeter(ACTION_BUDGET), { timeZone: zone, perCalendar: AGENDA_LIMITS.perCalendar, max: AGENDA_LIMITS.total }),
     );
-    return Response.json({ ...page, events, more } satisfies AgendaPage);
+    return Response.json({ ...page, events, more: more || skipped.length > 0 } satisfies AgendaPage);
   });
 
   app.post("/google/events", async (c) => {
