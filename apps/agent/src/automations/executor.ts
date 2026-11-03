@@ -1,5 +1,7 @@
 import { type Automation, isQuietAnswer, type Locale, type Settings, t, type Task } from "@zuri/shared";
-import type { AgentRunner } from "../agent/runner.ts";
+import { type AgentRunner, ROUTINE_MCP_BUDGET } from "../agent/runner.ts";
+import { SubrequestMeter } from "../mcp/session.ts";
+import type { Notice } from "../tools/registry.ts";
 import { instantToLocal } from "../chat/local-due.ts";
 import { AppError } from "../http/errors.ts";
 import type { Productivity } from "../productivity/index.ts";
@@ -29,6 +31,8 @@ export interface ExecutorDeps {
  * in the history; the notice center (step 11) delivers it as well.
  */
 export function automationExecutor(deps: ExecutorDeps): Executor {
+  // One executor per wake: its AI routines share one count of external calls (rule P9).
+  const meter = new SubrequestMeter(ROUTINE_MCP_BUDGET);
   return async (automation, run) => {
     switch (automation.kind) {
       case "reminder":
@@ -36,7 +40,7 @@ export function automationExecutor(deps: ExecutorDeps): Executor {
       case "task_digest":
         return { status: "success", result: digest(automation, deps) };
       case "agent_prompt":
-        return routine(automation, run.id, deps);
+        return routine(automation, run.id, deps, meter);
     }
   };
 }
@@ -44,13 +48,19 @@ export function automationExecutor(deps: ExecutorDeps): Executor {
 /** The longest a scheduled routine may take, all its model calls together. */
 const ROUTINE_DEADLINE_MS = 5 * 60_000;
 
-async function routine(automation: Automation, runId: string, deps: ExecutorDeps): Promise<RunOutcome> {
+async function routine(automation: Automation, runId: string, deps: ExecutorDeps, meter: SubrequestMeter): Promise<RunOutcome> {
   if (deps.lockdown?.()) return { status: "skipped", result: null, problem: "lockdown" };
   const cap = deps.settings().aiScheduledRunsPerDay;
   if (deps.automations.aiRunsToday() >= cap) return { status: "skipped", result: null, problem: "ai_budget" };
   deps.automations.markAi(runId);
+  const left: Notice[] = [];
+  // A run that failed after a call became a proposal still tells the owner where it waits.
+  const leftOver = () => (left.length ? left.map((notice) => `${notice.title}\n${notice.body}`).join("\n\n") : null);
   try {
     const { text, notices } = await deps.runner().scheduled({
+      id: automation.id,
+      meter,
+      notices: left,
       name: automation.name,
       prompt: automation.message,
       quiet: automation.sentinel,
@@ -65,8 +75,9 @@ async function routine(automation: Automation, runId: string, deps: ExecutorDeps
     if (delivered.length === 0) return { status: "quiet", result: null, ai: true };
     return { status: "success", result: delivered.join("\n\n"), ai: true };
   } catch (error) {
-    if (error instanceof AppError && error.code === "AI_LIMIT_REACHED") return { status: "skipped", result: null, problem: "ai_limit", ai: true };
-    if (error instanceof AppError && error.code === "SERVICE_UNAVAILABLE") return { status: "error", result: null, problem: "ai_unavailable", ai: true };
+    if (error instanceof AppError && error.code === "AI_LIMIT_REACHED") return { status: "skipped", result: leftOver(), problem: "ai_limit", ai: true };
+    if (error instanceof AppError && error.code === "SERVICE_UNAVAILABLE") return { status: "error", result: leftOver(), problem: "ai_unavailable", ai: true };
+    if (left.length) return { status: "error", result: leftOver(), problem: "failed", ai: true };
     throw error;
   }
 }

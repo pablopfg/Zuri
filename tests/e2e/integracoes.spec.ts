@@ -161,3 +161,53 @@ test("signs in to a service with OAuth: the service's page, back to the app, con
   await expect(back.getByText("0 de 2 ferramentas ligadas")).toBeVisible();
   await expect(back.getByRole("link", { name: "Entrar no serviço" })).toHaveCount(0);
 });
+
+test("raises a tool that writes up to routines, with the warning, and sets the other one free for a single routine", async ({ page }) => {
+  const name = runName();
+  mine.push(name);
+  await openIntegrations(page);
+  await addServer(page, name, "https://docs.exemplo.com.br/mcp");
+  const card = page.getByRole("article").filter({ has: page.getByRole("heading", { name }) });
+  await card.getByRole("button", { name: "Ver ferramentas" }).click();
+  const tools = card.getByRole("list", { name: `Ferramentas de ${name}` });
+  for (const tool of ["Criar chamado", "Buscar documentos"]) {
+    const toggle = tools.getByRole("switch", { name: `Usar ${tool}` });
+    await toggle.click();
+    await expect(toggle).toHaveAttribute("aria-checked", "true");
+  }
+  const writer = tools.getByRole("listitem").filter({ hasText: "Criar chamado" });
+  const level = writer.getByRole("combobox", { name: "Antes de usar" });
+  await level.selectOption("routines");
+  await expect(level).toHaveValue("routines");
+  await expect(writer.getByText(/Esta ferramenta pode mudar dados no serviço/)).toBeVisible();
+  await expectAccessible(page, "integracoes-autonomia");
+
+  // A routine with AI: the tool at "routines" comes checked and locked, the other one can be set free for it alone.
+  const routineName = `Rotina ${name}`;
+  const created = await page.request.post("/api/automations", {
+    headers: CSRF,
+    data: { name: routineName, kind: "agent_prompt", message: "Resuma a documentação", schedule: { type: "daily", time: "08:00" } },
+  });
+  expect(created.status()).toBe(201);
+  const routineId = ((await created.json()) as { automation: { id: string } }).automation.id;
+  try {
+    await page.goto("/automacoes");
+    const row = page.getByRole("listitem").filter({ hasText: routineName });
+    await row.getByRole("button", { name: "Editar" }).click();
+    const edit = page.getByRole("dialog", { name: "Editar automação" });
+    const group = edit.getByRole("group", { name: "Ferramentas externas" });
+    const locked = group.getByRole("checkbox", { name: `Criar chamado · ${name}` });
+    await expect(locked).toBeChecked();
+    await expect(locked).toBeDisabled();
+    const free = group.getByRole("checkbox", { name: `Buscar documentos · ${name}` });
+    await expect(free).not.toBeChecked();
+    await free.check();
+    await expectAccessible(page, "automacoes-ferramentas");
+    await edit.getByRole("button", { name: "Salvar" }).click();
+    await expect(page.getByRole("status").filter({ hasText: "Alterações salvas." }).first()).toBeVisible();
+    const saved = (await (await page.request.get(`/api/mcp/routines/${routineId}/tools`, { headers: CSRF })).json()) as { tools: { label: string; allowed: boolean }[] };
+    expect(saved.tools.find((t) => t.label === `Buscar documentos · ${name}`)?.allowed).toBe(true);
+  } finally {
+    await page.request.delete(`/api/automations/${routineId}`, { headers: CSRF });
+  }
+});

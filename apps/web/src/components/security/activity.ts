@@ -43,6 +43,7 @@ export const KIND_LABEL: Record<AuthEventKind, MessageKey> = {
   lockdown_exited: "web.activity.kind.lockdown_exited",
   mcp_server_added: "web.activity.kind.mcp_server_added",
   mcp_server_changed: "web.activity.kind.mcp_server_changed",
+  mcp_tool_autonomy: "web.activity.kind.mcp_tool_autonomy",
   setup_failure: "web.activity.kind.setup_failure",
   setup_locked: "web.activity.kind.setup_locked",
   owner_created: "web.activity.kind.owner_created",

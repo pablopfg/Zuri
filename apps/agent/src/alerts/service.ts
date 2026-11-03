@@ -687,6 +687,7 @@ const SECURITY_TEXT: Record<SecurityAlertEvent, Text> = {
   lockdown_exited: { title: "notice.security.lockdown_exited.title", body: "notice.security.lockdown_exited.body" },
   mcp_server_added: { title: "notice.security.mcp_server_added.title", body: "notice.security.mcp_server_added.body" },
   mcp_server_changed: { title: "notice.security.mcp_server_changed.title", body: "notice.security.mcp_server_changed.body" },
+  mcp_tool_autonomy: { title: "notice.security.mcp_tool_autonomy.title", body: "notice.security.mcp_tool_autonomy.body" },
   setup_failure: { title: "notice.security.setup_failure.title", body: "notice.security.setup_failure.body" },
   setup_locked: { title: "notice.security.setup_locked.title", body: "notice.security.setup_locked.body" },
   owner_created: { title: "notice.security.owner_created.title", body: "notice.security.owner_created.body" },

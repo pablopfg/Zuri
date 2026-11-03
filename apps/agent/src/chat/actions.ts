@@ -49,7 +49,7 @@ export class PendingActionRepository {
     return new Date(this.clock()).toISOString();
   }
 
-  create(input: { conversationId: string; tool: DestructiveToolName | ExternalToolName; targetId: string; targetHash: string; targetLabel: string; payload: unknown }): PendingAction {
+  create(input: { conversationId: string; tool: DestructiveToolName | ExternalToolName; targetId: string; targetHash: string; targetLabel: string; payload: unknown; ttlMs?: number }): PendingAction {
     // Never a proposal for a conversation the owner deleted while the turn ran.
     if (!this.db.one(`SELECT 1 AS ok FROM zur_conversations WHERE id = ?`, input.conversationId)) throw new AppError("NOT_FOUND", "error.conversationNotFound");
     const at = this.clock();
@@ -64,7 +64,7 @@ export class PendingActionRepository {
       status: "pending",
       problem: null,
       created_at: new Date(at).toISOString(),
-      expires_at: new Date(at + PENDING_ACTION_TTL_MS).toISOString(),
+      expires_at: new Date(at + (input.ttlMs ?? PENDING_ACTION_TTL_MS)).toISOString(),
       resolved_at: null,
     };
     this.db.run(

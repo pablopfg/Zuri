@@ -1,6 +1,7 @@
-import { MCP_TOOL_PREFIX, type McpAuthType, type McpServerProblem, type McpToolInfo, type McpToolPolicy, type McpToolProblem } from "@zuri/shared";
+import { MCP_TOOL_PREFIX, type McpAuthType, type McpServerProblem, type McpToolInfo, type McpToolKind, type McpToolPolicy, type McpToolProblem } from "@zuri/shared";
 import type { Database } from "../db/database.ts";
 import { type CatalogEntry, parseHints } from "./catalog.ts";
+import { classifyTool, isKind } from "./classify.ts";
 
 export interface ServerRow {
   id: string;
@@ -36,7 +37,12 @@ export interface ToolRow {
   status: "available" | "removed" | "invalid";
   problem: McpToolProblem | null;
   enabled: number;
-  policy: McpToolPolicy;
+  /** "approve" or "auto"; the third level is "auto" with `routines` (migration 20). */
+  policy: "approve" | "auto";
+  /** 1: also runs on its own in routines. */
+  routines?: number;
+  /** What the tool does, as the owner confirmed it; null: Zuri's judgement (migration 20). */
+  kind?: McpToolKind | null;
   hint: string;
   reviewed_hash: string | null;
   created_at: string;
@@ -64,16 +70,27 @@ function slugBase(name: string): string {
 /** On, reviewed and still the definition the owner reviewed. */
 export const isUsable = (tool: ToolRow) => tool.enabled === 1 && tool.status === "available" && tool.reviewed_hash === tool.schema_hash;
 
-export function presentTool(tool: ToolRow): McpToolInfo {
+/** The owner's level of a tool, as the API speaks it. */
+export const levelOf = (tool: ToolRow): McpToolPolicy => (tool.policy !== "auto" ? "approve" : tool.routines === 1 ? "routines" : "auto");
+
+/** What the tool does: the owner's choice, or else Zuri's judgement of its definition. */
+export const kindOf = (tool: ToolRow): McpToolKind => (isKind(tool.kind) ? tool.kind : classifyTool(tool).kind);
+
+export function presentTool(tool: ToolRow, routineCount = 0): McpToolInfo {
+  const auto = classifyTool(tool);
   return {
     id: tool.exposed_name,
     name: tool.name,
     title: tool.title,
     description: tool.description,
     enabled: tool.enabled === 1,
-    policy: tool.policy,
+    policy: levelOf(tool),
     hint: tool.hint,
     hints: parseHints(tool.annotations),
+    kind: isKind(tool.kind) ? tool.kind : auto.kind,
+    kindAuto: auto.kind,
+    kindReason: auto.reason,
+    routineCount,
     status: tool.status,
     problem: tool.problem,
     needsReview: tool.enabled === 1 && tool.status === "available" && tool.reviewed_hash !== tool.schema_hash,
@@ -199,6 +216,7 @@ export class McpRepository {
 
   delete(id: string): boolean {
     return this.db.transaction(() => {
+      this.db.run(`DELETE FROM zur_automation_mcp_tools WHERE exposed_name IN (SELECT exposed_name FROM zur_mcp_tools WHERE server_id = ?)`, id);
       this.db.run(`DELETE FROM zur_mcp_tools WHERE server_id = ?`, id);
       return this.db.all(`DELETE FROM zur_mcp_servers WHERE id = ? RETURNING id`, id).length > 0;
     });
@@ -239,30 +257,65 @@ export class McpRepository {
    * change takes it out until turned on again. Changing only the policy or
    * the hint keeps the reviewed definition.
    */
-  updateTool(exposedName: string, patch: { enabled?: boolean; policy?: McpToolPolicy; hint?: string }): void {
+  updateTool(exposedName: string, patch: { enabled?: boolean; policy?: McpToolPolicy; hint?: string; kind?: McpToolKind | null }): void {
     const tool = this.tool(exposedName);
     if (!tool) return;
     const enabled = patch.enabled ?? tool.enabled === 1;
     const reviewed = !enabled ? null : patch.enabled === true ? tool.schema_hash : tool.reviewed_hash;
-    this.db.run(
-      `UPDATE zur_mcp_tools SET enabled = ?, policy = ?, hint = ?, reviewed_hash = ?, updated_at = ? WHERE exposed_name = ?`,
-      enabled ? 1 : 0,
-      patch.policy ?? tool.policy,
-      patch.hint ?? tool.hint,
-      reviewed,
-      this.now(),
-      exposedName,
-    );
+    const level = patch.policy ?? levelOf(tool);
+    const kind = patch.kind === undefined ? (isKind(tool.kind) ? tool.kind : null) : patch.kind;
+    this.db.transaction(() => {
+      this.db.run(
+        `UPDATE zur_mcp_tools SET enabled = ?, policy = ?, routines = ?, hint = ?, kind = ?, reviewed_hash = ?, updated_at = ? WHERE exposed_name = ?`,
+        enabled ? 1 : 0,
+        level === "approve" ? "approve" : "auto",
+        level === "routines" ? 1 : 0,
+        patch.hint ?? tool.hint,
+        kind,
+        reviewed,
+        this.now(),
+        exposedName,
+      );
+      // Turned off, or brought back to asking, or now judged destructive: no routine keeps it on its own.
+      // Turning it on again never brings a routine's leave back without the password.
+      if (!enabled || (patch.policy === "approve" && levelOf(tool) !== "approve") || kind === "destructive") {
+        this.db.run(`DELETE FROM zur_automation_mcp_tools WHERE exposed_name = ?`, exposedName);
+      }
+    });
   }
 
-  /** A new address is a new third party: every tool off, back to asking first, no review kept. */
+  /** How many routines each tool was set free for, in one read. */
+  routineCounts(): Map<string, number> {
+    const rows = this.db.all<{ exposed_name: string; n: number }>(`SELECT exposed_name, COUNT(*) AS n FROM zur_automation_mcp_tools GROUP BY exposed_name LIMIT 200`);
+    return new Map(rows.map((row) => [row.exposed_name, row.n]));
+  }
+
+  /** A new address is a new third party: every tool off, back to asking first, no review kept, no routine's leave. */
   resetTrust(serverId: string): void {
-    this.db.run(`UPDATE zur_mcp_tools SET enabled = 0, policy = 'approve', reviewed_hash = NULL, updated_at = ? WHERE server_id = ?`, this.now(), serverId);
+    this.db.transaction(() => {
+      this.db.run(`DELETE FROM zur_automation_mcp_tools WHERE exposed_name IN (SELECT exposed_name FROM zur_mcp_tools WHERE server_id = ?)`, serverId);
+      this.db.run(`UPDATE zur_mcp_tools SET enabled = 0, policy = 'approve', routines = 0, kind = NULL, reviewed_hash = NULL, updated_at = ? WHERE server_id = ?`, this.now(), serverId);
+    });
+  }
+
+  /** The tools set free for one routine (migration 20). */
+  routineTools(automationId: string): Set<string> {
+    const rows = this.db.all<{ exposed_name: string }>(`SELECT exposed_name FROM zur_automation_mcp_tools WHERE automation_id = ? LIMIT 50`, automationId);
+    return new Set(rows.map((row) => row.exposed_name));
+  }
+
+  /** Replaces the routine's list in one step. */
+  setRoutineTools(automationId: string, names: readonly string[]): void {
+    const at = this.now();
+    this.db.transaction(() => {
+      this.db.run(`DELETE FROM zur_automation_mcp_tools WHERE automation_id = ?`, automationId);
+      for (const name of names) this.db.run(`INSERT INTO zur_automation_mcp_tools (automation_id, exposed_name, created_at) VALUES (?, ?, ?)`, automationId, name, at);
+    });
   }
 
   /**
    * A fresh catalog. Known tools keep their name, switch, policy and hint (a
-   * changed definition then waits for review); new ones arrive off; tools the
+   * changed definition then waits for review and asks first again); new ones arrive off; tools the
    * server stopped listing are marked removed.
    */
   saveCatalog(server: ServerRow, entries: CatalogEntry[]): void {
@@ -293,13 +346,21 @@ export class McpRepository {
           at,
           at,
         );
+        // A changed definition goes back to asking first, is judged again and leaves every routine it was set free for.
+        if (known && known.schema_hash !== entry.schemaHash) {
+          this.db.run(`UPDATE zur_mcp_tools SET policy = 'approve', routines = 0, kind = NULL WHERE server_id = ? AND name = ?`, server.id, entry.name);
+          this.db.run(`DELETE FROM zur_automation_mcp_tools WHERE exposed_name = ?`, exposed);
+        }
       }
       const seen = new Set(entries.map((entry) => entry.name));
       for (const [name, tool] of existing) {
         if (seen.has(name)) continue;
         // A tool gone from the server and turned off has nothing to show: dropped, so the list stays bounded.
         // One turned on stays, marked, so the owner sees why it is no longer used.
-        if (!tool.enabled) this.db.run(`DELETE FROM zur_mcp_tools WHERE server_id = ? AND name = ?`, server.id, name);
+        if (!tool.enabled) {
+          this.db.run(`DELETE FROM zur_automation_mcp_tools WHERE exposed_name = ?`, tool.exposed_name);
+          this.db.run(`DELETE FROM zur_mcp_tools WHERE server_id = ? AND name = ?`, server.id, name);
+        }
         else if (tool.status !== "removed") this.db.run(`UPDATE zur_mcp_tools SET status = 'removed', updated_at = ? WHERE server_id = ? AND name = ?`, at, server.id, name);
       }
       this.db.run(`UPDATE zur_mcp_servers SET discovered_at = ? WHERE id = ?`, at, server.id);

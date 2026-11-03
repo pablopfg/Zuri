@@ -5,7 +5,7 @@ import type { MeteredAI } from "../ai/metered.ts";
 import { estimateTokens, type ProviderTool } from "../ai/provider.ts";
 import { type ConversationRepository, decodeTools, type Quoted } from "../chat/conversations.ts";
 import { McpTurnTools, recentExternal } from "../mcp/agent.ts";
-import { MCP_SUBREQUEST_BUDGET } from "../mcp/session.ts";
+import { MCP_SUBREQUEST_BUDGET, type SubrequestMeter } from "../mcp/session.ts";
 import { AppError } from "../http/errors.ts";
 import { MAX_RELEVANT_MEMORIES, memoryPromptSection, memoryTokenBudget, selectRelevantMemories } from "../memory/recall.ts";
 import { ALL_TOOLS } from "../tools/index.ts";
@@ -18,6 +18,12 @@ import { log } from "../log.ts";
 const RECENT_EXTERNAL_MESSAGES = 6;
 /** The MCP share of the subrequests in a Telegram turn: the bot's client keeps the rest of the 50 (rule P9). */
 const MCP_TELEGRAM_BUDGET = 12;
+/**
+ * A routine's external calls (decision of 03/11/2026): the alarm's
+ * invocation has 50 subrequests and also sends notices and checks sites, so
+ * the routines of one wake share 12 of them (automations/executor.ts).
+ */
+export const ROUTINE_MCP_BUDGET = 12;
 
 /** Messages read for one prompt, newest first, before the token budget picks. */
 const HISTORY_ROWS = 200;
@@ -339,19 +345,57 @@ export class AgentRunner {
 
   /**
    * One run of an AI routine the owner approved (step 10): no conversation and
-   * nobody watching, so only the read tools and notify_owner are offered
-   * (mode "scheduled"); nothing is written, deleted or proposed. The routine's
-   * instruction is the owner's own, approved text; everything it reads is data.
+   * nobody watching, so only the read tools, notify_owner and the external
+   * tools the owner let run there are offered (mode "scheduled"); nothing of
+   * Zuri's is written or deleted. An external call that needs the owner
+   * becomes a proposal in the routine's conversation, with a notice, and the
+   * run goes on (decision of 03/11/2026). The routine's instruction is the
+   * owner's own, approved text; everything it reads is data.
    */
-  async scheduled(input: { name: string; prompt: string; quiet: boolean; signal: AbortSignal }): Promise<{ text: string; notices: Notice[] }> {
+  async scheduled(input: {
+    id?: string;
+    name: string;
+    prompt: string;
+    quiet: boolean;
+    signal: AbortSignal;
+    meter?: SubrequestMeter;
+    /** Filled as the run goes, so a run that fails still hands over what it left for the owner. */
+    notices?: Notice[];
+  }): Promise<{ text: string; notices: Notice[] }> {
     const settings = this.deps.settings();
     const locale = this.deps.locale();
+    const notices: Notice[] = input.notices ?? [];
+    const mcp = input.id === undefined ? null : this.safeRoutineTools(input.id, input.prompt, input.signal, input.meter);
+    let conversationId: string | null = null;
+    const routineConversation = () => {
+      conversationId ??= this.routineConversation(input.id ?? "", input.name, locale);
+      return conversationId;
+    };
+    const ctx: ToolContext = {
+      ...this.deps.tools,
+      timeZone: settings.timeZone,
+      mode: "scheduled",
+      conversationId: null,
+      notices,
+      routineName: input.name,
+      ...(mcp ? { mcp, routineConversation } : {}),
+    };
+    try {
+      const text = await this.runScheduled(input, ctx, mcp, locale);
+      return { text, notices };
+    } finally {
+      await mcp?.close().catch(() => undefined);
+    }
+  }
+
+  private async runScheduled(input: { name: string; prompt: string; quiet: boolean; signal: AbortSignal }, ctx: ToolContext, mcp: McpTurnTools | null, locale: Locale): Promise<string> {
+    const settings = this.deps.settings();
     const ai = this.deps.ai();
     const registry = this.deps.registry ?? ALL_TOOLS;
-    const notices: Notice[] = [];
-    const ctx: ToolContext = { ...this.deps.tools, timeZone: settings.timeZone, mode: "scheduled", conversationId: null, notices, routineName: input.name };
-    const executor = new ToolExecutor(registry, ctx, { maxToolCalls: settings.aiMaxIterations > 1 ? settings.aiMaxToolCalls : 0 });
-    const offered = executor.available();
+    const notices = ctx.notices ?? [];
+    const executor = new ToolExecutor(mcp ? [...registry, ...mcp.tools] : registry, ctx, { maxToolCalls: settings.aiMaxIterations > 1 ? settings.aiMaxToolCalls : 0 });
+    // External tools: what the triage chose for the routine's instruction (no find_tools here).
+    const offered = executor.available().filter((tool) => tool.permission !== "external" || mcp?.isActive(tool.name) === true);
     const budget = chainBudget(ai, settings.aiMaxContextTokens, settings.aiMaxOutputTokens, offered.length ? toolTokens(offered) : 0);
     const repo = this.deps.tools.memories.repo;
     const meaning = await this.meaning(input.prompt, input.signal);
@@ -368,8 +412,20 @@ export class AgentRunner {
       locale,
       memories,
       summary: null,
-      routine: scheduledInstructions(input.name, input.quiet),
+      routine: scheduledInstructions(input.name, input.quiet, offered.some((tool) => tool.permission === "external")),
     });
+    let text = "";
+    try {
+      text = await this.routineAnswer(executor, offered, system, input, settings);
+    } finally {
+      // Even when the model fails after a call became a proposal, the owner gets its card and the notice.
+      this.leaveProposals(input.name, executor, ctx, locale, notices);
+    }
+    return text.trim();
+  }
+
+  private async routineAnswer(executor: ToolExecutor, offered: ToolDefinition[], system: Parameters<MeteredAI["generateWithTools"]>[0]["system"], input: { prompt: string; signal: AbortSignal }, settings: Settings): Promise<string> {
+    const ai = this.deps.ai();
     let text = "";
     for await (const event of ai.generateWithTools({
       system,
@@ -387,6 +443,56 @@ export class AgentRunner {
     })) {
       if (event.type === "text") text += event.delta;
     }
-    return { text: text.trim(), notices };
+    return text;
+  }
+
+  /**
+   * The external calls a routine left for the owner: a message with their
+   * cards in the routine's conversation, and one notice (app and Telegram).
+   */
+  private leaveProposals(name: string, executor: ToolExecutor, ctx: ToolContext, locale: Locale, notices: Notice[]): void {
+    const proposals = executor.routineProposals;
+    if (proposals.length > 0) {
+      const conversationId = ctx.routineConversation?.();
+      if (conversationId) {
+        const tools: ToolActivity[] = proposals.map((p) => ({ id: p.id.slice(0, 100), name: p.name, status: "success", label: p.label, actionId: p.actionId }));
+        this.deps.conversations.addMessage({ conversationId, role: "assistant", content: t(locale, "automation.mcp.message", { name }), tools, status: "complete", source: "app" });
+      }
+      notices.push({ title: name, body: t(locale, proposals.length === 1 ? "automation.mcp.notice.one" : "automation.mcp.notice.other", { count: proposals.length }) });
+    }
+    if (executor.routineSkipped > 0) notices.push({ title: name, body: t(locale, "automation.mcp.skipped") });
+  }
+
+  /** A broken MCP setup never breaks the routine: it runs with the built-in tools. */
+  private safeRoutineTools(automationId: string, prompt: string, signal: AbortSignal, meter?: SubrequestMeter): McpTurnTools | null {
+    try {
+      const service = this.deps.tools.mcpService;
+      if (!service) return null;
+      const available = service.turnTools(automationId);
+      if (available.length === 0) return null;
+      return new McpTurnTools(service, available, prompt, new Set(), signal, {
+        ...(meter ? { meter } : { budget: ROUTINE_MCP_BUDGET }),
+        routine: { id: automationId, allowed: service.routineAllowed(automationId) },
+      });
+    } catch (error) {
+      log("error", "mcp_tool_skipped", { error });
+      return null;
+    }
+  }
+
+  /** The routine's conversation, made the first time a call needs the owner (and again if the owner deleted it). */
+  private routineConversation(automationId: string, name: string, locale: Locale): string {
+    const automations = this.deps.tools.automations;
+    const stored = automations.conversationOf(automationId);
+    if (stored) {
+      try {
+        return this.deps.conversations.row(stored).id;
+      } catch (error) {
+        if (!(error instanceof AppError && error.code === "NOT_FOUND")) throw error;
+      }
+    }
+    const created = this.deps.conversations.create(t(locale, "automation.mcp.conversation", { name }));
+    automations.setConversation(automationId, created.id);
+    return created.id;
   }
 }

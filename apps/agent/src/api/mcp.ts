@@ -1,16 +1,24 @@
-import { mcpOAuthCallbackSchema, mcpServerCreateSchema, mcpServerUpdateSchema, mcpToolUpdateSchema } from "@zuri/shared";
+import { type McpToolPolicy, mcpOAuthCallbackSchema, mcpRoutineToolsSchema, mcpServerCreateSchema, mcpServerUpdateSchema, mcpToolUpdateSchema, RECORD_ID } from "@zuri/shared";
 import type { Context, Hono } from "hono";
 import type { AuthService } from "../auth/service.ts";
+import type { AutomationService } from "../automations/service.ts";
 import type { ClientInfo } from "../auth/client.ts";
 import { AppError } from "../http/errors.ts";
 import type { McpService } from "../mcp/service.ts";
+import { kindRank } from "../mcp/classify.ts";
+import { kindOf, levelOf } from "../mcp/repository.ts";
 import type { ApiEnv } from "./app.ts";
 import { readJson } from "./http.ts";
 
 export interface McpRouteDeps {
   service: McpService;
   auth: AuthService;
+  /** The routines whose external tools the owner sets free one by one. */
+  automations?: AutomationService;
 }
+
+/** How far a level lets a tool run on its own: raising it takes the password. */
+const RANK: Record<McpToolPolicy, number> = { approve: 0, auto: 1, routines: 2 };
 
 /** A server or tool id as the routes accept it; anything else is simply not found. */
 function serverId(value: string): string {
@@ -85,11 +93,43 @@ export function registerMcpRoutes(app: Hono<ApiEnv>, deps: () => McpRouteDeps, c
     const patch = await readJson(c.req.raw, mcpToolUpdateSchema, 2 * 1024);
     const { service, auth } = deps();
     const before = service.storedTool(id, tool);
-    // A call that runs without asking sends what the model writes with no card to stop it: turning that on
-    // (the policy, or turning on again a tool set that way, which also accepts a changed definition) needs the password.
-    const auto = (patch.policy ?? before.policy) === "auto";
+    // A call that runs without asking sends what the model writes with no card to stop it: raising the level
+    // (or turning on again a tool set that way, which also accepts a changed definition) needs the password and tells the owner.
+    const level = patch.policy ?? levelOf(before);
     const enabling = patch.enabled === true && (before.enabled !== 1 || before.reviewed_hash !== before.schema_hash);
-    if (auto && (patch.policy === "auto" || enabling)) auth.requireRecentAuth(c.get("session"));
-    return Response.json({ tool: service.updateTool(id, tool, patch) });
+    // Calling a tool less dangerous than Zuri or the owner judged it lets it climb: the same password and alert.
+    const loosened = patch.kind !== undefined && kindRank(patch.kind) < kindRank(kindOf(before));
+    const raised = RANK[level] > RANK[levelOf(before)] || (enabling && level !== "approve") || loosened;
+    if (raised) auth.requireRecentAuth(c.get("session"));
+    const updated = service.updateTool(id, tool, patch);
+    if (raised) auth.events.record("mcp_tool_autonomy", client(c), { alert: true });
+    return Response.json({ tool: updated });
+  });
+
+  /**
+   * The external tools of one AI routine (decision of 03/11/2026): the ones on
+   * in Integrations, and which run on its own there. Setting one free takes
+   * the password and tells the owner; a destructive one is refused.
+   */
+  const routine = (value: string) => {
+    if (!RECORD_ID.test(value)) throw new AppError("NOT_FOUND", "error.automationNotFound");
+    const automations = deps().automations;
+    if (!automations) throw new AppError("NOT_FOUND", "error.automationNotFound");
+    if (automations.get(value).kind !== "agent_prompt") throw new AppError("CONFLICT", "error.mcpRoutineOnly");
+    return value;
+  };
+
+  app.get("/mcp/routines/:id/tools", (c) => Response.json({ tools: deps().service.routineTools(routine(c.req.param("id"))) }));
+
+  app.patch("/mcp/routines/:id/tools", async (c) => {
+    const id = routine(c.req.param("id"));
+    const input = await readJson(c.req.raw, mcpRoutineToolsSchema, 2 * 1024);
+    const { service, auth } = deps();
+    const before = service.routineAllowed(id);
+    const added = input.tools.some((name) => !before.has(name));
+    if (added) auth.requireRecentAuth(c.get("session"));
+    const { tools } = service.setRoutineTools(id, input.tools);
+    if (added) auth.events.record("mcp_tool_autonomy", client(c), { alert: true });
+    return Response.json({ tools });
   });
 }

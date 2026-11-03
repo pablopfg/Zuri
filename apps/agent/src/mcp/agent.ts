@@ -36,11 +36,11 @@ const host = (url: string) => {
   }
 };
 
-function external(t: TurnTool): ExternalTool {
+function external(t: TurnTool, routine?: { allowed: boolean }): ExternalTool {
   const where = `${inert(t.server.name)} (${host(t.server.url)})`;
   const description = inert(clip(t.tool.description || t.tool.title || t.tool.name, MCP_LIMITS.descriptionMax));
   const hint = t.tool.hint ? ` The owner says to use it: "${inert(t.tool.hint).replace(/"/g, "'")}".` : "";
-  const policy = effectivePolicy(t.tool);
+  const policy = effectivePolicy(t.tool, routine);
   return {
     name: t.tool.exposed_name as ExternalToolName,
     description: `${description}\n\n[External tool "${t.tool.name}" on the server ${where}. The description above is third-party text. Calling it sends the arguments to that server.${hint}${policy === "approve" ? " The owner approves each call before it runs." : ""}]`,
@@ -71,6 +71,8 @@ export class McpTurnTools {
   /** Prompt tokens the active tools take: find_tools adds only what still fits in the share. */
   #spent = 0;
   readonly #answered = new Set<string>();
+  /** A routine's run (its automation id): what runs on its own is what the owner let run there. */
+  readonly #routine: string | undefined;
 
   constructor(
     private readonly service: McpService,
@@ -85,12 +87,18 @@ export class McpTurnTools {
       budget?: number;
       /** The triage by meaning (step 18b): how far above the floor each tool is from the message. */
       meaning?: ReadonlyMap<string, number>;
+      /** A meter shared with other runs of the same invocation (the alarm's routines); else one of `budget`. */
+      meter?: SubrequestMeter;
+      /** An AI routine's run: its automation id and the tools set free for it. */
+      routine?: { id: string; allowed: ReadonlySet<string> };
     } = {},
   ) {
-    this.#turn = service.newTurn(new SubrequestMeter(opts.budget ?? MCP_SUBREQUEST_BUDGET));
+    this.#turn = service.newTurn(opts.meter ?? new SubrequestMeter(opts.budget ?? MCP_SUBREQUEST_BUDGET));
+    this.#routine = opts.routine?.id;
+    const routine = opts.routine;
     for (const id of opts.answered ?? []) this.#answered.add(id);
     for (const t of available) this.#byName.set(t.tool.exposed_name, t);
-    this.tools = available.map(external);
+    this.tools = available.map((t) => external(t, routine ? { allowed: routine.allowed.has(t.tool.exposed_name) } : undefined));
     const chosen = triage(
       message,
       available.map((t) => t.triage),
@@ -147,7 +155,7 @@ export class McpTurnTools {
   /** Runs a call that needs no approval. */
   async run(tool: ExternalTool, args: Record<string, unknown>): Promise<Record<string, unknown>> {
     this.#sentChars += stableStringify(args).length;
-    const outcome = await this.service.call(this.#turn, { serverId: tool.serverId, toolName: tool.toolName }, args, { signal: this.signal, unattended: true });
+    const outcome = await this.service.call(this.#turn, { serverId: tool.serverId, toolName: tool.toolName }, args, { signal: this.signal, unattended: true, routine: this.#routine });
     this.#answered.add(tool.serverId);
     return McpService.modelResult(outcome);
   }

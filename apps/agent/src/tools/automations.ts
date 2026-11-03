@@ -203,7 +203,7 @@ export const automationTools = [
   defineTool({
     name: "propose_ai_routine",
     description: [
-      "Propose a repeating AI routine: on each run you answer 'prompt' with read-only tools and the answer goes to the owner as a notice.",
+      "Propose a repeating AI routine: on each run you answer 'prompt' with read-only tools (and only the external tools the owner let routines use) and the answer goes to the owner as a notice.",
       "Use it only when the owner asked for one in this chat and AI is truly needed; plain reminders and the task digest use create_automation.",
       "Nothing runs until the owner approves the exact name, prompt and schedule on the Automations page.",
     ].join(" "),
