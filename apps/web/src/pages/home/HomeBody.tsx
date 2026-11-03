@@ -106,12 +106,13 @@ function SeeAll({ label }: { label: string }) {
 const NO_FILTER = { projectId: "", q: "" };
 
 function TodayCard() {
-  const { t, plural, timeZone } = useI18n();
+  const { t, plural } = useI18n();
   // The same query as the Tarefas page's "Hoje" tab: one cache for both.
   const tasks = useTasks({ view: "today", ...NO_FILTER });
   const list = tasks.data?.tasks ?? [];
   const now = new Date();
-  const late = list.filter((task) => task.dueAt !== null && dayOffset(task.dueAt, now, timeZone) < 0).length;
+  // Late as in the lines below and on the Tarefas page: the deadline has passed, hour included.
+  const late = list.filter((task) => task.dueAt !== null && Date.parse(task.dueAt) < now.getTime()).length;
   const summary = tasks.data
     ? late > 0
       ? t("web.home.today.withLate", { tasks: plural("web.home.today.count", list.length), late: plural("web.home.today.late", late) })

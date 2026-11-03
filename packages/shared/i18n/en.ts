@@ -899,7 +899,7 @@ export const en: Messages = {
   "web.automations.resumed": "Automation resumed.",
   "web.automations.created": "Automation created.",
   "web.automations.saved": "Changes saved.",
-  "web.automations.ran": "Done. The result is in the history.",
+  "web.automations.ran": "Done. The result is in Recent runs.",
   "web.automations.ranQuiet": "Done. Nothing needed your attention.",
   "web.automations.ranSkipped": "It didn't run: {reason}",
   "web.automations.ranError": "The run didn't work: {reason}",

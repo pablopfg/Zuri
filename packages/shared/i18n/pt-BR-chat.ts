@@ -151,7 +151,7 @@ export const ptBRChat = {
   "web.chat.tool.create_reminder": "Criar lembrete",
   "web.chat.tool.create_automation": "Criar automação",
   "web.chat.tool.list_automations": "Consultar automações",
-  "web.chat.tool.cancel_automation": "Propor excluir automação",
+  "web.chat.tool.cancel_automation": "Propor apagar automação",
   "web.chat.tool.propose_ai_routine": "Propor rotina",
   "web.chat.tool.notify_owner": "Avisar você",
   "web.chat.approval.cancel_automation": "Apagar a automação “{target}”. Ela para de rodar na hora.",

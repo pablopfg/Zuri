@@ -161,17 +161,18 @@ export function ChatPage() {
   // A question typed on the home page or in the search arrives with the address: sent once, then
   // the address forgets it, so a reload or going back never sends it again.
   const location = useLocation();
-  const asked = useRef(false);
+  // Per arrival (the address's key): the screen stays mounted from one conversation to the next.
+  const asked = useRef<string | null>(null);
   const ask = (location.state as { ask?: unknown } | null)?.ask;
   // biome-ignore lint/correctness/useExhaustiveDependencies: runs once per question, with the send of this render
   useEffect(() => {
-    if (asked.current || id || typeof ask !== "string" || !ask.trim()) return;
-    asked.current = true;
+    if (asked.current === location.key || id || typeof ask !== "string" || !ask.trim()) return;
+    asked.current = location.key;
     navigate(location.pathname, { replace: true, state: null });
     // Too long for one message: it waits in the composer, where the counter says why.
     if ([...ask].length > CHAT_MESSAGE_MAX) setDraft(ask);
     else void send(ask);
-  }, [ask, id]);
+  }, [ask, id, location.key]);
 
   async function stop() {
     const conversationId = live?.conversationId;

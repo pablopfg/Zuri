@@ -84,6 +84,14 @@ export function AppShell() {
     window.addEventListener("storage", onStorage);
     return () => window.removeEventListener("storage", onStorage);
   }, []);
+  useEffect(() => {
+    // Widening past the phone's size (a tablet turned sideways) closes the drawer: a modal left open
+    // behind md:hidden would keep the whole page inert.
+    const wide = window.matchMedia("(min-width: 48rem)");
+    const onChange = () => wide.matches && setDrawerOpen(false);
+    wide.addEventListener("change", onChange);
+    return () => wide.removeEventListener("change", onChange);
+  }, []);
   // Any move to another page closes the drawer (a link inside it, the palette, the bell).
   // biome-ignore lint/correctness/useExhaustiveDependencies: the address is the trigger
   useEffect(() => setDrawerOpen(false), [location.pathname]);

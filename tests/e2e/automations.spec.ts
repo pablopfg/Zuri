@@ -57,7 +57,7 @@ test("a reminder: create with the preview, run now, pause, edit and delete @mobi
 
   // Run now: the result lands in the history.
   await row.getByRole("button", { name: "Rodar agora" }).click();
-  await expect(toast(page, "Pronto. O resultado está no histórico.")).toBeVisible();
+  await expect(toast(page, "Pronto. O resultado está em Últimas execuções.")).toBeVisible();
   const history = page.getByRole("region", { name: "Últimas execuções" });
   const run = history.getByRole("listitem").filter({ hasText: name }).first();
   await expect(run.getByText("Tomar o remédio da pressão")).toBeVisible();
@@ -90,7 +90,7 @@ test("a reminder: create with the preview, run now, pause, edit and delete @mobi
   const confirm = page.getByRole("dialog", { name: `Apagar “${name}”?` });
   await expectAccessible(page, "excluir automação");
   await confirm.getByRole("button", { name: "Apagar" }).click();
-  await expect(toast(page, "Automação excluída.")).toBeVisible();
+  await expect(toast(page, "Automação apagada.")).toBeVisible();
   await expect(row).toHaveCount(0);
   await expect(run).toBeVisible();
 });
@@ -126,7 +126,7 @@ test("a routine Zuri proposes in the chat runs nothing until the owner approves 
 
   await page.getByRole("link", { name: "Revisar em Automações" }).last().click();
   await expect(page).toHaveURL(/\/automacoes#automacao-[0-9a-f-]{36}$/);
-  const pending = page.getByRole("region", { name: "A Zuri sugeriu uma rotina" });
+  const pending = page.getByRole("region", { name: /^A Zuri sugeriu (uma rotina|\d+ rotinas)$/ });
   const item = pending.getByRole("listitem").filter({ hasText: name });
   await expect(item.getByText("Veja minhas tarefas da semana e diga o que está atrasado.")).toBeVisible();
   await expect(item.getByText("Sexta, às 17:00")).toBeVisible();

@@ -41,7 +41,8 @@ test("the sidebar holds Nova conversa, the six places and the account; settings 
   await expect(account).toHaveAttribute("aria-expanded", "false");
   await expect(account).toBeFocused();
   await account.click();
-  await page.mouse.click(900, 400);
+  // Outside, on a spot with no action of its own: the greeting.
+  await page.getByRole("heading", { level: 1 }).click();
   await expect(account).toHaveAttribute("aria-expanded", "false");
   await account.click();
   await menu.getByRole("link", { name: "Configurações", exact: true }).click();

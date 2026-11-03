@@ -36,7 +36,7 @@ export const ptBRAutomations = {
   "web.automations.resumed": "Automação retomada.",
   "web.automations.created": "Automação criada.",
   "web.automations.saved": "Alterações salvas.",
-  "web.automations.ran": "Pronto. O resultado está no histórico.",
+  "web.automations.ran": "Pronto. O resultado está em Últimas execuções.",
   "web.automations.ranQuiet": "Pronto. Nada precisava da sua atenção.",
   "web.automations.ranSkipped": "Não rodou: {reason}",
   "web.automations.ranError": "A execução não deu certo: {reason}",

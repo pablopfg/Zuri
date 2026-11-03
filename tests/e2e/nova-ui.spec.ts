@@ -16,12 +16,16 @@ async function openHome(page: Page) {
   await expect(page.getByRole("heading", { level: 1, name: /^(Bom dia|Boa tarde|Boa noite)/ })).toBeVisible();
 }
 
-/** A deadline `days` from now at 23:00 in São Paulo (02:00 UTC of the next day). */
-function dueIn(days: number): string {
+/** A deadline `days` from today at `time` in São Paulo (the owner's zone). */
+function atHour(days: number, time: string): string {
   const day = new Date(Date.now() + days * 86_400_000);
   const local = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(day);
-  return new Date(`${local}T23:00:00-03:00`).toISOString();
+  return new Date(`${local}T${time}:00-03:00`).toISOString();
 }
+
+/** A deadline `days` from today at 23:00 in São Paulo. */
+const dueIn = (days: number) => atHour(days, "23:00");
+
 
 test("the home page sends what is written to a new conversation, once @mobile", async ({ page }) => {
   const word = tag();
@@ -56,31 +60,49 @@ test("an idea on the home page starts a conversation with it", async ({ page }) 
   await expect(page.getByRole("log").getByText("O que tenho amanhã?", { exact: true })).toBeVisible();
 });
 
-test("the home cards show what is due today and in the next days, with the late ones marked @mobile", async ({ page }) => {
+test.describe("with the device in another zone", () => {
+  // The owner's zone (São Paulo) decides "today", never the device's (Tokyo is 12 h ahead).
+  test.use({ timezoneId: "Asia/Tokyo" });
+
+  test("the home cards show what is due today and in the next days, with the late ones marked @mobile", async ({ page }) => {
   const word = tag();
   await page.goto("/entrar");
   await signIn(page);
   await expect(page.getByRole("heading", { level: 1, name: /^(Bom dia|Boa tarde|Boa noite)/ })).toBeVisible();
   for (const [title, dueAt] of [
-    [`Hoje ${word}`, dueIn(0)],
-    [`Atrasada ${word}`, dueIn(-1)],
+    [`Hoje ${word}`, atHour(0, "23:59")],
+    // A minute ago: late by the hour, even when today has just begun.
+    [`Cedo ${word}`, new Date(Date.now() - 60_000).toISOString()],
+    [`Ontem ${word}`, dueIn(-1)],
     [`Amanhã ${word}`, dueIn(1)],
   ] as const) {
     expect((await page.request.post("/api/tasks", { headers: CSRF, data: { title, dueAt } })).status()).toBe(201);
   }
   await page.reload();
+  // Other tests leave tasks for today too, and the card lists the first five: compare with the server's list.
+  const { tasks } = (await (await page.request.get("/api/tasks?view=today", { headers: CSRF })).json()) as { tasks: { title: string; dueAt: string | null }[] };
+  const now = Date.now();
+  const late = tasks.filter((task) => task.dueAt !== null && Date.parse(task.dueAt) < now).length;
   const today = page.getByRole("region", { name: "Hoje" });
-  await expect(today.getByText(`Hoje ${word}`)).toBeVisible();
-  await expect(today.getByRole("listitem").filter({ hasText: `Atrasada ${word}` })).toContainText("Atrasada");
-  await expect(today.getByText(/^\d+ tarefas?, \d+ atrasadas?$/)).toBeVisible();
+  const count = `${tasks.length} ${tasks.length === 1 ? "tarefa" : "tarefas"}`;
+  await expect(today.getByText(`${count}, ${late} ${late === 1 ? "atrasada" : "atrasadas"}`, { exact: true })).toBeVisible();
+  expect(late).toBeGreaterThanOrEqual(2);
+  const rows = today.getByRole("listitem");
+  await expect(rows).toHaveCount(Math.min(tasks.length, 5));
+  for (const [index, task] of tasks.slice(0, 5).entries()) {
+    await expect(rows.nth(index)).toContainText(task.title);
+    if (task.dueAt !== null && Date.parse(task.dueAt) < now) await expect(rows.nth(index)).toContainText("Atrasada");
+    else await expect(rows.nth(index)).not.toContainText("Atrasada");
+  }
+  // Tomorrow by the owner's clock (São Paulo), with the device 12 h ahead in Tokyo.
   const next = page.getByRole("region", { name: "Próximos dias" });
   await expect(next.getByRole("heading", { name: "Amanhã", exact: true })).toBeVisible();
-  await expect(next.getByText(`Amanhã ${word}`)).toBeVisible();
   await today.getByRole("link", { name: "Ver tarefas" }).click();
   await expect(page).toHaveURL(/\/tarefas$/);
   await page.goBack();
   await expect(page.getByRole("region", { name: "Hoje" })).toBeVisible();
   await expectAccessible(page, "início com cartões");
+});
 });
 
 test("recent conversations come by day and the list has its own search", async ({ page }) => {
@@ -145,10 +167,24 @@ test("loading shows nothing for 300 ms, then gray lines and the green line; the 
   const status = page.getByRole("main").getByRole("status").filter({ hasText: "Carregando…" }).first();
   await expect(status).toBeAttached();
   const rows = status.locator(".zuri-wait").first();
-  // The delay is a 300 ms zero-length animation: hidden first, shown after.
+  // The delay is a 300 ms zero-length animation: held at its start, nothing shows.
   expect(await rows.evaluate((el) => getComputedStyle(el).animationDelay)).toBe("0.3s");
+  expect(
+    await rows.evaluate((el) => {
+      const [wait] = el.getAnimations();
+      wait?.pause();
+      if (wait) wait.currentTime = 0;
+      const opacity = getComputedStyle(el).opacity;
+      wait?.play();
+      return opacity;
+    }),
+  ).toBe("0");
   await expect.poll(() => rows.evaluate((el) => getComputedStyle(el).opacity)).toBe("1");
   expect(await status.locator(".zuri-skeleton").first().evaluate((el) => getComputedStyle(el).animationName)).toBe("zuri-shine");
+  // The thin green line on top, while the screen's code downloads (the tasks page, the first time here).
+  const line = page.locator(".zuri-progress");
+  const lineMotion = () => line.evaluate((el) => getComputedStyle(el, "::before").animationName);
+  if ((await line.count()) > 0) expect(await lineMotion()).toBe("zuri-slide");
   await page.emulateMedia({ reducedMotion: "reduce" });
   expect(await status.locator(".zuri-skeleton").first().evaluate((el) => getComputedStyle(el).animationName)).toBe("none");
   release();
@@ -175,4 +211,82 @@ test("Zuri thinking shows her mark and the line, in a bubble", async ({ page }) 
   await expect(bubble.locator("svg")).toBeVisible();
   release();
   await expect(bubble).toHaveCount(0);
+});
+
+test("the green line runs on top while a screen downloads, and stands still with reduce motion", async ({ page }) => {
+  await page.goto("/");
+  await signIn(page);
+  await expect(page.getByRole("heading", { level: 1, name: /^(Bom dia|Boa tarde|Boa noite)/ })).toBeVisible();
+  // Hold the Memória screen's code, so its loading stays on screen.
+  let release = () => {};
+  const held = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  await page.route(/\/assets\/MemoryPage-[^/]+\.js$/, async (route) => {
+    await held;
+    await route.continue();
+  });
+  await page.locator("aside").getByRole("link", { name: "Memória" }).click();
+  const line = page.locator(".zuri-progress");
+  await expect(line).toBeAttached();
+  await expect.poll(() => line.evaluate((el) => getComputedStyle(el).opacity)).toBe("1");
+  expect(await line.evaluate((el) => getComputedStyle(el, "::before").animationName)).toBe("zuri-slide");
+  expect(await line.evaluate((el) => getComputedStyle(el, "::before").backgroundColor)).toBe("rgb(21, 128, 61)");
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  expect(await line.evaluate((el) => getComputedStyle(el, "::before").animationName)).toBe("none");
+  release();
+  await expect(page.getByRole("heading", { level: 1, name: "Memória" })).toBeVisible();
+  await expect(line).toHaveCount(0);
+});
+
+test("a question from the palette inside an open conversation starts a new one too", async ({ page }) => {
+  const word = tag();
+  await page.goto("/conversa");
+  await signIn(page);
+  const box = page.getByRole("textbox", { name: "Mensagem" });
+  await box.fill(`Primeira ${word}`);
+  await box.press("Enter");
+  await expect(page).toHaveURL(/\/conversa\/[0-9a-f-]{36}$/);
+  await expect(page.getByRole("button", { name: "Parar" })).toHaveCount(0);
+  const first = page.url();
+  for (const n of ["segunda", "terceira"]) {
+    await page.keyboard.press("Control+K");
+    await page.getByRole("dialog", { name: "Buscar e ir para" }).getByRole("combobox").fill(`pergunta ${n} ${word}`);
+    const sent = page.waitForResponse((r) => r.url().endsWith("/api/chat") && r.request().method() === "POST");
+    await page.getByRole("option", { name: `Perguntar à Zuri: “pergunta ${n} ${word}”` }).click();
+    expect((await sent).status()).toBe(200);
+    await expect(page.getByRole("log").getByText(`pergunta ${n} ${word}`, { exact: true })).toBeVisible();
+    await expect(page).toHaveURL(/\/conversa\/[0-9a-f-]{36}$/);
+    expect(page.url()).not.toBe(first);
+    await expect(page.getByRole("button", { name: "Parar" })).toHaveCount(0);
+  }
+});
+
+test("from the home page, 4,000 characters are sent and 4,001 wait in the composer", async ({ page }) => {
+  await openHome(page);
+  let posts = 0;
+  page.on("request", (r) => r.url().endsWith("/api/chat") && r.method() === "POST" && posts++);
+  const field = page.getByRole("textbox", { name: "Escreva para a Zuri" });
+  await field.fill("a".repeat(4_001));
+  await field.press("Enter");
+  await expect(page).toHaveURL(/\/conversa$/);
+  await expect(page.getByRole("textbox", { name: "Mensagem" })).toHaveValue("a".repeat(4_001));
+  expect(posts).toBe(0);
+  await page.goto("/");
+  await field.fill("b".repeat(4_000));
+  const sent = page.waitForResponse((r) => r.url().endsWith("/api/chat") && r.request().method() === "POST");
+  await field.press("Enter");
+  expect((await sent).status()).toBe(200);
+  await expect(page).toHaveURL(/\/conversa\/[0-9a-f-]{36}$/);
+});
+
+test("a drawer left open closes when the screen widens, and the page stays usable", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await openHome(page);
+  await page.getByRole("button", { name: "Abrir menu" }).click();
+  await expect(page.getByRole("dialog", { name: "Navegação principal" })).toBeVisible();
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await expect(page.getByRole("dialog", { name: "Navegação principal" })).toHaveCount(0);
+  await page.locator("aside").getByRole("link", { name: "Notas" }).click();
+  await expect(page).toHaveURL(/\/notas$/);
 });
