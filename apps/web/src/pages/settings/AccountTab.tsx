@@ -2,7 +2,7 @@ import { isLocale, LOCALES, normalizeOwnerName } from "@zuri/shared";
 import { type FormEvent, useEffect, useMemo, useState } from "react";
 import { ChangePasswordForm } from "../../components/ChangePasswordForm.tsx";
 import { ThemeSwitcher } from "../../components/ThemeSwitcher.tsx";
-import { Button, Card, ErrorNotice, SelectField, Spinner, TextField } from "../../components/ui.tsx";
+import { Button, Card, ErrorNotice, SelectField, Loading, TextField } from "../../components/ui.tsx";
 import { useSession } from "../../hooks/session.tsx";
 import { useSettings, useSettingsMutation } from "../../hooks/settings.ts";
 import { errorMessage } from "../../lib/api.ts";
@@ -62,7 +62,7 @@ export function AccountTab() {
     <>
       <Card title={t("web.account.preferences")} description={t("web.account.preferencesHint")}>
         {settings.isPending ? (
-          <Spinner />
+          <Loading />
         ) : settings.isError ? (
           <ErrorNotice error={settings.error} onRetry={() => void settings.refetch()} />
         ) : (

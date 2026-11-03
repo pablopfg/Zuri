@@ -14,7 +14,7 @@ import {
 } from "@zuri/shared";
 import { Archive, ArchiveRestore, BadgeCheck, Brain, CircleHelp, GitCompareArrows, History, Pencil, RefreshCw, Search, Trash2 } from "lucide-react";
 import { type FormEvent, useEffect, useId, useState } from "react";
-import { Button, Card, cn, Dialog, EmptyState, ErrorNotice, fieldClass, PageHeader, SelectField, Spinner, TextAreaField } from "../../components/ui.tsx";
+import { Button, Card, cn, Dialog, EmptyState, ErrorNotice, fieldClass, PageHeader, SelectField, Loading, TextAreaField } from "../../components/ui.tsx";
 import { MEMORIES_KEY, useMemories, useMemoryHistory, useMemoryReviews } from "../../hooks/memory.ts";
 import { SETTINGS_KEY } from "../../hooks/session.tsx";
 import { api, errorMessage } from "../../lib/api.ts";
@@ -121,7 +121,7 @@ export function MemoryPage() {
         </div>
 
         {memories.isPending ? (
-          <Spinner />
+          <Loading />
         ) : memories.isError ? (
           <ErrorNotice error={memories.error} onRetry={() => void memories.refetch()} />
         ) : memories.data.memories.length === 0 ? (
@@ -350,7 +350,7 @@ function ReviewQueue({ total, onDone }: { total: number; onDone: (message: strin
   return (
     <Card title={t("web.memory.reviews.title")} description={plural("web.memory.reviews.count", total)} className="border-warning/40">
       {reviews.isPending ? (
-        <Spinner />
+        <Loading />
       ) : reviews.isError ? (
         <ErrorNotice error={reviews.error} onRetry={() => void reviews.refetch()} />
       ) : (
@@ -541,7 +541,7 @@ function HistoryDialog({ memory, onClose }: { memory: Memory; onClose: () => voi
   return (
     <Dialog open onClose={onClose} title={t("web.memory.historyTitle")}>
       {history.isPending ? (
-        <Spinner />
+        <Loading />
       ) : history.isError ? (
         <ErrorNotice error={history.error} onRetry={() => void history.refetch()} />
       ) : (

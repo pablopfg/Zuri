@@ -1,5 +1,5 @@
 import { expect, type Page, test } from "./fixtures.ts";
-import { CSRF, signIn } from "./ui-helpers.ts";
+import { CSRF, signIn, signOutFromMenu } from "./ui-helpers.ts";
 
 // A tab that comes back from the background counts the session from stale news:
 // its own clock may say the session is over while another tab (or the server)
@@ -89,7 +89,7 @@ test("a presence signal answered after signing out does not reopen the page", as
   expect(await answered).toBe(200);
 
   const logout = page.waitForResponse((r) => new URL(r.url()).pathname === "/api/auth/logout");
-  await page.getByRole("button", { name: "Sair" }).first().click();
+  await signOutFromMenu(page);
   expect((await logout).status()).toBe(204);
   await expect(page).toHaveURL(/\/entrar/);
 

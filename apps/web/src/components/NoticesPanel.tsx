@@ -6,7 +6,7 @@ import { NOTICES_KEY, setUnread, useNotices } from "../hooks/notices.ts";
 import { api, errorMessage } from "../lib/api.ts";
 import { addMessages, useI18n } from "../lib/i18n.tsx";
 import { useToast } from "./Toaster.tsx";
-import { Button, cn, EmptyState, ErrorNotice, Spinner } from "./ui.tsx";
+import { Button, cn, EmptyState, ErrorNotice, Loading } from "./ui.tsx";
 
 // The panel's pt-BR texts arrive with it (rule P11).
 addMessages(ptBRAlerts);
@@ -73,7 +73,7 @@ export function NoticesPanel({ onClose, navigate }: { onClose: () => void; navig
     navigate(notice.link);
   };
 
-  if (query.isPending) return <Spinner label={t("web.notices.loading")} />;
+  if (query.isPending) return <Loading label={t("web.notices.loading")} />;
 
   return (
     <div className="space-y-4">

@@ -1,7 +1,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { ALERT_CHANNELS, type AlertDelivery, type AlertOverview, type LearnedPriority, ptBRAlerts, type Settings } from "@zuri/shared";
 import { type FormEvent, useEffect, useId, useState } from "react";
-import { Button, Card, cn, ErrorNotice, Spinner, TextField } from "../../components/ui.tsx";
+import { Button, Card, cn, ErrorNotice, Loading, TextField } from "../../components/ui.tsx";
 import { useToast } from "../../components/Toaster.tsx";
 import { ALERTS_KEY, useAlertOverview } from "../../hooks/notices.ts";
 import { useSettings, useSettingsMutation } from "../../hooks/settings.ts";
@@ -18,7 +18,7 @@ addMessages(ptBRAlerts);
 /** Settings > Avisos: the daily summary, what the Zuri watches on her own, push on this device, the Telegram bot, the channels per kind of notice and the recent sends. */
 export function AlertsTab() {
   const settings = useSettings();
-  if (settings.isPending) return <Spinner />;
+  if (settings.isPending) return <Loading />;
   if (settings.isError) return <ErrorNotice error={settings.error} onRetry={() => void settings.refetch()} />;
   return (
     <>
@@ -139,7 +139,7 @@ function LearningCard({ settings }: { settings: Settings }) {
             {errorMessage(save.error)}
           </p>
         )}
-        {overview.isPending && <Spinner />}
+        {overview.isPending && <Loading />}
         {overview.isError && <ErrorNotice error={overview.error} onRetry={() => void overview.refetch()} />}
         {overview.data &&
           (overview.data.learned.length === 0 ? (
@@ -182,7 +182,7 @@ function ChannelsCard() {
   return (
     <>
       <Card title={t("web.alerts.channels.title")} description={t("web.alerts.channels.description")}>
-        {overview.isPending && <Spinner />}
+        {overview.isPending && <Loading />}
         {overview.isError && <ErrorNotice error={overview.error} onRetry={() => void overview.refetch()} />}
         {overview.data && (
           <ul className="divide-y divide-border">

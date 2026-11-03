@@ -1,7 +1,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { APP_VERSION, type DiagnosticEntry, type DiagnosticsStatus, ptBRAlerts } from "@zuri/shared";
 import { CircleAlert, CircleCheck, ExternalLink, TriangleAlert } from "lucide-react";
-import { Button, buttonClass, Card, cn, ErrorNotice, Spinner } from "../../components/ui.tsx";
+import { Button, buttonClass, Card, cn, ErrorNotice, Loading } from "../../components/ui.tsx";
 import { useToast } from "../../components/Toaster.tsx";
 import { DIAGNOSTICS_KEY, useDiagnostics } from "../../hooks/notices.ts";
 import { api, errorMessage } from "../../lib/api.ts";
@@ -15,7 +15,7 @@ addMessages(ptBRAlerts);
 export function DiagnosticsTab() {
   const { t } = useI18n();
   const report = useDiagnostics();
-  if (report.isPending) return <Spinner />;
+  if (report.isPending) return <Loading />;
   if (report.isError) return <ErrorNotice error={report.error} onRetry={() => void report.refetch()} />;
   const { status, release, entries } = report.data;
   return (

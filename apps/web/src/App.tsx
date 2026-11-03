@@ -2,7 +2,7 @@ import { lazy, Suspense, useCallback, useState } from "react";
 import { Route, Routes, useNavigate } from "react-router";
 import { AppShell } from "./components/AppShell.tsx";
 import { RequireSession, SessionChecking } from "./components/RequireSession.tsx";
-import { Spinner } from "./components/ui.tsx";
+import { ScreenLoading } from "./components/ui.tsx";
 import { useSession } from "./hooks/session.tsx";
 import { APPROVE_PATH, FIRST_ACCESS_PATH, LOGIN_PATH, RECOVERY_PATH } from "./lib/next.ts";
 import { HomePage } from "./pages/HomePage.tsx";
@@ -92,7 +92,7 @@ export function App() {
         <Route
           path="configuracoes/:tab?"
           element={
-            <Suspense fallback={<Spinner />}>
+            <Suspense fallback={<ScreenLoading />}>
               <SettingsPage />
             </Suspense>
           }
@@ -100,7 +100,7 @@ export function App() {
         <Route
           path="conversa/:id?"
           element={
-            <Suspense fallback={<Spinner />}>
+            <Suspense fallback={<ScreenLoading />}>
               <ChatPage />
             </Suspense>
           }
@@ -108,7 +108,7 @@ export function App() {
         <Route
           path="tarefas"
           element={
-            <Suspense fallback={<Spinner />}>
+            <Suspense fallback={<ScreenLoading />}>
               <TasksPage />
             </Suspense>
           }
@@ -116,7 +116,7 @@ export function App() {
         <Route
           path="notas/:id?"
           element={
-            <Suspense fallback={<Spinner />}>
+            <Suspense fallback={<ScreenLoading />}>
               <NotesPage />
             </Suspense>
           }
@@ -124,7 +124,7 @@ export function App() {
         <Route
           path="automacoes"
           element={
-            <Suspense fallback={<Spinner />}>
+            <Suspense fallback={<ScreenLoading />}>
               <AutomationsPage />
             </Suspense>
           }
@@ -132,7 +132,7 @@ export function App() {
         <Route
           path="memoria"
           element={
-            <Suspense fallback={<Spinner />}>
+            <Suspense fallback={<ScreenLoading />}>
               <MemoryPage />
             </Suspense>
           }
@@ -140,7 +140,7 @@ export function App() {
         <Route
           path="acessos"
           element={
-            <Suspense fallback={<Spinner />}>
+            <Suspense fallback={<ScreenLoading />}>
               <AccessLogPage />
             </Suspense>
           }

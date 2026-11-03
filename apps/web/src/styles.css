@@ -143,6 +143,81 @@ body {
   background: color-mix(in srgb, var(--color-fg) 86%, var(--color-bg));
 }
 
+/*
+ * Loading (new interface): nothing in the first 300 ms, so a fast answer never
+ * flashes; then gray lines in the shape of the content, with a soft shine, and
+ * a thin green line on top while a screen downloads. Only CSS. The delay is a
+ * zero-length animation, so the wait never moves anything; with "reduce
+ * motion" the shine and the line stand still.
+ */
+.zuri-wait {
+  animation: zuri-appear 0s linear 300ms both;
+}
+
+@keyframes zuri-appear {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.zuri-skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--color-raised) 35%,
+    color-mix(in srgb, var(--color-raised) 35%, var(--color-surface)) 50%,
+    var(--color-raised) 65%
+  );
+  background-size: 300% 100%;
+  animation: zuri-shine 1.6s ease-in-out infinite;
+}
+
+@keyframes zuri-shine {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: 0 0;
+  }
+}
+
+.zuri-progress {
+  position: fixed;
+  inset: 0 0 auto;
+  z-index: 60;
+  height: 2px;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.zuri-progress::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 35%;
+  border-radius: 2px;
+  background: var(--color-accent);
+  animation: zuri-slide 1.1s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+@keyframes zuri-slide {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(300%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .zuri-skeleton,
+  .zuri-progress::before {
+    animation: none;
+  }
+}
+
 /* One visible focus ring for every control, keyboard only. */
 :focus-visible {
   outline: 2px solid var(--color-accent);

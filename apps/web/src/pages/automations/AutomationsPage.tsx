@@ -18,7 +18,7 @@ import {
 import { AlarmClock, Bell, History, ListChecks, Pause, Pencil, Play, Plus, Trash2, WandSparkles, Zap } from "lucide-react";
 import { type FormEvent, type ReactNode, useEffect, useId, useMemo, useState } from "react";
 import { useToast } from "../../components/Toaster.tsx";
-import { Button, Card, cn, Dialog, EmptyState, ErrorNotice, PageHeader, SelectField, Spinner, TextAreaField, TextField } from "../../components/ui.tsx";
+import { Button, Card, cn, Dialog, EmptyState, ErrorNotice, PageHeader, SelectField, Loading, TextAreaField, TextField } from "../../components/ui.tsx";
 import { AUTOMATIONS_KEY, useAutomationRuns, useAutomations } from "../../hooks/automations.ts";
 import { SETTINGS_KEY } from "../../hooks/session.tsx";
 import { api, errorMessage } from "../../lib/api.ts";
@@ -89,7 +89,7 @@ export function AutomationsPage() {
         }
       />
       {list.isPending ? (
-        <Spinner label={t("web.automations.loading")} />
+        <Loading label={t("web.automations.loading")} />
       ) : list.isError ? (
         <ErrorNotice error={list.error} onRetry={() => void list.refetch()} />
       ) : (
@@ -260,10 +260,10 @@ function AutomationRow({ automation, onEdit, onDelete }: { automation: Automatio
 
 /** Routines Zuri proposed in the chat: the owner reads exactly what will run, then approves or declines. */
 function PendingCard({ routines, onDecline }: { routines: Automation[]; onDecline: (routine: Automation) => void }) {
-  const { t, dateTime, timeZone } = useI18n();
+  const { t, plural, dateTime, timeZone } = useI18n();
   const { busy, act } = useAutomationAction();
   return (
-    <Card title={t("web.automations.pending.title")} description={t("web.automations.pending.description")} className="border-warning/50">
+    <Card title={plural("web.automations.pending.title", routines.length)} description={t("web.automations.pending.description")} className="border-warning/50">
       <ul className="space-y-3">
         {routines.map((routine) => (
           <li key={routine.id} id={automationAnchor(routine.id)} className="scroll-mt-24 space-y-3 rounded-xl border border-border bg-subtle p-4">
@@ -344,7 +344,7 @@ function RunHistory() {
   return (
     <Card title={t("web.automations.history.title")} description={t("web.automations.history.description")}>
       {runs.isPending ? (
-        <Spinner />
+        <Loading />
       ) : runs.isError ? (
         <ErrorNotice error={runs.error} onRetry={() => void runs.refetch()} />
       ) : items.length === 0 ? (

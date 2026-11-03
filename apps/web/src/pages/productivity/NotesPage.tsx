@@ -4,7 +4,7 @@ import { ArrowLeft, NotebookPen, Plus, Search, Trash2 } from "lucide-react";
 import { type FormEvent, useEffect, useState } from "react";
 import { Link, useBlocker, useLocation, useNavigate, useParams } from "react-router";
 import { Markdown } from "../../components/Markdown.tsx";
-import { Button, cn, Dialog, EmptyState, ErrorNotice, fieldClass, PageHeader, SelectField, Spinner, TextField } from "../../components/ui.tsx";
+import { Button, cn, Dialog, EmptyState, ErrorNotice, fieldClass, PageHeader, SelectField, Loading, TextField } from "../../components/ui.tsx";
 import { NOTES_KEY, PROJECTS_KEY, useNote, useNotes, useProjects } from "../../hooks/productivity.ts";
 import { api, errorMessage } from "../../lib/api.ts";
 import { useDebounced } from "../../lib/debounce.ts";
@@ -138,7 +138,7 @@ function NotesList({ activeId }: { activeId: string | undefined }) {
         </p>
       </div>
       {notes.isPending ? (
-        <Spinner />
+        <Loading />
       ) : notes.isError ? (
         <ErrorNotice error={notes.error} onRetry={() => void notes.refetch()} />
       ) : notes.data.notes.length === 0 ? (
@@ -182,7 +182,7 @@ function NotesList({ activeId }: { activeId: string | undefined }) {
 
 function ExistingNote({ id, onDirty }: { id: string; onDirty: (dirty: boolean) => void }) {
   const note = useNote(id);
-  if (note.isPending) return <Spinner />;
+  if (note.isPending) return <Loading />;
   if (note.isError) return <ErrorNotice error={note.error} onRetry={() => void note.refetch()} />;
   return <NoteEditor key={note.data.note.id} note={note.data.note} onDirty={onDirty} />;
 }

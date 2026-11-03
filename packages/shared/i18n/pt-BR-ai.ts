@@ -53,7 +53,7 @@ export const ptBRAi = {
   "web.ai.pricing": "Preços da Cloudflare conferidos em {date}. São estimativas da Zuri, não uma fatura.",
   "web.ai.pricingLink": "Tabela de preços do Workers AI",
   "web.ai.settings.title": "Modelo e limites",
-  "web.ai.settings.description": "Quando um limite chega, a Zuri recusa o pedido com um aviso antes de chamar a IA. Nada pago é ligado.",
+  "web.ai.settings.description": "Quando um limite chega, a Zuri avisa e não chama a IA. Nada pago é ligado.",
   "web.ai.model": "Modelo de conversa",
   "web.ai.modelHint": "Cerca de {neurons} Neurons por resposta típica; {turns} respostas cabem no teto do dia.",
   "web.ai.modelDefault": "{label} (padrão)",

@@ -135,7 +135,7 @@ abrindo em outra aba com `noopener noreferrer`. Nenhum
 - **Notas** (`/notas`): em telas largas a lista fica ao lado do editor; no
   celular, uma de cada vez. Sair de uma nota com alterações não salvas por
   qualquer caminho (lista, "Nova nota", lixeira, "Todas as notas", menu
-  lateral, barra de baixo ou o voltar do navegador) pede confirmação, e
+  lateral, gaveta do celular ou o voltar do navegador) pede confirmação, e
   fechar a aba avisa. O app usa um roteador de dados (`createBrowserRouter`)
   só para ter o `useBlocker`; a regra fica em `lib/leave-guard.ts`. Não
   perguntam: a mesma nota (SEC-6R-01), os movimentos do próprio editor

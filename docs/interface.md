@@ -72,23 +72,43 @@ resposta de `/api/*` sai com `Cache-Control: no-store`, e o cliente pede com
 
 ## Casca depois do login
 
-Segue a UI do Talorys (decisão do Pablo, 31/10/2026):
+Organização dos grandes apps de conversa com o visual da Zuri (decisão do
+Pablo, 03/11/2026; plano em `docs/planos/nova-ui.md`):
 
-- **Computador:** barra lateral de altura total (`AppShell`), com a marca e o
-  sino de avisos no topo, as seções do app no meio e Configurações e Sair no
-  pé. Uma seção nova é um item a mais em `sections`.
-  "Recolher menu", no pé, troca a barra por uma coluna só de ícones. Cada
-  ícone mostra o nome numa dica ao passar o mouse ou focar pelo teclado (Esc
-  esconde a dica); o nome continua no controle para leitores de tela. A
-  escolha fica em `localStorage` (`zuri.sidebar`), só neste navegador, e as
-  outras abas acompanham. No celular a barra não existe, então nada muda.
-- **Celular:** barra superior com a marca, os avisos e Sair; navegação inferior
-  com as seções e Configurações.
+- **Computador:** barra lateral de altura total (`AppShell`). No topo, a
+  marca, a busca (Ctrl/⌘ K) e o botão de recolher. Logo abaixo, "Nova
+  conversa" como botão principal (também com Ctrl/⌘ ⇧ O). No meio, as seis
+  telas (Início, Conversa, Tarefas, Notas, Memória e Automações); uma tela
+  nova é um item a mais em `sections`. No pé, a conta: o nome do dono abre um
+  menu com Configurações, Acessos, o tema (desta máquina), Sair e a versão.
+  Esc ou um clique fora fecham o menu e devolvem o foco. O sino fica na barra
+  do topo, à direita.
+  Recolhida, a barra vira uma coluna só de ícones. Cada ícone mostra o nome
+  numa dica ao passar o mouse ou focar pelo teclado (Esc esconde a dica); o
+  nome continua no controle para leitores de tela. A escolha fica em
+  `localStorage` (`zuri.sidebar`), só neste navegador, e as outras abas
+  acompanham.
+- **Celular:** não há barra de baixo. A barra do topo tem o botão de menu, a
+  marca, o sino e "Nova conversa"; o menu abre a mesma barra lateral como
+  gaveta (um `<dialog>` modal: o foco fica dentro, Esc, o X, um toque fora ou
+  escolher uma tela fecham).
+- **Carregamento:** `Loading` mostra linhas cinzas no formato de uma lista,
+  com um brilho suave; `ScreenLoading` soma uma linha verde fina no topo
+  enquanto uma tela sob demanda baixa. Nada aparece nos primeiros 300 ms (uma
+  animação de duração zero com atraso, só CSS, em `styles.css`), e com
+  "reduzir movimento" o brilho e a linha ficam parados. O leitor de tela ouve
+  "Carregando…" uma vez. Na conversa, o balão "A Zuri está pensando" leva a
+  marca com a luz pulsando.
 - **Páginas:** começam com `PageHeader` (título, uma linha de contexto e ações
   à direita), numa coluna de até 5xl.
 - **Lembrete de 2FA:** enquanto a verificação em duas etapas estiver
   desligada, uma faixa acima do conteúdo chama para ligar. "Lembrar depois"
   esconde por 3 dias, só neste navegador; nas Configurações ela não aparece.
+- **Início:** abaixo do cumprimento, um campo "Escreva para a Zuri" (abre
+  uma conversa nova com o texto, que vai uma vez só pelo `state` da
+  navegação), três ideias para começar e dois cartões: Hoje (com as
+  atrasadas marcadas) e Próximos dias (agrupados por dia no fuso do dono).
+  Tudo isso vem sob demanda (`pages/home/HomeBody.tsx`, `pt-BR-home.ts`).
 - **Cumprimento no Início:** no lugar do `PageHeader`, a Zuri cumprimenta pelo
   horário do fuso das configurações (nunca o do aparelho): bom dia das 5h às
   12h, boa tarde até 18h e boa noite depois, com frases próprias de madrugada.

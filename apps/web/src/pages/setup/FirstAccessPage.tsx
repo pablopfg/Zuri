@@ -18,7 +18,7 @@ import { KeyRound, LockKeyhole, Mail, RotateCw, UserRound } from "lucide-react";
 import { type FormEvent, type MouseEvent, useEffect, useMemo, useRef, useState } from "react";
 import { Logo } from "../../components/Logo.tsx";
 import { TurnstileWidget } from "../../components/TurnstileWidget.tsx";
-import { Button, ErrorNotice, Notice, PasswordField, SelectField, Spinner, TextField, useDocumentTitle } from "../../components/ui.tsx";
+import { Button, ErrorNotice, Notice, PasswordField, SelectField, Loading, TextField, useDocumentTitle } from "../../components/ui.tsx";
 import { useSetupStatus } from "../../hooks/setup.ts";
 import { useSession } from "../../hooks/session.tsx";
 import { ApiError, api, errorMessage } from "../../lib/api.ts";
@@ -120,7 +120,7 @@ export function FirstAccessPage({ go }: { go: (path: string) => void }) {
     return (
       <main className="flex min-h-full flex-col items-center justify-center gap-6 p-6">
         <Logo className="h-12 w-12" working />
-        <Spinner label={t("web.session.checking")} />
+        <Loading label={t("web.session.checking")} />
       </main>
     );
   }

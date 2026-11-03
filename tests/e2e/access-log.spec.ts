@@ -1,5 +1,5 @@
 import { expect, HUMAN_TOKEN, test } from "./fixtures.ts";
-import { CSRF, EMAIL, expectAccessible, PASSWORD, signIn, tooSmallControls } from "./ui-helpers.ts";
+import { CSRF, EMAIL, expectAccessible, openAccountMenu, PASSWORD, signIn, tooSmallControls } from "./ui-helpers.ts";
 
 // The robot check on the sign-in form and the access log behind it (Acessos).
 
@@ -33,11 +33,13 @@ test("the access log lists each try with its IP and filters by type and IP @mobi
   await expect(page.getByRole("heading", { level: 1, name: /^(Bom dia|Boa tarde|Boa noite)/ })).toBeVisible();
 
   if (isMobile) {
-    // The phone's bar keeps four places: the log is reached from Settings > Security.
+    // Also reached from Settings > Security.
     await page.goto("/configuracoes/seguranca");
     await page.getByRole("link", { name: "Ver todos os acessos" }).click();
   } else {
-    await page.getByRole("navigation", { name: "Navegação principal" }).getByRole("link", { name: "Acessos" }).click();
+    // The account menu at the foot of the sidebar.
+    const sidebar = await openAccountMenu(page);
+    await sidebar.getByRole("link", { name: "Acessos" }).click();
   }
   await expect(page).toHaveURL(/\/acessos$/);
   await expect(page.getByRole("heading", { level: 1, name: "Acessos" })).toBeVisible();

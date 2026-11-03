@@ -1,6 +1,6 @@
 # Plano · Nova organização da interface
 
-Situação: modelo 2 aprovado pelo Pablo em 03/11/2026, com atualização em tempo real (WebSocket com hibernação, numa PR própria)
+Situação: modelo 2 aprovado pelo Pablo em 03/11/2026, com atualização em tempo real (WebSocket com hibernação, numa PR própria). Implementação em 3 PRs; a PR 1 (organização, textos e carregamento) está pronta, veja a seção 15.
 Origem: pedidos do Pablo em 03/11/2026, com a barra lateral do ChatGPT como referência
 Dependências: nenhuma para aprovar. A implementação espera a etapa 18 sair da `AppShell` (outra thread mexe no app agora).
 
@@ -258,3 +258,21 @@ O modelo é HTML estático em `docs/`, fora do pacote servido. Auditoria em modo
 ### Perguntas abertas
 
 - As duas acima.
+
+## 15. Implementação
+
+### PR 1: organização, textos e carregamento
+
+Entrou: a barra lateral nova (topo com marca, busca e recolher; "Nova conversa" com Ctrl/⌘ ⇧ O; seis telas; conta no pé com Configurações, Acessos, tema, Sair e versão), a gaveta no celular no lugar da barra de baixo, o sino na barra do topo, o Início com o campo para a Zuri, três ideias e os cartões Hoje e Próximos dias (sob demanda), as recentes por dia com busca própria, o submenu de Configurações no computador, os textos da tabela da seção 5, a paleta com "Conversa", "Nova conversa" e "Perguntar à Zuri", e o carregamento só em CSS (`Loading` e `ScreenLoading` no lugar do `Spinner`, balão "A Zuri está pensando").
+
+Decisões técnicas desta PR:
+
+- As contagens na lateral (Tarefas) e nas abas de Tarefas e Memória ficam para a PR 2, que já atualiza essas contagens junto com o resto. Na PR 1 elas custariam uma busca a mais em toda página.
+- A busca das recentes filtra o que já carregou (páginas de 20), sem rota nova; "Carregar mais" continua no fim da lista. Uma busca no servidor fica para quando o volume pedir.
+- Próximos dias mostra só tarefas com prazo; as automações marcadas entram quando a PR 2 trouxer as versões por área.
+- A linha de resumo embaixo de cada conversa (do modelo) não entrou: a lista não tem esse texto hoje e trazê-lo pediria mudar a rota.
+- O texto que chega do Início ou da busca segue o limite da conversa (`CHAT_MESSAGE_MAX`, 8.000 caracteres, não os 4.000 da seção 6): até ele, vai direto; acima, espera no campo da conversa com o contador.
+- O tema no menu da conta troca entre claro e escuro desta máquina, como em Configurações › Conta.
+- O texto "Avisos, canais" ficou "O sino do app sempre recebe tudo. Cada canal mostra se está ligado.", e "Ideias para começar" nomeia as sugestões do Início.
+- JS inicial: 138.992 B depois de trazer a develop 0.25.6 (teto 139.100 B). O corpo do Início vem sob demanda para caber.
+

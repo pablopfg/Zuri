@@ -2,7 +2,7 @@
 // the interface downloads them with the palette, on the first time it opens (rule P11).
 export const ptBRPalette = {
   "web.palette.title": "Buscar e ir para",
-  "web.palette.placeholder": "Buscar tarefas, notas, memórias ou ir para…",
+  "web.palette.placeholder": "Busque uma tela, tarefa, nota ou memória",
   "web.palette.results": "Resultados",
   "web.palette.groupGo": "Ir para",
   "web.palette.groupCreate": "Criar",
@@ -11,9 +11,12 @@ export const ptBRPalette = {
   "web.palette.newNote": "Nova nota",
   "web.palette.settingsSection": "Configurações › {section}",
   "web.palette.searching": "Buscando…",
-  "web.palette.empty": "Nada encontrado para “{query}”.",
+  "web.palette.empty": "Nada com “{query}”. Tente outra palavra.",
   "web.palette.failed": "A busca não respondeu. Os atalhos continuam aqui.",
   "web.palette.keys": "↑ ↓ para escolher · Enter para abrir · Esc para fechar",
   "web.palette.done": "Concluída",
-  "web.palette.newAutomation": "Nova automação",
+  "web.palette.newAutomation": "Criar automação",
+  "web.palette.newChat": "Nova conversa",
+  "web.palette.ask": "Perguntar à Zuri: “{query}”",
+  "web.palette.groupAsk": "Conversa",
 } as const;

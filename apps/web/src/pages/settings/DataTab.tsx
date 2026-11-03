@@ -2,7 +2,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { TRASH_RETENTION_DAYS, type TrashItem } from "@zuri/shared";
 import { Database, Trash2 } from "lucide-react";
 import { useState } from "react";
-import { Button, Card, Dialog, EmptyState, ErrorNotice, Notice, Spinner } from "../../components/ui.tsx";
+import { Button, Card, Dialog, EmptyState, ErrorNotice, Notice, Loading } from "../../components/ui.tsx";
 import { useTrash } from "../../hooks/productivity.ts";
 import { api, errorMessage } from "../../lib/api.ts";
 import { useI18n } from "../../lib/i18n.tsx";
@@ -83,7 +83,7 @@ function TrashCard() {
           </p>
         )}
         {trash.isPending ? (
-          <Spinner />
+          <Loading />
         ) : trash.isError ? (
           <ErrorNotice error={trash.error} onRetry={() => void trash.refetch()} />
         ) : items.length === 0 ? (

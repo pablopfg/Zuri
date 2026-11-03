@@ -12,14 +12,16 @@ import {
   type ToolActivity,
   type ToolName,
 } from "@zuri/shared";
-import { Check, CircleAlert, Clock, History, LifeBuoy, LoaderCircle, Mic, Pencil, Plus, SendHorizontal, Sparkles, Square, Trash2, X } from "lucide-react";
+import { Check, CircleAlert, Clock, History, LifeBuoy, LoaderCircle, Mic, Pencil, Plus, Search, SendHorizontal, Sparkles, Square, Trash2, X } from "lucide-react";
 import { type FormEvent, type KeyboardEvent, useCallback, useEffect, useId, useRef, useState } from "react";
-import { Link, NavLink, useNavigate, useParams } from "react-router";
+import { Link, NavLink, useLocation, useNavigate, useParams } from "react-router";
+import { Logo } from "../../components/Logo.tsx";
 import { Markdown } from "../../components/Markdown.tsx";
 import { useToast } from "../../components/Toaster.tsx";
-import { Button, cn, Dialog, EmptyState, ErrorNotice, Notice, PageHeader, Spinner, TextField } from "../../components/ui.tsx";
+import { Button, cn, Dialog, EmptyState, ErrorNotice, Notice, PageHeader, Loading, TextField } from "../../components/ui.tsx";
 import { api, ApiError, errorMessage } from "../../lib/api.ts";
 import { addMessages, useI18n } from "../../lib/i18n.tsx";
+import { groupRecents } from "../../lib/recents.ts";
 import { ApprovalCard, PlanCard } from "./cards.tsx";
 import { TOOL_LABEL, TOOL_STATUS_LABEL } from "./labels.ts";
 import { streamChat } from "./stream.ts";
@@ -156,6 +158,26 @@ export function ChatPage() {
     }
   }
 
+  // A question typed on the home page or in the search arrives with the address: sent once, then
+  // the address forgets it, so a reload or going back never sends it again.
+  const location = useLocation();
+  // Per arrival (the address's key): the screen stays mounted from one conversation to the next.
+  const asked = useRef<string | null>(null);
+  const ask = (location.state as { ask?: unknown } | null)?.ask;
+  // biome-ignore lint/correctness/useExhaustiveDependencies: runs once per question, with the send of this render
+  useEffect(() => {
+    if (asked.current === location.key || id || typeof ask !== "string" || !ask.trim()) return;
+    asked.current = location.key;
+    // Too long for one message: it waits in the composer, where the counter says why. Nothing is
+    // sent, so the address may keep it (a reload just puts it back in the composer).
+    if ([...ask].length > CHAT_MESSAGE_MAX) {
+      setDraft(ask);
+      return;
+    }
+    navigate(location.pathname, { replace: true, state: null });
+    void send(ask);
+  }, [ask, id, location.key]);
+
   async function stop() {
     const conversationId = live?.conversationId;
     if (!conversationId) {
@@ -209,7 +231,7 @@ export function ChatPage() {
         </Dialog>
 
         {id && page.isPending ? (
-          <Spinner label={t("web.chat.loading")} />
+          <Loading label={t("web.chat.loading")} />
         ) : id && page.isError ? (
           <ErrorNotice error={page.error} onRetry={() => void page.refetch()} />
         ) : (
@@ -255,9 +277,10 @@ export function ChatPage() {
   );
 }
 
-/** The conversations, newest first, a page at a time. */
+/** The conversations, newest first, a page at a time, by day (in the owner's zone) and with a search of their titles. */
 function ConversationList({ activeId, onPick }: { activeId: string | undefined; onPick?: () => void }) {
-  const { t, dateTime } = useI18n();
+  const { t, timeZone } = useI18n();
+  const [query, setQuery] = useState("");
   const list = useInfiniteQuery({
     queryKey: LIST_KEY,
     queryFn: ({ pageParam, signal }) =>
@@ -266,47 +289,64 @@ function ConversationList({ activeId, onPick }: { activeId: string | undefined; 
     getNextPageParam: (last) => last.nextCursor ?? undefined,
   });
   const items = list.data?.pages.flatMap((p) => p.conversations) ?? [];
+  const groups = groupRecents(items, query, new Date(), timeZone);
+  const labels = { today: t("web.chat.group.today"), yesterday: t("web.chat.group.yesterday"), week: t("web.chat.group.week"), older: t("web.chat.group.older") } as const;
   return (
-    <nav aria-label={t("web.chat.list")} className="space-y-2">
-      <NavLink
+    <nav aria-label={t("web.chat.list")} className="space-y-3">
+      <Link
         to="/conversa"
-        end
         onClick={onPick}
-        className={({ isActive }) =>
-          cn(
-            "flex min-h-11 items-center gap-2 rounded-xl border border-dashed border-border-strong px-3 text-sm font-medium",
-            isActive ? "bg-accent-soft text-accent-text" : "text-fg hover:bg-raised",
-          )
-        }
+        className="flex min-h-11 items-center justify-center gap-2 rounded-xl bg-accent px-3 text-sm font-semibold text-accent-fg shadow-sm hover:bg-accent-hover"
       >
         <Plus className="h-4 w-4" aria-hidden />
         {t("web.chat.new")}
-      </NavLink>
+      </Link>
+      <label className="flex min-h-11 items-center gap-2 rounded-xl border border-border-strong bg-surface px-3 text-fg-muted focus-within:border-accent">
+        <Search className="h-4 w-4 shrink-0" aria-hidden />
+        <span className="sr-only">{t("web.chat.search")}</span>
+        <input
+          type="search"
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+          placeholder={t("web.chat.search")}
+          className="min-h-11 min-w-0 flex-1 bg-transparent text-[15px] text-fg placeholder:text-fg-muted focus:outline-none"
+        />
+      </label>
       {list.isPending ? (
-        <Spinner />
+        <Loading />
       ) : list.isError ? (
         <ErrorNotice error={list.error} onRetry={() => void list.refetch()} />
       ) : items.length === 0 ? (
         <p className="px-3 py-2 text-sm text-fg-muted">{t("web.chat.listEmpty")}</p>
+      ) : groups.length === 0 ? (
+        <p role="status" className="px-3 py-2 text-sm text-fg-muted">
+          {t("web.chat.searchEmpty")}
+        </p>
       ) : (
-        <ul className="space-y-1">
-          {items.map((item) => (
-            <li key={item.id}>
-              <NavLink
-                to={`/conversa/${item.id}`}
-                onClick={onPick}
-                aria-current={item.id === activeId ? "page" : undefined}
-                className={cn(
-                  "block min-h-11 rounded-xl px-3 py-2 text-sm",
-                  item.id === activeId ? "bg-accent-soft text-accent-text" : "text-fg hover:bg-raised",
-                )}
-              >
-                <span className="block truncate font-medium">{item.title}</span>
-                <span className="block truncate text-xs text-fg-muted">{dateTime(item.updatedAt)}</span>
-              </NavLink>
-            </li>
-          ))}
-        </ul>
+        groups.map(({ group, items: inGroup }) => (
+          <section key={group} aria-labelledby={`recentes-${group}`}>
+            <h3 id={`recentes-${group}`} className="px-3 pb-1 pt-2 text-xs font-semibold text-fg-muted">
+              {labels[group]}
+            </h3>
+            <ul className="space-y-0.5">
+              {inGroup.map((item) => (
+                <li key={item.id}>
+                  <NavLink
+                    to={`/conversa/${item.id}`}
+                    onClick={onPick}
+                    aria-current={item.id === activeId ? "page" : undefined}
+                    className={cn(
+                      "flex min-h-11 items-center rounded-xl px-3 py-2 text-sm",
+                      item.id === activeId ? "bg-accent-soft font-semibold text-accent-text" : "text-fg hover:bg-raised",
+                    )}
+                  >
+                    <span className="truncate">{item.title}</span>
+                  </NavLink>
+                </li>
+              ))}
+            </ul>
+          </section>
+        ))
       )}
       {list.hasNextPage && (
         <Button variant="ghost" className="w-full" loading={list.isFetchingNextPage} onClick={() => void list.fetchNextPage()}>
@@ -634,12 +674,8 @@ function AssistantBody({
         ) : (
           streaming &&
           tools.every((tool) => tool.status !== "running") && (
-            <p className="inline-flex items-center gap-2 text-sm text-fg-muted">
-              <span className="flex gap-1" aria-hidden>
-                <span className="h-1.5 w-1.5 rounded-full bg-fg-muted motion-safe:animate-pulse" />
-                <span className="h-1.5 w-1.5 rounded-full bg-fg-muted motion-safe:animate-pulse [animation-delay:150ms]" />
-                <span className="h-1.5 w-1.5 rounded-full bg-fg-muted motion-safe:animate-pulse [animation-delay:300ms]" />
-              </span>
+            <p className="inline-flex items-center gap-2.5 rounded-2xl rounded-tl-md border border-border bg-surface py-2 pl-2 pr-4 text-sm text-fg-muted shadow-sm">
+              <Logo className="h-7 w-7" working />
               {t("web.chat.thinking")}
             </p>
           )
@@ -748,7 +784,7 @@ function Composer({
         event.preventDefault();
         if (!empty && !over && !streaming && !blocked) onSend();
       }}
-      className="sticky bottom-[calc(4rem+env(safe-area-inset-bottom))] z-10 space-y-2 rounded-2xl border border-border-strong bg-surface p-2 shadow-lg md:bottom-4"
+      className="sticky bottom-[calc(0.75rem+env(safe-area-inset-bottom))] z-10 space-y-2 rounded-2xl border border-border-strong bg-surface p-2 shadow-lg md:bottom-4"
     >
       {(recording || transcribing || voiceError) && (
         <div aria-live="polite" className="flex items-center justify-between gap-2 px-2 pt-1 text-sm">

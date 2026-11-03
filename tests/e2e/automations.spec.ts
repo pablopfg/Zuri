@@ -1,5 +1,5 @@
 import { expect, type Page, test } from "./fixtures.ts";
-import { expectAccessible, signIn, tooSmallControls } from "./ui-helpers.ts";
+import { expectAccessible, openSidebar, signIn, tooSmallControls } from "./ui-helpers.ts";
 
 // Automations against the real Worker (step 10): create with the preview, run
 // now, pause, edit and delete; a routine Zuri proposes in the chat waits for the
@@ -23,7 +23,7 @@ const toast = (page: Page, text: string | RegExp) => page.getByRole("status").fi
 test("a reminder: create with the preview, run now, pause, edit and delete @mobile", async ({ page }) => {
   const name = `Remédio ${tag()}`;
   await openAutomations(page);
-  await page.getByRole("button", { name: "Nova automação" }).click();
+  await page.getByRole("button", { name: "Criar automação" }).click();
   const form = page.getByRole("dialog", { name: "Nova automação" });
   // The dialog puts the focus on its first field.
   await expect(form.getByLabel("Tipo")).toBeFocused();
@@ -56,9 +56,9 @@ test("a reminder: create with the preview, run now, pause, edit and delete @mobi
   expect(await tooSmallControls(page), "every control of the automations page is a 44 px target").toEqual([]);
 
   // Run now: the result lands in the history.
-  await row.getByRole("button", { name: "Executar agora" }).click();
-  await expect(toast(page, "Pronto. O resultado está no histórico.")).toBeVisible();
-  const history = page.getByRole("region", { name: "Histórico de execuções" });
+  await row.getByRole("button", { name: "Rodar agora" }).click();
+  await expect(toast(page, "Pronto. O resultado está em Últimas execuções.")).toBeVisible();
+  const history = page.getByRole("region", { name: "Últimas execuções" });
   const run = history.getByRole("listitem").filter({ hasText: name }).first();
   await expect(run.getByText("Tomar o remédio da pressão")).toBeVisible();
   await expect(run.getByText("Entregue")).toBeVisible();
@@ -86,18 +86,18 @@ test("a reminder: create with the preview, run now, pause, edit and delete @mobi
   await expect(row.getByText("Lembrete · Todo dia 31 às 08:15 (ou no último dia do mês)")).toBeVisible();
 
   // Delete, after a confirmation; the history stays.
-  await row.getByRole("button", { name: "Excluir" }).click();
-  const confirm = page.getByRole("dialog", { name: `Excluir “${name}”?` });
+  await row.getByRole("button", { name: "Apagar" }).click();
+  const confirm = page.getByRole("dialog", { name: `Apagar “${name}”?` });
   await expectAccessible(page, "excluir automação");
-  await confirm.getByRole("button", { name: "Excluir" }).click();
-  await expect(toast(page, "Automação excluída.")).toBeVisible();
+  await confirm.getByRole("button", { name: "Apagar" }).click();
+  await expect(toast(page, "Automação apagada.")).toBeVisible();
   await expect(row).toHaveCount(0);
   await expect(run).toBeVisible();
 });
 
 test("the server's refusal shows in the form: a one-time moment already past", async ({ page }) => {
   await openAutomations(page);
-  await page.getByRole("button", { name: "Nova automação" }).click();
+  await page.getByRole("button", { name: "Criar automação" }).click();
   const form = page.getByRole("dialog", { name: "Nova automação" });
   await form.getByLabel("Nome").fill(`Passado ${tag()}`);
   await form.getByLabel("Texto do lembrete").fill("Nada");
@@ -126,20 +126,20 @@ test("a routine Zuri proposes in the chat runs nothing until the owner approves 
 
   await page.getByRole("link", { name: "Revisar em Automações" }).last().click();
   await expect(page).toHaveURL(/\/automacoes#automacao-[0-9a-f-]{36}$/);
-  const pending = page.getByRole("region", { name: "Rotinas esperando sua aprovação" });
+  const pending = page.getByRole("region", { name: /^A Zuri sugeriu (uma rotina|\d+ rotinas)$/ });
   const item = pending.getByRole("listitem").filter({ hasText: name });
   await expect(item.getByText("Veja minhas tarefas da semana e diga o que está atrasado.")).toBeVisible();
   await expect(item.getByText("Sexta, às 17:00")).toBeVisible();
   await expect(item.getByText("Só avisa quando houver algo")).toBeVisible();
   await expectAccessible(page, "rotina esperando aprovação");
 
-  await item.getByRole("button", { name: "Aprovar e ativar" }).click();
+  await item.getByRole("button", { name: "Aprovar" }).click();
   await expect(toast(page, "Rotina aprovada. A primeira execução já está marcada.")).toBeVisible();
   const row = page.getByRole("listitem").filter({ has: page.getByRole("heading", { name, exact: true }) });
   await expect(row.getByText("Ativa", { exact: true })).toBeVisible();
   await expect(row.getByText("Criada na conversa")).toBeVisible();
-  await row.getByRole("button", { name: "Excluir" }).click();
-  await page.getByRole("dialog", { name: `Excluir “${name}”?` }).getByRole("button", { name: "Excluir" }).click();
+  await row.getByRole("button", { name: "Apagar" }).click();
+  await page.getByRole("dialog", { name: `Apagar “${name}”?` }).getByRole("button", { name: "Apagar" }).click();
   await expect(row).toHaveCount(0);
 });
 
@@ -149,7 +149,7 @@ test("the palette opens the form, from another page or on the page itself", asyn
   await expect(page.getByRole("heading", { level: 1, name: /^(Bom dia|Boa tarde|Boa noite)/ })).toBeVisible();
   for (const from of ["home", "automations"]) {
     await page.keyboard.press("Control+k");
-    await page.getByRole("dialog", { name: "Buscar e ir para" }).getByRole("combobox").fill("nova automação");
+    await page.getByRole("dialog", { name: "Buscar e ir para" }).getByRole("combobox").fill("criar automação");
     await page.keyboard.press("Enter");
     const form = page.getByRole("dialog", { name: "Nova automação" });
     await expect(form, from).toBeVisible();
@@ -163,10 +163,12 @@ test("the palette opens the form, from another page or on the page itself", asyn
   await expect(page.getByRole("dialog", { name: "Nova automação" })).toBeHidden();
 });
 
-test("on a phone, Automations sits in the Settings list @mobile", async ({ page, isMobile }) => {
-  test.skip(!isMobile, "the list of sections is the phone's settings");
-  await page.goto("/configuracoes");
+test("Automations sits in the sidebar, which is a drawer on a phone @mobile", async ({ page }) => {
+  await page.goto("/");
   await signIn(page);
-  await page.getByRole("navigation", { name: "Outras páginas" }).getByRole("link", { name: "Automações" }).click();
+  const sidebar = await openSidebar(page);
+  await sidebar.getByRole("link", { name: "Automações" }).click();
   await expect(page.getByRole("heading", { level: 1, name: "Automações" })).toBeVisible();
+  // The drawer closes once a place is picked.
+  await expect(page.getByRole("dialog", { name: "Navegação principal" })).toHaveCount(0);
 });

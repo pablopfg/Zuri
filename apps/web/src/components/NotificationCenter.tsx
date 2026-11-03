@@ -2,7 +2,7 @@ import { Bell } from "lucide-react";
 import { lazy, Suspense, useState } from "react";
 import { useSession } from "../hooks/session.tsx";
 import { useI18n } from "../lib/i18n.tsx";
-import { Dialog, Spinner } from "./ui.tsx";
+import { Dialog, Loading } from "./ui.tsx";
 
 // The list, its actions and its texts come only when the bell is opened (rule P11).
 const NoticesPanel = lazy(() => import("./NoticesPanel.tsx").then((m) => ({ default: m.NoticesPanel })));
@@ -18,12 +18,14 @@ export function NotificationCenter({ navigate }: { navigate: (to: string) => voi
   const { session } = useSession();
   const [open, setOpen] = useState(false);
   const unread = session?.unreadNotices ?? 0;
+  // The name says the same number the badge shows ("99+"), so a voice command naming what is seen still finds it.
+  const shown = unread > 99 ? "99+" : String(unread);
   return (
     <>
       <button
         type="button"
         onClick={() => setOpen(true)}
-        aria-label={unread > 0 ? t("web.notifications.openUnread", { count: unread }) : t("web.notifications.open")}
+        aria-label={unread > 0 ? t("web.notifications.openUnread", { count: shown }) : t("web.notifications.open")}
         aria-haspopup="dialog"
         className="relative inline-flex h-11 w-11 items-center justify-center rounded-xl text-fg hover:bg-raised"
       >
@@ -33,12 +35,12 @@ export function NotificationCenter({ navigate }: { navigate: (to: string) => voi
             aria-hidden
             className="absolute right-1 top-1 flex h-[1.125rem] min-w-[1.125rem] items-center justify-center rounded-full bg-accent px-1 text-[0.6875rem] font-semibold leading-none text-accent-fg"
           >
-            {unread > 99 ? "99+" : unread}
+            {shown}
           </span>
         )}
       </button>
       <Dialog open={open} onClose={() => setOpen(false)} title={t("web.notifications.title")}>
-        <Suspense fallback={<Spinner />}>
+        <Suspense fallback={<Loading />}>
           <NoticesPanel onClose={() => setOpen(false)} navigate={navigate} />
         </Suspense>
       </Dialog>
