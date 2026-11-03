@@ -54,7 +54,7 @@ test("a task: create with a deadline and a project, edit, complete, delete and r
   // 18:30 in São Paulo (UTC-3).
   expect(body.task.dueAt).toBe("2099-12-10T21:30:00.000Z");
 
-  await page.getByRole("button", { name: "Próximas", exact: true }).click();
+  await page.getByRole("button", { name: /^Próximas \d+$/ }).click();
   const list = page.getByRole("region", { name: "Lista de tarefas" });
   await expect(list.getByRole("button", { name: title })).toBeVisible();
   await expect(list.getByText("Prazo: 10/12/2099 às 18:30")).toBeVisible();
@@ -312,7 +312,7 @@ test.describe("a device in another zone than the owner's", () => {
     const { task } = (await (await created).json()) as { task: { id: string; dueAt: string } };
     expect(task.dueAt).toBe("2099-12-10T21:30:00.000Z");
 
-    await page.getByRole("button", { name: "Próximas", exact: true }).click();
+    await page.getByRole("button", { name: /^Próximas \d+$/ }).click();
     await expect(page.getByRole("region", { name: "Lista de tarefas" }).getByText("Prazo: 10/12/2099 às 18:30")).toBeVisible();
     expect((await page.request.delete(`/api/tasks/${task.id}`, { headers: CSRF })).status()).toBe(200);
   });

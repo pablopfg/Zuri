@@ -3,6 +3,7 @@ import "./zod-config.ts";
 
 import { z } from "zod";
 import type { ApiErrorCode } from "./errors.ts";
+import type { AreaVersions } from "./areas.ts";
 import type { QuotedKind } from "./telegram.ts";
 import { isValidCalendarDate, MAX_DATE_YEAR, MIN_DATE_YEAR } from "./dates.ts";
 import { line, RECORD_ID, recordIdSchema, TASK_PRIORITIES, type TaskPriority, text } from "./productivity.ts";
@@ -260,7 +261,8 @@ export interface ConversationPage {
 export type ChatEvent =
   | { type: "start"; conversation: Conversation; userMessage: ChatMessage; assistantMessageId: string }
   | { type: "text"; delta: string }
-  | { type: "tool"; tool: ToolActivity }
+  /** `versions`: after a tool that may have written, the screen areas' numbers (AreaVersions), so the screens refresh only what moved. */
+  | { type: "tool"; tool: ToolActivity; versions?: AreaVersions }
   | { type: "approval"; action: PendingAction }
   | { type: "plan"; plan: TaskPlan }
   | { type: "error"; code: ApiErrorCode; message: string; details?: Record<string, unknown> }

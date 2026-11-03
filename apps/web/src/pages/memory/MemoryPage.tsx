@@ -18,7 +18,7 @@ import { Button, Card, cn, Dialog, EmptyState, ErrorNotice, fieldClass, PageHead
 import { MEMORIES_KEY, useMemories, useMemoryHistory, useMemoryReviews } from "../../hooks/memory.ts";
 import { SETTINGS_KEY } from "../../hooks/session.tsx";
 import { api, errorMessage } from "../../lib/api.ts";
-import { useDebounced } from "../../lib/debounce.ts";
+import { FlashStatus, flashClass, useDebounced, useFlash } from "../../lib/lists.tsx";
 import { addMessages, useI18n } from "../../lib/i18n.tsx";
 import { onMemorySearch } from "../../lib/palette.ts";
 import { useToast } from "../../components/Toaster.tsx";
@@ -56,6 +56,7 @@ export function MemoryPage() {
   const q = useDebounced(query.trim());
   const memories = useMemories({ filter, category, q });
   const counts = memories.data?.counts;
+  const flash = useFlash(memories.isPlaceholderData ? undefined : memories.data?.memories, (memory) => memory.id, (memory) => `${memory.updatedAt}|${memory.status}`, `${filter}|${category}|${q}`);
   const [editing, setEditing] = useState<Editing | null>(null);
   const [historyOf, setHistoryOf] = useState<Memory | null>(null);
   const [deleting, setDeleting] = useState<Memory | null>(null);
@@ -86,8 +87,7 @@ export function MemoryPage() {
                 filter === item ? "bg-surface text-fg shadow-sm ring-1 ring-border-strong" : "text-fg-muted hover:text-fg",
               )}
             >
-              {t(FILTER_LABEL[item])}
-              {counts && <span className="ml-1 tabular-nums text-fg-muted">{counts[COUNT_OF[item]]}</span>}
+              {t(FILTER_LABEL[item])} {counts && <span className="tabular-nums text-fg-muted">{counts[COUNT_OF[item]]}</span>}
             </button>
           ))}
         </fieldset>
@@ -137,6 +137,7 @@ export function MemoryPage() {
               <MemoryRow
                 key={memory.id}
                 memory={memory}
+                glow={flashClass(flash.glowing, memory.id)}
                 onEdit={() => setEditing({ mode: "edit", memory })}
                 onCorrect={() => setEditing({ mode: "correct", memory })}
                 onHistory={() => setHistoryOf(memory)}
@@ -145,6 +146,7 @@ export function MemoryPage() {
             ))}
           </ul>
         )}
+        <FlashStatus count={flash.remote} />
       </section>
 
       <ConflictReviewSetting />
@@ -248,12 +250,14 @@ function MemoryRow({
   onCorrect,
   onHistory,
   onDelete,
+  glow,
 }: {
   memory: Memory;
   onEdit: () => void;
   onCorrect: () => void;
   onHistory: () => void;
   onDelete: () => void;
+  glow: string;
 }) {
   const { t, dateTime } = useI18n();
   const qc = useQueryClient();
@@ -276,7 +280,7 @@ function MemoryRow({
 
   const action = "inline-flex h-11 w-11 items-center justify-center rounded-xl text-fg-muted transition-colors hover:bg-raised hover:text-fg disabled:opacity-60";
   return (
-    <li className="space-y-2 px-4 py-3">
+    <li className={cn("space-y-2 px-4 py-3", glow)}>
       <p className={cn("whitespace-pre-wrap break-words text-[15px] leading-6", past && "text-fg-muted")}>{memory.content}</p>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap items-center gap-1.5 text-xs">

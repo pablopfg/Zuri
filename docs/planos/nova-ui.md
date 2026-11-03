@@ -276,3 +276,20 @@ Decisões técnicas desta PR:
 - O texto "Avisos, canais" ficou "O sino do app sempre recebe tudo. Cada canal mostra se está ligado.", e "Ideias para começar" nomeia as sugestões do Início.
 - JS inicial: 138.992 B depois de trazer a develop 0.25.6 (teto 139.100 B). O corpo do Início vem sob demanda para caber.
 
+
+### PR 2: atualização automática só do que mudou
+
+Entrou: o número por área (tarefas, projetos, notas, lixeira, memórias, automações e conversas recentes) que sobe a cada mudança e vai junto com a conferência da sessão, a entrada, a troca de senha e o sinal de vida; a busca de novo só da área que mudou, repassada às outras abas; o mesmo número nos eventos de ferramenta da conversa; o brilho verde de 2,4 s na linha que mudou (Tarefas, Notas, Memória, Automações e Últimas execuções), com uma frase curta para o leitor de tela quando a mudança veio de fora; as contagens no menu (tarefas de hoje) e nas abas de Tarefas; o passo otimista em concluir tarefa, pausar e retomar automação e restaurar da lixeira; o aviso "Esta nota mudou em outro aparelho" com "Ver a versão nova" e "Manter a minha"; e as automações marcadas em Próximos dias.
+
+Decisões técnicas desta PR:
+
+- Os números ficam numa tabela de uma linha só (`zur_area_versions`, migration 21) e sobem por gatilhos no banco, não no código de cada escrita. Assim nenhuma origem (app, conversa, bot, rotina, restauração, MCP) esquece de avisar. Custa uma linha lida por batida e uma escrita por mudança (P4); os tetos de `free-tier-budget.test.ts` subiram nessa medida, com o motivo ao lado.
+- O evento de ferramenta da conversa leva o conjunto de números (`versions`) depois de uma ferramenta de escrita da própria Zuri, no lugar da `area` da seção 7. O resultado é o mesmo e serve para qualquer ferramenta, inclusive as que mexem em mais de uma área.
+- Contagem das abas de Tarefas: rota nova `GET /api/tasks/counts`, que lê só as tarefas abertas com prazo até hoje à noite e os contadores (`tasks` e o novo `tasks_done`). Nunca conta a tabela inteira (P2).
+- No modo de bloqueio, com a senha a trocar ou com o segundo passo pendente, os números não vão na resposta: não há tela para atualizar.
+- A própria mudança da pessoa volta no sinal de vida seguinte como número novo. A tela busca de novo a área uma vez e, como nada mudou na lista, nada acende. Aceitamos essa busca a mais (no máximo uma por área por minuto) para manter um único caminho.
+- A etiqueta de origem ("Pelo Telegram") não entrou: tarefas, notas e automações não guardam de onde vieram, e guardar pediria mudar cada escrita. O leitor de tela ouve "1 item da lista mudou." Fica para quando houver a coluna de origem.
+- Gatilhos por linha: uma operação em lote (apagar um projeto com N tarefas, esvaziar a lixeira, limpar execuções antigas) soma N escritas na linha dos números. Aceitamos: o volume continua preso aos limites de cada operação, e somar um incremento só no código de cada lote voltaria ao risco de alguém esquecer.
+- No navegador, um número diferente do conhecido conta como mudança, mesmo menor. Uma resposta atrasada custa no máximo uma busca a mais; em troca, uma restauração que volte os números nunca deixa a tela parada.
+- Os números saem só nas respostas da sessão e do chat; no chat, um bloqueio que começa no meio do turno também os corta.
+- JS inicial: 139.0xx B de 139.100 B. O código da atualização (`lib/versions.ts`) vem sob demanda, e o brilho mora em `lib/lists.tsx`, junto da busca com espera, para as telas dividirem um arquivo só. Para caber, o texto "Encerra esta sessão…" passou para o catálogo de Configurações e a contagem do menu é lida junto com o nome ("Tarefas 3"). A PR 3 precisa abrir folga antes de crescer.

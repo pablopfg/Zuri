@@ -1,4 +1,4 @@
-import { type ApiErrorCode, type ChatEvent, type ChatMessage, type Conversation, type Locale, MCP_LIMITS, type MessageKey, type Settings, type ToolActivity } from "@zuri/shared";
+import { type ApiErrorCode, type AreaVersions, type ChatEvent, type ChatMessage, type Conversation, type Locale, MCP_LIMITS, type MessageKey, type Settings, type ToolActivity } from "@zuri/shared";
 import { t } from "@zuri/shared";
 import { z } from "zod";
 import type { MeteredAI } from "../ai/metered.ts";
@@ -57,6 +57,8 @@ export interface RunnerDeps {
   registry?: readonly ToolDefinition[];
   /** A turn that failed unexpectedly, or found the model out: told to the failure log (step 11). */
   onFailure?: (failure: { source: "chat" | "ai"; code: string; errorName: string }) => void;
+  /** The screen areas' numbers, sent after a tool that may have written, so the open screens refresh only what moved (nova UI, PR 2). */
+  versions?: () => AreaVersions;
 }
 
 /** Tokens the tools' descriptions and schemas take in every prompt; computed once per process. */
@@ -253,7 +255,9 @@ export class AgentRunner {
           if (actionId) activity.actionId = actionId;
           if (planId) activity.planId = planId;
           if (automationId) activity.automationId = automationId;
-          yield { type: "tool", tool: { ...activity } };
+          // Only Zuri's own writing tools change what the screens show (a destructive one only proposes; an external one writes elsewhere).
+          const wrote = !event.error && this.deps.versions && turnTools.find(activity.name)?.permission === "write";
+          yield wrote ? { type: "tool", tool: { ...activity }, versions: this.deps.versions?.() ?? {} } : { type: "tool", tool: { ...activity } };
           if (actionId) yield { type: "approval", action: this.deps.tools.actions.view(actionId) };
           if (planId) yield { type: "plan", plan: this.deps.tools.plans.get(planId) };
         }

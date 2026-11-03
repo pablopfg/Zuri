@@ -1,6 +1,7 @@
 import {
   localDayBounds,
   type Task,
+  type TaskCounts,
   type TaskCreate,
   type TaskListQuery,
   type TaskUpdate,
@@ -120,6 +121,29 @@ export class TaskRepository {
       query.limit,
     );
     return rows.map(toTask);
+  }
+
+  /**
+   * How many tasks each view holds, by the same rules as `list` without a
+   * search or project. Only the open tasks due by the end of today (and the
+   * overdue ones) are read; the totals come from the counters (rule P2).
+   */
+  counts(): TaskCounts {
+    const now = new Date(this.#clock());
+    const dayEnd = localDayBounds(this.deps.timeZone(), now).end;
+    // One walk of the open-tasks index up to tonight gives both Today's dated part and Overdue.
+    const row = this.db.one<{ due_today: number; overdue: number | null; doing: number }>(
+      `SELECT count(*) AS due_today, sum(due_at < ?) AS overdue,
+         (SELECT count(*) FROM zur_tasks WHERE status = 'in_progress' AND due_at IS NULL) AS doing
+       FROM zur_tasks WHERE status != 'done' AND due_at < ?`,
+      now.toISOString(),
+      dayEnd,
+    );
+    const totals = this.db.all<{ kind: string; n: number }>(`SELECT kind, n FROM zur_counts WHERE kind IN ('tasks', 'tasks_done')`);
+    const all = totals.find((item) => item.kind === "tasks")?.n ?? 0;
+    const completed = totals.find((item) => item.kind === "tasks_done")?.n ?? 0;
+    const today = (row?.due_today ?? 0) + (row?.doing ?? 0);
+    return { today, upcoming: Math.max(0, all - completed - today), overdue: row?.overdue ?? 0, completed, all };
   }
 
   get(id: string): Task {

@@ -914,7 +914,57 @@ export const MIGRATIONS: readonly Migration[] = [
       `ALTER TABLE zur_automations ADD COLUMN conversation_id TEXT`,
     ],
   },
+  {
+    version: 21,
+    name: "area_versions",
+    statements: [
+      // A number per screen area (a column each) that goes up with every change
+      // to it, whoever made it (the app, the chat, the bot, a routine, a restore).
+      // The heartbeat sends the numbers and the open screens fetch again only the
+      // area that moved (nova UI, PR 2). Numbers only, never content. One row, so
+      // the heartbeat reads one more row a minute; kept by the triggers below, so
+      // no writer can forget, at one row written per change (rule P4). Not in the backup.
+      `CREATE TABLE IF NOT EXISTS zur_area_versions (
+        id INTEGER PRIMARY KEY CHECK (id = 1),
+        tasks INTEGER NOT NULL DEFAULT 0,
+        projects INTEGER NOT NULL DEFAULT 0,
+        notes INTEGER NOT NULL DEFAULT 0,
+        trash INTEGER NOT NULL DEFAULT 0,
+        memories INTEGER NOT NULL DEFAULT 0,
+        automations INTEGER NOT NULL DEFAULT 0,
+        conversations INTEGER NOT NULL DEFAULT 0
+      )`,
+      `INSERT INTO zur_area_versions (id) VALUES (1) ON CONFLICT (id) DO NOTHING`,
+      ...areaTriggers("tasks", "zur_tasks"),
+      ...areaTriggers("projects", "zur_projects"),
+      ...areaTriggers("notes", "zur_notes"),
+      ...areaTriggers("trash", "zur_trash"),
+      ...areaTriggers("memories", "zur_memories"),
+      ...areaTriggers("memories", "zur_memory_reviews"),
+      ...areaTriggers("automations", "zur_automations"),
+      ...areaTriggers("automations", "zur_automation_runs"),
+      // The recent list shows the title and the order by last message; the summary columns are not seen.
+      ...areaTriggers("conversations", "zur_conversations", "OF title, updated_at"),
+      // The task counts (step "nova UI", PR 2): done tasks grow without end, so they are counted here (rule P2).
+      `INSERT INTO zur_counts (kind, n) SELECT 'tasks_done', count(*) FROM zur_tasks WHERE status = 'done' ON CONFLICT (kind) DO UPDATE SET n = excluded.n`,
+      `CREATE TRIGGER IF NOT EXISTS zur_counts_tasks_done_insert AFTER INSERT ON zur_tasks WHEN NEW.status = 'done' BEGIN UPDATE zur_counts SET n = n + 1 WHERE kind = 'tasks_done'; END`,
+      `CREATE TRIGGER IF NOT EXISTS zur_counts_tasks_done_delete AFTER DELETE ON zur_tasks WHEN OLD.status = 'done' BEGIN UPDATE zur_counts SET n = n - 1 WHERE kind = 'tasks_done'; END`,
+      `CREATE TRIGGER IF NOT EXISTS zur_counts_tasks_done_update AFTER UPDATE OF status ON zur_tasks WHEN (OLD.status = 'done') != (NEW.status = 'done')
+       BEGIN UPDATE zur_counts SET n = n + CASE WHEN NEW.status = 'done' THEN 1 ELSE -1 END WHERE kind = 'tasks_done'; END`,
+    ],
+  },
 ];
+
+/** The three triggers that move an area's number when a row of `table` is added, changed or removed. Frozen: migration 21 is built from it. */
+function areaTriggers(area: string, table: string, columns = ""): string[] {
+  const bump = `UPDATE zur_area_versions SET ${area} = ${area} + 1 WHERE id = 1`;
+  const name = `zur_area_${area}_${table.replace(/^zur_/, "")}`;
+  return [
+    `CREATE TRIGGER IF NOT EXISTS ${name}_insert AFTER INSERT ON ${table} BEGIN ${bump}; END`,
+    `CREATE TRIGGER IF NOT EXISTS ${name}_update AFTER UPDATE ${columns} ON ${table} BEGIN ${bump}; END`,
+    `CREATE TRIGGER IF NOT EXISTS ${name}_delete AFTER DELETE ON ${table} BEGIN ${bump}; END`,
+  ];
+}
 
 export const LATEST_SCHEMA_VERSION = MIGRATIONS.at(-1)?.version ?? 0;
 

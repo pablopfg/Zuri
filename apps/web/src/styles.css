@@ -211,10 +211,32 @@ body {
   }
 }
 
+/*
+ * A row that just changed (nova UI, PR 2) glows green and fades in 2.4 s, the
+ * time lib/flash.ts keeps the class. With "reduce motion" it stays lit, still,
+ * and goes out at once.
+ */
+.zuri-flash {
+  animation: zuri-glow 2.4s ease-out both;
+}
+
+@keyframes zuri-glow {
+  from {
+    background-color: var(--color-accent-soft);
+  }
+  to {
+    background-color: transparent;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .zuri-skeleton,
   .zuri-progress::before {
     animation: none;
+  }
+  .zuri-flash {
+    animation: none;
+    background-color: var(--color-accent-soft);
   }
 }
 

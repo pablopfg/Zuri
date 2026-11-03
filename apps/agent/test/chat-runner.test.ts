@@ -4,6 +4,7 @@ import { contextBudget, contextWindow, IMPORTED_PREFIX, SUMMARIZE_THRESHOLD, sum
 import { decodeQuoted } from "../src/chat/conversations.ts";
 import { agentNameLine, buildSystemPrompt, FIXED_INSTRUCTIONS, languageReminder, SUMMARY_SYSTEM } from "../src/agent/prompt.ts";
 import { AgentRunner } from "../src/agent/runner.ts";
+import { readAreaVersions } from "../src/db/area-versions.ts";
 import { ProviderChain } from "../src/ai/chain.ts";
 import type { AIProvider } from "../src/ai/provider.ts";
 import { AppError } from "../src/http/errors.ts";
@@ -168,6 +169,34 @@ describe("a turn", () => {
       expect(world.productivity.tasks.list({ view: "all" })).toHaveLength(1);
       // Two model calls (the tool step and the answer), both counted.
       expect(requestsToday(world)).toBe(2);
+    });
+  });
+
+  it("a writing tool's success carries the areas' numbers, so the open screens refresh only what moved; a reading one does not", async () => {
+    await withChatWorld(async (world) => {
+      const before = readAreaVersions(world.db);
+      const provider = new ScriptedProvider([callTools({ name: "create_task", input: { title: "Pagar a luz" } }, { name: "search", input: { query: "luz" } }), say("Pronto.")]);
+      const events = await collect(
+        new AgentRunner({
+          tools: world.services(),
+          conversations: world.conversations,
+          settings: () => world.settings,
+          locale: () => "pt-BR",
+          ai: () => world.ai(provider),
+          agentName: undefined,
+          clock: () => world.clock.now,
+          versions: () => readAreaVersions(world.db),
+        }).chat({ message: "Crie e procure", signal: new AbortController().signal }),
+      );
+      const ended = events.filter((e): e is Extract<ChatEvent, { type: "tool" }> => e.type === "tool" && e.tool.status !== "running");
+      const created = ended.find((e) => e.tool.name === "create_task");
+      expect(created?.versions?.tasks).toBe((before.tasks ?? 0) + 1);
+      expect(created?.versions?.notes).toBe(before.notes);
+      expect(ended.find((e) => e.tool.name === "search")?.versions).toBeUndefined();
+      // Only numbers: nothing of the task travels with them.
+      expect(JSON.stringify(created?.versions)).not.toContain("luz");
+      // Not stored with the message: the history keeps only what the owner sees.
+      expect(JSON.stringify(events.at(-1))).not.toContain("versions");
     });
   });
 

@@ -25,7 +25,7 @@ import {
 } from "lucide-react";
 import { type KeyboardEvent, useEffect, useId, useMemo, useRef, useState } from "react";
 import { api } from "../lib/api.ts";
-import { useDebounced } from "../lib/debounce.ts";
+import { useDebounced } from "../lib/lists.tsx";
 import { addMessages, useI18n } from "../lib/i18n.tsx";
 import { askMemorySearch, matches, moveActive, searchTerm } from "../lib/palette.ts";
 import { cn } from "./ui.tsx";

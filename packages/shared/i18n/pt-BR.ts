@@ -16,6 +16,7 @@ import { ptBRApprove } from "./pt-BR-approve.ts";
 import { ptBRShell } from "./pt-BR-shell.ts";
 import { ptBRSettingsTabs } from "./pt-BR-settings-tabs.ts";
 import { ptBRHome } from "./pt-BR-home.ts";
+import { ptBRLive } from "./pt-BR-live.ts";
 
 // Default and fallback catalog. Every key must also exist in en.ts and be used in the code (npm run lint).
 // The texts of the lazy screens live in their own files (pt-BR-memory.ts, pt-BR-productivity.ts,
@@ -95,7 +96,6 @@ export const ptBRCore = {
   "web.crash.reload": "Recarregar",
   "web.password.show": "Mostrar senha",
   "web.password.hide": "Ocultar senha",
-  "web.account.signOutHint": "Encerra esta sessão. As outras abas deste navegador saem junto.",
   "web.nav.accessLog": "Acessos",
   "web.nav.tasks": "Tarefas",
   "web.nav.notes": "Notas",
@@ -139,4 +139,5 @@ export const ptBR = /* @__PURE__ */ join(
   ptBRShell,
   ptBRSettingsTabs,
   ptBRHome,
+  ptBRLive,
 );

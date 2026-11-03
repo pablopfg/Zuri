@@ -146,7 +146,8 @@ describe("the Free plan budget of each route", () => {
     const beat = await cost("POST", "/auth/heartbeat", { active: true });
     expect(beat.status).toBe(200);
     // The session row, plus one counter row for the bell (step 11): never a count of the notices.
-    expect(beat.read).toBeLessThanOrEqual(3);
+    // And the one row of the areas' numbers (nova UI, PR 2), so the screens learn of changes made elsewhere.
+    expect(beat.read).toBeLessThanOrEqual(4);
     expect(beat.written).toBeLessThanOrEqual(2);
   });
 
@@ -238,6 +239,14 @@ describe("the Free plan budget of each route", () => {
     }
   });
 
+  it("counts the views for the side menu and the tabs from the open tasks due by tonight and the counters", async () => {
+    // About 1,000 overdue tasks here: one walk of the open-tasks index, never the done ones.
+    const res = await cost("GET", "/tasks/counts");
+    expect(res.status).toBe(200);
+    expect(res.read).toBeLessThanOrEqual(1100);
+    expect(res.written).toBe(0);
+  });
+
   it("reads only the project's own tasks for a project's list", async () => {
     const projectId = await runInDurableObject(owner(), (agent: ZuriAgent) => {
       const { db } = agent.store;
@@ -309,9 +318,10 @@ describe("the Free plan budget of each route", () => {
     expect(created.written).toBeLessThanOrEqual(12);
     const duplicate = await cost("POST", "/memories", { content: "moro em curitiba desde 2024" });
     expect(duplicate.status).toBe(200);
-    expect(duplicate.read).toBeLessThanOrEqual(5);
-    // The row and its four indexes on updated_at.
-    expect(duplicate.written).toBeLessThanOrEqual(5);
+    // The memories' number (nova UI, PR 2) reads its one row and writes it.
+    expect(duplicate.read).toBeLessThanOrEqual(6);
+    // The row and its four indexes on updated_at, plus the memories' number.
+    expect(duplicate.written).toBeLessThanOrEqual(6);
     // A new fact on the same topic: one review more (row, index and counter).
     const conflict = await cost("POST", "/memories", { content: "Moro em Joinville" });
     expect(conflict.status).toBe(201);
@@ -502,7 +512,8 @@ describe("the Free plan budget of each route", () => {
     expect(ran.status).toBe(200);
     // The reminder's notice also asks the push channel whether any device is there (one count)
     // and the Telegram channel whether an account is linked (its one-row table, step 13).
-    expect(ran.read).toBeLessThanOrEqual(22);
+    // Each of the three writes (the run, its result, the automation) moves the automations' number: one row each (nova UI, PR 2).
+    expect(ran.read).toBeLessThanOrEqual(25);
     expect(ran.written).toBeLessThanOrEqual(25);
 
     // The alarm: one due automation costs a handful of rows, whatever the size of the history.
@@ -516,7 +527,8 @@ describe("the Free plan budget of each route", () => {
       return usage;
     });
     // 41: the Telegram channel's look at its link and the snoozed notices' index (step 13) cost a row.
-    expect(wake.read).toBeLessThanOrEqual(41);
+    // 45: the run's two writes and the automation's bookkeeping each move the automations' number (nova UI, PR 2).
+    expect(wake.read).toBeLessThanOrEqual(45);
     expect(wake.written).toBeLessThanOrEqual(30);
   });
 

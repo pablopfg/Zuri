@@ -115,6 +115,11 @@ export function ChatPage() {
           break;
         case "tool":
           update({ ...turn, tools: upsert(turn.tools, event.tool) });
+          // A tool that wrote sends the areas' numbers: the screens refresh what it changed, right now.
+          if (event.versions) {
+            const { versions } = event;
+            void import("../../lib/versions.ts").then((m) => m.seen(qc, versions));
+          }
           break;
         case "approval":
           update({ ...turn, actions: upsert(turn.actions, event.action) });

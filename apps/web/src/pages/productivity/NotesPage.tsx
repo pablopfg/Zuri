@@ -4,10 +4,10 @@ import { ArrowLeft, NotebookPen, Plus, Search, Trash2 } from "lucide-react";
 import { type FormEvent, useEffect, useState } from "react";
 import { Link, useBlocker, useLocation, useNavigate, useParams } from "react-router";
 import { Markdown } from "../../components/Markdown.tsx";
-import { Button, cn, Dialog, EmptyState, ErrorNotice, fieldClass, PageHeader, SelectField, Loading, TextField } from "../../components/ui.tsx";
+import { Button, cn, Dialog, EmptyState, ErrorNotice, fieldClass, Notice, PageHeader, SelectField, Loading, TextField } from "../../components/ui.tsx";
 import { NOTES_KEY, PROJECTS_KEY, useNote, useNotes, useProjects } from "../../hooks/productivity.ts";
 import { api, errorMessage } from "../../lib/api.ts";
-import { useDebounced } from "../../lib/debounce.ts";
+import { FlashStatus, flashClass, useDebounced, useFlash } from "../../lib/lists.tsx";
 import { plainExcerpt } from "../../lib/excerpt.ts";
 import { useI18n } from "../../lib/i18n.tsx";
 import { EDITOR_DONE, shouldAskBeforeLeaving } from "../../lib/leave-guard.ts";
@@ -76,6 +76,7 @@ function NotesList({ activeId }: { activeId: string | undefined }) {
   const [query, setQuery] = useState("");
   const q = useDebounced(query.trim());
   const notes = useNotes(q);
+  const flash = useFlash(notes.isPlaceholderData ? undefined : notes.data?.notes, (note) => note.id, (note) => note.updatedAt, q);
   // The editor hands over what it just moved to the trash, so the undo shows here.
   const location = useLocation();
   const navigate = useNavigate();
@@ -164,7 +165,7 @@ function NotesList({ activeId }: { activeId: string | undefined }) {
               <Link
                 to={`/notas/${note.id}`}
                 aria-current={note.id === activeId ? "page" : undefined}
-                className={cn("block min-h-11 rounded-xl px-3 py-2.5", note.id === activeId ? "bg-raised" : "hover:bg-raised/60")}
+                className={cn("block min-h-11 rounded-xl px-3 py-2.5", note.id === activeId ? "bg-raised" : "hover:bg-raised/60", flashClass(flash.glowing, note.id))}
               >
                 <span className="block truncate text-sm font-medium">{note.title}</span>
                 <span className="mt-0.5 line-clamp-2 block text-xs leading-5 text-fg-muted">
@@ -176,15 +177,17 @@ function NotesList({ activeId }: { activeId: string | undefined }) {
           ))}
         </ul>
       )}
+      <FlashStatus count={flash.remote} />
     </>
   );
 }
 
 function ExistingNote({ id, onDirty }: { id: string; onDirty: (dirty: boolean) => void }) {
   const note = useNote(id);
-  if (note.isPending) return <Loading />;
+  // Once open, the editor stays even if a later refresh fails (the note gone elsewhere): the text typed is never dropped.
+  if (note.data) return <NoteEditor key={note.data.note.id} note={note.data.note} onDirty={onDirty} />;
   if (note.isError) return <ErrorNotice error={note.error} onRetry={() => void note.refetch()} />;
-  return <NoteEditor key={note.data.note.id} note={note.data.note} onDirty={onDirty} />;
+  return <Loading />;
 }
 
 function NoteEditor({ note, onDirty }: { note?: Note; onDirty: (dirty: boolean) => void }) {
@@ -200,7 +203,25 @@ function NoteEditor({ note, onDirty }: { note?: Note; onDirty: (dirty: boolean) 
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState<"save" | "delete" | null>(null);
   const [justSaved, setJustSaved] = useState(false);
+  // The version this editor started from (or last saved). A newer one from elsewhere never replaces what is typed.
+  const [base, setBase] = useState(note?.updatedAt ?? "");
   const dirty = title !== saved.title || content !== saved.content || projectId !== saved.projectId;
+  // Later only (ISO times compare as text): an answer that left before a save and lands after it is older, never "new".
+  const newer = note !== undefined && note.updatedAt > base ? note : null;
+
+  // Untouched, the editor simply shows the new version; with changes, it asks (below).
+  // biome-ignore lint/correctness/useExhaustiveDependencies: only a newer version from elsewhere matters here.
+  useEffect(() => {
+    if (newer && !dirty) adopt(newer);
+  }, [newer?.updatedAt]);
+
+  function adopt(next: Note) {
+    setTitle(next.title);
+    setContent(next.content);
+    setProjectId(next.projectId ?? "");
+    setSaved({ title: next.title, content: next.content, projectId: next.projectId ?? "" });
+    setBase(next.updatedAt);
+  }
 
   useEffect(() => {
     onDirty(dirty);
@@ -225,6 +246,7 @@ function NoteEditor({ note, onDirty }: { note?: Note; onDirty: (dirty: boolean) 
       const body = { title, content, projectId: projectId || null };
       if (note) {
         const result = await api<{ note: Note }>(`/notes/${note.id}`, { method: "PATCH", body });
+        setBase(result.note.updatedAt);
         qc.setQueryData([...NOTES_KEY, "one", note.id], result);
         setSaved({ title: result.note.title, content: result.note.content, projectId: result.note.projectId ?? "" });
         setTitle(result.note.title);
@@ -268,6 +290,19 @@ function NoteEditor({ note, onDirty }: { note?: Note; onDirty: (dirty: boolean) 
       }}
       className="space-y-4"
     >
+      {newer && dirty && (
+        <Notice tone="warning">
+          <p>{t("web.notes.changedElsewhere")}</p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            <Button variant="secondary" onClick={() => adopt(newer)}>
+              {t("web.notes.seeNewer")}
+            </Button>
+            <Button variant="ghost" onClick={() => setBase(newer.updatedAt)}>
+              {t("web.notes.keepMine")}
+            </Button>
+          </div>
+        </Notice>
+      )}
       <div className="grid gap-3 sm:grid-cols-[1fr_16rem]">
         <TextField label={t("web.notes.field.title")} value={title} required maxLength={NOTE_TITLE_MAX} onChange={(e) => setTitle(e.target.value)} />
         <SelectField label={t("web.tasks.field.project")} value={projectId} onChange={(e) => setProjectId(e.target.value)}>

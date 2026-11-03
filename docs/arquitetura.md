@@ -211,6 +211,17 @@ objeto fica carregado a sessão inteira:
 | Uso contínuo até o máximo padrão (6 h) | 6 h | cerca de 2.700 GB-s (21%) |
 | Uso contínuo até o máximo permitido (24 h) | 24 h | cerca de 11.000 GB-s (85%) |
 
+A batida também leva um número por área da tela (tarefas, projetos, notas,
+lixeira, memórias, automações e conversas recentes), na tabela de uma linha
+`zur_area_versions` (migration 21). Gatilhos no banco sobem o número da área a
+cada mudança, venha ela de onde vier (app, conversa, bot, rotina, restauração),
+e a interface busca de novo só a área cujo número mudou (`apps/web/src/lib/versions.ts`).
+A aba que bate repassa os números às outras pelo `BroadcastChannel`. Custa uma
+linha lida por batida e uma linha escrita por mudança, sem requisição nova. Os
+eventos de ferramenta da conversa trazem os mesmos números, então o que a Zuri
+cria aparece na hora. Só números: nenhum conteúdo viaja com eles, e no modo de
+bloqueio eles nem são enviados.
+
 O intervalo da batida não pode passar do limite mínimo de presença (3 min).
 Confira a duração real no painel da Cloudflare depois do primeiro deploy e de
 cada etapa com Workflows ou alarmes. Se apertar, a saída é diminuir o máximo da
