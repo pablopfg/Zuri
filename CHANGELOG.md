@@ -19,6 +19,38 @@ funciona: [docs/agente/versionamento.md](docs/agente/versionamento.md).
 
 O que já entrou na `develop` e ainda não ganhou número fica em [`changelog/nao-lancado/`](changelog/nao-lancado/) por alguns minutos, até o workflow de versão escrever a seção.
 
+## [0.25.0] - 2026-11-02
+
+Mesclada às 23:17 (UTC-3) · commit [`bd0edb6`](https://github.com/pablopfg/Zuri/commit/bd0edb64061be2389500c60a871e81c9feebbaf3) · PR [#111](https://github.com/pablopfg/Zuri/pull/111) · Login OAuth, triagem por significado e aprovação pelo bot nos servidores MCP (etapa 18b)
+
+### Adicionado
+
+- Servidores MCP que pedem conta: em Configurações › Integrações, escolha
+  **Entrar com a conta do serviço (OAuth)**. Ao salvar, aparece o botão
+  **Entrar no serviço**; você entra na página do serviço e volta para a Zuri,
+  que conecta e lista as ferramentas. Quando o login vence, o cartão avisa e o
+  botão volta.
+- Com a busca pelo significado ligada, a Zuri escolhe as ferramentas externas
+  também pelo sentido do pedido: "planejar a viagem" acha a ferramenta de
+  reservas mesmo sem palavra em comum. Isso não gasta IA a mais na conversa.
+- Chamadas a ferramentas externas também se aprovam pelo bot do Telegram, com
+  a ferramenta, o serviço e os dados exatos que vão sair. Depois de aprovada, a
+  resposta do serviço aparece no chat.
+- `/status` avisa quando algum serviço espera você entrar na conta de novo.
+
+### Segurança
+
+- O login usa PKCE e registra a Zuri no serviço como app público, sem segredo
+  guardado. O link de login vale 10 minutos e uma vez só, e terminar o login
+  pede a senha digitada agora e gera aviso de segurança.
+- O servidor de login passa pelas mesmas regras de endereço público, e o token
+  de acesso nunca vai para outro endereço. Tokens ficam cifrados como o token
+  comum. Uma conversa ou rotina nunca abre a página de login sozinha.
+- No Telegram, se o serviço, o acesso ou a ferramenta mudaram depois da
+  proposta, o bot não deixa aprovar. Dados com mais de 600 caracteres só se
+  confirmam pela passkey, e a resposta do serviço chega como citação, só para
+  ler.
+
 ## [0.24.1] - 2026-11-02
 
 Mesclada às 22:24 (UTC-3) · commit [`027e6a4`](https://github.com/pablopfg/Zuri/commit/027e6a41e57239132287cd747ed4ce4346e0e5b9) · PR [#110](https://github.com/pablopfg/Zuri/pull/110) · Abre folga de quase 1 kB no JS inicial
@@ -1746,7 +1778,8 @@ Mesclada às 22:15 (UTC-3) · commit [`360a79e`](https://github.com/pablopfg/Zur
   `npm audit`), CodeQL, Dependabot e rulesets para a `develop` e a `main`.
 - `LICENSE` (MIT), `NOTICE.md`, `SECURITY.md` e `CONTRIBUTING.md`.
 
-[Não lançado]: https://github.com/pablopfg/Zuri/compare/v0.24.1...develop
+[Não lançado]: https://github.com/pablopfg/Zuri/compare/v0.25.0...develop
+[0.25.0]: https://github.com/pablopfg/Zuri/releases/tag/v0.25.0
 [0.24.1]: https://github.com/pablopfg/Zuri/releases/tag/v0.24.1
 [0.24.0]: https://github.com/pablopfg/Zuri/releases/tag/v0.24.0
 [0.23.2]: https://github.com/pablopfg/Zuri/releases/tag/v0.23.2
