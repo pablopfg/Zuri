@@ -1,4 +1,4 @@
-import { toBase64Url } from "@zuri/shared";
+import { GOOGLE_CALLBACK_PATH, toBase64Url } from "@zuri/shared";
 import type { GoogleNetwork } from "./service.ts";
 
 /**
@@ -134,7 +134,7 @@ export function devGoogle(options: { clientId?: string | undefined; clientSecret
       const verifier = form.get("code_verifier") ?? "";
       // One use per code, and only for the verifier whose challenge it carries.
       if (codes.has(code) || !code.startsWith("dev.") || code.slice(4) !== (await s256(verifier))) return json({ error: "invalid_grant" }, 400);
-      if (!/\/configuracoes\/integracoes$/.test(form.get("redirect_uri") ?? "")) return json({ error: "redirect_uri_mismatch" }, 400);
+      if (!(form.get("redirect_uri") ?? "").endsWith(GOOGLE_CALLBACK_PATH)) return json({ error: "redirect_uri_mismatch" }, 400);
       codes.set(code, true);
       const refresh = `1//dev-${random()}`;
       google.refreshTokens.add(refresh);

@@ -10,11 +10,14 @@ export const CALENDAR_MODES = ["off", "read", "write"] as const;
 export type CalendarMode = (typeof CALENDAR_MODES)[number];
 
 /**
- * Where Google sends the browser back: the Integrations page, as for the MCP
- * sign-ins (step 18b). The state starts with this prefix, so the page knows
- * the answer is Google's.
+ * Where Google sends the browser back (the owner's choice, 03/11/2026): the
+ * address registered in the Google Cloud client. The Worker passes what came
+ * in it on to the Integrations page (GOOGLE_RETURN_PAGE), which finishes the
+ * connection as for the MCP sign-ins (step 18b). The state starts with this
+ * prefix, so the page knows the answer is Google's.
  */
-export const GOOGLE_CALLBACK_PATH = "/configuracoes/integracoes";
+export const GOOGLE_CALLBACK_PATH = "/rest/oauth2-credential/call-back";
+export const GOOGLE_RETURN_PAGE = "/configuracoes/integracoes";
 export const GOOGLE_STATE_PREFIX = "g.";
 
 /** Why the connection needs the owner: Google refused the stored access, or the key that seals it changed. */

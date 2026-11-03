@@ -799,8 +799,11 @@ A etapa 19 liga a conta Google do dono pelo cliente OAuth dele mesmo
   para escrita, o `google_calendar_write`. Toda agenda nasce fechada.
 - **OAuth sem atalho.** PKCE S256, `state` aleatório de 256 bits, de uso
   único, que vence em 10 minutos e só vale na sessão que começou (o hash da
-  sessão vai junto). A volta é sempre `/configuracoes/integracoes` (o endereço
-  cadastrado no Google), o código sai da barra de endereços na hora e a
+  sessão vai junto). A volta é sempre `/rest/oauth2-credential/call-back` (o
+  endereço cadastrado no Google): o Worker repassa só `state` (com o prefixo
+  `g.`), `code` e `error`, cortados, para `/configuracoes/integracoes`, sem
+  guardar nada e sem cache; lá a sessão do dono termina a conexão. O código
+  sai da barra de endereços na hora e a
   interface só aceita mandar o navegador para `https://accounts.google.com`.
   Permissão desmarcada não grava nada. Outra conta no lugar apaga as agendas
   da anterior e devolve o acesso dela ao Google.

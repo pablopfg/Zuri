@@ -110,7 +110,7 @@ test("connects Google, opens calendars, and creates, edits and deletes an event 
   await created.click();
   await page.getByRole("dialog", { name: "Consulta de teste" }).getByRole("button", { name: "Editar" }).click();
   const stale = page.getByRole("dialog", { name: "Editar evento" });
-  const window = (await (await page.request.get(`/api/google/events?from=${day}&to=${day}`)).json()) as { events: { id: string; calendarId: string; etag: string; title: string }[] };
+  const window = (await (await page.request.get(`/api/google/events?from=${day}&to=${day}`, { headers: CSRF })).json()) as { events: { id: string; calendarId: string; etag: string; title: string }[] };
   const atGoogle = window.events.find((event) => event.title === "Consulta de teste");
   expect(atGoogle).toBeTruthy();
   const elsewhere = await page.request.patch("/api/google/events", {

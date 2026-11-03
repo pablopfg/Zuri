@@ -1,4 +1,4 @@
-import { AGENT_INSTANCE_NAME, LIVE_PATH, LOGIN_OPTIONS_PATH, type LoginOptions, TELEGRAM_LIMITS } from "@zuri/shared";
+import { AGENT_INSTANCE_NAME, GOOGLE_CALLBACK_PATH, GOOGLE_RETURN_PAGE, LIVE_PATH, LOGIN_OPTIONS_PATH, type LoginOptions, TELEGRAM_LIMITS } from "@zuri/shared";
 import { checkCsrf, readBodyLimited } from "./api/http.ts";
 import { CLIENT_GEO_HEADER, geoFromCf } from "./auth/client.ts";
 import { TURNSTILE_ORIGIN, turnstileSiteKey } from "./auth/turnstile.ts";
@@ -60,6 +60,11 @@ async function handle(request: Request, env: WorkerEnv): Promise<Response> {
   // Gate 3.
   if (config.access && !(await passesAccess(request, url, config.access, config.secretsReady, env))) {
     return refuse(new AppError("FORBIDDEN", "error.accessRequired"));
+  }
+
+  // Google's OAuth return (step 19): on to the Integrations page, which finishes it in the owner's session.
+  if (url.pathname === GOOGLE_CALLBACK_PATH && (request.method === "GET" || request.method === "HEAD")) {
+    return withWebHeaders(googleReturn(url), url.pathname);
   }
 
   // Gate 4 for the interface: the asset, with the interface's headers.
@@ -161,6 +166,26 @@ async function googlePush(request: Request, url: URL, env: WorkerEnv): Promise<R
   const answer = await agent.fetch(forwarded);
   void answer.body?.cancel();
   return new Response(null, { status: 200 });
+}
+
+/**
+ * Google's return, passed on to the Integrations page with only what Google
+ * sends back (state, code, error), cut to size. Anything else, or a state
+ * that isn't Google's, goes on without them: the page just opens.
+ */
+function googleReturn(url: URL): Response {
+  const next = new URLSearchParams();
+  const state = url.searchParams.get("state") ?? "";
+  if (/^g\.[A-Za-z0-9_-]{1,100}$/.test(state)) {
+    next.set("state", state);
+    const code = url.searchParams.get("code");
+    const error = url.searchParams.get("error");
+    if (code !== null) next.set("code", code.slice(0, 2_048));
+    if (error !== null) next.set("error", error.slice(0, 200));
+  }
+  const query = next.toString();
+  // The code travels on once, in the app's own address; the page takes it out of the address at once.
+  return new Response(null, { status: 303, headers: { location: `${GOOGLE_RETURN_PAGE}${query ? `?${query}` : ""}`, "cache-control": "no-store" } });
 }
 
 function isApiPath(pathname: string): boolean {
