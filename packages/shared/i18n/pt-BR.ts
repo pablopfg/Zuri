@@ -13,6 +13,8 @@ import { ptBRAutomations } from "./pt-BR-automations.ts";
 import { ptBRMarkdown } from "./pt-BR-markdown.ts";
 import { ptBRAlerts } from "./pt-BR-alerts.ts";
 import { ptBRApprove } from "./pt-BR-approve.ts";
+import { ptBRShell } from "./pt-BR-shell.ts";
+import { ptBRSettingsTabs } from "./pt-BR-settings-tabs.ts";
 
 // Default and fallback catalog. Every key must also exist in en.ts and be used in the code (npm run lint).
 // The texts of the lazy screens live in their own files (pt-BR-memory.ts, pt-BR-productivity.ts,
@@ -76,11 +78,6 @@ export const ptBRCore = {
   "web.guard.idle": "Por falta de uso, a sessão termina em {time}. Quer continuar?",
   "web.guard.max": "A sessão chegou ao tempo máximo e termina em {time}. Depois disso, entre de novo.",
   "web.guard.stay": "Continuar conectado",
-  "web.confirm.title": "Confirme que é você",
-  "web.confirm.body": "Para mudar algo sensível, digite a sua senha de novo. A confirmação vale por 15 minutos.",
-  "web.confirm.submit": "Confirmar",
-  "web.confirm.useCode": "Usar o código do aplicativo",
-  "web.confirm.usePassword": "Usar a senha",
   "web.notifications.open": "Abrir avisos",
   "web.notifications.title": "Avisos",
   "web.notifications.openUnread": "Abrir avisos, {count} sem ler",
@@ -101,22 +98,7 @@ export const ptBRCore = {
   "web.crash.reload": "Recarregar",
   "web.password.show": "Mostrar senha",
   "web.password.hide": "Ocultar senha",
-  "web.mfaReminder.body": "A verificação em duas etapas está desligada. Ligue para proteger a sua conta.",
-  "web.mfaReminder.short": "Duas etapas desligadas",
-  "web.mfaReminder.action": "Ligar agora",
-  "web.mfaReminder.later": "Lembrar depois",
-  "web.settings.tab.account": "Conta",
-  "web.settings.tab.security": "Segurança",
-  "web.settings.tab.ai": "IA",
-  "web.settings.tab.notifications": "Avisos",
-  "web.settings.tab.integrations": "Integrações",
-  "web.settings.tab.data": "Dados",
-  "web.settings.tab.diagnostics": "Diagnóstico",
   "web.account.signOutHint": "Encerra esta sessão. As outras abas deste navegador saem junto.",
-  "web.theme.label": "Tema",
-  "web.theme.system": "Como o sistema",
-  "web.theme.light": "Claro",
-  "web.theme.dark": "Escuro",
   "web.nav.accessLog": "Acessos",
   "web.nav.tasks": "Tarefas",
   "web.nav.notes": "Notas",
@@ -157,4 +139,6 @@ export const ptBR = /* @__PURE__ */ join(
   ptBRMarkdown,
   ptBRAlerts,
   ptBRApprove,
+  ptBRShell,
+  ptBRSettingsTabs,
 );
