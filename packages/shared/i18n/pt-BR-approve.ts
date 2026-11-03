@@ -46,6 +46,8 @@ export const ptBRApprove = {
   "web.approve.action.delete_note": "Apagar a nota",
   "web.approve.action.forget_memory": "Esquecer a memória",
   "web.approve.action.cancel_automation": "Cancelar a automação",
+  "web.approve.action.change_shared_calendar_event": "Mudar um evento que outras pessoas veem",
+  "web.approve.action.delete_calendar_event": "Apagar o evento da agenda",
   "web.approve.action.mcp_call": "Usar uma ferramenta externa",
   "web.approve.approvedBody": "A proposta foi aprovada e já está feita.",
   "web.approve.changedTitle": "O item mudou",

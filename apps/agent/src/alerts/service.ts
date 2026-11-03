@@ -658,6 +658,7 @@ const KIND_TEXT: Record<Exclude<NoticeKind, "security">, Text> = {
   "diagnostic.new": { title: "notice.diagnostic.new.title", body: "notice.diagnostic.new.body" },
   "alerts.lowered": { title: "notice.alerts.lowered.title", body: "notice.alerts.lowered.body" },
   "alerts.raised": { title: "notice.alerts.raised.title", body: "notice.alerts.raised.body" },
+  "google.reconnect": { title: "notice.google.reconnect.title", body: "notice.google.reconnect.body" },
 };
 
 /** Security alerts: what happened and what to do if it was not the owner, never where it came from (it may show on a locked screen). */
@@ -688,6 +689,8 @@ const SECURITY_TEXT: Record<SecurityAlertEvent, Text> = {
   mcp_server_added: { title: "notice.security.mcp_server_added.title", body: "notice.security.mcp_server_added.body" },
   mcp_server_changed: { title: "notice.security.mcp_server_changed.title", body: "notice.security.mcp_server_changed.body" },
   mcp_tool_autonomy: { title: "notice.security.mcp_tool_autonomy.title", body: "notice.security.mcp_tool_autonomy.body" },
+  google_connected: { title: "notice.security.google_connected.title", body: "notice.security.google_connected.body" },
+  google_calendar_write: { title: "notice.security.google_calendar_write.title", body: "notice.security.google_calendar_write.body" },
   setup_failure: { title: "notice.security.setup_failure.title", body: "notice.security.setup_failure.body" },
   setup_locked: { title: "notice.security.setup_locked.title", body: "notice.security.setup_locked.body" },
   owner_created: { title: "notice.security.owner_created.title", body: "notice.security.owner_created.body" },

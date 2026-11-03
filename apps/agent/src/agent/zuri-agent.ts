@@ -52,6 +52,8 @@ import { SemanticSearch } from "../semantic/service.ts";
 import { developmentMcpNetwork } from "../mcp/dev-mcp.ts";
 import { McpMeaning } from "../mcp/meaning.ts";
 import { McpService, OAUTH_CALLBACK_PATH } from "../mcp/service.ts";
+import { developmentGoogle, developmentGoogleNetwork } from "../google/dev-google.ts";
+import { GoogleCalendar } from "../google/service.ts";
 import { ALL_TOOLS } from "../tools/index.ts";
 import type { ToolContext } from "../tools/registry.ts";
 import { AgentRunner } from "./runner.ts";
@@ -109,6 +111,8 @@ interface Store {
   telegramConversation: TelegramConversation;
   /** The remote MCP servers (step 18). */
   mcp: McpService;
+  /** The Google Calendar (step 19). */
+  google: GoogleCalendar;
 }
 
 /**
@@ -188,6 +192,7 @@ export class ZuriAgent extends Agent<WorkerEnv> {
       rearm: () => this.store.automations.rearm(),
     }),
     mcp: () => ({ service: this.store.mcp, auth: this.store.auth, automations: this.store.automations }),
+    google: () => ({ google: this.store.google, auth: this.store.auth, timeZone: () => this.store.settings.field("timeZone") }),
     telegram: () => ({
       telegram: this.store.telegram,
       auth: this.store.auth,
@@ -209,8 +214,8 @@ export class ZuriAgent extends Agent<WorkerEnv> {
   }
 
   private toolServices(): Omit<ToolContext, "conversationId" | "mode" | "timeZone"> {
-    const { db, productivity, memories, conversations, plans, actions, automations, semantic, mcp } = this.store;
-    return { db, productivity, memories, conversations, plans, actions, automations, semantic, mcpService: mcp };
+    const { db, productivity, memories, conversations, plans, actions, automations, semantic, mcp, google } = this.store;
+    return { db, productivity, memories, conversations, plans, actions, automations, semantic, mcpService: mcp, calendar: google };
   }
 
   /** How an automation runs: reminders and the digest without AI, routines through the runner. */
@@ -283,6 +288,12 @@ export class ZuriAgent extends Agent<WorkerEnv> {
       await this.store.mcp.meaning?.tick();
     } catch (error) {
       log("error", "alert_tick_failed", { error });
+    }
+    // The Google Calendar's push channels (step 19): the open calendars' channels opened or renewed, a few per wake.
+    try {
+      await this.store.google.renewWatches();
+    } catch (error) {
+      log("error", "google_alarm_failed", { error });
     }
     await alerts.settled();
   }
@@ -514,7 +525,16 @@ export class ZuriAgent extends Agent<WorkerEnv> {
               return null;
             }
           })();
-          const due = [tries, watch, indexing, tools].filter((at): at is string => Boolean(at)).sort()[0] ?? watch;
+          // The Google Calendar's push channels (step 19), made further down too.
+          const channels = (() => {
+            try {
+              const at = google.watchDue();
+              return at === null ? null : new Date(at).toISOString();
+            } catch {
+              return null;
+            }
+          })();
+          const due = [tries, watch, indexing, tools, channels].filter((at): at is string => Boolean(at)).sort()[0] ?? watch;
           // Work already past due is only left there when its step failed on the last
           // alarm (a full disk, say): wait a minute before trying again, never at once,
           // so a step that keeps failing can't spin the alarm through the day's quota.
@@ -558,6 +578,22 @@ export class ZuriAgent extends Agent<WorkerEnv> {
         lockdown: () => auth.lockdown.active(),
         neuronsPerDay: () => settings.field("aiNeuronsPerDay"),
       });
+      // The Google Calendar (step 19): the owner's own OAuth client; nothing goes to Google during a lockdown.
+      const google = new GoogleCalendar({
+        db,
+        state,
+        clientId: () => env.GOOGLE_CLIENT_ID,
+        clientSecret: () => env.GOOGLE_CLIENT_SECRET,
+        credentialKey: env.MCP_CREDENTIAL_KEY,
+        pushSecret: () => env.SESSION_SECRET,
+        publicUrl: () => this.publicUrl(),
+        lockdown: () => auth.lockdown.active(),
+        onProblem: () => {
+          alerts.raise({ kind: "google.reconnect", category: "system", priority: "normal", link: "/configuracoes/integracoes", dedupeKey: "google-reconnect", dedupeMs: 86_400_000 });
+        },
+      });
+      // Local development never reaches Google (src/google/dev-google.ts).
+      if (this.development()) google.network = developmentGoogleNetwork(developmentGoogle(env.GOOGLE_CLIENT_ID, env.GOOGLE_CLIENT_SECRET));
       // The owner's conversation in the bot (step 14): the same runner, meter and turns as the app.
       const telegramConversation = new TelegramConversation({
         db,
@@ -591,7 +627,7 @@ export class ZuriAgent extends Agent<WorkerEnv> {
       const telegramApprovals = new TelegramApprovals({
         actions: () => actions,
         tools: ALL_TOOLS,
-        toolContext: (conversationId) => ({ db, productivity, memories, conversations, plans, actions, automations, timeZone: settings.field("timeZone"), mode: "chat", conversationId }),
+        toolContext: (conversationId) => ({ db, productivity, memories, conversations, plans, actions, automations, calendar: google, timeZone: settings.field("timeZone"), mode: "chat", conversationId }),
         buttons: commandButtons,
         locale: () => this.locale(),
         hour: (ms) => telegramHour(ms, this.locale(), settings.field("timeZone")),
@@ -643,6 +679,7 @@ export class ZuriAgent extends Agent<WorkerEnv> {
         healthy: () => this.healthy(),
         aiAvailable: () => usage.room(this.aiLimits()).neurons > 0,
         mcpSignIn: () => mcp.needingSignIn(),
+        calendar: google,
         buttons: commandButtons,
         state,
         locale: () => this.locale(),
@@ -682,7 +719,7 @@ export class ZuriAgent extends Agent<WorkerEnv> {
         // Local development never reaches Telegram (src/telegram/dev-telegram.ts).
         ...(this.development() ? { fetcher: developmentTelegramFetcher as typeof fetch } : {}),
       });
-      this.#store = { db, settings, auth, productivity, memories, usage, conversations, actions, plans, automations, alerts, watchers, diagnostics, push, telegram, telegramConversation, semantic, mcp };
+      this.#store = { db, settings, auth, productivity, memories, usage, conversations, actions, plans, automations, alerts, watchers, diagnostics, push, telegram, telegramConversation, semantic, mcp, google };
     }
     return this.#store;
   }

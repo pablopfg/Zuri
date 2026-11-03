@@ -300,3 +300,25 @@ describe("errors", () => {
     expect(JSON.stringify(spy.mock.calls)).not.toContain("segredo");
   });
 });
+
+describe("Google's OAuth return (step 19)", () => {
+  it("passes Google's state, code and error on to the Integrations page, and nothing else", async () => {
+    const assets = fakeAssets();
+    const state = `g.${"a".repeat(43)}`;
+    const res = await call(`${ORIGIN}/rest/oauth2-credential/callback?state=${state}&code=4%2F0abc&scope=x&extra=1`, { redirect: "manual" }, { ASSETS: assets.binding });
+    expect(res.status).toBe(303);
+    expect(res.headers.get("location")).toBe(`/configuracoes/integracoes?state=${state}&code=4%2F0abc`);
+    expect(res.headers.get("cache-control")).toBe("no-store");
+    expect(res.headers.get("referrer-policy")).toBe(WEB_HEADERS["referrer-policy"]);
+    expect(assets.fetch).not.toHaveBeenCalled();
+    const denied = await call(`${ORIGIN}/rest/oauth2-credential/callback?state=${state}&error=access_denied`, { redirect: "manual" });
+    expect(denied.headers.get("location")).toBe(`/configuracoes/integracoes?state=${state}&error=access_denied`);
+  });
+
+  it("a state that isn't Google's, or none, just opens the page", async () => {
+    for (const query of ["", "?state=outro&code=x", `?state=g.${"a".repeat(101)}&code=x`, "?state=g.a%2Fb&code=x"]) {
+      const res = await call(`${ORIGIN}/rest/oauth2-credential/callback${query}`, { redirect: "manual" });
+      expect(res.headers.get("location"), query).toBe("/configuracoes/integracoes");
+    }
+  });
+});

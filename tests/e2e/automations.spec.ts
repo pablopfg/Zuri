@@ -111,6 +111,26 @@ test("the server's refusal shows in the form: a one-time moment already past", a
   await expect(form).toBeHidden();
 });
 
+test("the AI routine templates fill the form: the morning briefing and the end of the day", async ({ page }) => {
+  await openAutomations(page);
+  await page.getByRole("button", { name: "Criar automação" }).click();
+  const form = page.getByRole("dialog", { name: "Nova automação" });
+  // Only for a routine with AI: a reminder has no templates.
+  await expect(form.getByText("Começar de um modelo")).toHaveCount(0);
+  await form.getByLabel("Tipo").selectOption("agent_prompt");
+  await form.getByRole("button", { name: "Briefing da manhã" }).click();
+  await expect(form.getByLabel("Nome", { exact: true })).toHaveValue("Briefing da manhã");
+  await expect(form.getByLabel("O que a Zuri deve fazer")).toHaveValue(/eventos de hoje na agenda/);
+  await expect(form.getByLabel("Quando", { exact: true })).toHaveValue("daily");
+  await expect(form.getByLabel("Horário", { exact: true })).toHaveValue("07:00");
+  await form.getByRole("button", { name: "Fechamento do dia" }).click();
+  await expect(form.getByLabel("Nome", { exact: true })).toHaveValue("Fechamento do dia");
+  await expect(form.getByLabel("Quando", { exact: true })).toHaveValue("weekly");
+  await expect(form.getByLabel("Horário", { exact: true })).toHaveValue("19:00");
+  await form.getByRole("button", { name: "Cancelar" }).click();
+  await expect(form).toBeHidden();
+});
+
 test("a routine Zuri proposes in the chat runs nothing until the owner approves it", async ({ page }) => {
   const name = `Revisão ${tag()}`;
   await page.goto("/conversa");

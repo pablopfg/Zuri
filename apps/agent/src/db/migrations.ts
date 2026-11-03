@@ -953,6 +953,54 @@ export const MIGRATIONS: readonly Migration[] = [
        BEGIN UPDATE zur_counts SET n = n + CASE WHEN NEW.status = 'done' THEN 1 ELSE -1 END WHERE kind = 'tasks_done'; END`,
     ],
   },
+  {
+    version: 22,
+    name: "google_calendar",
+    statements: [
+      // The Google account (step 19): one row. The tokens are sealed with
+      // MCP_CREDENTIAL_KEY under their own key (google/service.ts) and never
+      // leave the database (not in the backup, never in an answer). `scopes`
+      // is what Google granted, so step 19b adds the contacts to the same grant.
+      `CREATE TABLE IF NOT EXISTS zur_google_account (
+        id INTEGER PRIMARY KEY CHECK (id = 1),
+        email TEXT NOT NULL,
+        refresh_token TEXT NOT NULL,
+        access_token TEXT,
+        access_expires_at INTEGER,
+        scopes TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'connected',
+        problem TEXT,
+        problem_noticed_at TEXT,
+        connected_at TEXT NOT NULL,
+        checked_at TEXT NOT NULL
+      )`,
+      // The account's calendars and what Zuri may do in each (off by default).
+      // The watch columns hold Google's push channel of an open calendar: the
+      // screen learns of a change made elsewhere at once (owner's request of
+      // 03/11/2026). `changed` goes up with each change seen, which moves the
+      // calendar area below; events themselves are never stored here.
+      `CREATE TABLE IF NOT EXISTS zur_google_calendars (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        access_role TEXT NOT NULL,
+        time_zone TEXT,
+        color TEXT,
+        is_primary INTEGER NOT NULL DEFAULT 0,
+        mode TEXT NOT NULL DEFAULT 'off',
+        watch_id TEXT,
+        watch_resource TEXT,
+        watch_expires INTEGER,
+        changed INTEGER NOT NULL DEFAULT 0,
+        updated_at TEXT NOT NULL
+      )`,
+      `CREATE UNIQUE INDEX IF NOT EXISTS zur_google_calendars_watch ON zur_google_calendars (watch_id) WHERE watch_id IS NOT NULL`,
+      // The Agenda screen and the Integrations card follow this number (nova UI, PR 2).
+      `ALTER TABLE zur_area_versions ADD COLUMN calendar INTEGER NOT NULL DEFAULT 0`,
+      ...areaTriggers("calendar", "zur_google_account", "OF email, status, problem, scopes"),
+      // A renewed watch moves nothing: only what the screens show.
+      ...areaTriggers("calendar", "zur_google_calendars", "OF name, access_role, color, is_primary, mode, changed"),
+    ],
+  },
 ];
 
 /** The three triggers that move an area's number when a row of `table` is added, changed or removed. Frozen: migration 21 is built from it. */

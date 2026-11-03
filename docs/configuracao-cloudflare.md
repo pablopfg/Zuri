@@ -236,6 +236,24 @@ um token de acesso, a Zuri guarda o token cifrado com uma chave sua:
 Os servidores entram em **Configurações > Integrações**. Detalhes em
 [mcp.md](mcp.md).
 
+## Google Agenda (opcional)
+
+A agenda usa o seu próprio cliente OAuth do Google, gratuito. Crie o cliente
+no Google Cloud Console seguindo [google-agenda.md](google-agenda.md) e grave
+dois **Secrets** em **Workers e Pages > zuri > Configurações > Variáveis e
+segredos** (ou com `npx wrangler secret put` dentro de `apps/agent`):
+
+- `GOOGLE_CLIENT_ID`
+- `GOOGLE_CLIENT_SECRET`
+
+O `MCP_CREDENTIAL_KEY` (seção acima) também é preciso: ele cifra os tokens do
+Google. O endereço de volta cadastrado no Google é
+`https://exemplo.com.br/rest/oauth2-credential/callback`, com o domínio da sua
+Zuri (exatamente assim, `callback` sem hífen).
+Os avisos de mudança do Google chegam em `/api/google/push`; se você usa o
+Cloudflare Access, nada a fazer: a rota só passa sem login com o token certo
+do canal.
+
 ## IP certo no registro de acessos
 
 O registro usa o cabeçalho `CF-Connecting-IP`, que a Cloudflare define na

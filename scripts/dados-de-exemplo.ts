@@ -106,5 +106,18 @@ export async function seed(page: Page, base: string): Promise<{ conversationId: 
   if (!device.ok()) throw new Error(`/api/push/devices: ${device.status()}`);
   const renamed = await page.request.patch(`${base}/api/conversations/${conversationId}`, { headers: CSRF, data: { title: "Organizar a mudança" } });
   if (!renamed.ok()) throw new Error(`rename: ${renamed.status()}`);
+  // Google Calendar (step 19): over loopback the Worker answers Google itself, with sample
+  // calendars and events (apps/agent/src/google/dev-google.ts). The consent page is skipped:
+  // the simulator takes `dev.<challenge>` as the code Google would send back.
+  const consent = new URL(((await post("/api/google/connect", {})) as unknown as { url: string }).url);
+  await post("/api/google/callback", { state: consent.searchParams.get("state") ?? "", code: `dev.${consent.searchParams.get("code_challenge") ?? ""}` });
+  for (const [id, mode] of [
+    ["dono@exemplo.com.br", "write"],
+    ["trabalho@exemplo.com.br", "write"],
+    ["consultorio@exemplo.com.br", "read"],
+  ] as const) {
+    const opened = await page.request.patch(`${base}/api/google/calendars/${encodeURIComponent(id)}`, { headers: CSRF, data: { mode } });
+    if (!opened.ok()) throw new Error(`/api/google/calendars: ${opened.status()}`);
+  }
   return { conversationId };
 }

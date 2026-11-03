@@ -1,4 +1,4 @@
-import { AGENT_INSTANCE_NAME, LIVE_PATH, LOGIN_OPTIONS_PATH, type LoginOptions, TELEGRAM_LIMITS } from "@zuri/shared";
+import { AGENT_INSTANCE_NAME, GOOGLE_CALLBACK_PATH, GOOGLE_RETURN_PAGE, LIVE_PATH, LOGIN_OPTIONS_PATH, type LoginOptions, TELEGRAM_LIMITS } from "@zuri/shared";
 import { checkCsrf, readBodyLimited } from "./api/http.ts";
 import { CLIENT_GEO_HEADER, geoFromCf } from "./auth/client.ts";
 import { TURNSTILE_ORIGIN, turnstileSiteKey } from "./auth/turnstile.ts";
@@ -8,6 +8,7 @@ import { type AccessConfig, verifyAccessToken } from "./gates/access.ts";
 import { withBodyRead } from "./gates/body.ts";
 import { withApiHeaders, withWebHeaders } from "./gates/headers.ts";
 import { isTelegramWebhookSecret, TELEGRAM_SECRET_HEADER, TELEGRAM_WEBHOOK_PATH } from "./gates/telegram.ts";
+import { GOOGLE_CHANNEL_HEADER, GOOGLE_PUSH_PATH, GOOGLE_STATE_HEADER, GOOGLE_TOKEN_HEADER, isGooglePushToken } from "./gates/google-push.ts";
 import { AppError, errorResponse } from "./http/errors.ts";
 import { log } from "./log.ts";
 
@@ -61,6 +62,11 @@ async function handle(request: Request, env: WorkerEnv): Promise<Response> {
     return refuse(new AppError("FORBIDDEN", "error.accessRequired"));
   }
 
+  // Google's OAuth return (step 19): on to the Integrations page, which finishes it in the owner's session.
+  if (url.pathname === GOOGLE_CALLBACK_PATH && (request.method === "GET" || request.method === "HEAD")) {
+    return withWebHeaders(googleReturn(url), url.pathname);
+  }
+
   // Gate 4 for the interface: the asset, with the interface's headers.
   if (!isApiPath(url.pathname)) {
     const turnstile = turnstileSiteKey(env.TURNSTILE_SITE_KEY, env.TURNSTILE_SECRET_KEY, config.allowPlainHttp) ? TURNSTILE_ORIGIN : null;
@@ -79,6 +85,7 @@ async function handle(request: Request, env: WorkerEnv): Promise<Response> {
     return refuse(new AppError("NOT_CONFIGURED"));
   }
   if (url.pathname === TELEGRAM_WEBHOOK_PATH) return withApiHeaders(await telegramWebhook(request, url, env));
+  if (url.pathname === GOOGLE_PUSH_PATH) return withApiHeaders(await googlePush(request, url, env));
   // What the sign-in form draws, answered here: public settings need no Durable
   // Object request (they count on the Free plan, and anyone can ask for them).
   if (url.pathname === LOGIN_OPTIONS_PATH && (request.method === "GET" || request.method === "HEAD")) {
@@ -135,6 +142,52 @@ async function telegramWebhook(request: Request, url: URL, env: WorkerEnv): Prom
   return new Response(null, { status: answer.status >= 500 ? 500 : 200 });
 }
 
+/**
+ * Google's push notices of the open calendars (step 19): POST with the
+ * channel's id and token (derived from SESSION_SECRET), checked here before
+ * they cost an object request. A notice has no body; only the channel's id,
+ * token and state go on. Anything that doesn't check out gets the same empty
+ * 200 (Google never retries it and a probe learns nothing).
+ */
+async function googlePush(request: Request, url: URL, env: WorkerEnv): Promise<Response> {
+  await request.body?.cancel();
+  const channel = request.headers.get(GOOGLE_CHANNEL_HEADER);
+  const token = request.headers.get(GOOGLE_TOKEN_HEADER);
+  if (request.method !== "POST" || !(await isGooglePushToken(channel, token, env.SESSION_SECRET))) return new Response(null, { status: 200 });
+  const agent = env.AGENT.getByName(AGENT_INSTANCE_NAME);
+  const forwarded = new Request(new URL(GOOGLE_PUSH_PATH, url.origin), {
+    method: "POST",
+    headers: {
+      [GOOGLE_CHANNEL_HEADER]: channel ?? "",
+      [GOOGLE_TOKEN_HEADER]: token ?? "",
+      [GOOGLE_STATE_HEADER]: (request.headers.get(GOOGLE_STATE_HEADER) ?? "").slice(0, 20),
+    },
+  });
+  const answer = await agent.fetch(forwarded);
+  void answer.body?.cancel();
+  return new Response(null, { status: 200 });
+}
+
+/**
+ * Google's return, passed on to the Integrations page with only what Google
+ * sends back (state, code, error), cut to size. Anything else, or a state
+ * that isn't Google's, goes on without them: the page just opens.
+ */
+function googleReturn(url: URL): Response {
+  const next = new URLSearchParams();
+  const state = url.searchParams.get("state") ?? "";
+  if (/^g\.[A-Za-z0-9_-]{1,100}$/.test(state)) {
+    next.set("state", state);
+    const code = url.searchParams.get("code");
+    const error = url.searchParams.get("error");
+    if (code !== null) next.set("code", code.slice(0, 2_048));
+    if (error !== null) next.set("error", error.slice(0, 200));
+  }
+  const query = next.toString();
+  // The code travels on once, in the app's own address; the page takes it out of the address at once.
+  return new Response(null, { status: 303, headers: { location: `${GOOGLE_RETURN_PAGE}${query ? `?${query}` : ""}`, "cache-control": "no-store" } });
+}
+
 function isApiPath(pathname: string): boolean {
   return pathname === "/api" || pathname.startsWith("/api/");
 }
@@ -188,6 +241,11 @@ async function passesAccess(
     !request.headers.has("cookie") &&
     !request.headers.has("authorization");
   if (telegram && (await isTelegramWebhookSecret(request.headers.get(TELEGRAM_SECRET_HEADER), env.SESSION_SECRET))) {
+    return true;
+  }
+  // Google's push notices (step 19) can't sign in to Access either: the channel's token proves them.
+  const google = request.method === "POST" && url.pathname === GOOGLE_PUSH_PATH && secretsReady && !request.headers.has("cookie") && !request.headers.has("authorization");
+  if (google && (await isGooglePushToken(request.headers.get(GOOGLE_CHANNEL_HEADER), request.headers.get(GOOGLE_TOKEN_HEADER), env.SESSION_SECRET))) {
     return true;
   }
   return verifyAccessToken(request.headers.get("cf-access-jwt-assertion"), access);

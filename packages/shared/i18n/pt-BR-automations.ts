@@ -137,4 +137,9 @@ export const ptBRAutomations = {
   "web.automations.problem.interrupted": "o sistema reiniciou no meio da execução. Ela não é repetida para não avisar duas vezes.",
   "web.automations.problem.failed": "algo deu errado. A próxima execução tenta de novo.",
   "web.automations.problem.lockdown": "o modo de bloqueio estava ligado. A rotina volta quando você sair dele.",
+  "web.automations.template.label": "Começar de um modelo",
+  "web.automations.template.briefing.name": "Briefing da manhã",
+  "web.automations.template.briefing.message": "Monte meu briefing da manhã: os eventos de hoje na agenda, as tarefas que vencem hoje ou estão atrasadas e os lembretes do dia. Seja breve e comece pelo que merece atenção primeiro.",
+  "web.automations.template.closing.name": "Fechamento do dia",
+  "web.automations.template.closing.message": "Faça o fechamento do meu dia: as tarefas que ficaram pendentes, o que ainda tem na agenda hoje à noite e os eventos de amanhã. Sugira no máximo três prioridades para amanhã.",
 } as const;

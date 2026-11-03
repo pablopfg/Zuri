@@ -304,7 +304,7 @@ Ordem: nome do agente (uma linha) → instruções fixas → relógio do dono �
 | --- | --- | --- |
 | `read` | `list_tasks`, `list_projects`, `read_note`, `search_notes`, `search_memories`, `search`, `list_automations`, `list_calendar_events` | Roda direto; única classe da Zuri em execuções agendadas (mais `notify_owner` e as ferramentas MCP liberadas para rotinas) |
 | `write` | `create_task`, `update_task`, `complete_task` (máx. 3 por turno), `create_project`, `create_note`, `update_note` (só renomeia ou acrescenta), `remember`, `update_memory`, `create_reminder`, `create_automation`, `create_calendar_event`, `update_calendar_event`, `propose_task_plan` (1 por turno), `propose_ai_routine` | Roda direto no chat; nunca em execuções agendadas |
-| `destructive` | `delete_task`, `delete_note`, `replace_task_description`, `replace_note_content`, `forget_memory`, `cancel_automation`, `delete_calendar_event` e ferramentas MCP que apagam ou sobrescrevem, na classificação da Zuri confirmada pelo dono (as outras seguem o nível que o dono escolheu) | Vira proposta; só roda com aprovação |
+| `destructive` | `delete_task`, `delete_note`, `replace_task_description`, `replace_note_content`, `forget_memory`, `cancel_automation`, `delete_calendar_event`, `change_shared_calendar_event` e ferramentas MCP que apagam ou sobrescrevem, na classificação da Zuri confirmada pelo dono (as outras seguem o nível que o dono escolheu) | Vira proposta; só roda com aprovação |
 
 ### Avisos, MCP, agenda, remoto e backup
 

@@ -9,6 +9,7 @@ export const ptBRPalette = {
   "web.palette.groupMeaning": "Pelo significado",
   "web.palette.newTask": "Nova tarefa",
   "web.palette.newNote": "Nova nota",
+  "web.palette.newEvent": "Novo evento",
   "web.palette.settingsSection": "Configurações › {section}",
   "web.palette.searching": "Buscando…",
   "web.palette.empty": "Nada com “{query}”. Tente outra palavra.",
