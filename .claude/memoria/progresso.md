@@ -36,9 +36,14 @@ etapas ficam detalhadas; as mais antigas viram uma linha na tabela.
 | 16b | mesclada (02/11/2026) | #96 | Comandos de segurança (`/acessos`, `/sessoes`, `/encerrar_sessoes`, `/tokens`, `/pausar_rotinas`, `/bloquear`), modo de bloqueio com a tela **Sair do bloqueio**, rebloqueio que suspende o vínculo, **Confirmar que vi** no app |
 | 17 | mesclada (02/11/2026) | #99 | Busca por significado opcional: vetores `bge-m3` em `int8` no SQLite do objeto, fila por gatilhos, preparo no alarme único com tetos diários, busca híbrida na paleta, na recordação, na ferramenta `search` e no `/buscar` |
 | 18a | mesclada (03/11/2026) | #105 | Servidores MCP remotos (sem login ou token fixo): fetch protegido contra SSRF, token cifrado, catálogo revisado pelo dono, triagem por turno com `find_tools`, cartão com os dados exatos, tela Configurações › Integrações |
-| 18b | em revisão | — | Login OAuth nos servidores MCP (PKCE, registro dinâmico, botão **Entrar no serviço**), triagem das ferramentas pelo significado, aprovação de chamadas externas pelo bot e pela página `/aprovar` |
+| 18b | mesclada (03/11/2026) | #111 | Login OAuth nos servidores MCP (PKCE, registro dinâmico, botão **Entrar no serviço**), triagem das ferramentas pelo significado, aprovação de chamadas externas pelo bot e pela página `/aprovar` |
 
 ## Últimas etapas (detalhe)
+
+### Ajuste da 18 · Autonomia por ferramenta MCP (#120, 03/11/2026)
+- Entregou: três níveis por ferramenta (`approve`, `auto`, `routines`; no banco `policy` + coluna `routines`, lidos por `levelOf`); `mcp/classify.ts` (a Zuri classifica cada ferramenta em `read`/`write`/`destructive` por palavras no nome, descrição e campos, sem IA; na dúvida `write`; a marcação do servidor só deixa mais cauteloso; o dono confirma na coluna `kind`); ferramentas externas nas rotinas com IA (`AgentRunner.scheduled` com `turnTools(automationId)`), liberação por rotina (`zur_automation_mcp_tools`, até 10, nunca destrutiva), propostas de rotina na conversa "Rotina: <nome>" com validade de 24 h (`MCP_LIMITS.routineProposalTtlMs`), até 3 por execução, 12 subrequisições externas por despertar (`ROUTINE_MCP_BUDGET`). Senha recente para subir nível, baixar a cautela do tipo, liberar para rotina e criar/mudar/aprovar rotina com IA enquanto algo roda sozinho em rotinas. Plano: `docs/planos/autonomia-mcp.md`.
+- Migrations: 20 (`mcp_autonomy`). A próxima livre é a 21. Coluna acrescentada por `ALTER` não leva `CHECK` (ver `armadilhas.md`).
+- Para as próximas: a 22 (workflows) reaproveita a liberação por automação; ferramenta nova da Zuri que escreve continua fora das rotinas.
 
 ### Etapa 18b · Login OAuth, triagem por significado e aprovação pelo bot
 - Entregou: `mcp/oauth.ts` (`ZuriOAuthProvider` sobre o `OAuthClientProvider` do SDK, cliente público, não interativo fora de ações do dono), `mcp/meaning.ts` (`McpMeaning`: vetor int8 por ferramenta ligada, feito no alarme depois de `semantic.tick`, chave FNV de modelo+texto), `mcp/dev-oauth.ts` (servidor de login simulado em `entrar.exemplo.com.br`, código `dev.<challenge>` no local), `POST /api/mcp/oauth/callback` (senha recente, `state` 10 min uso único), `SemanticSearch.known()`, `mcp_call` em `telegram/approvals.ts` (`BOT_MCP_BUDGET = 12`, resposta citada até 600) e na página `/aprovar`, linha no `/status`. Plano: `docs/planos/etapa-18b-mcp-oauth.md`.
@@ -52,16 +57,11 @@ etapas ficam detalhadas; as mais antigas viram uma linha na tabela.
 - Decisões técnicas: OAuth, triagem por embeddings e aprovação de chamadas externas pelo bot ficam para a 18b; proposta `mcp_<…>` é `app_only` no Telegram; constante importada pela interface não pode morar em módulo com Zod (puxava 5,9 kB para o JS inicial).
 - Para as próximas: a 18b reaproveita `McpService` (tipo de acesso `oauth` já previsto no CHECK) e liga as aprovações externas no bot; a 19 pode usar o mesmo `MCP_CREDENTIAL_KEY` com outro `info` no HKDF; a 22 usa `guardedFetch`/`assertPublicHost` para sair para a internet.
 
-### Etapa 17 · Busca por significado
-- Entregou: `apps/agent/src/semantic/` (`schema.ts` trilha própria `SEMANTIC_MIGRATIONS` com versão na chave `semantic` da `InternalState` e gatilhos de fila; `vectors.ts`; `embedder.ts` com `WorkersAIEmbedder` e `MockEmbedder`; `store.ts` `VectorStore` em blocos de 64; `service.ts` `SemanticSearch`; `hybrid.ts` `hybridSearch`), `MeteredAI.embed` com `reserveEmbedding`/`settleEmbedding`, rotas em `api/semantic.ts`, cartão em `AiTab.tsx`, grupo "Pelo significado" na paleta, `packages/shared/src/semantic.ts`. Doc: `docs/semantic-recall.md`. Plano: `docs/planos/etapa-17-busca-semantica.md`.
-- Migrations: nenhuma na trilha principal (18 continua livre); tabelas `zur_semantic_*` só ao ligar, pela trilha do módulo.
-- Decisões técnicas: embedder só Workers AI ou simulado (D8); preparo até 2.000 textos/dia e 50% do teto de Neurons; 500 buscas/dia com cache de 32; piso 0,55/0,10 no bge-m3; rotas fora de `WHILE_LOCKDOWN`; o ícone novo na paleta estourava o orçamento do JS inicial (139.099 B hoje), então automações usam `Clock`.
-- Para as próximas: item novo com texto (etapas 18–22) que deva aparecer na busca ganha uma entrada em `KIND_SOURCES` e uma migration nova em `SEMANTIC_MIGRATIONS` (só acréscimo).
-
 ### Notas que continuam valendo
-- Um alarme só (P8): use `AutomationService.rearm()`/`otherDue`, nunca outro alarme. O runner aceita `context: "scheduled"` (só leitura, sem dono presente). Toda IA por `agent.ai()`.
+- Um alarme só (P8): use `AutomationService.rearm()`/`otherDue`, nunca outro alarme. O runner aceita `context: "scheduled"` (ferramentas da Zuri só leem; externas só as liberadas para rotinas, o resto vira proposta de 24 h). Toda IA por `agent.ai()`.
 - Bloqueio (16b): a etapa 20 liga os tokens no `RemoteTokenHook` (`suspendAll`/`resumeAll`/`active`) e põe **Revogar** em `/tokens`; IA, MCP e workflows em segundo plano consultam `auth.lockdown.active()`; rota que precise funcionar no bloqueio entra em `WHILE_LOCKDOWN`.
-- JS inicial em ~139,08 kB (teto 139,1): tela nova sob demanda, textos via `addMessages`; tela que trava o app vai no chunk de `PasswordChangePage`.
+- Busca por significado (17): item novo com texto pesquisável ganha entrada em `KIND_SOURCES` e migration nova em `SEMANTIC_MIGRATIONS`.
+- JS inicial em ~138,2 kB (teto 139,1): tela nova sob demanda, textos via `addMessages`; tela que trava o app vai no chunk de `PasswordChangePage`.
 
 <!-- Modelo, até 10 linhas por etapa:
 ### Etapa NN · <nome>
@@ -95,6 +95,6 @@ etapas ficam detalhadas; as mais antigas viram uma linha na tabela.
 
 ## Próxima etapa
 
-- Número e nome: 19 · Google Agenda, depois que a 18b mesclar
-- Dependências mescladas: 9, 10, 15b (#89), 18a (#105); 18b em revisão
+- Número e nome: 19 · Google Agenda
+- Dependências mescladas: 9, 10, 15b (#89), 18a (#105), 18b (#111), autonomia MCP (#120)
 - Precisa de algo do Pablo antes: o app OAuth do Google (cliente do próprio dono) só no deploy; o desenvolvimento usa um Google simulado
