@@ -1,4 +1,4 @@
-import { APP_VERSION, ptBRSettings } from "@zuri/shared";
+import { APP_VERSION, ptBRSettings, ptBRSettingsTabs } from "@zuri/shared";
 import { Activity, Bell, Bot, ChevronLeft, ChevronRight, Clock, Database, Plug, Shield, User } from "lucide-react";
 import { useSyncExternalStore } from "react";
 import { Link, NavLink, Navigate, useParams } from "react-router";
@@ -14,6 +14,7 @@ import { SecurityTab } from "./settings/SecurityTab.tsx";
 
 // The screen's texts come with its download (rule P11).
 addMessages(ptBRSettings);
+addMessages(ptBRSettingsTabs);
 
 /** The tabs, by the path segment the address shows ("/configuracoes/seguranca"). */
 export const SETTINGS_TABS = ["conta", "seguranca", "ia", "avisos", "integracoes", "dados", "diagnostico"] as const;

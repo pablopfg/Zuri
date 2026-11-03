@@ -263,6 +263,15 @@ acrescente aqui cada armadilha nova que encontrar (sem dados pessoais).
   mudou. Antes de abrir a PR, confira o total exato em bytes e deixe pelo menos
   20 bytes de folga. Ícone já usado em outra tela sob demanda conta como
   pedaço novo; troque por um do inicial (`RotateCw`, `Clock`).
+- 03/11: a develop chegou a 3 bytes do teto e a PR de versão 0.24.0 estourou.
+  A folga voltou (926 bytes) tirando do inicial o que quase nunca aparece: o
+  formulário da confirmação de senha (`ReauthDialog.tsx`, o `ConfirmDialog` só
+  escuta), o aviso de duas etapas (o `AppShell` só o carrega com o 2FA
+  desligado), `shortcutLabel` fora de `lib/palette.ts` (um import do `AppShell`
+  levava o módulo inteiro) e os textos das seções e do tema para catálogos sob
+  demanda. Deixar a `LoginPage` ou a `NotFoundPage` sob demanda dividiu o
+  pacote inicial em vários pedaços (com a `NotFoundPage`, o total ainda subiu
+  400 bytes): não é o caminho.
 - O axe rodando no meio da animação de entrada (opacidade baixa) acusa
   contraste falso. `expectAccessible` espera as animações finitas terminarem.
 

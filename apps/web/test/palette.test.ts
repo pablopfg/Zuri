@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { matches, moveActive, normalize, SEARCH_MIN_CHARS, searchTerm, shortcutLabel } from "../src/lib/palette.ts";
+import { matches, moveActive, normalize, SEARCH_MIN_CHARS, searchTerm } from "../src/lib/palette.ts";
+import { shortcutLabel } from "../src/lib/shortcut.ts";
 
 describe("command palette rules", () => {
   it("compares without case or accents", () => {

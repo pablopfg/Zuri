@@ -1,8 +1,11 @@
+import { ptBRShell } from "@zuri/shared";
 import { ShieldAlert, X } from "lucide-react";
 import { useState } from "react";
 import { Link, useLocation } from "react-router";
 import { useMfaStatus } from "../hooks/mfa.ts";
-import { useI18n } from "../lib/i18n.tsx";
+import { addMessages, useI18n } from "../lib/i18n.tsx";
+
+addMessages(ptBRShell);
 
 /** "Remind me later" hides the reminder this long, on this browser only. */
 const SNOOZE_MS = 3 * 24 * 3600_000;
