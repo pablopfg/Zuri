@@ -51,6 +51,8 @@ export default defineConfig({
         "--var VAPID_PUBLIC_KEY:BArqm2bEiRY0vWr0hdrXN1eh6ibifZDca45l9kP34MtvpKnTtFebh64fsDf3d8SkgS7deK2cCQNehxkeKQyU2oE --var VAPID_PRIVATE_KEY:wOOMmS0NgL81YSjmS0UwAl7PotpIuPUi0q3Z2acC0Gk" +
         // A made-up bot (step 12): over loopback the Worker answers the Bot API itself (src/telegram/dev-telegram.ts).
         ` --var TELEGRAM_BOT_TOKEN:${E2E_TELEGRAM_TOKEN} --var TELEGRAM_ADMIN_ID:${E2E_TELEGRAM_ADMIN}` +
+        // A made-up key for the MCP servers' tokens (step 18): the servers on *.exemplo.com.br are simulated (src/mcp/dev-mcp.ts).
+        " --var MCP_CREDENTIAL_KEY:e2e-chave-mcp-inventada-0123456789abcdef" +
         // A copy of everything the Worker prints, for the check after the run, and
         // all of it back on stderr: Playwright shows only the server's stderr.
         // Appending (the file was just removed): the second server writes to it too,

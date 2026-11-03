@@ -10,7 +10,12 @@ import { AppError } from "../http/errors.ts";
 import type { MemoryService } from "../memory/service.ts";
 import type { Productivity } from "../productivity/index.ts";
 import { log } from "../log.ts";
+import { stableStringify } from "./stable.ts";
+
+export { stableStringify };
 import type { SemanticSearch } from "../semantic/service.ts";
+import { type ExternalTool, type McpTurnTools, runApprovedExternal } from "../mcp/agent.ts";
+import { type McpService, McpToolError } from "../mcp/service.ts";
 
 export type ToolPermission = "read" | "write" | "destructive";
 
@@ -42,6 +47,10 @@ export interface ToolContext {
   notices?: Notice[];
   /** Scheduled runs only: the routine's name, which titles its notices. */
   routineName?: string;
+  /** The remote MCP servers (step 18): approvals of external calls go through it. */
+  mcpService?: McpService;
+  /** Chat turns only: the external tools of this turn, its sessions and what it sent out. */
+  mcp?: McpTurnTools;
 }
 
 /** A notice a scheduled run writes for the owner (notify_owner). */
@@ -94,7 +103,8 @@ export interface DestructiveTool<S extends z.ZodType = z.ZodType> extends BaseTo
   afterCommit?: (ctx: ToolContext) => Promise<void>;
 }
 
-export type ToolDefinition = ImmediateTool | DestructiveTool;
+export type ToolDefinition = ImmediateTool | DestructiveTool | ExternalTool;
+export type { ExternalTool };
 
 export function defineTool<S extends z.ZodType>(tool: ImmediateTool<S> | DestructiveTool<S>): ToolDefinition {
   return tool as unknown as ToolDefinition;
@@ -115,27 +125,20 @@ export class ToolError extends Error {
  */
 export const MAX_TOOL_RESULT_CHARS = 8_000;
 
-/** The JSON of a value with object keys sorted: the same data always gives the same text. */
-export function stableStringify(value: unknown): string {
-  if (value === null || typeof value !== "object") return JSON.stringify(value) ?? "null";
-  if (Array.isArray(value)) return `[${value.map(stableStringify).join(",")}]`;
-  const entries = Object.entries(value as Record<string, unknown>)
-    .filter(([, v]) => v !== undefined)
-    .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
-  return `{${entries.map(([k, v]) => `${JSON.stringify(k)}:${stableStringify(v)}`).join(",")}}`;
-}
+/** Longest arguments of an external call (step 18), as JSON. */
+export const MAX_EXTERNAL_ARGS_CHARS = 4_000;
 
 /**
  * A tool result as the model gets it: one `<data source="tool">` line (rule 2),
  * so a note or memory that says "ignore your rules" stays inert text, cut to
  * MAX_TOOL_RESULT_CHARS.
  */
-export function presentResult(name: string, result: unknown): string {
+export function presentResult(name: string, result: unknown, source: "tool" | "mcp" = "tool"): string {
   let json = stableStringify(result);
   if (json.length > MAX_TOOL_RESULT_CHARS) {
     json = `${[...json].slice(0, MAX_TOOL_RESULT_CHARS).join("")}… [result cut: ask for less, or open one item at a time]`;
   }
-  return dataLine("tool", name, json);
+  return dataLine(source, name, json);
 }
 
 /** Service refusals, worded for the model. The owner never sees these. */
@@ -192,9 +195,17 @@ export class ToolExecutor {
   /** The tools offered in this context: scheduled runs only ever get the read ones, plus notify_owner. */
   available(): ToolDefinition[] {
     if (this.limits.maxToolCalls <= 0) return [];
+    // find_tools only when the turn's triage left some external tools out.
+    const findable = (this.ctx.mcp?.leftOut ?? 0) > 0;
+    // External tools (step 18) never run in scheduled runs: nobody is there to see what leaves the account.
     return this.ctx.mode === "chat"
-      ? this.tools.filter((tool) => !(tool.permission !== "destructive" && tool.scheduledOnly))
-      : this.tools.filter((tool) => tool.permission === "read" || (tool.permission !== "destructive" && tool.scheduledOnly === true));
+      ? this.tools.filter(
+          (tool) =>
+            !((tool.permission === "read" || tool.permission === "write") && tool.scheduledOnly) &&
+            (tool.permission !== "external" || this.ctx.mcp !== undefined) &&
+            (tool.name !== "find_tools" || findable),
+        )
+      : this.tools.filter((tool) => tool.name !== "find_tools" && (tool.permission === "read" || (tool.permission === "write" && tool.scheduledOnly === true)));
   }
 
   find(name: string): ToolDefinition | undefined {
@@ -221,7 +232,7 @@ export class ToolExecutor {
   /** What the call is about, from its validated input, for the activity line; never more than 120 characters. */
   detail(name: string, input: unknown): string | undefined {
     const tool = this.find(name);
-    if (!tool?.detail) return undefined;
+    if (!tool || tool.permission === "external" || !tool.detail) return undefined;
     const parsed = tool.input.safeParse(input ?? {});
     if (!parsed.success) return undefined;
     const value = tool.detail(parsed.data);
@@ -230,7 +241,7 @@ export class ToolExecutor {
 
   async execute(name: string, rawInput: unknown, callId: string): Promise<string> {
     const tool = this.find(name);
-    if (!tool) throw new ToolError(`Tool "${String(name).slice(0, 64)}" is not available.`);
+    if (!tool || (tool.permission === "external" && !this.ctx.mcp?.isActive(tool.name))) throw new ToolError(`Tool "${String(name).slice(0, 64)}" is not available.`);
     if (this.calls >= this.limits.maxToolCalls) {
       throw new ToolError("The tool call limit of this request is reached. Answer the owner with what you already have.");
     }
@@ -248,6 +259,7 @@ export class ToolExecutor {
     this.signatures.add(signature);
     try {
       if (tool.permission === "destructive") return presentResult(tool.name, await this.propose(tool, parsed.data, callId));
+      if (tool.permission === "external") return await this.external(tool, parsed.data as Record<string, unknown>, callId);
       const result = await tool.execute(parsed.data, this.ctx);
       if (result && typeof result === "object" && "planId" in result && typeof result.planId === "string") this.plansByCall.set(callId, result.planId);
       if (result && typeof result === "object" && "routineId" in result && typeof result.routineId === "string") this.automationsByCall.set(callId, result.routineId);
@@ -257,10 +269,44 @@ export class ToolExecutor {
       this.perTool.set(tool.name, used);
       this.signatures.delete(signature);
       if (error instanceof ToolError) throw error;
+      if (error instanceof McpToolError) throw new ToolError(error.message);
       if (error instanceof AppError) throw new ToolError(forModel(error));
       log("error", "tool_failed", { tool: tool.name, error });
       throw new ToolError("The tool failed. Tell the owner; do not retry.");
     }
+  }
+
+  /**
+   * An external call (step 18): "ask first" always becomes a card; "run
+   * without asking" runs now unless this call carries a lot or another
+   * server answered earlier in the turn, when it becomes a card too.
+   */
+  private async external(tool: ExternalTool, args: Record<string, unknown>, callId: string): Promise<string> {
+    const mcp = this.ctx.mcp;
+    if (this.ctx.mode !== "chat" || !mcp) throw new ToolError(`Tool "${tool.name}" is not available.`);
+    const argsChars = stableStringify(args).length;
+    // The card shows the whole call: arguments the owner can't read at a glance are refused, not cut.
+    if (argsChars > MAX_EXTERNAL_ARGS_CHARS) throw new ToolError("These arguments are too long for an external call. Send only what the request needs.");
+    if (!mcp.mustAsk(tool, argsChars)) return presentResult(tool.name, await mcp.run(tool, args), "mcp");
+    const service = this.ctx.mcpService;
+    if (!service || !this.ctx.conversationId) throw new ToolError(`"${tool.name}" needs the owner's approval and works only in the chat.`);
+    const targetId = `${tool.serverId}/${tool.toolName}`;
+    const hash = await service.proposalHash(targetId, args);
+    if (hash === null) throw new ToolError("This external tool is turned off.");
+    const action = this.ctx.actions.create({
+      conversationId: this.ctx.conversationId,
+      tool: tool.name,
+      targetId,
+      targetHash: hash,
+      targetLabel: [...tool.label.replace(/\s+/g, " ").trim()].slice(0, 120).join(""),
+      payload: { args },
+    });
+    this.ctx.actions.prune();
+    this.actionsByCall.set(callId, action.id);
+    return presentResult(tool.name, {
+      status: "awaiting_owner_approval",
+      note: "Nothing was sent yet. The owner now sees an Approve button with these exact arguments. Say in one sentence what you asked to run and where. Do not call it again and never say it ran.",
+    });
   }
 
   /** Records a proposal the owner approves or cancels in the app. Nothing changes now. */
@@ -313,6 +359,11 @@ export async function runApprovedAction(tools: readonly ToolDefinition[], ctx: T
   const { actions } = ctx;
   const row = actions.row(actionId);
   if (!row) throw new AppError("NOT_FOUND", "error.actionNotFound");
+  // An external call (step 18): run through the MCP service, outside any transaction.
+  if (row.tool.startsWith("mcp_")) {
+    if (!ctx.mcpService) throw new AppError("NOT_FOUND", "error.actionNotFound");
+    return runApprovedExternal(ctx.mcpService, actions, row);
+  }
   const tool = tools.find((item): item is DestructiveTool => item.permission === "destructive" && item.name === row.tool);
   if (!tool) throw new AppError("NOT_FOUND", "error.actionNotFound");
   if (!actions.claim(actionId, "approved")) {

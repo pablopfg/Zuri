@@ -55,8 +55,11 @@ export const TOOL_NAMES = [
   "cancel_automation",
   "propose_ai_routine",
   "notify_owner",
+  "find_tools",
 ] as const;
 export type ToolName = (typeof TOOL_NAMES)[number];
+/** A remote MCP tool as the model calls it (step 18): never one of TOOL_NAMES. */
+export type ExternalToolName = `mcp_${string}`;
 
 /** The destructive ones: they only ever become a proposal the owner approves. */
 export const DESTRUCTIVE_TOOLS = ["delete_task", "replace_task_description", "replace_note_content", "delete_note", "forget_memory", "cancel_automation"] as const;
@@ -68,8 +71,10 @@ export type ToolStatus = "running" | "success" | "error";
 export interface ToolActivity {
   /** The model's call id. */
   id: string;
-  name: ToolName;
+  name: ToolName | ExternalToolName;
   status: ToolStatus;
+  /** External tools only: "tool · server", the owner's names for them. */
+  label?: string;
   /** A short piece of the validated input (a title, a query), to name what the call was about. */
   detail?: string;
   /** Set when the call became a proposal the owner approves (destructive tools). */
@@ -96,13 +101,18 @@ export const PENDING_ACTION_TTL_MS = 30 * 60_000;
 export interface PendingAction {
   id: string;
   conversationId: string;
-  tool: DestructiveToolName;
+  /** "mcp_call": a call to a remote MCP tool (step 18), whose preview is the exact arguments. */
+  tool: DestructiveToolName | "mcp_call";
   status: PendingActionStatus;
   /** The target's title or text, cut to one short line. */
   target: string;
   /** The complete text the action would write, for rewrites; empty clears. */
   preview?: string;
   problem?: PendingActionProblem;
+  /** External calls: the server's answer once approved, cut short (third-party text). */
+  result?: string;
+  /** External calls: the server said the call failed. */
+  resultError?: boolean;
   createdAt: string;
   expiresAt: string;
 }

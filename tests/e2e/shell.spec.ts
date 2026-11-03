@@ -139,7 +139,7 @@ test("settings has the seven sections, each with its address and content: tabs o
     ["Segurança", "seguranca", "Atividade de acesso"],
     ["IA", "ia", "Uso de hoje"],
     ["Avisos", "avisos", "Resumo do dia"],
-    ["Integrações", "integracoes", "Google Agenda"],
+    ["Integrações", "integracoes", "Serviços externos (MCP)"],
     ["Dados", "dados", "Backup e uso do armazenamento"],
     ["Diagnóstico", "diagnostico", "Nada do que você escreveu entra neste registro."],
     ["Conta", "conta", "Nome, idioma e fuso horário"],

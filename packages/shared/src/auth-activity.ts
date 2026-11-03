@@ -46,6 +46,8 @@ export const AUTH_EVENT_KINDS = [
   "telegram_sessions_ended",
   "telegram_routines_paused",
   "lockdown_exited",
+  "mcp_server_added",
+  "mcp_server_changed",
   "setup_failure",
   "setup_locked",
   "owner_created",

@@ -29,6 +29,7 @@ export const TOOL_LABEL: Record<ToolName, MessageKey> = {
   cancel_automation: "web.chat.tool.cancel_automation",
   propose_ai_routine: "web.chat.tool.propose_ai_routine",
   notify_owner: "web.chat.tool.notify_owner",
+  find_tools: "web.chat.tool.find_tools",
 };
 
 export const TOOL_STATUS_LABEL: Record<ToolStatus, MessageKey> = {

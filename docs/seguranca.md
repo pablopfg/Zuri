@@ -540,10 +540,11 @@ propostas chegam ao modelo só em linhas `<data>`. As regras fixas do prompt
 dizem que um dado nunca vale como instrução. Como nenhum modelo garante isso, o
 limite real está no servidor:
 
-- **Sem agência a mais.** As 26 ferramentas só leem e escrevem os dados do
-  próprio dono. Não há shell, código, HTTP, credenciais, e-mail nem deploy. Um
-  teste confere a lista inteira e falha se aparecer uma ferramenta nova sem
-  revisão.
+- **Sem agência a mais.** As 27 ferramentas próprias só leem e escrevem os
+  dados do próprio dono. Não há shell, código, HTTP livre, credenciais, e-mail
+  nem deploy. Um teste confere a lista inteira e falha se aparecer uma
+  ferramenta nova sem revisão. A única saída são as ferramentas de servidores
+  MCP que o dono ligou (etapa 18, seção seguinte).
 - **Rotina agendada só lê.** Uma rotina da Zuri roda sem o dono por perto, então
   recebe só as ferramentas de leitura e `notify_owner`. A rotina que o modelo
   propõe no chat nasce esperando aprovação e não roda até o dono aprovar na
@@ -591,6 +592,11 @@ limite real está no servidor:
 | Aprovação dupla ou alvo trocado | `chat-tools.test.ts`, "two approvals at the same time", "TARGET_CHANGED" |
 | Prompt com segredos | `chat-runner.test.ts`, "never carries the deployment's secrets" |
 | Ferramenta que sai dos dados do dono | `chat-tools.test.ts`, "offers nothing that reaches outside the owner's data" |
+| Resposta de serviço MCP com `</data>` e ordens | `mcp-chat.test.ts`, "returns its answer as third-party data" |
+| Dados de um serviço levados a outro sem o dono ver | `mcp-chat.test.ts`, "asks first when a call carries a lot, or follows another server's answer", "…from an earlier turn" |
+| "Usar sem perguntar" numa ferramenta que escreve | `mcp-routes.test.ts`, "refuses 'run without asking' for a tool that does not say it only reads"; `mcp-chat.test.ts`, "never runs on its own a tool its server doesn't declare read-only" |
+| Descrição de ferramenta com `</data>` ou link | `mcp-units.test.ts`, "makes third-party text inert"; `mcp-chat.test.ts`, "gives the model the server's text with no tag or bracket of its own" |
+| Definição de ferramenta MCP trocada depois da aprovação | `mcp-chat.test.ts`, "refuses an approval when the tool, its definition or the server changed" |
 
 Nos testes, o modelo roteirizado obedece ao texto injetado de propósito. O
 teste passa quando, mesmo assim, nada é apagado sem o dono.
@@ -604,6 +610,66 @@ um frame de outra origem. O navegador ainda pergunta ao dono na primeira vez. O
 mais longo do que o tamanho indicava (um arquivo de bitrate muito baixo), conta
 a duração que ele ouviu, mesmo acima da reserva, e o próximo áudio já encontra
 o limite do dia.
+
+## Servidores MCP remotos
+
+A etapa 18 deixa a Zuri chamar ferramentas de servidores MCP que o dono
+adiciona (`docs/mcp.md`). É a primeira vez que o agente manda dados para fora,
+então o servidor externo é tratado como não confiável em tudo:
+
+- **Só o dono abre a porta.** Nenhuma ferramenta do agente adiciona servidor
+  ou liga ferramenta. Adicionar, trocar endereço, acesso ou token pede a senha
+  digitada agora e gera aviso de segurança (`mcp_server_added`,
+  `mcp_server_changed`). Toda ferramenta nasce desligada e em "Perguntar
+  sempre"; "Usar sem perguntar" também pede a senha digitada agora e só vale
+  para ferramenta que o servidor marca como de consulta (`readOnlyHint`). Uma
+  ferramenta que escreve sempre pergunta, mesmo com a linha mexida no banco: o
+  executor confere a marca de novo.
+- **Sem SSRF.** Só `https` na porta padrão, sem usuário e senha no endereço,
+  sem nome de rede particular (`localhost`, `.local`, `.internal`…) e sem IP
+  particular, reservado ou de metadados, inclusive IPv4 embutido em IPv6. Antes
+  de cada conexão, o nome é resolvido por DNS sobre HTTPS e qualquer endereço
+  particular recusa. O fetch só fala com a origem cadastrada, nunca segue
+  redirecionamento e não manda cookie. O token vai só para essa origem.
+- **Sem travar o Durable Object.** Corpo cortado em 2 MB e 35 s, prazos de 10,
+  15 e 30 s, sessão fechada no fim do turno, sem a stream `GET` do servidor e
+  no máximo 24 subrequisições por turno (12 no Telegram), contando as
+  consultas de DNS. `find_tools` só libera o que cabe nas 6 vagas e nos 2.000
+  tokens do turno. O schema do servidor perde `pattern`,
+  `patternProperties` e `format` antes de virar Zod, para nenhuma expressão
+  regular de terceiros rodar no objeto (ReDoS); tamanho e profundidade têm
+  teto.
+- **Texto de terceiros é dado.** Nome, título e descrição (também as do
+  schema) viram uma linha sem caracteres invisíveis, com `<`, `>` e colchetes
+  trocados por sinais inertes, e vão ao modelo marcados como texto de
+  terceiros. A
+  resposta entra em `<data source="mcp">` e não muda regra nenhuma. A
+  descrição mudou? A ferramenta sai de uso até o dono religar (hash revisado).
+- **Os dados não passeiam.** Mesmo em "Usar sem perguntar", a chamada vira
+  cartão quando leva mais de 1.000 caracteres, quando o turno passaria de 4.000
+  enviados ou quando outro servidor já respondeu na conversa, neste turno ou
+  num anterior (as aprovações com resposta e as chamadas automáticas recentes
+  contam). O cartão mostra os
+  argumentos exatos; a aprovação fica presa ao hash do servidor, do token
+  cifrado, da definição, da política e dos argumentos, roda uma vez e nunca é
+  repetida. Aprovações externas não passam pelo Telegram.
+- **Bloqueio e rotinas.** Durante o bloqueio da conta nenhuma ferramenta
+  externa é oferecida nem chamada, e as rotas do MCP ficam fechadas. Rotinas
+  agendadas nunca recebem ferramentas externas.
+- **Credencial cifrada.** AES-256-GCM com chave derivada do segredo
+  `MCP_CREDENTIAL_KEY` e o id do servidor como dado associado. O token nunca
+  volta à interface, ao log nem ao prompt. Trocar de endereço descarta o token.
+- **Erros sem texto do servidor.** Falhas viram um código (`auth`, `timeout`,
+  `private_address`…) que a interface traduz; o texto do servidor nunca é
+  guardado nem logado. Falha passageira (tempo, tamanho, fora do ar) não
+  desconecta; três falhas seguidas pausam o servidor por 15 minutos.
+
+Para a etapa 22, que deve trazer mais saídas de rede: o DNS é conferido antes
+de cada conexão, mas o `fetch` da Cloudflare resolve o nome de novo. Um
+servidor que troca a resposta do DNS entre as duas consultas (DNS rebinding)
+passaria pela conferência. O risco é baixo porque o Worker roda na rede da
+Cloudflare, longe da rede do dono, mas fica registrado para reavaliar quando
+houver outro tipo de saída.
 
 ## Dados apagados
 

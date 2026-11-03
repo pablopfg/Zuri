@@ -10,6 +10,7 @@ import {
   ptBRChat,
   type TaskPlan,
   type ToolActivity,
+  type ToolName,
 } from "@zuri/shared";
 import { Check, CircleAlert, Clock, History, LifeBuoy, LoaderCircle, Mic, Pencil, Plus, SendHorizontal, Sparkles, Square, Trash2, X } from "lucide-react";
 import { type FormEvent, type KeyboardEvent, useCallback, useEffect, useId, useRef, useState } from "react";
@@ -679,7 +680,7 @@ function ToolChip({ tool }: { tool: ToolActivity }) {
       )}
     >
       <Icon className={cn("h-3.5 w-3.5 shrink-0", tool.status === "running" && "motion-safe:animate-spin", tool.status === "success" && "text-success", tool.status === "error" && "text-danger")} aria-hidden />
-      <span className="font-medium">{t(TOOL_LABEL[tool.name])}</span>
+      <span className="font-medium">{tool.name.startsWith("mcp_") ? (tool.label ?? t("web.chat.tool.external")) : t(TOOL_LABEL[tool.name as ToolName])}</span>
       {tool.detail && <span className="truncate text-fg-muted">· {tool.detail}</span>}
       <span className="sr-only">({t(TOOL_STATUS_LABEL[tool.status])})</span>
     </li>

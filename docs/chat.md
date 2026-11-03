@@ -82,6 +82,13 @@ desconhecido é recusado), permissão e limite por turno.
 
 Detalhes das automações em [automacoes.md](automacoes.md).
 
+Ferramentas de servidores MCP remotos (etapa 18) entram no turno com o nome
+`mcp_<servidor>_<ferramenta>` quando o dono as liga em Configurações >
+Integrações. A triagem oferece até 6 por turno; se alguma ficou de fora, o
+modelo recebe `find_tools` (leitura, 1 por turno), que libera as que combinam
+com uma frase para o passo seguinte. A resposta do serviço chega em
+`<data source="mcp">`. Detalhes em [mcp.md](mcp.md).
+
 O executor (`tools/registry.ts`) também:
 
 - recusa o nome de uma ferramenta que não existe e a chamada exata repetida no
@@ -104,6 +111,10 @@ que vai acontecer e, numa reescrita, o texto novo inteiro.
   mesmo tempo. Se o alvo mudou ou sumiu, nada acontece e a resposta é
   `409 TARGET_CHANGED`. O retrato é conferido de novo dentro da transação.
 - **Recusar** (`POST /api/actions/:id/cancel`) fecha a proposta.
+- Uma chamada a um serviço externo que pede aprovação vira o cartão
+  `mcp_call` com os dados exatos que serão enviados. Ao aprovar, ela roda fora
+  da transação, uma vez só, e a resposta fica com a proposta (coluna `result`,
+  migration 18) para o cartão e para o turno seguinte.
 - A proposta vale 30 minutos; depois disso a resposta é `410 APPROVAL_EXPIRED`.
 
 ## Planos de tarefas

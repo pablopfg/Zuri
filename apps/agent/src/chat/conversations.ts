@@ -97,14 +97,17 @@ export function decodeTools(json: string): ToolActivity[] {
   const out: ToolActivity[] = [];
   for (const item of raw.slice(0, 40)) {
     if (!item || typeof item !== "object") continue;
-    const { id, name, status, detail, actionId, planId, automationId } = item as Record<string, unknown>;
-    if (typeof id !== "string" || id.length > 100 || typeof name !== "string" || !NAMES.has(name)) continue;
+    const { id, name, status, detail, actionId, planId, automationId, label } = item as Record<string, unknown>;
+    // External tools (step 18) keep their mcp_ name; nothing else outside the list is kept.
+    const external = typeof name === "string" && /^mcp_[a-z0-9_]{1,60}$/.test(name);
+    if (typeof id !== "string" || id.length > 100 || typeof name !== "string" || !(NAMES.has(name) || external)) continue;
     if (status !== "running" && status !== "success" && status !== "error") continue;
     const activity: ToolActivity = { id, name: name as ToolActivity["name"], status };
     if (typeof detail === "string") activity.detail = detail.slice(0, 120);
     if (typeof actionId === "string") activity.actionId = actionId;
     if (typeof planId === "string") activity.planId = planId;
     if (typeof automationId === "string") activity.automationId = automationId;
+    if (external && typeof label === "string") activity.label = label.slice(0, 200);
     out.push(activity);
   }
   return out;

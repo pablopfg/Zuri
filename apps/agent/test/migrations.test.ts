@@ -98,6 +98,7 @@ describe("the migration list", () => {
       15: "862c580be5d38907e9632922016c755a65b6ec6a60ed17dc381e4681dd82edbb",
       16: "0670271af26f7129e724c31b2de44737396c3c420aee68a96b2585662489e53d",
       17: "fd290cc5de35dccf4d948273b968436628891a5c4bcdaa43aa16917db22466a2",
+      18: "6e59b3b8d2eb9f8dbc3195ea0aa951c60139ebc0fc34400bf6c85e010f96b3fb",
     };
     for (const m of MIGRATIONS) {
       const digest = createHash("sha256").update(statementText(m).replace(/\r\n/g, "\n")).digest("hex");
@@ -113,7 +114,7 @@ describe("migrate", () => {
       expect(zurObjects(db)).toEqual([]);
 
       expect(migrate(db)).toBe(LATEST_SCHEMA_VERSION);
-      expect(schemaVersion(db)).toBe(17);
+      expect(schemaVersion(db)).toBe(18);
       // FTS5 keeps shadow tables of its own (zur_notes_fts_data and others): only ours are listed.
       expect(zurObjects(db).filter((name) => !/^table:zur_(notes|memories)_fts_/.test(name))).toEqual([
         "table:zur_activity",
@@ -175,6 +176,9 @@ describe("migrate", () => {
         "table:zur_login_attempts",
         "index:zur_login_attempts_at",
         "index:zur_login_attempts_network",
+        "table:zur_mcp_servers",
+        "table:zur_mcp_tools",
+        "index:zur_mcp_tools_enabled",
         "table:zur_memories",
         "index:zur_memories_category",
         "index:zur_memories_dedupe",
@@ -450,11 +454,33 @@ describe("migrate", () => {
     });
   });
 
+  it("upgrades a database at version 17 to 18: MCP servers and tools, the proposals kept", async () => {
+    await withEmptyDatabase("from-17", (db) => {
+      expect(migrate(db, MIGRATIONS.slice(0, 17))).toBe(17);
+      db.run(`INSERT INTO zur_conversations (id, title, created_at, updated_at) VALUES ('c1', 'Oi', 'x', 'x')`);
+      db.run(
+        `INSERT INTO zur_pending_actions (id, conversation_id, tool, target_id, target_hash, target_label, created_at, expires_at) VALUES ('p1', 'c1', 'delete_task', 't1', 'h', 'Tarefa', 'x', 'y')`,
+      );
+      expect(migrate(db)).toBe(18);
+      expect(db.one(`SELECT target_label, result FROM zur_pending_actions WHERE id = 'p1'`)).toEqual({ target_label: "Tarefa", result: null });
+      db.run(`INSERT INTO zur_mcp_servers (id, slug, name, url, auth_type, created_at, updated_at) VALUES ('s1', 'docs', 'Docs', 'https://exemplo.com.br/mcp', 'none', 'x', 'x')`);
+      expect(db.one(`SELECT enabled, status, failures, credential FROM zur_mcp_servers WHERE id = 's1'`)).toEqual({ enabled: 1, status: "disconnected", failures: 0, credential: null });
+      // Only the contract's ways of signing in, and one slug per server.
+      expect(() => db.run(`INSERT INTO zur_mcp_servers (id, slug, name, url, auth_type, created_at, updated_at) VALUES ('s2', 'x', 'X', 'u', 'basic', 'x', 'x')`)).toThrow();
+      expect(() => db.run(`INSERT INTO zur_mcp_servers (id, slug, name, url, auth_type, created_at, updated_at) VALUES ('s3', 'docs', 'X', 'u', 'none', 'x', 'x')`)).toThrow();
+      db.run(`INSERT INTO zur_mcp_tools (server_id, name, exposed_name, input_schema, schema_hash, status, created_at, updated_at) VALUES ('s1', 'search', 'mcp_docs_search', '{}', 'h', 'available', 'x', 'x')`);
+      // A tool arrives off and asking first; its exposed name is unique.
+      expect(db.one(`SELECT enabled, policy, hint, reviewed_hash FROM zur_mcp_tools`)).toEqual({ enabled: 0, policy: "approve", hint: "", reviewed_hash: null });
+      expect(() => db.run(`INSERT INTO zur_mcp_tools (server_id, name, exposed_name, input_schema, schema_hash, status, created_at, updated_at) VALUES ('s1', 'other', 'mcp_docs_search', '{}', 'h', 'available', 'x', 'x')`)).toThrow();
+      expect(() => db.run(`UPDATE zur_mcp_tools SET policy = 'always'`)).toThrow();
+    });
+  });
+
   it("upgrades a database at version 16 to 17: the bot's confirmations, the owner's data kept", async () => {
     await withEmptyDatabase("from-16", (db) => {
       expect(migrate(db, MIGRATIONS.slice(0, 16))).toBe(16);
       db.run(`INSERT INTO zur_telegram_links (id, kind, user_id, chat_id, status) VALUES ('l1', 'private', 1, 1, 'active')`);
-      expect(migrate(db)).toBe(17);
+      expect(migrate(db, MIGRATIONS.slice(0, 17))).toBe(17);
       expect(db.one(`SELECT status FROM zur_telegram_links WHERE id = 'l1'`)).toEqual({ status: "active" });
       db.run(`INSERT INTO zur_telegram_approvals (id, purpose, status, created_at, expires_at, page_token_hmac) VALUES ('a1', 'unlock', 'open', 'x', 'y', 'h1')`);
       expect(db.one(`SELECT email_sends, attempts, reply_message_id FROM zur_telegram_approvals WHERE id = 'a1'`)).toEqual({ email_sends: 0, attempts: 0, reply_message_id: null });

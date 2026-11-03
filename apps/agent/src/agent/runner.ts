@@ -1,9 +1,11 @@
-import type { ApiErrorCode, ChatEvent, ChatMessage, Conversation, Locale, MessageKey, Settings, ToolActivity } from "@zuri/shared";
+import { type ApiErrorCode, type ChatEvent, type ChatMessage, type Conversation, type Locale, MCP_LIMITS, type MessageKey, type Settings, type ToolActivity } from "@zuri/shared";
 import { t } from "@zuri/shared";
 import { z } from "zod";
 import type { MeteredAI } from "../ai/metered.ts";
 import { estimateTokens, type ProviderTool } from "../ai/provider.ts";
-import type { ConversationRepository, Quoted } from "../chat/conversations.ts";
+import { type ConversationRepository, decodeTools, type Quoted } from "../chat/conversations.ts";
+import { McpTurnTools, recentExternal } from "../mcp/agent.ts";
+import { MCP_SUBREQUEST_BUDGET } from "../mcp/session.ts";
 import { AppError } from "../http/errors.ts";
 import { MAX_RELEVANT_MEMORIES, memoryPromptSection, memoryTokenBudget, selectRelevantMemories } from "../memory/recall.ts";
 import { ALL_TOOLS } from "../tools/index.ts";
@@ -11,6 +13,11 @@ import { type Notice, type ToolContext, type ToolDefinition, ToolExecutor } from
 import { contextBudget, contextWindow, SUMMARIZE_THRESHOLD, summaryRequest } from "./context.ts";
 import { buildSystemPrompt, scheduledInstructions, SUMMARY_SYSTEM } from "./prompt.ts";
 import { log } from "../log.ts";
+
+/** Messages whose external tools stay offered, so a follow-up ("e para sexta?") keeps them. */
+const RECENT_EXTERNAL_MESSAGES = 6;
+/** The MCP share of the subrequests in a Telegram turn: the bot's client keeps the rest of the 50 (rule P9). */
+const MCP_TELEGRAM_BUDGET = 12;
 
 /** Messages read for one prompt, newest first, before the token budget picks. */
 const HISTORY_ROWS = 200;
@@ -106,6 +113,7 @@ export class AgentRunner {
     let fallback = false;
     const tools: ToolActivity[] = [];
     let executor: ToolExecutor | null = null;
+    let mcp: McpTurnTools | null = null;
     const finish = (status: ChatMessage["status"], error: { code: ApiErrorCode; key: MessageKey } | null): ChatMessage => {
       // A plan proposed in a turn the owner stopped is withdrawn: a half answer leaves nothing to confirm.
       if (status === "cancelled" && executor) this.deps.tools.plans.discard(executor.proposedPlans());
@@ -132,10 +140,16 @@ export class AgentRunner {
     try {
       const ai = this.deps.ai();
       const registry = this.deps.registry ?? ALL_TOOLS;
-      const ctx: ToolContext = { ...this.deps.tools, timeZone: settings.timeZone, mode: "chat", conversationId: conversation.id, source };
-      executor = new ToolExecutor(registry, ctx, { maxToolCalls: settings.aiMaxIterations > 1 ? settings.aiMaxToolCalls : 0 });
+      mcp = this.safeExternalTools(conversation.id, input);
+      const ctx: ToolContext = { ...this.deps.tools, timeZone: settings.timeZone, mode: "chat", conversationId: conversation.id, source, ...(mcp ? { mcp } : {}) };
+      executor = new ToolExecutor(mcp ? [...registry, ...mcp.tools] : registry, ctx, { maxToolCalls: settings.aiMaxIterations > 1 ? settings.aiMaxToolCalls : 0 });
       const offered = executor.available();
-      const budget = chainBudget(ai, settings.aiMaxContextTokens, settings.aiMaxOutputTokens, offered.length ? toolTokens(offered) : 0);
+      // The external tools take a fixed share of the prompt (docs/planos/mcp.md): whatever the triage or find_tools offer fits in it.
+      const native = offered.filter((tool) => tool.permission !== "external");
+      const toolShare = (native.length ? toolTokens(native) : 0) + (mcp && offered.length > native.length ? MCP_LIMITS.offeredTokens : 0);
+      const budget = chainBudget(ai, settings.aiMaxContextTokens, settings.aiMaxOutputTokens, toolShare);
+      const turnMcp = mcp;
+      const activeTools = turnMcp ? () => offered.filter((tool) => tool.permission !== "external" || turnMcp.isActive(tool.name)).map((tool) => tool.name) : undefined;
 
       // Memories: a fifth of the budget at most, every one a <data> line.
       const repo = this.deps.tools.memories.repo;
@@ -200,6 +214,7 @@ export class AgentRunner {
         system: system(),
         messages: window.messages,
         tools: providerTools,
+        ...(activeTools ? { activeTools } : {}),
         maxIterations: settings.aiMaxIterations,
         maxOutputTokens: settings.aiMaxOutputTokens,
         toolBudgetExhausted: () => turnTools.budgetExhausted(),
@@ -216,6 +231,7 @@ export class AgentRunner {
           const found = turnTools.find(event.name);
           if (!found) continue;
           const activity: ToolActivity = { id: String(event.id).slice(0, 100), name: found.name, status: "running" };
+          if (found.permission === "external") activity.label = found.label;
           const detail = turnTools.detail(event.name, event.input);
           if (detail) activity.detail = detail;
           tools.push(activity);
@@ -253,7 +269,46 @@ export class AgentRunner {
       }
       yield { type: "error", code: appError.code, message: t(locale, appError.messageKey), ...(appError.details ? { details: appError.details } : {}) };
       yield { type: "done", message: finish("error", { code: appError.code, key: appError.messageKey }) };
+    } finally {
+      // The turn's MCP sessions end with it, however it ends (rule P5).
+      await mcp?.close().catch(() => undefined);
     }
+  }
+
+  /**
+   * The external tools of this turn (step 18): none without the MCP service,
+   * with nothing turned on, or during a lockdown (turnTools checks it).
+   */
+  /** A broken MCP setup never breaks the chat: the turn goes on with the built-in tools. */
+  private safeExternalTools(conversationId: string, input: TurnInput): McpTurnTools | null {
+    try {
+      return this.externalTools(conversationId, input);
+    } catch (error) {
+      log("error", "mcp_tool_skipped", { error });
+      return null;
+    }
+  }
+
+  private externalTools(conversationId: string, input: TurnInput): McpTurnTools | null {
+    const service = this.deps.tools.mcpService;
+    if (!service) return null;
+    const available = service.turnTools();
+    if (available.length === 0) return null;
+    const used = this.deps.conversations
+      .recent(conversationId, 0, RECENT_EXTERNAL_MESSAGES)
+      .filter((row) => row.role === "assistant")
+      .map((row) => decodeTools(row.tools));
+    const recent = recentExternal(used);
+    // Answers already in this conversation (calls that ran on their own, approved ones): data from them
+    // must not reach another server without the owner seeing it, in this turn or a later one.
+    const serverOf = new Map(available.map((t) => [t.tool.exposed_name, t.server.id]));
+    const answered = new Set(this.deps.tools.actions.externalAnswered(conversationId));
+    for (const list of used) for (const tool of list) if (tool.status === "success" && !tool.actionId && serverOf.has(tool.name)) answered.add(serverOf.get(tool.name) ?? "");
+    return new McpTurnTools(service, available, input.message, recent, input.signal, {
+      answered,
+      // The bot's turn also sends its answer through the Telegram API within the same invocation.
+      budget: input.source === "telegram" ? MCP_TELEGRAM_BUDGET : MCP_SUBREQUEST_BUDGET,
+    });
   }
 
   /**

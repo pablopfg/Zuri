@@ -685,6 +685,8 @@ const SECURITY_TEXT: Record<SecurityAlertEvent, Text> = {
   telegram_sessions_ended: { title: "notice.security.telegram_sessions_ended.title", body: "notice.security.telegram_sessions_ended.body" },
   telegram_routines_paused: { title: "notice.security.telegram_routines_paused.title", body: "notice.security.telegram_routines_paused.body" },
   lockdown_exited: { title: "notice.security.lockdown_exited.title", body: "notice.security.lockdown_exited.body" },
+  mcp_server_added: { title: "notice.security.mcp_server_added.title", body: "notice.security.mcp_server_added.body" },
+  mcp_server_changed: { title: "notice.security.mcp_server_changed.title", body: "notice.security.mcp_server_changed.body" },
   setup_failure: { title: "notice.security.setup_failure.title", body: "notice.security.setup_failure.body" },
   setup_locked: { title: "notice.security.setup_locked.title", body: "notice.security.setup_locked.body" },
   owner_created: { title: "notice.security.owner_created.title", body: "notice.security.owner_created.body" },

@@ -71,7 +71,8 @@ export function clientInfo(request: Request, development: boolean): ClientInfo {
   };
 }
 
-function ipv4(text: string): number[] | null {
+/** The four octets of a dotted-quad IPv4 address, or null. */
+export function ipv4(text: string): number[] | null {
   const parts = text.split(".");
   if (parts.length !== 4) return null;
   const octets = parts.map((part) => (/^\d{1,3}$/.test(part) ? Number(part) : Number.NaN));

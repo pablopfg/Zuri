@@ -94,6 +94,7 @@ export class TelegramApprovals {
     if (row.status !== "pending") return { status: "handled" };
     if (row.expires_at <= new Date(this.#now()).toISOString()) return { status: "expired" };
     const tool = row.tool as DestructiveToolName;
+    // External calls (mcp_…, step 18) are never in the list: their arguments are checked in the app, in full.
     if (!BOT_APPROVABLE.has(tool)) return { status: "app_only" };
     const state = await targetState(this.deps.tools, this.deps.toolContext(row.conversation_id), row);
     if (!state) return { status: "app_only" };

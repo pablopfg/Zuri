@@ -109,8 +109,10 @@ export class WorkersAIProvider implements AIProvider {
             stopWhen: ({ steps: done }: { steps: { toolResults?: unknown }[] }) =>
               done.length >= req.maxIterations || (req.reserveNextStep ? !req.reserveNextStep(nextPrompt(steps, done)) : false),
             // On the last allowed step, or with the tool budget spent, the model must answer in text.
-            prepareStep: ({ stepNumber }: { stepNumber: number }) =>
-              stepNumber >= req.maxIterations - 1 || req.toolBudgetExhausted() ? { toolChoice: "none" as const } : {},
+            prepareStep: ({ stepNumber }: { stepNumber: number }) => ({
+              ...(req.activeTools ? { activeTools: req.activeTools() } : {}),
+              ...(stepNumber >= req.maxIterations - 1 || req.toolBudgetExhausted() ? { toolChoice: "none" as const } : {}),
+            }),
           }
         : {}),
       onError: ({ error }: { error: unknown }) => {

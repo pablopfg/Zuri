@@ -25,6 +25,8 @@ export const TEST_ENV = {
   TELEGRAM_BOT_TOKEN: "123456789:AAteste-token-falso_0123456789abcdefgh",
   TELEGRAM_ADMIN_ID: "424242",
   VAPID_PRIVATE_KEY: vapid.d ?? "",
+  // Seals the MCP servers' tokens (step 18); made up, at least 32 characters.
+  MCP_CREDENTIAL_KEY: "test-mcp-credential-key-0123456789abcdefghij",
 };
 
 // The agent runs inside workerd, with the bindings of wrangler.jsonc. Nothing

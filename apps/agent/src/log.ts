@@ -46,6 +46,9 @@ export const LOG_EVENTS = [
   "semantic_index_failed",
   "semantic_query_failed",
   "semantic_recall_failed",
+  "mcp_connect_failed",
+  "mcp_call_failed",
+  "mcp_tool_skipped",
 ] as const;
 export type LogEvent = (typeof LOG_EVENTS)[number];
 
@@ -93,9 +96,9 @@ const METHOD = /^[A-Z]{3,7}$/;
  */
 export const ROUTE_WORDS: ReadonlySet<string> = new Set([
   "acknowledge", "api", "activity", "actions", "ai", "alerts", "approvals", "approve", "auth", "automations", "cancel", "chat", "check", "client", "code", "confirm", "connect", "conversations", "correct", "devices", "diagnostics", "disable",
-  "empty", "enable", "exit", "group", "health", "heartbeat", "history", "learning", "lockdown", "login", "login-options", "logout", "memories", "mfa", "mute",
+  "empty", "enable", "exit", "group", "mcp", "health", "heartbeat", "history", "learning", "lockdown", "login", "login-options", "logout", "memories", "mfa", "mute",
   "notes", "notices", "read", "resolve", "options", "owner", "passkey", "passkeys", "password", "plans", "projects", "push", "recover", "recovery-codes", "reindex", "request", "restore", "reviews", "run", "runs",
-  "search", "semantic", "session", "settings", "setup", "status", "tasks", "telegram", "test", "transcribe", "trash", "usage", "verify", "webhook",
+  "search", "semantic", "servers", "session", "settings", "setup", "status", "tasks", "telegram", "test", "tools", "transcribe", "trash", "usage", "verify", "webhook",
 ]);
 const MAX_SEGMENTS = 8;
 
