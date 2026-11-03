@@ -50,9 +50,39 @@ export function clip(text: string, max: number): string {
 /** One line, no control or invisible characters: third-party text shown and sent to the model. */
 export function plainText(value: unknown, max: number): string {
   if (typeof value !== "string") return "";
-  // biome-ignore lint/suspicious/noControlCharactersInRegex: removing them is the point
-  const cleaned = value.replace(/[\u0000-\u001f\u007f-\u009f​-‏‪-‮⁠-⁤﻿]/g, " ").replace(/\s+/g, " ").trim();
+  const cleaned = value.replace(HIDDEN, " ").replace(/\s+/g, " ").trim();
   return clip(cleaned, max);
+}
+
+/**
+ * Controls, format characters (bidi marks and isolates, Unicode tags, soft
+ * hyphen), private use, unassigned, line and paragraph separators, variation
+ * selectors and the blank "letters": what could hide words from the owner's
+ * review and still reach the model (SEC-A7-01).
+ */
+const HIDDEN = /[\p{Cc}\p{Cf}\p{Co}\p{Cn}\p{Cs}\p{Zl}\p{Zp}\u115f\u1160\u3164\uffa0\u2800\p{Variation_Selector}]/gu;
+
+/** A property name the model may read: short and plain (SEC-A7-01). */
+const PROPERTY_NAME = /^[A-Za-z0-9_.-]{1,64}$/;
+
+/**
+ * Whether the schema hides nothing: every name under `properties` (and the
+ * other maps) is plain, and no data string (`enum`, `const`, `default`,
+ * `examples`) carries hidden characters. Those reach the model as they are,
+ * since changing them would change what the server accepts.
+ */
+function plainSchema(node: unknown, data = false): boolean {
+  if (typeof node === "string") return !data || !new RegExp(HIDDEN.source, "u").test(node);
+  if (Array.isArray(node)) return node.every((item) => plainSchema(item, data));
+  if (node === null || typeof node !== "object") return true;
+  return Object.entries(node as Record<string, unknown>).every(([key, value]) => {
+    if (data) return plainSchema(value, true);
+    if (DATA_KEYWORDS.has(key)) return plainSchema(value, true);
+    if (SCHEMA_MAPS.has(key) && value !== null && typeof value === "object" && !Array.isArray(value)) {
+      return Object.entries(value as Record<string, unknown>).every(([name, sub]) => PROPERTY_NAME.test(name) && plainSchema(sub));
+    }
+    return plainSchema(value);
+  });
 }
 
 /**
@@ -78,7 +108,7 @@ const DATA_KEYWORDS = new Set(["enum", "const", "default", "examples"]);
 
 /**
  * The schema without regular expressions (`pattern`, `patternProperties`) and
- * with its descriptions made inert (they reach the model too):
+ * with its descriptions made one plain, inert line (they reach the model too):
  * Zod would compile them into RegExps that run inside the Durable Object on
  * every call, and a backtracking pattern could stall the whole app. The server
  * still checks its own input; Zuri checks the shape.
@@ -90,7 +120,8 @@ export function withoutPatterns(node: unknown): unknown {
   const out: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(source)) {
     if (key === "pattern" || key === "patternProperties" || key === "format") continue;
-    if ((key === "description" || key === "title") && typeof value === "string") out[key] = inert(value);
+    // One plain line, as the owner reviews it, and inert (SEC-A7-01).
+    if ((key === "description" || key === "title") && typeof value === "string") out[key] = inert(plainText(value, CATALOG_LIMITS.maxDescription));
     else if (DATA_KEYWORDS.has(key)) out[key] = value;
     else if (SCHEMA_MAPS.has(key) && value !== null && typeof value === "object" && !Array.isArray(value)) {
       out[key] = Object.fromEntries(Object.entries(value as Record<string, unknown>).map(([name, sub]) => [name, withoutPatterns(sub)]));
@@ -141,6 +172,7 @@ export async function checkTool(tool: ListedTool): Promise<CatalogEntry | null> 
   if (schemaText.length > CATALOG_LIMITS.maxSchemaChars) problem = "schema_too_large";
   else if (depth(schema) > CATALOG_LIMITS.maxSchemaDepth) problem = "schema_too_deep";
   else if (schema === null || typeof schema !== "object" || (schema as { type?: unknown }).type !== "object") problem = "schema_not_object";
+  else if (!plainSchema(schema)) problem = "schema_unsupported";
   else {
     try {
       toZod(schema);

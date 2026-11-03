@@ -651,7 +651,13 @@ então o servidor externo é tratado como não confiável em tudo:
 - **Texto de terceiros é dado.** Nome, título e descrição (também as do
   schema) viram uma linha sem caracteres invisíveis, com `<`, `>` e colchetes
   trocados por sinais inertes, e vão ao modelo marcados como texto de
-  terceiros. A
+  terceiros. "Invisível" inclui controles, marcas e isolamentos bidi, tags
+  Unicode, hífen discreto, seletores de variação, letras em branco e
+  separadores de linha. Nome de campo fora de `^[A-Za-z0-9_.-]{1,64}$`, ou
+  valor de `enum`, `const`, `default` e `examples` com caractere invisível,
+  deixa a ferramenta como "schema não suportado": esses textos chegam ao
+  modelo como estão, e limpá-los mudaria o que o servidor aceita
+  (SEC-A7-01). A
   resposta entra em `<data source="mcp">` e não muda regra nenhuma. A
   descrição mudou? A ferramenta sai de uso até o dono religar (hash revisado).
 - **Os dados não passeiam.** Mesmo em "Usar sem perguntar", a chamada vira
