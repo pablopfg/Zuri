@@ -51,6 +51,7 @@ export const LOG_EVENTS = [
   "mcp_meaning_failed",
   "mcp_call_failed",
   "mcp_tool_skipped",
+  "live_notify_failed",
 ] as const;
 export type LogEvent = (typeof LOG_EVENTS)[number];
 

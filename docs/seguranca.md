@@ -411,6 +411,39 @@ Falhou, 403 `CSRF_FAILED`, antes de ler sessão ou corpo. O login também passa
 por isso (sem CSRF de login). O corpo precisa ser `application/json`, com
 limite de tamanho lido em fluxo.
 
+## Tempo real (WebSocket)
+
+A única conexão WebSocket do Zuri é o canal de tempo real da interface
+(nova UI, PR 3), em `GET /api/live`. Ele só diz que um número de área mudou
+(`{"versions":{…}}`, os mesmos números do heartbeat); a tela busca o que mudou
+pelas rotas normais, com as checagens delas. Regras:
+
+1. **Só esse caminho e só GET.** O Worker recusa com 403 qualquer outro
+   pedido de upgrade (outro caminho, barra no fim, outro método), e o Durable
+   Object recusa de novo se um pedido chegar sem passar pelo Worker. Os
+   sockets do Agents SDK (estado, métodos chamáveis) nunca abrem: todo upgrade
+   vai para o canal do Zuri.
+2. **Origem do site.** O navegador não manda o `x-zuri-request` num WebSocket,
+   então o `Origin` precisa ser exatamente a origem do `PUBLIC_URL`. Sem
+   `Origin`, ou com outro, 403 `CSRF_FAILED` (impede o sequestro do WebSocket
+   por outro site, que mandaria o cookie junto).
+3. **Sessão válida.** O cookie de sessão é conferido como em qualquer rota
+   (401 sem ele ou com um que não abre nada). Abrir o canal não conta como uso
+   e não estica o limite de inatividade; o heartbeat continua sendo o sinal de
+   presença.
+4. **Conferido de novo a cada aviso.** Antes de escrever, o servidor confere
+   se a sessão ainda existe: sessão encerrada (Sair, /sessoes, limite, troca de
+   senha) fecha o canal com o código 4401. Bloqueio (/bloquear), senha a trocar
+   ou segundo passo pendente fecham com 4403, e o canal não abre nesses estados.
+5. **Nada vindo do navegador.** Só o `ping` é esperado, e quem responde é o
+   próprio runtime (resposta automática), sem acordar o objeto. Qualquer outra
+   mensagem fecha o canal com 1008.
+6. **Limite.** No máximo 5 canais abertos; um novo fecha o mais antigo (4409),
+   para uma página recarregada nunca trancar o dono do lado de fora. Cada
+   navegador abre um só (a aba que tem a trava `zuri-live`).
+
+Testes: `apps/agent/test/live-channel.test.ts` e `tests/e2e/realtime.spec.ts`.
+
 ## Atividade de acesso
 
 A página **Acessos** (`/acessos`, na barra lateral; no celular, por

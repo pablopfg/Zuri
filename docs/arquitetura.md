@@ -51,7 +51,9 @@ chegar aos arquivos estáticos. Os portões rodam nesta ordem:
    sub-agente (`/sub/…`) recebem 404.
 
 Conexões WebSocket são recusadas com 403 em qualquer caminho, no Worker e
-também no Durable Object.
+também no Durable Object, menos o canal de tempo real em `GET /api/live`
+(nova UI, PR 3), que exige sessão válida e o `Origin` do site e só leva os
+números das áreas. Regras em [seguranca.md](seguranca.md#tempo-real-websocket).
 
 Erros saem sempre no formato `{ code, message, details? }`, com o texto do
 catálogo de traduções. Uma falha inesperada vira `INTERNAL_ERROR` (500), sem
@@ -198,7 +200,9 @@ objeto. Pela documentação da Cloudflare, um objeto sem requisição entra em
 hibernação depois de 10 s e, enquanto hibernável, não conta duração. Só fica na
 memória (e cobrando) quem tem `setTimeout`/`setInterval` pendente, `fetch` ou
 `waitUntil` sem terminar ou WebSocket padrão; o Zuri não usa nada disso (regra
-P5 de `.claude/rules/performance.md`). A conta real é o tempo de trabalho: uns
+P5 de `.claude/rules/performance.md`). O canal de tempo real usa a API de
+hibernação (`ctx.acceptWebSocket`), que deixa o objeto dormir com a conexão
+aberta, e o ping do navegador é respondido pelo runtime sem acordá-lo. A conta real é o tempo de trabalho: uns
 50 ms por requisição e o tempo de cada turno de chat em streaming.
 
 O heartbeat da interface (uma batida por minuto, de uma aba só, mesmo com

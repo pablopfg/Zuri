@@ -293,3 +293,19 @@ Decisões técnicas desta PR:
 - No navegador, um número diferente do conhecido conta como mudança, mesmo menor. Uma resposta atrasada custa no máximo uma busca a mais; em troca, uma restauração que volte os números nunca deixa a tela parada.
 - Os números saem só nas respostas da sessão e do chat; no chat, um bloqueio que começa no meio do turno também os corta.
 - JS inicial: 139.0xx B de 139.100 B. O código da atualização (`lib/versions.ts`) vem sob demanda, e o brilho mora em `lib/lists.tsx`, junto da busca com espera, para as telas dividirem um arquivo só. Para caber, o texto "Encerra esta sessão…" passou para o catálogo de Configurações e a contagem do menu é lida junto com o nome ("Tarefas 3"). A PR 3 precisa abrir folga antes de crescer.
+
+### PR 3: tempo real por WebSocket
+
+Entrou: o canal de tempo real em `GET /api/live`. A aba que tem a trava `zuri-live` (uma por navegador) abre um WebSocket; o Durable Object o aceita com a API de hibernação, dorme com ele aberto e só escreve `{"versions":{…}}` quando um número de área mudou. A tela passa os números para `seen`, como os do sinal de vida, e as outras abas recebem pelo `BroadcastChannel` de sempre. O sinal de vida de 60 s continua: é ele que mantém a sessão viva e é a reserva quando o canal cai.
+
+Decisões técnicas desta PR:
+
+- **Quando avisar.** `Database` chama `onWrite` depois de cada comando que gravou linha, venha de onde vier (rota, conversa em andamento, bot, rotina no alarme, MCP). Com um canal aberto, o canal olha uma vez, numa microtarefa (não timer, regra P5), se os números mudaram: uma leitura da linha dos números e uma das sessões. Sem canal aberto, nada é lido. Uma rajada de escritas na mesma tarefa custa uma olhada e no máximo uma mensagem.
+- **Abertura.** Só `GET` no caminho exato; o Worker recusa qualquer outro upgrade e o objeto confere de novo. O navegador não manda o `x-zuri-request` num WebSocket, então vale o `Origin` exato do site (sem ele, 403). Sessão conferida como em qualquer rota, sem contar como uso. Recusado no bloqueio, com senha a trocar e com segundo passo pendente.
+- **Depois de aberto.** Antes de cada aviso a sessão é conferida: encerrada, o canal fecha (4401); bloqueio e as outras travas fecham com 4403. Só o `ping` é aceito, respondido pelo runtime sem acordar o objeto (resposta automática); qualquer outra mensagem fecha com 1008.
+- **Limite.** No máximo 5 canais; um novo fecha o mais antigo (4409), e o navegador que perdeu o lugar fica só com o sinal de vida até recarregar a página. Sem Web Locks, cada aba abre o seu.
+- **Volta depois de cair.** Espera crescente (1 s, 2 s, 4 s… até 60 s, com sorteio), só com sessão na tela; depois de Sair, para.
+- **Os sockets do Agents SDK nunca abrem.** O `fetch` do objeto manda todo upgrade para o canal do Zuri, e os handlers de hibernação (`webSocketMessage`, `webSocketClose`, `webSocketError`) ficam na classe, o que faz o SDK não instalar os dele.
+- **CSP.** `connect-src 'self'` já cobre `wss:` do mesmo endereço nos navegadores atuais. Um navegador antigo que bloquear fica com o sinal de vida.
+- **JS inicial.** Sem mudança (139.083 B): o canal mora em `lib/versions.ts`, que já vem depois da primeira tela e é iniciado pelo primeiro `seen`.
+- **Testes.** `apps/agent/test/live-channel.test.ts` (abertura, origem, sessão, caminhos, limite, avisos, ping, mensagens estranhas, saída, /sessoes, bloqueio), `apps/web/test/live.test.ts` (endereço, números, ping, espera crescente, troca, saída, trava) e `tests/e2e/realtime.spec.ts`. Os testes da PR 2 em `live-refresh.spec.ts` passam a rodar com o canal derrubado, cobrindo a reserva de 60 s.

@@ -120,10 +120,16 @@ Como cheguei nos números:
   12 h). Cada chamada da API é uma requisição ao Worker e uma ao DO; os
   arquivos com hash ficam no cache do navegador por um ano, então uma visita
   nova custa umas quatro requisições (HTML, service worker, ícone, manifesto).
+  O canal de tempo real custa uma requisição ao abrir (e a cada volta depois
+  de cair). Parado, não custa nada: o ping a cada 50 s é respondido pelo
+  runtime sem acordar o objeto, e o servidor só escreve quando um número muda.
+  Com o canal aberto, cada escrita no banco lê também a linha dos números e as
+  sessões (uma leitura de cada, junte o que vier na mesma tarefa).
 - **Duração.** Segundo a documentação, um objeto parado entra em hibernação
   depois de 10 s sem requisição e, hibernável, não é cobrado. Ele só não
   hiberna com `setTimeout`/`setInterval` pendente, `fetch` ou `waitUntil` sem
-  terminar ou WebSocket padrão. O Zuri não usa nenhum deles, então a conta
+  terminar ou WebSocket padrão. O Zuri não usa nenhum deles (o canal de tempo
+  real usa WebSocket com hibernação, que não segura o objeto), então a conta
   é o tempo de trabalho (um `fetch` travado segura o objeto na memória por até
   15 min, por isso toda chamada externa tem prazo curto): uns 50 ms por requisição comum e uns 20 s por turno
   de chat em streaming. A linha "se algo impedir" é a conta antiga deste
@@ -181,7 +187,8 @@ Numeradas para o PR poder citar ("segue P2 e P4").
   escrita por minuto (como o heartbeat); agrupe numa transação. `setAlarm`
   conta uma escrita.
 - **P5. Objeto sempre hibernável.** Sem `setTimeout`, `setInterval`, WebSocket
-  padrão ou `fetch` esquecido no Durable Object. Espera longa é
+  padrão ou `fetch` esquecido no Durable Object. WebSocket só com hibernação
+  (`ctx.acceptWebSocket`), como o canal de tempo real. Espera longa é
   `this.schedule`; `keepAliveWhile` só pelo tempo do trabalho.
 - **P6. Worker fino.** O Worker tem 10 ms de CPU: só os portões e um repasse
   ao objeto por requisição, sem RPC extra (`getByName`, não

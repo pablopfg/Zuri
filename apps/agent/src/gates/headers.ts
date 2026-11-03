@@ -68,7 +68,8 @@ export function withWebHeaders(response: Response, pathname: string, turnstileOr
 
 /** A copy of an API or gate response with the API's headers. */
 export function withApiHeaders(response: Response): Response {
-  // A 101 (WebSocket) can't be copied; the gates refuse upgrades long before one could exist.
+  // A 101 (the live channel's WebSocket) can't be copied, and carries no body for these headers to protect.
+  if (response.status === 101) return response;
   const res = new Response(response.body, response);
   for (const [name, value] of Object.entries(API_HEADERS)) res.headers.set(name, value);
   return res;

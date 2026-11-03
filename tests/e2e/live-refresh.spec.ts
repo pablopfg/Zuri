@@ -5,9 +5,14 @@ import { CSRF, expectAccessible, signIn } from "./ui-helpers.ts";
 // The new interface, part 2 (docs/planos/nova-ui.md): only what changed is
 // fetched again, without reloading. A change made elsewhere (here, straight
 // through the API, as the bot, a routine or another device would) arrives with
-// the heartbeat; one the chat makes arrives with its own tool event.
+// the heartbeat when the live channel is down; one the chat makes arrives with
+// its own tool event.
 
 test.use({ locale: "pt-BR", timezoneId: "America/Sao_Paulo" });
+
+// These are the backup path: the live channel (part 3, realtime.spec.ts) falls at
+// every try here, and the heartbeat alone still brings what changed elsewhere.
+test.beforeEach(({ page }) => page.routeWebSocket(/\/api\/live$/, (ws) => ws.close()));
 
 const tag = () => `${test.info().project.name}${crypto.randomUUID().slice(0, 8).replace(/\d/g, "x")}`;
 
