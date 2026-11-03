@@ -140,7 +140,7 @@ export function App() {
           }
         />
         <Route
-          path="automacoes"
+          path="automacoes/:aba?"
           element={
             <Suspense fallback={<ScreenLoading />}>
               <AutomationsPage />

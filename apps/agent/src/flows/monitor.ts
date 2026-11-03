@@ -9,6 +9,8 @@ export interface SiteCheck {
   ok: boolean;
   status: number | null;
   ms: number;
+  /** Set once the result is stored: whether it moved the site's state (an answer is stored at once). */
+  changed?: boolean;
 }
 
 interface SiteRow {

@@ -50,6 +50,7 @@ for (const scheme of ["light", "dark"] as const) {
         ["/tarefas", "Tarefas"],
         ["/notas", "Notas"],
         ["/automacoes", "Automações"],
+        ["/automacoes/fluxos", "Automações"],
         ["/memoria", "Memória"],
         ["/acessos", "Acessos"],
       ] as const) {

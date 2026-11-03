@@ -17,7 +17,8 @@ import {
   upcomingRuns,
 } from "@zuri/shared";
 import { AlarmClock, Bell, History, ListChecks, Pause, Pencil, Play, Plus, Trash2, WandSparkles, Zap } from "lucide-react";
-import { type FormEvent, type ReactNode, useEffect, useId, useMemo, useState } from "react";
+import { type FormEvent, lazy, type ReactNode, Suspense, useEffect, useId, useMemo, useState } from "react";
+import { Navigate, NavLink, useParams } from "react-router";
 import { useToast } from "../../components/Toaster.tsx";
 import { Button, Card, cn, Dialog, EmptyState, ErrorNotice, PageHeader, SelectField, Loading, TextAreaField, TextField } from "../../components/ui.tsx";
 import { AUTOMATIONS_KEY, useAutomationRuns, useAutomations } from "../../hooks/automations.ts";
@@ -26,6 +27,7 @@ import { api, errorMessage } from "../../lib/api.ts";
 import { automationAnchor, describeSchedule, draftOf, emptyDraft, type ScheduleDraft, scheduleOf } from "../../lib/automations.ts";
 import { addMessages, useI18n } from "../../lib/i18n.tsx";
 import { FlashStatus, flashClass, useFlash } from "../../lib/lists.tsx";
+import { Badge, IconButton } from "./parts.tsx";
 import { DAY_SHORT, FREQUENCY_LABEL, KIND_HINT, KIND_LABEL, MESSAGE_LABEL, NAME_PLACEHOLDER, PRIORITY_HINT, PRIORITY_LABEL, PROBLEM_LABEL, RUN_STATUS_LABEL, STATUS_LABEL, TRIGGER_LABEL } from "./labels.ts";
 
 // This screen's pt-BR texts travel with its code, not in the first bundle (rule P11).
@@ -47,6 +49,45 @@ type Editing = { mode: "new" } | { mode: "edit"; automation: Automation };
  * for approval; the history shows what each run delivered.
  */
 export function AutomationsPage() {
+  const { t } = useI18n();
+  const { aba } = useParams();
+  if (aba === undefined) return <RoutinesTab tabs={<Tabs />} />;
+  if (aba !== "fluxos") return <Navigate to="/automacoes" replace />;
+  return (
+    <>
+      <PageHeader title={t("web.automations.title")} description={t("web.automations.description")} />
+      <Tabs />
+      <Suspense fallback={<Loading />}>
+        <FlowsPanel />
+      </Suspense>
+    </>
+  );
+}
+
+// The Flows tab (step 22a) comes only when opened: its code and texts stay out of the routines' download (rule P11).
+const FlowsPanel = lazy(() => import("./flows/FlowsPanel.tsx").then((m) => ({ default: m.FlowsPanel })));
+
+/** Routines and Flows, as links: each tab has its address, so the back button and a shared link land on it. */
+function Tabs() {
+  const { t } = useI18n();
+  const tab = ({ isActive }: { isActive: boolean }) =>
+    cn(
+      "inline-flex min-h-11 items-center border-b-2 px-3 text-sm font-medium transition-colors",
+      isActive ? "border-accent text-fg" : "border-transparent text-fg-muted hover:text-fg",
+    );
+  return (
+    <nav aria-label={t("web.automations.tabs")} className="flex gap-1 border-b border-border">
+      <NavLink to="/automacoes" end className={tab}>
+        {t("web.automations.tab.routines")}
+      </NavLink>
+      <NavLink to="/automacoes/fluxos" className={tab}>
+        {t("web.automations.tab.flows")}
+      </NavLink>
+    </nav>
+  );
+}
+
+function RoutinesTab({ tabs }: { tabs: ReactNode }) {
   const { t } = useI18n();
   const list = useAutomations();
   const [editing, setEditing] = useState<Editing | null>(null);
@@ -91,6 +132,7 @@ export function AutomationsPage() {
           </Button>
         }
       />
+      {tabs}
       {list.isPending ? (
         <Loading label={t("web.automations.loading")} />
       ) : list.isError ? (
@@ -135,39 +177,7 @@ export function AutomationsPage() {
   );
 }
 
-/** A small rounded label: the status of an automation or of a run. */
-function Badge({ tone = "neutral", children }: { tone?: "neutral" | "accent" | "warning" | "danger" | "success"; children: ReactNode }) {
-  const tones = {
-    neutral: "bg-raised text-fg-muted",
-    accent: "bg-accent-soft text-accent-text",
-    warning: "bg-warning-soft text-fg",
-    danger: "bg-danger-soft text-danger",
-    success: "bg-success-soft text-fg",
-  } as const;
-  return <span className={cn("inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium", tones[tone])}>{children}</span>;
-}
-
 const STATUS_TONE = { active: "accent", paused: "neutral", pending_approval: "warning", completed: "neutral" } as const;
-
-/** An icon button with its name for screen readers and as a tooltip. */
-function IconButton({ label, onClick, children, busy, danger }: { label: string; onClick: () => void; children: ReactNode; busy?: boolean; danger?: boolean }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={busy}
-      aria-busy={busy || undefined}
-      aria-label={label}
-      title={label}
-      className={cn(
-        "inline-flex h-11 w-11 items-center justify-center rounded-xl transition-colors disabled:cursor-wait disabled:opacity-60 [&>svg]:h-4 [&>svg]:w-4",
-        danger ? "text-danger hover:bg-danger-soft" : "text-fg-muted hover:bg-raised hover:text-fg",
-      )}
-    >
-      {children}
-    </button>
-  );
-}
 
 /** The owner's action on one automation, with the list and history refreshed after. */
 function useAutomationAction() {

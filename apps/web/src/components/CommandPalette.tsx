@@ -45,6 +45,8 @@ addMessages(ptBRSettingsTabs);
 const NEW_AUTOMATION = "nova-automacao";
 /** The same for the Agenda's "Novo evento" (AgendaPage.tsx, NEW_EVENT). */
 const NEW_EVENT = "novo-evento";
+/** And for "Novo fluxo", on the Flows tab of Automations (FlowsPanel.tsx, NEW_FLOW). */
+const NEW_FLOW = "novo-fluxo";
 
 /** How many of each kind the search lists: a shortcut, not the full page. */
 const PER_KIND = 5;
@@ -125,6 +127,14 @@ export function CommandPalette({ onClose, navigate }: { onClose: () => void; nav
         // Already there: the page hears the event and the address stays clean. Elsewhere: the page reads the address.
         to: location.pathname === "/automacoes" ? "/automacoes" : `/automacoes#${NEW_AUTOMATION}`,
         before: () => window.dispatchEvent(new Event(NEW_AUTOMATION)),
+      },
+      {
+        id: "new-flow",
+        group: t("web.palette.groupCreate"),
+        label: t("web.palette.newFlow"),
+        icon: Plus,
+        to: location.pathname === "/automacoes/fluxos" ? "/automacoes/fluxos" : `/automacoes/fluxos#${NEW_FLOW}`,
+        before: () => window.dispatchEvent(new Event(NEW_FLOW)),
       },
       { id: "new-note", group: t("web.palette.groupCreate"), label: t("web.palette.newNote"), icon: FilePlus2, to: "/notas/nova" },
       {

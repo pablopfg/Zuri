@@ -35,6 +35,7 @@ export {
   ptBRLive,
   ptBRAgenda,
   ptBRContacts,
+  ptBRFlows,
   t,
 } from "../i18n/index.ts";
 export { AGENT_INSTANCE_NAME } from "./constants.ts";

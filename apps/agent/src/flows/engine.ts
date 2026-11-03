@@ -303,8 +303,10 @@ async function ai(node: Extract<FlowNode, { type: "ai" }>, state: RunState, deps
 /**
  * The site monitor (specification, step 22): every site looked at; a failing
  * one is looked at again 1 and 5 minutes later, and only after the third try
- * counts as down. The final result of each site is stored, and a change tells
- * the owner. Its items are the sites, for the steps after it.
+ * counts as down. A site that answers is stored at once (its result is final
+ * for this run, and the tab shows it while another site is still being tried);
+ * a failing one when its tries are over. A change tells the owner. Its items
+ * are the sites, for the steps after it.
  */
 async function monitor(node: Extract<FlowNode, { type: "monitor" }>, state: RunState, deps: EngineDeps, wake: Wake): Promise<StepResult> {
   const checks = new Map((state.checks ?? []).map((check) => [check.url, check]));
@@ -324,7 +326,8 @@ async function monitor(node: Extract<FlowNode, { type: "monitor" }>, state: RunS
       return { kind: "wait", at: deps.clock() + MINUTE };
     }
     state.calls += 1;
-    const check = await checkSite(url, { network: deps.network(), development: deps.development(), meter: wake.meter, clock: deps.clock });
+    const check: SiteCheck = await checkSite(url, { network: deps.network(), development: deps.development(), meter: wake.meter, clock: deps.clock });
+    if (check.ok) store(check);
     checks.set(url, check);
     state.partial.out.push(newItem({ url }));
   }
@@ -336,13 +339,17 @@ async function monitor(node: Extract<FlowNode, { type: "monitor" }>, state: RunS
     state.partial = { done: 0, out: [] };
     return { kind: "wait", at: deps.clock() + (waits[state.attempt - 1] ?? 5) * MINUTE };
   }
-  const at = new Date(deps.clock()).toISOString();
   const items: Item[] = [];
   for (const url of node.sites) {
     const check = checks.get(url) as SiteCheck;
-    const change = deps.sites.record(deps.flowId, check, at);
-    if (change) deps.siteChanged(change);
-    items.push(newItem({ url, ok: check.ok, status: check.status, ms: check.ms, changed: change !== null }));
+    if (check.changed === undefined) store(check);
+    items.push(newItem({ url, ok: check.ok, status: check.status, ms: check.ms, changed: check.changed === true }));
   }
   return { kind: "items", items: plain(items) as Item[] };
+
+  function store(check: SiteCheck): void {
+    const change = deps.sites.record(deps.flowId, check, new Date(deps.clock()).toISOString());
+    check.changed = change !== null;
+    if (change) deps.siteChanged(change);
+  }
 }

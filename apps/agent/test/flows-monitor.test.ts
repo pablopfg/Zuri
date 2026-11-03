@@ -82,6 +82,27 @@ describe("the site monitor", () => {
     });
   });
 
+  it("shows a site that answered at once, while another is still being tried", async () => {
+    await withFlowWorld(async (world) => {
+      world.network.handlers.set("a.exemplo.com.br", () => new Response("ok"));
+      world.network.handlers.set("b.exemplo.com.br", () => new Response("erro", { status: 503 }));
+      const flow = await start(world, ["https://a.exemplo.com.br/", "https://b.exemplo.com.br/"]);
+      await wake(world);
+      expect(world.flows.runs({}).runs[0]?.status).toBe("waiting");
+      expect(sitesOf(world, flow.id).map((site) => [site.host, site.state])).toEqual([
+        ["a.exemplo.com.br", "up"],
+        ["b.exemplo.com.br", "unknown"],
+      ]);
+      // Stored once: the end of the run doesn't write it again.
+      const checkedAt = sitesOf(world, flow.id)[0]?.checkedAt;
+      await wake(world);
+      await wake(world);
+      expect(world.flows.runs({}).runs[0]?.status).toBe("success");
+      expect(sitesOf(world, flow.id)[0]?.checkedAt).toBe(checkedAt);
+      expect(sitesOf(world, flow.id)[1]?.state).toBe("down");
+    });
+  });
+
   it("a site that fails once and answers on the next try never counts as down", async () => {
     await withFlowWorld(async (world) => {
       let calls = 0;
