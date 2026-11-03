@@ -31,3 +31,11 @@
   liberação das ferramentas dela.
 - Cada execução de rotina deixa no máximo 3 propostas, e as rotinas de um
   mesmo despertar dividem no máximo 12 chamadas externas.
+
+### Atualização
+
+- O banco ganha a migration 20 (nível das ferramentas para rotinas, o tipo
+  confirmado por você, as ferramentas liberadas por rotina e a conversa de
+  cada rotina). Ela roda sozinha na primeira requisição e só acrescenta. Uma
+  ferramenta que estava em "Usar sem perguntar" sem ser marcada como consulta
+  volta para "Perguntar sempre".
