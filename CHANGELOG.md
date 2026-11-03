@@ -19,6 +19,48 @@ funciona: [docs/agente/versionamento.md](docs/agente/versionamento.md).
 
 O que já entrou na `develop` e ainda não ganhou número fica em [`changelog/nao-lancado/`](changelog/nao-lancado/) por alguns minutos, até o workflow de versão escrever a seção.
 
+## [0.28.0] - 2026-11-03
+
+Mesclada às 16:58 (UTC-3) · commit [`77c6495`](https://github.com/pablopfg/Zuri/commit/77c6495f20c31730a6a01e2d9e9765fd3d969cfd) · PR [#153](https://github.com/pablopfg/Zuri/pull/153) · Motor de fluxos e monitor de sites (etapa 22a)
+
+### Adicionado
+
+- Aba **Fluxos** em Automações, com endereço próprio (`/automacoes/fluxos`):
+  passos que rodam sozinhos, só quando você executar ou num horário (a cada
+  15 minutos ou mais, todo dia ou em dias da semana). Os passos são chamar um
+  serviço, filtrar itens, montar campos, esperar, avisar você, pedir à IA e
+  olhar sites.
+- Modelo **Monitorar sites**: até 10 endereços somando todos os fluxos. Um
+  site que falha é testado de novo 1 e 5 minutos depois antes de contar como
+  fora do ar, e você recebe um aviso na queda e outro na volta. A tela mostra
+  o estado de cada site, o código e o tempo de resposta.
+- **Conexões**: o endereço de um serviço seu, os caminhos e os métodos que um
+  fluxo pode usar (GET, POST, PUT e PATCH; nunca DELETE) e uma credencial
+  opcional, guardada cifrada.
+- Histórico das execuções, com o passo e o motivo de cada parada. Depois de 5
+  falhas seguidas o fluxo se desliga e avisa.
+- "Criar fluxo" na paleta Ctrl/⌘K. No bot, `/status` mostra os sites
+  monitorados e os fluxos com falha (com a leitura travada, só as contagens).
+
+### Segurança
+
+- Todo fluxo nasce desligado. Ligar um fluxo, mudá-lo e criar ou mudar uma
+  conexão pedem a senha digitada nos últimos 15 minutos; desligar não pede.
+- Nenhuma ferramenta da Zuri, comando do bot ou token remoto cria, liga ou
+  altera fluxos, conexões ou endereços. Não há passo de código nem chamada a
+  endereço livre.
+- A credencial de uma conexão nunca volta para a tela nem vai ao modelo, ao
+  log ou ao histórico. Mudar o endereço ou o tipo apaga a credencial, e criar
+  ou mudar o destino de uma conexão gera alerta de segurança.
+- Toda chamada confere o nome por DNS, recusa rede interna, não segue
+  redirecionamento e tem teto de tempo e tamanho. O que um serviço responde é
+  dado: não muda os passos e entra na IA como `<data source="flow">`.
+- Desligar ou mudar um fluxo encerra a execução dele que estava esperando. Um
+  valor vindo de fora igual a `.` ou `..` não muda o caminho chamado: a
+  execução para.
+- No modo de bloqueio nenhum fluxo roda e as rotas dos fluxos respondem 423.
+- O teste dos logs passa a conferir que números de telefone nunca aparecem neles.
+
 ## [0.27.3] - 2026-11-03
 
 Mesclada às 15:33 (UTC-3) · commit [`e0902dc`](https://github.com/pablopfg/Zuri/commit/e0902dc960614863b474582ea5751418b1b0f43d) · PR [#149](https://github.com/pablopfg/Zuri/pull/149) · Etapa 19b mesclada (#144)
@@ -2161,7 +2203,8 @@ Mesclada às 22:15 (UTC-3) · commit [`360a79e`](https://github.com/pablopfg/Zur
   `npm audit`), CodeQL, Dependabot e rulesets para a `develop` e a `main`.
 - `LICENSE` (MIT), `NOTICE.md`, `SECURITY.md` e `CONTRIBUTING.md`.
 
-[Não lançado]: https://github.com/pablopfg/Zuri/compare/v0.27.3...develop
+[Não lançado]: https://github.com/pablopfg/Zuri/compare/v0.28.0...develop
+[0.28.0]: https://github.com/pablopfg/Zuri/releases/tag/v0.28.0
 [0.27.3]: https://github.com/pablopfg/Zuri/releases/tag/v0.27.3
 [0.27.2]: https://github.com/pablopfg/Zuri/releases/tag/v0.27.2
 [0.27.1]: https://github.com/pablopfg/Zuri/releases/tag/v0.27.1
