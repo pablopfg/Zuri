@@ -1,6 +1,6 @@
 # Plano · Nova organização da interface
 
-Situação: modelo 2 aprovado pelo Pablo em 03/11/2026; falta escolher entre tempo real e o sinal de vida (seção "Atualização automática só do que mudou")
+Situação: modelo 2 aprovado pelo Pablo em 03/11/2026, com atualização em tempo real (WebSocket com hibernação, numa PR própria)
 Origem: pedidos do Pablo em 03/11/2026, com a barra lateral do ChatGPT como referência
 Dependências: nenhuma para aprovar. A implementação espera a etapa 18 sair da `AppShell` (outra thread mexe no app agora).
 
@@ -253,7 +253,7 @@ O modelo é HTML estático em `docs/`, fora do pacote servido. Auditoria em modo
 | 03/11/2026 | Qual modelo visual ou paleta? | Nenhum: manter as cores atuais e aproveitar só a organização |
 | 03/11/2026 | Aprova o modelo 2 (menus, textos, carregamento e atualização automática)? Recomendação: sim, em dois PRs depois da etapa 18 | aguardando |
 | 03/11/2026 | O modelo 2 está aprovado? | aprovado (Pablo, 03/11 02:44) |
-| 03/11/2026 | Mudança de fora em até 60 s, 20 s ou em tempo real? Recomendação: tempo real com WebSocket hibernável, com os 60 s como reserva | aguardando |
+| 03/11/2026 | Mudança de fora em até 60 s, 20 s ou em tempo real? Recomendação: tempo real com WebSocket hibernável, com os 60 s como reserva | tempo real (Pablo, 03/11 02:55) |
 
 ### Perguntas abertas
 
