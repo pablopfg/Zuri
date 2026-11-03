@@ -58,8 +58,7 @@ Cada linha é um requisito. A coluna da direita aponta onde o agente estuda a re
 | Canais | Push (Web Push, máx. 3 aparelhos, remoção após 7 dias sem acesso), e-mail pelo Email Routing, Telegram | `push/`, `alerts/email.ts`, `telegram/` |
 | Integrações | Servidores MCP remotos (sem auth, bearer, OAuth), ferramentas desligadas por padrão, aprovação para o que altera | `mcp/`, `docs/mcp.md` |
 | Google Agenda | Leitura e escrita de eventos, rotinas do dia com a agenda | `calendar/`, `docs/google-calendar.md` |
-| Google Contatos | Cópia só leitura dos contatos das etiquetas escolhidas, busca, avisos de aniversário e datas | `google/contacts.ts`, `docs/google-contatos.md` |
-| Google Contatos | Cópia só leitura dos contatos das etiquetas escolhidas, busca na conversa, aniversários e datas nas automações, fonte de dados dos workflows (novo no Zuri, etapa 19b) | `docs/planos/google-contatos.md` |
+| Google Contatos | Cópia só leitura dos contatos das etiquetas escolhidas, busca na tela e na conversa, avisos de aniversário e datas, fonte de dados dos workflows (novo no Zuri, etapa 19b) | `google/contacts.ts`, `docs/google-contatos.md`, `docs/planos/google-contatos.md` |
 | Acesso remoto | Tokens pessoais com escopo `read` ou `write`, 90 dias, só hash; eventos de entrada do n8n | `remote/`, `docs/remote-access.md` |
 | Workflows | Monitor de sites com Cloudflare Workflows (passos duráveis e novas tentativas) | `workflows/` |
 | Modelos de IA | Workers AI por padrão; Anthropic e OpenAI opcionais, com teto diário em US$ e fallback | `ai/`, `docs/modelos-de-ia.md` |

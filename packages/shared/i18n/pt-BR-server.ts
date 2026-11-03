@@ -537,7 +537,7 @@ export const ptBRServer = {
   "notice.contacts.birthdays.body": "Hoje é aniversário de: {names}.",
   "notice.contacts.dates.title": "Datas especiais em {date}",
   "notice.contacts.dates.body": "{items}.",
-  "notice.contacts.added.title": "Contato novo: {name}",
+  "notice.contacts.added.title": "Contato novo numa etiqueta",
   "notice.contacts.added.body": "{name} entrou na etiqueta {label} do Google Contatos.",
   "notice.contacts.labelGone.title": "Uma etiqueta saiu do Google Contatos",
   "notice.contacts.labelGone.body": "Uma das etiquetas que a Zuri copiava foi apagada no Google. Os contatos que estavam só nela saíram da Zuri. Confira as etiquetas em Configurações › Integrações.",

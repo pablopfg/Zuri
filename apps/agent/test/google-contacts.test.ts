@@ -269,6 +269,50 @@ describe("the sync", () => {
       expect(names(world)).toEqual([]);
       expect(sync(world)).toMatchObject({ enabled: 0, running_since: null });
     }));
+
+  /** Runs `act` on the first read of the contacts' pages, while the sync waits for Google. */
+  const during = (world: ChatWorld, act: () => void) => {
+    const real = world.googleSim.handle.bind(world.googleSim);
+    let done = false;
+    world.googleSim.handle = async (request) => {
+      if (!done && new URL(request.url).pathname === "/v1/people/me/connections") {
+        done = true;
+        act();
+      }
+      return real(request);
+    };
+    return () => {
+      world.googleSim.handle = real;
+    };
+  };
+
+  it("a label added while an incremental read waits for Google is copied whole on the next sync", () =>
+    withChatWorld(async (world) => {
+      add(world, "c1", "Ana", [CLIENTS]);
+      add(world, "c2", "Bruno", [FAMILY]);
+      await turnOn(world);
+      world.clock.now += 3_600_000;
+      const restore = during(world, () => world.contacts.select([CLIENTS, FAMILY]));
+      // The sync on its way read the old choice: it stops without writing, and the full read stays due.
+      expect(await world.contacts.sync("alarm")).toBe("off");
+      restore();
+      expect(sync(world)).toMatchObject({ full_needed: 1, running_since: null });
+      expect(await world.contacts.sync("alarm")).toBe("ok");
+      expect(names(world)).toEqual(["Ana", "Bruno"]);
+    }));
+
+  it("a label removed while a full read waits for Google never comes back into the copy", () =>
+    withChatWorld(async (world) => {
+      add(world, "c1", "Ana", [CLIENTS]);
+      add(world, "c2", "Bruno", [FAMILY]);
+      await turnOn(world, []);
+      world.contacts.select([CLIENTS, FAMILY]);
+      const restore = during(world, () => world.contacts.select([CLIENTS]));
+      expect(await world.contacts.sync("owner")).toBe("off");
+      restore();
+      expect(await world.contacts.sync("alarm")).toBe("ok");
+      expect(names(world)).toEqual(["Ana"]);
+    }));
 });
 
 describe("the sync's failures", () => {

@@ -589,7 +589,10 @@ export class GoogleCalendar {
     try {
       // Google never redirects these calls; one that does is refused rather than followed.
       res = await this.network.fetch(url, { ...init, redirect: "manual", signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) });
-    } catch {
+    } catch (error) {
+      // The platform's cap on a wake's subrequests, spent by the other work of the same wake:
+      // the rest waits for the next one, like a spent meter, and Google isn't to blame.
+      if (error instanceof Error && /too many subrequests/i.test(error.message)) throw new GoogleError("budget");
       throw new GoogleError("unavailable");
     }
     if (res.status >= 300 && res.status < 400) {

@@ -1,4 +1,4 @@
-import { AGENT_INSTANCE_NAME, type ContactDetail, type ContactPage, type ContactsStatus } from "@zuri/shared";
+import { AGENT_INSTANCE_NAME, type ContactDetail, type ContactPage, type ContactsStatus, type NoticePage } from "@zuri/shared";
 import { runInDurableObject } from "cloudflare:test";
 import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import type { ZuriAgent } from "../src/agent/zuri-agent.ts";
@@ -179,6 +179,23 @@ describe("/api/google/contacts", () => {
     expect((await api("DELETE", "/google")).status).toBe(200);
     expect(google.revoked).toHaveLength(1);
     expect(await inOwner((agent) => agent.store.db.one(`SELECT count(*) AS n FROM zur_contacts`))).toEqual({ n: 0 });
+  });
+
+  it("SEC-A9-01 and SEC-A12-01: a contact's name stays out of a notice's title, and turning off takes the notices made from the copy", async () => {
+    await turnOn();
+    await inOwner((agent) => {
+      agent.store.alerts.raise({ kind: "contacts.added", category: "reminders", priority: "normal", params: { name: "Ana Souza", label: "Clientes" }, link: "/contatos" });
+      agent.store.alerts.raise({ kind: "contacts.birthdays", category: "reminders", priority: "normal", params: { names: "Ana Souza" }, link: "/contatos" });
+      agent.store.alerts.raise({ kind: "google.reconnect", category: "system", priority: "normal", link: "/configuracoes/integracoes" });
+    });
+    const before = (await (await api("GET", "/notices")).json()) as NoticePage;
+    const added = before.notices.find((notice) => notice.kind === "contacts.added");
+    // The title is what a discreet Telegram notice or a locked phone shows; the name only in the body.
+    expect(added?.title).toBe("Contato novo numa etiqueta");
+    expect(added?.body).toContain("Ana Souza");
+    expect((await api("DELETE", "/google/contacts")).status).toBe(200);
+    const after = (await (await api("GET", "/notices")).json()) as NoticePage;
+    expect(after.notices.map((notice) => notice.kind)).toEqual(["google.reconnect"]);
   });
 
   it("does nothing during a lockdown", async () => {

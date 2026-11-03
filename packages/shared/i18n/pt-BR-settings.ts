@@ -267,7 +267,7 @@ export const ptBRSettings = {
   "web.contacts.card.noticesSaved": "Avisos salvos.",
   "web.contacts.card.disable": "Desligar contatos",
   "web.contacts.card.disableTitle": "Desligar os contatos?",
-  "web.contacts.card.disableBody": "A Zuri apaga a cópia dos contatos e para de sincronizar. Os contatos continuam no Google. A agenda continua conectada.",
+  "web.contacts.card.disableBody": "A Zuri apaga a cópia dos contatos e os avisos feitos a partir dela, e para de sincronizar. Os contatos continuam no Google e a agenda continua conectada. A permissão de ler os contatos só sai do Google quando você desconecta a conta.",
   "web.contacts.card.disabled": "Contatos desligados e cópia apagada.",
   "web.contacts.problem.reconnect": "A Zuri perdeu o acesso aos contatos. Ligue os contatos de novo e permita na página do Google.",
   "web.contacts.problem.api_disabled": "A People API está desligada no projeto do Google Cloud. Ligue-a em APIs e serviços › Biblioteca e toque em \"Sincronizar agora\".",

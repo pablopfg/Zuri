@@ -310,9 +310,11 @@ export class GoogleContacts {
       this.db.run(`UPDATE zur_contact_labels SET selected = 0, updated_at = ? WHERE selected = 1`, now);
       for (const id of chosen) this.db.run(`UPDATE zur_contact_labels SET selected = 1, updated_at = ? WHERE resource_name = ?`, now, id);
       this.pruneUnselected();
-      // A choice that fits under the ceiling starts again; a full read takes in the new label.
+      // A choice that fits under the ceiling starts again; a full read takes in the new label. A sync on
+      // its way read the old choice: freeing its lock makes it stop before it writes again (mine()), and
+      // the next one, due now, reads the new choice.
       this.db.run(
-        `UPDATE zur_contact_sync SET ${added ? "full_needed = 1, page_token = NULL, page_mode = NULL, " : ""}status = 'syncing',
+        `UPDATE zur_contact_sync SET ${added ? "full_needed = 1, page_token = NULL, page_mode = NULL, " : ""}status = 'syncing', running_since = NULL,
            problem = CASE WHEN problem = 'too_many' THEN NULL ELSE problem END, failures = 0, next_sync = ? WHERE id = 1`,
         now,
       );
@@ -372,13 +374,21 @@ export class GoogleContacts {
     return due.length ? Math.min(...due) : null;
   }
 
-  /** From the alarm: the sync when it is due, then the notice of the day. */
-  async tick(): Promise<void> {
+  /** From the alarm: the sync when it is due, then the notice of the day. True when it did either (the times moved). */
+  async tick(): Promise<boolean> {
     const row = this.onRow();
-    if (!row || !this.deps.google.connected()) return;
+    if (!row || !this.deps.google.connected()) return false;
     const now = this.clock();
-    if (row.next_sync !== null && row.next_sync <= now) await this.sync("alarm");
-    if (row.next_reminder !== null && row.next_reminder <= now) this.remind();
+    let worked = false;
+    if (row.next_sync !== null && row.next_sync <= now) {
+      await this.sync("alarm");
+      worked = true;
+    }
+    if (row.next_reminder !== null && row.next_reminder <= now) {
+      this.remind();
+      worked = true;
+    }
+    return worked;
   }
 
   // ---------- The sync ----------
@@ -396,7 +406,8 @@ export class GoogleContacts {
     if (!locked) return "busy";
     try {
       const outcome = await this.run(stamp, meter);
-      if (outcome === "ok") log("info", "contacts_synced", { kind: trigger });
+      // The hourly sync that finds nothing stays quiet (P10): only the owner's button leaves a line.
+      if (outcome === "ok" && trigger !== "alarm") log("info", "contacts_synced", { kind: trigger });
       return outcome;
     } catch (error) {
       return this.failed(error, stamp);

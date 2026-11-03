@@ -306,7 +306,9 @@ export class ZuriAgent extends Agent<WorkerEnv> {
     }
     // The contacts' hourly sync and the notice of the day (step 19b).
     try {
-      await this.store.contacts.tick();
+      // The alarm was set by `wake` while this work was still due (a retry a minute out):
+      // set again from the times the sync and the notice just moved, so no empty wake follows.
+      if (await this.store.contacts.tick()) await automations.rearm();
     } catch (error) {
       log("error", "google_alarm_failed", { error });
     }

@@ -92,7 +92,8 @@ etiqueta ou liga os contatos.
 ### Desligar
 
 - **Desligar contatos** apaga a cópia inteira (contatos, etiquetas, datas) e
-  para a sincronização. A agenda continua conectada. A permissão de ler os
+  os avisos feitos a partir dela, e para a sincronização. As tarefas criadas
+  por "Me avisar e criar uma tarefa" ficam, porque são suas. A agenda continua conectada. A permissão de ler os
   contatos continua dada no Google, porque o Google só deixa retirar a
   conexão inteira; para retirar, desconecte o Google.
 - **Desconectar** o Google retira a permissão no Google e também apaga a cópia
@@ -145,8 +146,17 @@ Os mesmos secrets (`GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`,
 ## Custo
 
 Tudo de graça. A People API não cobra pela leitura. No plano Free da
-Cloudflare: uma sincronização por hora que não acha mudança escreve só a linha
-de estado; com 500 contatos copiados, a primeira leitura escreve uns 3.500
-registros (contatos, chaves e índices), uma única vez. A busca da tela e das
-ferramentas lê só o banco da Zuri. Os números medidos estão no teste
+Cloudflare (100.000 linhas gravadas por dia no banco do Durable Object):
+
+- uma sincronização por hora que não acha mudança grava umas 8 linhas (a de
+  estado e os índices dela);
+- a primeira leitura grava cerca de 11 linhas por contato copiado (contato,
+  telefones, e-mails, etiquetas, datas e índices), uma única vez: uns 5.500
+  com 500 contatos e uns 55.000 no teto de 5.000. Acrescentar uma etiqueta
+  repete a leitura inteira, então no teto evite trocar etiquetas várias vezes
+  no mesmo dia;
+- cada contato que muda no Google grava cerca de 13 linhas;
+- a busca da tela e das ferramentas só lê o banco da Zuri. Uma busca que acha
+  pouca coisa percorre a lista inteira (até 5.000 nomes, ou as chaves de
+  telefone e e-mail), o que fica bem abaixo da cota de leitura diária. Os números medidos estão no teste
 `apps/agent/test/free-tier-budget.test.ts` ("Google contacts").

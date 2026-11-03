@@ -786,8 +786,9 @@ describe("Google contacts (step 19b)", () => {
       expect(world.contacts.count()).toBe(500);
       // The labels and two pages of 1,000: well under the 50 subrequests of a wake.
       expect(first.calls).toBeLessThanOrEqual(4);
-      // Contacts, keys, labels and dates of 500 contacts, with their indexes (plan: ~3,500).
-      expect(first.written).toBeLessThanOrEqual(3_500 * 2);
+      // Contacts, keys, memberships and dates of 500 contacts, with their indexes: about 11 rows a contact,
+      // once (measured 5,512; docs/google-contatos.md, "Custo").
+      expect(first.written).toBeLessThanOrEqual(5_600);
       expect(first.read).toBeLessThanOrEqual(5_000);
       world.clock.now += 3_600_000;
       const quiet = await measure();
@@ -800,10 +801,9 @@ describe("Google contacts (step 19b)", () => {
       world.clock.now += 3_600_000;
       const busy = await measure();
       expect(busy.calls).toBeLessThanOrEqual(3);
-      // Ten changed contacts of a normal day (the plan: ~100 rows written a day in all).
-      expect(busy.written).toBeLessThanOrEqual(200);
+      // Ten changed contacts of a normal day: about 13 rows each (measured 128).
+      expect(busy.written).toBeLessThanOrEqual(140);
       expect(busy.read).toBeLessThanOrEqual(200);
-      console.info(JSON.stringify({ first, quiet, busy }));
       // A search on the screen reads the copy, never Google.
       const before = { ...world.db.usage };
       const calls = world.googleSim.seen.length;
