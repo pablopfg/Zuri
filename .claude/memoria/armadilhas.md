@@ -346,3 +346,9 @@ acrescente aqui cada armadilha nova que encontrar (sem dados pessoais).
   `input`: num fetch de teste que só lê a URL e repassa `input`/`init`, o
   servidor recebe o corpo vazio. Monte o `Request` uma vez e repasse ele.
 - CHECK numa coluna acrescentada por ALTER TABLE em zur_mcp_tools fez cada INSERT do catálogo ler 3 linhas em vez de 1 (free-tier-budget, MCP 100 ferramentas: 436 > 260). Validar o valor no código (03/11/2026, autonomia MCP).
+- Animação que começa em `opacity: 0` numa tela inteira tira o texto dela do
+  LCP: o Chrome ignora texto pintado transparente e não reconsidera depois.
+  No primeiro acesso isso deixou a página sem candidato e o Lighthouse falhava
+  com `LanternError: NO_LCP` (nota 0, "failing: none") em parte das execuções.
+  O `rise` começa em 0.01 (teste em `apps/web/test/motion.test.ts`); não volte
+  para 0 nem crie outra entrada de tela que comece invisível (03/11/2026).
