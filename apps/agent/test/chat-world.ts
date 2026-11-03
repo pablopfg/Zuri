@@ -100,7 +100,7 @@ export function withChatWorld<T>(fn: (world: ChatWorld) => T | Promise<T>): Prom
     const alarm = new FakeAlarm();
     const automations = new AutomationService(db, productivity.storage, new InternalState(db), { timeZone: () => TIME_ZONE, alarm, clock: tick });
     const mcpLockdown = { active: false };
-    const mcp = new McpService({ db, credentialKey: testEnv.MCP_CREDENTIAL_KEY, development: () => false, lockdown: () => mcpLockdown.active, clock: tick });
+    const mcp = new McpService({ db, credentialKey: testEnv.MCP_CREDENTIAL_KEY, development: () => false, lockdown: () => mcpLockdown.active, redirectUrl: () => "https://zuri.exemplo.com.br/configuracoes/integracoes", clock: tick });
     const services = () => ({ db, productivity, memories, conversations, plans, actions, automations, mcpService: mcp });
     const world: ChatWorld = {
       db,

@@ -1,10 +1,13 @@
 import { type ApprovalPreview, type DestructiveToolName, disarmLinks, type Locale, type MessageKey, t } from "@zuri/shared";
 import type { ActionRow, PendingActionRepository } from "../chat/actions.ts";
 import { AppError } from "../http/errors.ts";
+import { argsOf, runApprovedExternal } from "../mcp/agent.ts";
+import { type McpService, toolLabel } from "../mcp/service.ts";
 import { runApprovedAction, targetState, type ToolContext, type ToolDefinition } from "../tools/registry.ts";
 import type { CommandButtons } from "./callbacks.ts";
 import { disarm } from "./channel.ts";
 import type { Button, Out } from "./commands.ts";
+import { visibleJson } from "../mcp/visible.ts";
 
 /**
  * The proposals the bot may approve (spec, "Aprovação pelo bot"), written out
@@ -26,8 +29,18 @@ export const APP_ONLY: ReadonlySet<DestructiveToolName> = new Set<DestructiveToo
 /** The rewrites: their preview shows the text as it is and the text that would be written. */
 const REWRITES: ReadonlySet<DestructiveToolName> = new Set<DestructiveToolName>(["replace_task_description", "replace_note_content"]);
 
+/**
+ * A call to an external tool runs within the bot's invocation, which also
+ * sends through the Telegram API: the same share of subrequests as a chat
+ * turn in the bot.
+ */
+export const BOT_MCP_BUDGET = 12;
+/** Characters of the server's answer the bot shows after an approved call; the app shows it whole. */
+const ANSWER_MAX = 600;
+
 /** Each proposal's action, in words. */
-const ACTION_NAME: Record<DestructiveToolName, MessageKey> = {
+const ACTION_NAME: Record<ApprovalPreview["tool"], MessageKey> = {
+  mcp_call: "telegram.aprovar.acao.mcp_call",
   delete_task: "telegram.aprovar.acao.delete_task",
   replace_task_description: "telegram.aprovar.acao.replace_task_description",
   replace_note_content: "telegram.aprovar.acao.replace_note_content",
@@ -63,6 +76,8 @@ export interface ApprovalsDeps {
   /** "15:30" in the owner's time zone (with the day when it isn't today). */
   hour(ms: number): string;
   origin(): string;
+  /** The remote MCP servers (step 18b): their calls are approved here too, with the arguments in the preview. */
+  mcp?: () => McpService;
   clock?: () => number;
 }
 
@@ -93,8 +108,8 @@ export class TelegramApprovals {
     if (!row) return { status: "missing" };
     if (row.status !== "pending") return { status: "handled" };
     if (row.expires_at <= new Date(this.#now()).toISOString()) return { status: "expired" };
+    if (row.tool.startsWith("mcp_")) return this.#external(row);
     const tool = row.tool as DestructiveToolName;
-    // External calls (mcp_…, step 18) are never in the list: their arguments are checked in the app, in full.
     if (!BOT_APPROVABLE.has(tool)) return { status: "app_only" };
     const state = await targetState(this.deps.tools, this.deps.toolContext(row.conversation_id), row);
     if (!state) return { status: "app_only" };
@@ -107,6 +122,61 @@ export class TelegramApprovals {
       preview.after = payloadText(row.payload);
     }
     return { status: "ok", preview, targetHash: state.hash, row };
+  }
+
+  /**
+   * An external call (step 18b): the tool and its server as they are now, and
+   * the exact arguments that would go out, checked against the proposal's hash
+   * (the server's address, how it signs in, the tool's reviewed definition).
+   */
+  async #external(row: ActionRow): Promise<PreviewResult> {
+    const service = this.deps.mcp?.();
+    if (!service) return { status: "app_only" };
+    const args = argsOf(row);
+    const hash = await service.proposalHash(row.target_id, args);
+    if (hash === null || hash !== row.target_hash) return { status: "changed" };
+    const [serverId = "", ...rest] = row.target_id.split("/");
+    const server = service.repo.get(serverId);
+    const tool = server ? service.repo.toolByName(server.id, rest.join("/")) : null;
+    if (!server || !tool) return { status: "changed" };
+    let host = "";
+    try {
+      host = new URL(server.url).host;
+    } catch {
+      host = "";
+    }
+    const preview: ApprovalPreview = {
+      tool: "mcp_call",
+      target: `${toolLabel(server, tool)} (${host})`,
+      // Hidden characters (bidi, zero width) are shown as escapes, as on the app's card.
+      after: visibleJson(args, 2),
+      expiresAt: row.expires_at,
+    };
+    return { status: "ok", preview, targetHash: hash, row };
+  }
+
+  /**
+   * The server's answer to an approved call, as the bot shows it: a quoted
+   * block (third-party text, disarmed), cut; null when there is none.
+   */
+  answer(actionId: string): string | null {
+    const row = this.deps.actions().row(actionId);
+    if (!row?.tool.startsWith("mcp_") || row.status !== "approved" || !row.result) return null;
+    let text = "";
+    try {
+      const stored = JSON.parse(row.result) as { text?: unknown };
+      text = typeof stored.text === "string" ? stored.text : "";
+    } catch {
+      return null;
+    }
+    if (!text.trim()) return null;
+    const chars = [...text];
+    const shown = chars.length > ANSWER_MAX ? chars.slice(0, ANSWER_MAX).join("") : text;
+    const lines = disarm(shown)
+      .split(/\r?\n/)
+      .map((line) => `│ ${line}`);
+    if (chars.length > ANSWER_MAX) lines.push(this.#t("telegram.aprovar.cortado", { n: chars.length - ANSWER_MAX }));
+    return [this.#t("telegram.aprovar.resposta"), ...lines].join("\n");
   }
 
   /**
@@ -132,7 +202,7 @@ export class TelegramApprovals {
       this.#t("telegram.aprovar.item", { item: safe(cut(preview.target.replace(/\s+/g, " ").trim(), TARGET_MAX)) }),
     ];
     if (preview.before !== undefined) lines.push(this.#t("telegram.aprovar.atual"), block(preview.before, BEFORE_MAX));
-    if (preview.after !== undefined) lines.push(this.#t("telegram.aprovar.novo"), block(preview.after, AFTER_MAX));
+    if (preview.after !== undefined) lines.push(this.#t(preview.tool === "mcp_call" ? "telegram.aprovar.enviado" : "telegram.aprovar.novo"), block(preview.after, AFTER_MAX));
     lines.push(this.#t("telegram.aprovar.validade", { hora: this.deps.hour(Date.parse(preview.expiresAt)) }));
     return lines.join("\n");
   }
@@ -212,8 +282,16 @@ export class TelegramApprovals {
     const row = this.deps.actions().row(actionId);
     if (!row) return "expired";
     if (targetHash === null || targetHash !== row.target_hash) return "changed";
-    if (!BOT_APPROVABLE.has(row.tool as DestructiveToolName)) return "failed";
+    const external = row.tool.startsWith("mcp_");
+    if (!external && !BOT_APPROVABLE.has(row.tool as DestructiveToolName)) return "failed";
     try {
+      if (external) {
+        const service = this.deps.mcp?.();
+        if (!service) return "failed";
+        // The same path as the app's Approve: claimed once, checked again, never retried.
+        await runApprovedExternal(service, this.deps.actions(), row, BOT_MCP_BUDGET);
+        return this.deps.actions().row(actionId)?.status === "approved" ? "approved" : "failed";
+      }
       await runApprovedAction(this.deps.tools, this.deps.toolContext(row.conversation_id), actionId);
       return "approved";
     } catch (error) {

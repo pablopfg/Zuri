@@ -83,6 +83,8 @@ export class McpTurnTools {
       answered?: Iterable<string>;
       /** The turn's share of the invocation's subrequests (smaller in a Telegram turn, whose bot also sends). */
       budget?: number;
+      /** The triage by meaning (step 18b): how far above the floor each tool is from the message. */
+      meaning?: ReadonlyMap<string, number>;
     } = {},
   ) {
     this.#turn = service.newTurn(new SubrequestMeter(opts.budget ?? MCP_SUBREQUEST_BUDGET));
@@ -93,6 +95,7 @@ export class McpTurnTools {
       message,
       available.map((t) => t.triage),
       recent,
+      opts.meaning,
     );
     for (const id of chosen.offered) {
       this.#active.add(id);
@@ -163,7 +166,7 @@ export function recentExternal(tools: readonly { name: string }[][]): Set<string
 }
 
 /** The arguments of a stored proposal. */
-function argsOf(row: ActionRow): Record<string, unknown> {
+export function argsOf(row: ActionRow): Record<string, unknown> {
   try {
     const payload = JSON.parse(row.payload ?? "null") as { args?: unknown } | null;
     const args = payload?.args;
@@ -179,7 +182,7 @@ function argsOf(row: ActionRow): Record<string, unknown> {
  * the arguments are still exactly what the card showed. Never retried. The
  * answer, cut short, stays with the proposal for the card and the next turn.
  */
-export async function runApprovedExternal(service: McpService, actions: PendingActionRepository, row: ActionRow): Promise<void> {
+export async function runApprovedExternal(service: McpService, actions: PendingActionRepository, row: ActionRow, budget: number = MCP_SUBREQUEST_BUDGET): Promise<void> {
   if (!actions.claim(row.id, "approved")) {
     const status = actions.view(row.id).status;
     if (status === "expired") throw new AppError("APPROVAL_EXPIRED", "error.actionExpired");
@@ -196,7 +199,7 @@ export async function runApprovedExternal(service: McpService, actions: PendingA
     throw new AppError("TARGET_CHANGED", "error.actionTargetChanged");
   }
   const [serverId = "", ...rest] = row.target_id.split("/");
-  const turn = service.newTurn();
+  const turn = service.newTurn(new SubrequestMeter(budget));
   try {
     const outcome = await service.call(turn, { serverId, toolName: rest.join("/") }, args, { unattended: false });
     const stored = McpService.storedResult(outcome.result);

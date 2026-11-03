@@ -635,7 +635,8 @@ describe("the Free plan budget of each route", () => {
       expect(search.written).toBeLessThanOrEqual(6);
       const reindex = await cost("POST", "/semantic/reindex");
       expect(reindex.status).toBe(200);
-      expect(reindex.read).toBeLessThanOrEqual(230);
+      // 231: the alarm's planning also checks the MCP tools for a stale vector (step 18b, one read).
+      expect(reindex.read).toBeLessThanOrEqual(231);
       expect(reindex.written).toBeLessThanOrEqual(4);
       const off = await cost("PATCH", "/semantic", { enabled: false });
       expect(off.status).toBe(200);

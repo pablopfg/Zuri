@@ -54,3 +54,18 @@ export const mcpToolUpdateSchema = /* @__PURE__ */ (() =>
     .strict()
     .refine((patch) => Object.keys(patch).length > 0))();
 export type McpToolUpdate = z.input<typeof mcpToolUpdateSchema>;
+
+/**
+ * What the service's sign-in page sent back (step 18b): the app's callback
+ * page posts the query it got. `state` is `<server id>.<secret>`.
+ */
+export const mcpOAuthCallbackSchema = /* @__PURE__ */ (() =>
+  z
+    .object({
+      state: z.string().regex(/^[0-9a-f-]{36}\.[A-Za-z0-9_-]{43}$/),
+      code: z.string().min(1).max(2_048).optional(),
+      iss: z.string().max(MCP_LIMITS.urlMax).optional(),
+      error: z.string().max(200).optional(),
+    })
+    .strict())();
+export type McpOAuthCallback = z.input<typeof mcpOAuthCallbackSchema>;

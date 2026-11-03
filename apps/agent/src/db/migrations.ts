@@ -865,6 +865,26 @@ export const MIGRATIONS: readonly Migration[] = [
       `ALTER TABLE zur_pending_actions ADD COLUMN result TEXT`,
     ],
   },
+  {
+    version: 19,
+    name: "mcp_oauth_and_meaning",
+    statements: [
+      // OAuth sign-in (step 18b). The tokens and the registration stay in the
+      // encrypted `credential`; here only what the list shows without opening
+      // it: the service's sign-in page while a sign-in started by the owner
+      // waits (with its end), and when the last sign-in finished, which an
+      // approval is bound to instead of the token that a refresh keeps changing.
+      `ALTER TABLE zur_mcp_servers ADD COLUMN authorize_url TEXT`,
+      `ALTER TABLE zur_mcp_servers ADD COLUMN authorize_expires TEXT`,
+      `ALTER TABLE zur_mcp_servers ADD COLUMN signed_in_at TEXT`,
+      // The triage by meaning (step 18b): a tool's vector (int8, unit length,
+      // one scale), made once per text and model, derived from the catalog and
+      // never in the backup. `embedding_key` is the hash of model and text.
+      `ALTER TABLE zur_mcp_tools ADD COLUMN embedding BLOB`,
+      `ALTER TABLE zur_mcp_tools ADD COLUMN embedding_scale REAL`,
+      `ALTER TABLE zur_mcp_tools ADD COLUMN embedding_key TEXT`,
+    ],
+  },
 ];
 
 export const LATEST_SCHEMA_VERSION = MIGRATIONS.at(-1)?.version ?? 0;

@@ -902,7 +902,9 @@ export class TelegramService {
     if (outcome === "approved") this.deps.events.record("telegram_approved", null, { alert: true });
     const link = this.deps.links.private();
     if (!link || !this.configured()) return outcome;
-    const text = approvals.result(outcome, before.status === "ok" ? before.preview : null);
+    // An external call's answer (step 18b) follows, as third-party text in a quoted block.
+    const answer = outcome === "approved" ? approvals.answer(confirmed.pendingActionId) : null;
+    const text = [approvals.result(outcome, before.status === "ok" ? before.preview : null), answer].filter(Boolean).join("\n\n");
     const client = this.client();
     try {
       if (confirmed.messageId !== null) await client.editMessageText(link.chatId, confirmed.messageId, text, { reply_markup: { inline_keyboard: [] } });

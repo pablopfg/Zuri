@@ -400,6 +400,20 @@ export class SemanticSearch {
     return out;
   }
 
+  /**
+   * The vector a search already made of `query` (kept in memory), or null:
+   * never a call to the model. The chat turn's triage of the MCP tools (step
+   * 18b) reuses the one the memory recall made of the owner's message.
+   */
+  known(query: string): Float32Array | null {
+    const state = this.read();
+    if (!state.on || this.deps.lockdown()) return null;
+    const embedding = this.embedder();
+    if (!embedding) return null;
+    const text = [...query.trim()].slice(0, SEMANTIC_LIMITS.queryMaxChars).join("");
+    return this.#cache.get(`${embedding.model}|${text.toLowerCase()}`) ?? null;
+  }
+
   /** This deploy's embedding model, or null when there is none (or the model could not be set up). */
   private embedder(): MeteredAI["embedding"] {
     try {

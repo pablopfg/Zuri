@@ -214,12 +214,13 @@ export type ApproveVerifyRequest = z.infer<typeof approveVerifySchema>;
  * now, never from the model's words.
  */
 export interface ApprovalPreview {
-  tool: DestructiveToolName;
-  /** The target's current title (a memory's text), read from the database. */
+  /** "mcp_call": a call to an external tool (step 18b); `target` names the tool and its server, `after` holds the arguments. */
+  tool: DestructiveToolName | "mcp_call";
+  /** The target's current title (a memory's text), read from the database; for "mcp_call", "tool · server (host)". */
   target: string;
   /** Rewrites: the text as it is now. */
   before?: string;
-  /** Rewrites: the text that would be written (empty clears). */
+  /** Rewrites: the text that would be written (empty clears). "mcp_call": the arguments that go to the server. */
   after?: string;
   /** When the proposal stops being good. */
   expiresAt: string;

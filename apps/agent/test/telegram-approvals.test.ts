@@ -11,6 +11,8 @@ import { ALL_TOOLS } from "../src/tools/index.ts";
 import type { ToolContext } from "../src/tools/registry.ts";
 import startCode from "./fixtures/telegram/start-code.json?raw";
 import { call, CSRF, HUMAN_TOKEN, ORIGIN, TEST_EMAIL, TEST_PASSWORD, testEnv } from "./helpers.ts";
+import { disarm as disarmed } from "../src/telegram/channel.ts";
+import { createIssueTool, type McpFixture, mcpFixture } from "./mcp-fixture.ts";
 import { type SoftPasskey, softPasskey } from "./soft-passkey.ts";
 
 // Step 16a: approving the agent's proposals through the bot. Aprovar opens a
@@ -79,6 +81,8 @@ afterEach(async () => {
       "zur_telegram_callbacks",
       "zur_telegram_approvals",
       "zur_pending_actions",
+      "zur_mcp_tools",
+      "zur_mcp_servers",
       "zur_notices",
       "zur_alert_deliveries",
       "zur_alert_keys",
@@ -199,6 +203,17 @@ async function proposeDelete(title = "Academia"): Promise<{ taskId: string; card
   const card = sent().find((c) => String(c.body.text).startsWith("Proposta da Zuri"));
   const actionId = await inOwner((agent) => agent.store.db.one<{ id: string }>(`SELECT id FROM zur_pending_actions WHERE target_id = ?`, taskId)?.id ?? "");
   return { taskId, card, actionId };
+}
+
+/** A remote MCP server with create_issue turned on (asking first), answered in this process. */
+async function mcpServer(): Promise<McpFixture> {
+  const fixture = mcpFixture({ tools: [createIssueTool] });
+  await inOwner(async (agent) => {
+    agent.store.mcp.network = fixture.network;
+    const server = await agent.store.mcp.create({ name: "Docs", url: "https://mcp.exemplo.com.br/mcp", authType: "none" });
+    agent.store.mcp.updateTool(server.id, "mcp_docs_create_issue", { enabled: true });
+  });
+  return fixture;
 }
 
 const approveData = (card: BotCall | undefined) => buttons(card).find((b) => b.text === "Aprovar")?.callback_data ?? "";
@@ -507,22 +522,103 @@ describe("Aprovar", () => {
     expect(texts()).toEqual(["Essa proposta só pode ser aprovada no app."]);
     expect(buttons(sent()[0]).map((b) => b.text)).toEqual(["Abrir no app"]);
   });
-  it("keeps an external call (MCP) in the app: its arguments are checked there in full", async () => {
+  it("approves an external call (MCP) with the exact arguments in the preview, runs it once and shows the answer", async () => {
+    await linkOwner();
+    const key = await addPasskey();
+    const fixture = await mcpServer();
+    botCalls.length = 0;
+    await deliver(text(`call mcp_docs_create_issue {"title":"Porta https://exemplo.com.br/x quebrada"}`));
+    const card = sent().find((c) => String(c.body.text).startsWith("Proposta da Zuri"));
+    const lines = String(card?.body.text).split("\n");
+    expect(lines[0]).toBe("Proposta da Zuri: usar a ferramenta externa");
+    // Disarmed like any stored text: the host can't become a link.
+    expect(lines[1]).toBe(`Item: create_issue · Docs (${disarmed("mcp.exemplo.com.br")})`);
+    expect(lines[2]).toBe("O que vai para o serviço:");
+    // The arguments as they will go, from the stored proposal, disarmed (no link to tap).
+    expect(lines.slice(3, 6).join("\n")).toBe(`│ {\n│   "title": ${disarmed('"Porta https://exemplo.com.br/x quebrada"')}\n│ }`);
+    expect(String(card?.body.text)).not.toContain("https://exemplo.com.br/x");
+    expect(fixture.calls).toEqual([]);
+    const { token } = await askApproval(card);
+    botCalls.length = 0;
+    const { options, res } = await confirmWithPasskey(key, token);
+    expect(options.approval).toMatchObject({ tool: "mcp_call", target: "create_issue · Docs (mcp.exemplo.com.br)" });
+    expect(String(options.approval?.after)).toContain('"title": "Porta https://exemplo.com.br/x quebrada"');
+    expect(await json(res, 200)).toEqual({ purpose: "approval", status: "approved" });
+    expect(fixture.calls).toEqual([{ name: "create_issue", args: { title: "Porta https://exemplo.com.br/x quebrada" } }]);
+    const edited = String(sent("editMessageText")[0]?.body.text);
+    expect(edited.split("\n\n")[0]).toBe(`Feito: usar a ferramenta externa «create_issue · Docs (${disarmed("mcp.exemplo.com.br")})».`);
+    // The service's answer, as third-party text in a quoted block.
+    expect(edited).toContain("Resposta do serviço (conteúdo de fora, só para ler):\n│ Created issue #42: Porta");
+    // The answer's link is disarmed like the rest of the third-party text.
+    expect(edited).not.toContain("https://exemplo.com.br/x");
+    expect(edited).toContain(disarmed("https://exemplo.com.br/x"));
+    // Once: the page's token and the proposal are spent.
+    expect((await page("options", { token })).status).toBe(410);
+    expect(fixture.calls).toHaveLength(1);
+  });
+
+  it("an external call whose server or tool changed after the proposal is not approved", async () => {
     await linkOwner();
     await addPasskey();
-    const conversationId = await inOwner((agent) => agent.store.conversations.create("Teste").id);
-    await inOwner((agent) =>
-      agent.store.db.run(
-        `INSERT INTO zur_pending_actions (id, conversation_id, tool, target_id, target_hash, target_label, payload, created_at, expires_at) VALUES ('a1b2c3d4-0000-4000-8000-000000000002', ?, 'mcp_docs_create_issue', 's/create_issue', 'h', 'create_issue · Docs', '{"args":{}}', ?, ?)`,
-        conversationId,
-        new Date().toISOString(),
-        new Date(Date.now() + HOUR).toISOString(),
-      ),
-    );
+    const fixture = await mcpServer();
     botCalls.length = 0;
-    await deliver(text("/aprovar"));
-    expect(texts()).toEqual(["Essa proposta só pode ser aprovada no app."]);
-    expect(buttons(sent()[0]).map((b) => b.text)).toEqual(["Abrir no app"]);
+    await deliver(text(`call mcp_docs_create_issue {"title":"Bug"}`));
+    const card = sent().find((c) => String(c.body.text).startsWith("Proposta da Zuri"));
+    // The owner points the server elsewhere: another third party, the proposal no longer holds.
+    await inOwner((agent) => agent.store.mcp.update(agent.store.mcp.repo.list()[0]?.id ?? "", { url: "https://outro.exemplo.com.br/mcp" }));
+    botCalls.length = 0;
+    await tap(approveData(card));
+    expect(texts()).toEqual(["O item mudou depois da proposta, então não fiz nada. Se ainda quiser, peça de novo à Zuri."]);
+    expect(fixture.calls).toEqual([]);
+  });
+
+  it("a call with arguments too long for the bot's preview is confirmed only by the passkey page", async () => {
+    await linkOwner();
+    await addPasskey();
+    await mcpServer();
+    botCalls.length = 0;
+    await deliver(text(`call mcp_docs_create_issue {"title":"${"a".repeat(700)}"}`));
+    const card = sent().find((c) => String(c.body.text).startsWith("Proposta da Zuri"));
+    expect(String(card?.body.text)).toContain("o texto inteiro está no app");
+    const { question } = await askApproval(card);
+    // The e-mail would show a cut copy: only the page, which shows the arguments whole.
+    expect(buttons(question).map((b) => b.text)).toEqual(["Confirmar com passkey"]);
+  });
+
+  it("cuts a long answer from the service at 600 characters and says so", async () => {
+    await linkOwner();
+    const key = await addPasskey();
+    await mcpServer();
+    botCalls.length = 0;
+    // "Created issue #42: " (19) plus 700: 719 characters of answer.
+    await deliver(text(`call mcp_docs_create_issue {"title":"${"b".repeat(700)}"}`));
+    const card = sent().find((c) => String(c.body.text).startsWith("Proposta da Zuri"));
+    const { token } = await askApproval(card);
+    botCalls.length = 0;
+    await confirmWithPasskey(key, token);
+    const edited = String(sent("editMessageText")[0]?.body.text);
+    const answer = edited.split("Resposta do serviço (conteúdo de fora, só para ler):\n")[1] ?? "";
+    const quoted = answer.split("\n").filter((line) => line.startsWith("│ "));
+    expect(quoted.map((line) => line.slice(2)).join("")).toBe(`Created issue #42: ${"b".repeat(581)}`);
+    expect(answer).toContain("(e mais 119 caracteres; o texto inteiro está no app)");
+  });
+
+  it("shows hidden characters in the arguments as visible escapes, on the bot and on the page", async () => {
+    await linkOwner();
+    const key = await addPasskey();
+    const fixture = await mcpServer();
+    botCalls.length = 0;
+    // A right-to-left override would make "00001" read as "10000".
+    await deliver(text(`call mcp_docs_create_issue {"title":"valor \u202e00001\u202c"}`));
+    const card = String(sent().find((c) => String(c.body.text).startsWith("Proposta da Zuri"))?.body.text);
+    expect(card).not.toMatch(/[\u202a-\u202e\u2066-\u2069]/);
+    expect(card).toContain("\\u202E00001\\u202C");
+    const { token } = await askApproval(sent().find((c) => String(c.body.text).startsWith("Proposta da Zuri")));
+    const { options } = await confirmWithPasskey(key, token);
+    expect(String(options.approval?.after)).toContain("\\u202E00001\\u202C");
+    expect(String(options.approval?.after)).not.toMatch(/[\u202a-\u202e]/);
+    // What goes out is the real value.
+    expect(fixture.calls).toEqual([{ name: "create_issue", args: { title: "valor \u202e00001\u202c" } }]);
   });
 });
 
