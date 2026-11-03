@@ -145,7 +145,10 @@ test("signs in to a service with OAuth: the service's page, back to the app, con
   await expect(dialog.getByText("Ao salvar, a Zuri prepara o login")).toBeVisible();
   await dialog.getByRole("button", { name: "Adicionar e conectar" }).click();
   const card = page.getByRole("article").filter({ has: page.getByRole("heading", { name }) });
-  await expect(card.getByText("Falta entrar na conta do serviço para a Zuri usar este servidor.")).toBeVisible();
+  // Waiting for the first sign-in is a step to take, not a fault.
+  await expect(page.getByRole("status").filter({ hasText: "Servidor adicionado. Agora entre na conta do serviço." }).first()).toBeVisible();
+  await expect(card.getByText("Falta entrar", { exact: true })).toBeVisible();
+  await expect(card.getByText("Com problema")).toHaveCount(0);
   const signIn = card.getByRole("link", { name: "Entrar no serviço" });
   await expect(signIn).toHaveAttribute("href", /^https:\/\/entrar\.exemplo\.com\.br\/authorize\?/);
   await expectAccessible(page, "integracoes-oauth");

@@ -92,12 +92,15 @@ docs.
 | --- | --- | --- | --- |
 | `web.integrations.auth.oauth` | Entrar com a conta do serviço (OAuth) | Sign in with the service's account (OAuth) | formulário |
 | `web.integrations.oauthHint` | Ao salvar, a Zuri prepara o login e mostra o botão Entrar no serviço. | When you save, Zuri prepares the sign-in and shows the Sign in to the service button. | formulário |
+| `web.integrations.status.signin` | Falta entrar | Sign-in needed | cartão (status neutro enquanto o link vale) |
+| `web.integrations.addedSignIn` | Servidor adicionado. Agora entre na conta do serviço. | Server added. Now sign in to the service. | toast |
+| `web.integrations.signinReady` | Link de login pronto. Toque em Entrar no serviço. | Sign-in link ready… | toast do Reconectar |
 | `web.integrations.signin` | Entrar no serviço | Sign in to the service | cartão |
 | `web.integrations.signinHint` | Você vai para a página do serviço e volta para cá quando terminar. O link vale 10 minutos. | You go to the service's page… | cartão |
 | `web.integrations.signinFinishing` | Terminando o login no serviço… | Finishing the sign-in to the service… | status |
 | `web.integrations.signedIn` | Pronto, a Zuri entrou na conta do serviço. | Done, Zuri is signed in to the service. | toast |
-| `web.integrations.signinFailed` | O login não terminou. Tente de novo pelo botão Entrar no serviço. | The sign-in didn't finish… | toast |
-| `web.integrations.problem.signin` | Falta entrar na conta do serviço para a Zuri usar este servidor. | Sign in to the service so Zuri can use this server. | cartão |
+| `web.integrations.signinFailed` | O login não terminou. Toque em Reconectar para gerar um link novo. | The sign-in didn't finish… | toast |
+| `web.integrations.problem.signin` | Falta entrar na conta do serviço para a Zuri usar este servidor. Se o botão Entrar no serviço não aparecer, toque em Reconectar. | Sign in to the service… | cartão (sem link pronto) |
 | `web.integrations.problem.oauth` | O login no serviço não deu certo. Tente de novo; se repetir, o serviço pode não aceitar apps novos. | Signing in to the service didn't work… | cartão |
 | `error.mcpSignInExpired` | Esse login venceu ou já foi usado. Comece de novo em Configurações › Integrações. | This sign-in expired or was already used… | erro da API |
 | `web.approve.action.mcp_call` | Usar uma ferramenta externa | Use an external tool | `/aprovar` |

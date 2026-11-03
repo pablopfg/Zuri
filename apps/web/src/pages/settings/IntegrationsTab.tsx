@@ -194,7 +194,13 @@ function ServerDialog({ open, onClose, credentials, server }: { open: boolean; o
           body: { name: name.trim(), url: url.trim(), authType, ...(authType === "bearer" ? { token } : {}) },
         });
         update(result.server);
-        toast(result.server.status === "connected" ? t("web.integrations.added") : t("web.integrations.addedWithProblem"));
+        toast(
+          result.server.status === "connected"
+            ? t("web.integrations.added")
+            : result.server.authorizeUrl
+              ? t("web.integrations.addedSignIn")
+              : t("web.integrations.addedWithProblem"),
+        );
         setName("");
         setUrl("");
         setAuthType("none");
@@ -293,17 +299,24 @@ function ServerCard({ server, credentials }: { server: McpServerInfo; credential
     }
   }
 
+  // Waiting for the owner's first (or next) sign-in, with the link ready: a step to take, not a fault.
+  const waiting = server.enabled && server.problem === "signin" && server.authorizeUrl !== null;
   return (
     <article className="space-y-3 rounded-xl border border-border p-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0 space-y-1">
           <h3 className="break-words font-semibold">{server.name}</h3>
           <p className="break-all text-sm text-fg-muted">{host(server.url)}</p>
-          <p className={cn("inline-flex items-center gap-1.5 text-sm", ok ? "text-success" : server.status === "error" ? "text-danger" : "text-fg-muted")}>
+          <p
+            className={cn(
+              "inline-flex items-center gap-1.5 text-sm",
+              ok ? "text-success" : waiting ? "text-fg-muted" : server.status === "error" ? "text-danger" : "text-fg-muted",
+            )}
+          >
             {ok ? <CircleCheck className="h-4 w-4" aria-hidden /> : <CircleAlert className="h-4 w-4" aria-hidden />}
-            {t(STATUS_TEXT[server.status])}
+            {waiting ? t("web.integrations.status.signin") : t(STATUS_TEXT[server.status])}
           </p>
-          {server.problem && server.enabled && <p className="text-sm leading-6 text-fg-muted">{t(PROBLEM_TEXT[server.problem])}</p>}
+          {server.problem && server.enabled && !waiting && <p className="text-sm leading-6 text-fg-muted">{t(PROBLEM_TEXT[server.problem])}</p>}
           {server.pausedUntil && <p className="text-sm leading-6 text-fg-muted">{t("web.integrations.paused", { time: dateTime(server.pausedUntil) })}</p>}
           {server.authorizeUrl && server.enabled && (
             <div className="space-y-1 pt-1">
@@ -351,7 +364,13 @@ function ServerCard({ server, credentials }: { server: McpServerInfo; credential
             void run("connect", async () => {
               const result = await api<{ server: McpServerInfo }>(`/mcp/servers/${server.id}/connect`, { method: "POST" });
               update(result.server);
-              toast(result.server.status === "connected" ? t("web.integrations.reconnected") : t("web.integrations.reconnectFailed"));
+              toast(
+                result.server.status === "connected"
+                  ? t("web.integrations.reconnected")
+                  : result.server.authorizeUrl
+                    ? t("web.integrations.signinReady")
+                    : t("web.integrations.reconnectFailed"),
+              );
             })
           }
         >
