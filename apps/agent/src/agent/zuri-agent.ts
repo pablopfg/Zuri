@@ -63,7 +63,8 @@ import { McpCredentials } from "../mcp/credentials.ts";
 import { dohResolver } from "../mcp/url.ts";
 import { ALL_TOOLS } from "../tools/index.ts";
 import type { ToolContext } from "../tools/registry.ts";
-import { AgentRunner } from "./runner.ts";
+import { AgentRunner, ROUTINE_MCP_BUDGET } from "./runner.ts";
+import { inWake, WakeBudget } from "./wake-budget.ts";
 
 /**
  * The sign-in's robot check for this deploy. Loopback http PUBLIC_URL (local
@@ -277,6 +278,12 @@ export class ZuriAgent extends Agent<WorkerEnv> {
    * finally the next one is set. The handler waits for the sends it started.
    */
   async runAutomations(_payload: unknown, schedule?: { id: string }): Promise<void> {
+    // One count of external calls for the whole wake (issue #152): every area takes from it.
+    const budget = new WakeBudget();
+    await inWake(budget, () => this.alarmWork(schedule, budget));
+  }
+
+  private async alarmWork(schedule: { id: string } | undefined, budget: WakeBudget): Promise<void> {
     const { db, alerts, watchers, automations, diagnostics } = this.store;
     // Each step on its own: one that fails never keeps the others (or the automations) from running.
     // The watchers go first, since their round moves the next one forward before anything else.
@@ -286,6 +293,8 @@ export class ZuriAgent extends Agent<WorkerEnv> {
       () => alerts.sweep(),
       () => this.store.push.prune(),
       () => flushSecurityAlerts(db, alerts),
+      // What the last wake had no room for goes first.
+      () => alerts.resumeDeferred(),
       () => alerts.escalate(),
     ];
     for (const step of steps) {
@@ -295,7 +304,8 @@ export class ZuriAgent extends Agent<WorkerEnv> {
         log("error", "alert_tick_failed", { error });
       }
     }
-    await automations.wake(schedule?.id ?? null, this.executor());
+    // An AI routine starts only with room for its MCP share; otherwise it stays due for the next wake.
+    await automations.wake(schedule?.id ?? null, this.executor(), (kind) => kind !== "agent_prompt" || budget.room(ROUTINE_MCP_BUDGET));
     // The search by meaning's indexing (step 17) comes after what is due, so a slow model never delays a
     // reminder; nothing at all while it is off. The alarm `wake` just set already counts its next round.
     try {
@@ -330,6 +340,14 @@ export class ZuriAgent extends Agent<WorkerEnv> {
       log("error", "flow_failed", { error });
     }
     await alerts.settled();
+    // Some work found no room in this wake: the alarm comes back for it (a minute out at the soonest).
+    if (budget.short) {
+      try {
+        await automations.rearm();
+      } catch (error) {
+        log("error", "alert_tick_failed", { error });
+      }
+    }
   }
 
   /**

@@ -58,6 +58,11 @@ export class PushChannel implements AlertChannel {
     return this.deps.devices.any() ? "ready" : "no_target";
   }
 
+  /** One post per device the notice goes to. */
+  cost({ notice }: AlertMessage): number {
+    return this.deps.devices.targets(notice.security).length;
+  }
+
   async send({ notice }: AlertMessage): Promise<SendResult> {
     // Always discreet (the owner's choice, 02/11/2026): a locked screen shows
     // only that there is a notice, never its title or text. The content stays

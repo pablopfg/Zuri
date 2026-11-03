@@ -445,7 +445,12 @@ export class AutomationService {
    * and slot) and its next run moves on. A second alarm, a restart or a
    * concurrent wake finds nothing left to claim, so a slot never runs twice.
    */
-  async wake(firedId: string | null, execute: Executor): Promise<number> {
+  /**
+   * `ready` says whether a kind of automation fits in this wake (issue #152:
+   * an AI routine needs room for its external calls); one that doesn't stays
+   * due, unclaimed, and runs at the next wake.
+   */
+  async wake(firedId: string | null, execute: Executor, ready: (kind: Automation["kind"]) => boolean = () => true): Promise<number> {
     const stored = this.storedAlarm();
     if (firedId && stored?.id === firedId) this.state.delete("automation_alarm");
     let ran = 0;
@@ -461,6 +466,7 @@ export class AutomationService {
         // A wake runs its AI routines one after another: two at most, the rest go to the next wake
         // (the alarm is set again at once), so a long chain can't outlast the handler's time.
         if (row.kind === "agent_prompt" && ai >= AI_RUNS_PER_WAKE) continue;
+        if (!ready(row.kind)) continue;
         if (row.kind === "agent_prompt") ai++;
         const claim = this.claim(row);
         if (!claim) continue;

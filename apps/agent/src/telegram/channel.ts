@@ -55,6 +55,11 @@ export class TelegramChannel implements AlertChannel {
     return this.deps.links.private()?.status === "active" ? "ready" : "no_target";
   }
 
+  /** In the group: the topic's creation, the message and its one retry outside the topic; in private, the message. */
+  cost({ notice, attempt }: AlertMessage): number {
+    return notice.security || attempt >= ESCALATION.tries || !this.deps.links.group() ? 1 : 3;
+  }
+
   async send({ notice, attempt, origin }: AlertMessage): Promise<SendResult> {
     const account = this.deps.links.private();
     if (!this.deps.configured() || account?.status !== "active") return { status: "skipped", reason: account ? "no_target" : "not_configured" };

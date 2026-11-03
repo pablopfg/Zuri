@@ -23,5 +23,7 @@ export interface AlertChannel {
   state(): ChannelState;
   /** Only the first try goes through it (e-mail): it does not count for insisting. */
   readonly firstTryOnly?: boolean;
+  /** The most external calls this send may make (rule P9); one when left out. */
+  cost?(message: AlertMessage): number;
   send(message: AlertMessage): Promise<SendResult>;
 }

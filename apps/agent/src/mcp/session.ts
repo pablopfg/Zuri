@@ -1,6 +1,7 @@
 import { APP_VERSION } from "@zuri/shared";
 import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/client";
 import { CATALOG_LIMITS, type CallResult, type ListedTool } from "./catalog.ts";
+import { currentWake, type WakeBudget } from "../agent/wake-budget.ts";
 import { classifyMcpError, FETCH_LIMITS, type FetchAuth, type FetchMeter, guardedFetch } from "./guarded-fetch.ts";
 
 /**
@@ -19,11 +20,14 @@ export class McpBudgetSpent extends Error {
   }
 }
 
-/** Counts the subrequests of one turn's MCP traffic. */
+/** Counts the subrequests of one turn's MCP traffic; inside an alarm wake, each also takes a place in the wake's count. */
 export class SubrequestMeter implements FetchMeter {
   #used = 0;
 
-  constructor(private readonly budget: number = MCP_SUBREQUEST_BUDGET) {}
+  constructor(
+    private readonly budget: number = MCP_SUBREQUEST_BUDGET,
+    private readonly wake: WakeBudget | undefined = currentWake(),
+  ) {}
 
   get used(): number {
     return this.#used;
@@ -31,11 +35,11 @@ export class SubrequestMeter implements FetchMeter {
 
   /** Room for `n` more, without taking them. */
   room(n: number): boolean {
-    return this.#used + n <= this.budget;
+    return this.#used + n <= this.budget && (this.wake?.room(n) ?? true);
   }
 
   take(): void {
-    if (this.#used >= this.budget) throw new McpBudgetSpent();
+    if (this.#used >= this.budget || this.wake?.take() === false) throw new McpBudgetSpent();
     this.#used++;
   }
 }

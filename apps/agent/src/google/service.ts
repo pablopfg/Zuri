@@ -12,6 +12,7 @@ import {
   timingSafeEqualText,
   toBase64Url,
 } from "@zuri/shared";
+import { currentWake, type WakeBudget } from "../agent/wake-budget.ts";
 import type { Database } from "../db/database.ts";
 import type { InternalState } from "../db/internal-state.ts";
 import { googlePushToken, GOOGLE_PUSH_PATH } from "../gates/google-push.ts";
@@ -55,6 +56,8 @@ const WATCH_RENEW_MS = 24 * 3_600_000;
 const WATCH_RENEW_PER_WAKE = 4;
 /** How long the alarm waits after a channel it couldn't open (or during a lockdown). */
 const WATCH_RETRY_MS = 3_600_000;
+/** A wake that ran out of calls leaves its calendars for the next one, a minute later. */
+const WATCH_NEXT_WAKE_MS = 60_000;
 /** Open calendars with a push channel at most; more are still read, the screen just refreshes on focus. */
 export const WATCHED_CALENDARS_MAX = 10;
 /** At most one notice a day that the connection needs the owner. */
@@ -93,18 +96,21 @@ export class GoogleError extends Error {
   }
 }
 
-/** Counts the Google calls of one turn, owner action or alarm wake (rule P9). */
+/** Counts the Google calls of one turn, owner action or alarm wake (rule P9); in a wake, each also takes a place in its count. */
 export class GoogleMeter {
   #used = 0;
 
-  constructor(readonly budget: number) {}
+  constructor(
+    readonly budget: number,
+    private readonly wake: WakeBudget | undefined = currentWake(),
+  ) {}
 
   get used(): number {
     return this.#used;
   }
 
   take(): void {
-    if (this.#used >= this.budget) throw new GoogleError("budget");
+    if (this.#used >= this.budget || this.wake?.take() === false) throw new GoogleError("budget");
     this.#used++;
   }
 }
@@ -876,6 +882,7 @@ export class GoogleCalendar {
     );
     let renewed = 0;
     let failed = false;
+    let spent = false;
     for (const row of rows) {
       try {
         const old = row.watch_id ? { ...row } : null;
@@ -884,16 +891,21 @@ export class GoogleCalendar {
         if (old) await this.sendChannelStop(old, await this.accessToken(meter), meter).catch(() => undefined);
         renewed++;
       } catch (error) {
+        // Out of calls in this wake (its own share or the wake's count, issue #152): the rest on the next one.
+        if (error instanceof GoogleError && error.kind === "budget") {
+          spent = true;
+          break;
+        }
         failed = true;
-        if (error instanceof GoogleError && (error.kind === "budget" || error.kind === "revoked" || error.kind === "lockdown")) break;
+        if (error instanceof GoogleError && (error.kind === "revoked" || error.kind === "lockdown")) break;
         log("warn", "google_watch_failed", { error });
       }
     }
     // A channel Google refused is tried again in an hour: a failure never spins the alarm.
-    this.#due = failed ? this.clock() + WATCH_RETRY_MS : undefined;
+    this.#due = failed ? this.clock() + WATCH_RETRY_MS : spent ? this.clock() + WATCH_NEXT_WAKE_MS : undefined;
     // A channel Google gave less than a day would be due again at once: at most one renewal an hour,
     // unless this wake left calendars for the next one.
-    if (!failed && rows.length < WATCH_RENEW_PER_WAKE) {
+    if (!failed && !spent && rows.length < WATCH_RENEW_PER_WAKE) {
       const next = this.watchDue();
       if (next !== null && next < this.clock() + WATCH_RETRY_MS) this.#due = this.clock() + WATCH_RETRY_MS;
     }
