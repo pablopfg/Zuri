@@ -19,6 +19,22 @@ funciona: [docs/agente/versionamento.md](docs/agente/versionamento.md).
 
 O que já entrou na `develop` e ainda não ganhou número fica em [`changelog/nao-lancado/`](changelog/nao-lancado/) por alguns minutos, até o workflow de versão escrever a seção.
 
+## [0.28.2] - 2026-11-03
+
+Mesclada às 18:11 (UTC-3) · commit [`1ab3e0e`](https://github.com/pablopfg/Zuri/commit/1ab3e0e30fa7e12748b4db73c0816c748bed511b) · PR [#159](https://github.com/pablopfg/Zuri/pull/159) · Contador único de subrequisições por despertar do alarme
+
+### Corrigido
+
+- O alarme único deixa de passar do limite de subrequisições do plano Free quando rotinas, Google Agenda, contatos, fluxos e avisos vencem juntos. Um contador só por despertar soma todas as áreas e para antes de 45; o que não coube, inclusive o aviso, sai no despertar seguinte em vez de falhar (#152).
+
+## [0.28.1] - 2026-11-03
+
+Mesclada às 17:52 (UTC-3) · commit [`3839c4b`](https://github.com/pablopfg/Zuri/commit/3839c4b151d8690f129b648b4db3d98dedd005fd) · PR [#156](https://github.com/pablopfg/Zuri/pull/156) · Etapa 22a mesclada (#153)
+
+### Alterado
+
+- Sem mudança visível: etapa 22a mesclada (#153).
+
 ## [0.28.0] - 2026-11-03
 
 Mesclada às 16:58 (UTC-3) · commit [`77c6495`](https://github.com/pablopfg/Zuri/commit/77c6495f20c31730a6a01e2d9e9765fd3d969cfd) · PR [#153](https://github.com/pablopfg/Zuri/pull/153) · Motor de fluxos e monitor de sites (etapa 22a)
@@ -2203,7 +2219,9 @@ Mesclada às 22:15 (UTC-3) · commit [`360a79e`](https://github.com/pablopfg/Zur
   `npm audit`), CodeQL, Dependabot e rulesets para a `develop` e a `main`.
 - `LICENSE` (MIT), `NOTICE.md`, `SECURITY.md` e `CONTRIBUTING.md`.
 
-[Não lançado]: https://github.com/pablopfg/Zuri/compare/v0.28.0...develop
+[Não lançado]: https://github.com/pablopfg/Zuri/compare/v0.28.2...develop
+[0.28.2]: https://github.com/pablopfg/Zuri/releases/tag/v0.28.2
+[0.28.1]: https://github.com/pablopfg/Zuri/releases/tag/v0.28.1
 [0.28.0]: https://github.com/pablopfg/Zuri/releases/tag/v0.28.0
 [0.27.3]: https://github.com/pablopfg/Zuri/releases/tag/v0.27.3
 [0.27.2]: https://github.com/pablopfg/Zuri/releases/tag/v0.27.2
