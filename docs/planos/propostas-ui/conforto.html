@@ -1,0 +1,657 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<!-- /moldura -->
+<title>Zuri, paletas de conforto</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Albert+Sans:wght@400;500;600;700&family=Figtree:wght@400;500;600;700&family=Geist:wght@400;500;600;700&family=Manrope:wght@400;500;600;700;800&family=Onest:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&family=Sora:wght@400;500;600;700&display=swap">
+<style>
+/* Rodada 3: oito paletas de conforto visual para a moldura A, todas com a logomarca atual.
+   Regras: nada de branco nem preto puros; texto principal entre 10:1 e 12,5:1 sobre o fundo
+   (AAA sem o brilho de 18:1 do preto no branco); destaques menos saturados; o escuro é um
+   cinza tingido, nunca #000. Os pares claro/escuro foram escolhidos juntos.
+   Os valores abaixo são o padrão; cada paleta entra pelo script em :root[data-model]. */
+:root {
+  --bg: #f9f9fb; --surface: #ffffff; --raised: #f0f0f3; --border: #e0e1e6; --border-strong: #b9bbc6;
+  --fg: #1c2024; --muted: #60646c; --accent: #2a7e3b; --accent-hover: #236c33; --accent-fg: #ffffff;
+  --accent-soft: #e9f6e9; --accent-text: #2a7e3b; --duo: #daf1db;
+  --danger: #ce2c31; --danger-soft: #feebec;
+  --side-bg: #fcfcfd; --side-fg: #1c2024; --side-muted: #60646c; --side-active: #e9f6e9; --side-active-fg: #2a7e3b; --side-border: #e0e1e6; --side-hover: #f0f0f3;
+  --logo-bg: #1c2024; --logo-fg: #fcfcfd; --logo-dot: #46a758;
+  --scrim: rgba(17, 17, 19, 0.4); --shadow: 0 1px 2px rgba(17, 17, 19, 0.06), 0 12px 32px rgba(17, 17, 19, 0.1);
+  --radius: 12px; --font: "Geist", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; --stroke: 1.75;
+  --proto-bg: #1c2024; --proto-fg: #edeef0;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #111113; --surface: #18191b; --raised: #212225; --border: #2e3135; --border-strong: #5a6169;
+  --fg: #edeef0; --muted: #b0b4ba; --accent: #46a758; --accent-hover: #53b365; --accent-fg: #0b1a0e;
+  --accent-soft: #1b2a1e; --accent-text: #71d083; --duo: #1d3a24;
+  --danger: #ff9592; --danger-soft: #3b1219;
+  --side-bg: #18191b; --side-fg: #edeef0; --side-muted: #b0b4ba; --side-active: #1d3a24; --side-active-fg: #71d083; --side-border: #272a2d; --side-hover: #212225;
+  --logo-bg: #272a2d; --logo-fg: #edeef0; --logo-dot: #46a758;
+  --scrim: rgba(0, 0, 0, 0.6); --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 12px 32px rgba(0, 0, 0, 0.45);
+  --proto-bg: #000000; --proto-fg: #edeef0;
+  color-scheme: dark;
+} }
+:root[data-theme="dark"] {
+  --bg: #111113; --surface: #18191b; --raised: #212225; --border: #2e3135; --border-strong: #5a6169;
+  --fg: #edeef0; --muted: #b0b4ba; --accent: #46a758; --accent-hover: #53b365; --accent-fg: #0b1a0e;
+  --accent-soft: #1b2a1e; --accent-text: #71d083; --duo: #1d3a24;
+  --danger: #ff9592; --danger-soft: #3b1219;
+  --side-bg: #18191b; --side-fg: #edeef0; --side-muted: #b0b4ba; --side-active: #1d3a24; --side-active-fg: #71d083; --side-border: #272a2d; --side-hover: #212225;
+  --logo-bg: #272a2d; --logo-fg: #edeef0; --logo-dot: #46a758;
+  --scrim: rgba(0, 0, 0, 0.6); --shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 12px 32px rgba(0, 0, 0, 0.45);
+  --proto-bg: #000000; --proto-fg: #edeef0;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body { margin: 0; background: var(--bg); color: var(--fg); font: 15px/1.5 var(--font); -webkit-font-smoothing: antialiased; font-feature-settings: "ss01", "cv11"; }
+button, input { font: inherit; color: inherit; }
+button { cursor: pointer; background: none; border: 0; padding: 0; }
+a { color: inherit; text-decoration: none; }
+:focus-visible { outline: 2px solid var(--accent-text); outline-offset: 2px; border-radius: 8px; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+svg.i { width: 20px; height: 20px; flex: none; fill: none; stroke: currentColor; stroke-width: var(--stroke); stroke-linecap: var(--cap, round); stroke-linejoin: var(--join, round); }
+svg.i.sm { width: 16px; height: 16px; }
+.icons-duo svg.i.f > :first-child { fill: var(--duo); }
+.icons-duo [aria-current="page"] svg.i.f > :first-child { fill: var(--side-active-fg); fill-opacity: 0.18; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+
+/* Barra do protótipo */
+.proto { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 60; display: flex; align-items: center; gap: 8px 14px; padding-block: 6px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); background: var(--proto-bg); color: var(--proto-fg); font: 500 13px/1.3 system-ui, sans-serif; overflow-x: auto; scrollbar-width: none; }
+.proto .opts { display: flex; gap: 4px; flex: none; }
+.proto button { display: inline-flex; align-items: center; gap: 6px; min-height: 32px; padding: 0 10px; border-radius: 8px; color: inherit; opacity: 0.75; white-space: nowrap; }
+.proto button:hover { opacity: 1; }
+.proto button[aria-pressed="true"] { background: rgba(255, 255, 255, 0.14); opacity: 1; font-weight: 700; }
+.proto .sw { display: inline-block; width: 12px; height: 12px; border-radius: 50%; box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.4); }
+.proto .sep { flex: 1; min-width: 8px; }
+.limpo .proto { display: none; }
+#app { height: calc(100dvh - 44px); }
+.limpo #app { height: 100dvh; }
+
+/* Moldura */
+.shell { display: flex; height: 100%; }
+.side { display: flex; flex-direction: column; width: 272px; flex: none; background: var(--side-bg); color: var(--side-fg); border-right: 1px solid var(--side-border); transition: width .18s; }
+.side-floating .shell { padding: 10px 0 10px 10px; }
+.side-floating .side { border: 1px solid var(--side-border); border-radius: calc(var(--radius) + 6px); box-shadow: var(--shadow); }
+.side-head { display: flex; align-items: center; justify-content: space-between; min-height: 64px; padding: 0 8px 0 16px; }
+.brand { display: inline-flex; align-items: center; gap: 10px; min-height: 44px; font-weight: 700; font-size: 19px; letter-spacing: -0.02em; }
+.logo { width: 32px; height: 32px; flex: none; }
+.logo .lb { fill: var(--logo-bg); } .logo .lf { fill: var(--logo-fg); } .logo .ld { fill: var(--logo-dot); }
+.logo .sf { fill: none; stroke: var(--logo-fg); stroke-linecap: round; stroke-linejoin: round; }
+.logo .sd { fill: none; stroke: var(--logo-dot); stroke-linecap: round; }
+.headbtns { display: flex; }
+.iconbtn { position: relative; display: inline-grid; place-items: center; width: 44px; height: 44px; border-radius: calc(var(--radius) - 2px); color: inherit; }
+.iconbtn:hover { background: var(--side-hover); }
+.main .iconbtn:hover { background: var(--raised); }
+.side-body { flex: 1; overflow-y: auto; padding: 4px 12px 12px; }
+.newchat { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 46px; padding: 0 14px; margin-bottom: 14px; border-radius: var(--radius); background: var(--accent); color: var(--accent-fg); font-weight: 650; font-size: 14.5px; box-shadow: 0 1px 0 rgba(255, 255, 255, 0.15) inset, 0 1px 2px rgba(0, 0, 0, 0.12); }
+.newchat:hover { background: var(--accent-hover); }
+.newchat kbd { margin-left: auto; font: 600 11.5px/1 var(--font); }
+.nav { display: grid; gap: 2px; margin: 0; padding: 0; list-style: none; }
+.row { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 42px; padding: 0 12px; border-radius: calc(var(--radius) - 2px); color: var(--side-muted); font-size: 14.5px; font-weight: 550; text-align: left; }
+.row:hover { background: var(--side-hover); color: var(--side-fg); }
+.row[aria-current="page"] { background: var(--side-active); color: var(--side-active-fg); font-weight: 650; }
+.row .txt { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.count { margin-left: auto; min-width: 22px; padding: 0 7px; border-radius: 999px; background: var(--side-hover); color: var(--side-muted); font-size: 12px; font-weight: 650; line-height: 20px; text-align: center; font-variant-numeric: tabular-nums; }
+.row[aria-current="page"] .count { background: var(--accent); color: var(--accent-fg); }
+.side-foot { padding: 10px 12px 12px; border-top: 1px solid var(--side-border); }
+.acct { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 54px; padding: 6px 8px; border-radius: var(--radius); text-align: left; }
+.acct:hover { background: var(--side-hover); }
+.acct .nm { flex: 1; min-width: 0; line-height: 1.25; }
+.acct small { display: block; color: var(--side-muted); font-size: 12.5px; }
+.avatar { display: inline-grid; place-items: center; width: 34px; height: 34px; flex: none; border-radius: 50%; background: var(--accent); color: var(--accent-fg); font-weight: 700; font-size: 14px; }
+.collapsed .side { width: 72px; }
+.collapsed .side-head { flex-direction: column; gap: 2px; min-height: 0; padding: 12px 0 8px; }
+.collapsed .headbtns { flex-direction: column; }
+.collapsed .brand .wm, .collapsed .row .txt, .collapsed .count, .collapsed .acct .nm, .collapsed .acct .chev, .collapsed .newchat .txt, .collapsed .newchat kbd { display: none; }
+.collapsed .row, .collapsed .newchat { justify-content: center; padding: 0; }
+.collapsed .side-body, .collapsed .side-foot { padding-left: 12px; padding-right: 12px; }
+.collapsed .acct { justify-content: center; padding: 6px 0; }
+
+.main { display: flex; flex-direction: column; flex: 1; min-width: 0; }
+.topbar { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 64px; padding: 0 16px 0 28px; }
+.topbar .ttl { font-weight: 650; font-size: 15px; }
+.topbar .left { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.mob { display: none; }
+.minibrand { display: inline-flex; align-items: center; gap: 8px; font-weight: 700; font-size: 17px; letter-spacing: -0.02em; }
+main { flex: 1; min-width: 0; overflow-y: auto; }
+.page { max-width: 1000px; margin: 0 auto; padding: 8px 40px 120px; }
+.badge { position: absolute; top: 4px; right: 3px; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 9px; background: var(--accent); color: var(--accent-fg); font-size: 11px; font-weight: 750; line-height: 18px; text-align: center; box-shadow: 0 0 0 2px var(--bg); }
+
+/* Início */
+.hello { margin: 0 0 22px; }
+.hello .date { display: inline-flex; align-items: center; gap: 6px; min-height: 28px; padding: 0 10px; border-radius: 999px; background: var(--surface); border: 1px solid var(--border); color: var(--muted); font-size: 13px; font-weight: 600; }
+.hello h1 { margin: 12px 0 6px; font-size: clamp(28px, 3.4vw, 38px); line-height: 1.1; letter-spacing: -0.03em; font-weight: 700; text-wrap: balance; }
+.hello p { margin: 0; color: var(--muted); font-size: 16px; max-width: 58ch; }
+.composer { background: var(--surface); border: 1px solid var(--border); border-radius: calc(var(--radius) + 8px); box-shadow: var(--shadow); padding: 6px 6px 6px 18px; }
+.composer:focus-within { border-color: var(--accent-text); }
+.composer .line { display: flex; align-items: center; gap: 6px; }
+.composer input { flex: 1; min-width: 0; min-height: 52px; border: 0; outline: 0; background: transparent; font-size: 16px; }
+.composer input::placeholder { color: var(--muted); }
+.mic { display: grid; place-items: center; width: 44px; height: 44px; border-radius: var(--radius); color: var(--muted); }
+.mic:hover { background: var(--raised); color: var(--fg); }
+.send { display: grid; place-items: center; width: 44px; height: 44px; border-radius: var(--radius); background: var(--accent); color: var(--accent-fg); }
+.send:hover { background: var(--accent-hover); }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; margin: 12px 0 28px; }
+.chip { display: inline-flex; align-items: center; gap: 7px; min-height: 40px; padding: 0 14px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface); color: var(--fg); font-size: 14px; font-weight: 550; }
+.chip svg { color: var(--accent-text); }
+.chip:hover { border-color: var(--accent-text); }
+.grid2 { display: grid; grid-template-columns: 1.35fr 1fr; gap: 18px; align-items: start; }
+.box { min-width: 0; background: var(--surface); border: 1px solid var(--border); border-radius: calc(var(--radius) + 6px); padding: 18px 20px 8px; }
+.box h2 { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 0 0 4px; font-size: 16px; letter-spacing: -0.01em; }
+.box h2 a { color: var(--accent-text); font-size: 13.5px; font-weight: 650; }
+.box h2 a:hover { text-decoration: underline; }
+.list { list-style: none; margin: 0; padding: 0; }
+.list > li + li { border-top: 1px solid var(--border); }
+.task { display: flex; align-items: flex-start; gap: 12px; padding: 12px 0; }
+.check { display: grid; place-items: center; width: 24px; height: 24px; margin-top: 1px; flex: none; border: 2px solid var(--border-strong); border-radius: 50%; color: transparent; }
+.check:hover { border-color: var(--accent-text); color: var(--accent-text); }
+.task.done .check { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
+.task.done .tt { color: var(--muted); text-decoration: line-through; }
+.tt { font-weight: 550; }
+.meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin-top: 3px; color: var(--muted); font-size: 13px; }
+.tag { display: inline-flex; align-items: center; min-height: 22px; padding: 0 8px; border-radius: 6px; background: var(--raised); color: var(--muted); font-size: 12px; font-weight: 600; }
+.late { color: var(--danger); font-weight: 650; }
+.timeline { list-style: none; margin: 6px 0 10px; padding: 0; }
+.timeline li { position: relative; display: grid; grid-template-columns: 56px 1fr; gap: 12px; padding: 8px 0 12px; }
+.timeline li::before { content: ""; position: absolute; left: 66px; top: 16px; width: 9px; height: 9px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 4px var(--accent-soft); }
+.timeline li::after { content: ""; position: absolute; left: 70px; top: 30px; bottom: -6px; width: 1px; background: var(--border); }
+.timeline li:last-child::after { display: none; }
+.timeline .when { color: var(--muted); font-size: 13px; font-weight: 650; text-align: right; font-variant-numeric: tabular-nums; padding-top: 2px; }
+.timeline .what { padding-left: 22px; }
+
+/* Conversa: recentes à esquerda, conversa à direita */
+.chatwrap { display: grid; grid-template-columns: 300px 1fr; height: 100%; }
+.convlist { display: flex; flex-direction: column; min-height: 0; border-right: 1px solid var(--border); background: var(--surface); }
+.convlist .top { display: grid; gap: 8px; padding: 14px 14px 8px; }
+.field { display: flex; align-items: center; gap: 8px; min-height: 42px; padding: 0 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg); color: var(--muted); }
+.field input { flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; color: var(--fg); }
+.field:focus-within { border-color: var(--accent-text); }
+.convlist .scroll { flex: 1; overflow-y: auto; padding: 0 8px 16px; }
+.grp { padding: 14px 10px 4px; color: var(--muted); font-size: 12.5px; font-weight: 650; }
+.conv { display: grid; gap: 1px; width: 100%; padding: 9px 10px; border-radius: calc(var(--radius) - 2px); text-align: left; }
+.conv:hover { background: var(--raised); }
+.conv[aria-current="page"] { background: var(--accent-soft); }
+.conv[aria-current="page"] .ct { color: var(--accent-text); }
+.conv .ct { font-weight: 600; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.conv .cs { color: var(--muted); font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 42px; padding: 0 16px; border-radius: var(--radius); font-weight: 650; font-size: 14px; }
+.btn.primary { background: var(--accent); color: var(--accent-fg); }
+.btn.primary:hover { background: var(--accent-hover); }
+.btn.ghost { border: 1px solid var(--border); background: var(--surface); }
+.btn.ghost:hover { background: var(--raised); }
+.chat { display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+.chat .msgs { flex: 1; overflow-y: auto; display: grid; align-content: start; gap: 16px; padding: 24px 40px; }
+.bubble { max-width: 62ch; padding: 12px 16px; border-radius: calc(var(--radius) + 6px); }
+.bubble.me { justify-self: end; background: var(--accent); color: var(--accent-fg); border-bottom-right-radius: 6px; }
+.bubble.zuri { background: var(--surface); border: 1px solid var(--border); border-bottom-left-radius: 6px; }
+.who { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 13px; font-weight: 650; }
+.who .logo { width: 24px; height: 24px; }
+.chat .foot { padding: 0 40px 24px; }
+.page-empty { display: grid; justify-items: center; gap: 8px; margin-top: 28px; padding: 52px 24px; text-align: center; border: 1px dashed var(--border-strong); border-radius: calc(var(--radius) + 6px); }
+.page-empty .ic { display: grid; place-items: center; width: 56px; height: 56px; border-radius: 50%; background: var(--accent-soft); color: var(--accent-text); }
+.page-empty h2 { margin: 6px 0 0; font-size: 18px; }
+.page-empty p { margin: 0; max-width: 46ch; color: var(--muted); }
+.page-empty.err .ic { background: var(--danger-soft); color: var(--danger); }
+.pagehead h1 { margin: 14px 0 4px; font-size: 28px; letter-spacing: -0.02em; }
+.pagehead p { margin: 0; color: var(--muted); }
+.skel { display: grid; gap: 12px; margin-top: 24px; }
+.skel span { display: block; height: 60px; border-radius: var(--radius); background: linear-gradient(90deg, var(--raised), var(--surface), var(--raised)); background-size: 200% 100%; animation: shimmer 1.2s linear infinite; }
+@keyframes shimmer { to { background-position: -200% 0; } }
+
+/* Camadas */
+.scrim { position: fixed; inset: 0; z-index: 40; background: var(--scrim); }
+.palette { position: fixed; z-index: 50; top: 12vh; left: 50%; width: min(620px, calc(100vw - 32px)); transform: translateX(-50%); background: var(--surface); border: 1px solid var(--border); border-radius: calc(var(--radius) + 8px); box-shadow: var(--shadow); overflow: hidden; }
+.palette .q { display: flex; align-items: center; gap: 10px; padding: 0 12px 0 18px; border-bottom: 1px solid var(--border); color: var(--muted); }
+.palette .q input { flex: 1; min-height: 58px; border: 0; outline: 0; background: transparent; color: var(--fg); font-size: 16px; }
+.palette .res { max-height: 50vh; overflow-y: auto; padding: 8px; }
+.palette .gh { padding: 8px 10px 4px; color: var(--muted); font-size: 12px; font-weight: 650; }
+.palette .opt { display: flex; align-items: center; gap: 12px; width: 100%; min-height: 44px; padding: 0 10px; border-radius: calc(var(--radius) - 2px); text-align: left; }
+.palette .opt[aria-selected="true"], .palette .opt:hover { background: var(--raised); }
+.palette .opt.ask { color: var(--accent-text); font-weight: 650; }
+.pop { position: fixed; z-index: 45; width: 300px; max-width: calc(100vw - 24px); padding: 8px; background: var(--surface); color: var(--fg); border: 1px solid var(--border); border-radius: calc(var(--radius) + 4px); box-shadow: var(--shadow); }
+.pop h2 { margin: 6px 10px 6px; font-size: 14px; }
+.pop .note { display: grid; gap: 2px; padding: 10px; border-radius: calc(var(--radius) - 2px); font-size: 14px; }
+.pop .note:hover, .pop .mi:hover { background: var(--raised); }
+.pop .note small { color: var(--muted); font-size: 12px; }
+.pop .mi { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 42px; padding: 0 10px; border-radius: calc(var(--radius) - 2px); font-size: 14px; text-align: left; }
+.pop .me { display: flex; align-items: center; gap: 10px; padding: 8px 10px 12px; margin-bottom: 6px; border-bottom: 1px solid var(--border); }
+.pop .me small { display: block; color: var(--muted); font-size: 12px; }
+.pop .ver { padding: 8px 10px 4px; margin-top: 6px; border-top: 1px solid var(--border); color: var(--muted); font-size: 12px; }
+.toasts { position: fixed; z-index: 55; left: 50%; bottom: calc(24px + env(safe-area-inset-bottom, 0px)); transform: translateX(-50%); display: grid; gap: 8px; width: min(420px, calc(100vw - 32px)); }
+.toast { display: flex; align-items: center; gap: 12px; padding: 10px 10px 10px 16px; background: var(--fg); color: var(--bg); border-radius: calc(var(--radius) + 2px); box-shadow: var(--shadow); font-size: 14px; animation: up .2s ease-out; }
+.toast button { margin-left: auto; min-height: 36px; padding: 0 12px; border-radius: 8px; font-weight: 750; color: var(--bg); text-decoration: underline; }
+@keyframes up { from { opacity: 0; transform: translateY(8px); } }
+
+/* Celular */
+@media (max-width: 767px) {
+  #app { height: calc(100dvh - 44px); }
+  .side-floating .shell { padding: 0; }
+  .side { position: fixed; z-index: 46; top: 0; bottom: 0; left: 0; width: min(86vw, 320px); transform: translateX(-104%); visibility: hidden; transition: transform .2s, visibility .2s; box-shadow: var(--shadow); }
+  .side-floating .side { border-radius: 0 calc(var(--radius) + 6px) calc(var(--radius) + 6px) 0; }
+  .drawer .side { transform: none; visibility: visible; }
+  .collapsed .side { width: min(86vw, 320px); }
+  .collapse { display: none; }
+  .mob { display: inline-grid; }
+  .desk { display: none !important; }
+  .topbar { min-height: 60px; padding: 0 6px; border-bottom: 1px solid var(--border); background: var(--surface); }
+  .page { padding: 20px 16px 100px; }
+  .hello h1 { font-size: 30px; }
+  .grid2 { grid-template-columns: 1fr; }
+  .chips { flex-wrap: nowrap; overflow-x: auto; margin-inline: -16px; padding-inline: 16px; scrollbar-width: none; }
+  .chip { flex: none; }
+  .chatwrap { grid-template-columns: 1fr; }
+  .chatwrap .chat { display: none; }
+  .chatwrap.open .convlist { display: none; }
+  .chatwrap.open .chat { display: flex; }
+  .chat .msgs { padding: 16px; } .chat .foot { padding: 0 12px 16px; }
+  .convlist { border-right: 0; background: var(--bg); }
+}
+@media (min-width: 768px) { .only-mob { display: none !important; } }
+</style>
+</head>
+<body>
+<section class="proto" aria-label="Controles do protótipo">
+  <div class="opts" id="opts-m"></div>
+  <span class="sep"></span>
+  <div class="opts" id="opts-t"></div>
+</section>
+<div id="app"></div>
+<div id="layer"></div>
+<script>
+(() => {
+  /* ---------- As oito paletas de conforto ---------- */
+  // Ordem dos tokens: bg surface raised border borderStrong fg muted accent accentHover accentFg accentSoft accentText duo
+  // danger dangerSoft sideBg sideFg sideMuted sideActive sideActiveFg sideBorder sideHover logoBg logoFg logoDot
+  const K = "bg surface raised border border-strong fg muted accent accent-hover accent-fg accent-soft accent-text duo danger danger-soft side-bg side-fg side-muted side-active side-active-fg side-border side-hover logo-bg logo-fg logo-dot".split(" ");
+  const MODELS = [
+    { id: "papel", name: "Papel", font: '"Manrope"', radius: 12, stroke: 1.75, side: "plain", logo: "zuri",
+      light: "#f4f0e6 #faf7f0 #ebe6d9 #ded7c7 #8c8471 #2e2a22 #655e51 #8a5a1c #764c16 #faf7f0 #f1e4cc #7a4f17 #ecdcbd #a8402d #f5e0d8 #eee9dd #2e2a22 #615a4d #e9dcc2 #6c4513 #ded7c7 #e6e0d1 #2e2a22 #faf7f0 #5a9e5f",
+      dark: "#1e1c18 #25231e #2d2a24 #39352d #766f61 #e3dccd #aba292 #d6a35c #e0b16f #22190b #3a2e1c #e2b676 #463720 #e8937f #3d241e #191814 #e3dccd #a59d8d #3a2e1c #e8bf84 #2d2a24 #25231e #2d2a24 #e3dccd #6fb874" },
+    { id: "salvia", name: "Sálvia", font: '"Figtree"', radius: 14, stroke: 1.6, side: "plain", logo: "zuri",
+      light: "#eff1ea #f7f8f3 #e4e8dd #d6dccd #808b78 #283028 #58625a #3f7356 #35634a #f7f8f3 #dbe9dd #346148 #cfe2d2 #ad3f35 #f4e0dc #e7ebe1 #283028 #545e55 #d3e4d5 #2c573f #d6dccd #dde3d5 #283028 #f7f8f3 #6fb27a",
+      dark: "#1b201d #212723 #29302b #343c36 #68746b #dbe2d8 #a2ad9f #8fc49b #9fcea9 #14241a #25362b #a3d1ad #2c4233 #e8958a #3b2421 #171b18 #dbe2d8 #9ca798 #283c2e #acd9b6 #29302b #212723 #29302b #dbe2d8 #8fc49b" },
+    { id: "mare", name: "Maré", font: '"Albert Sans"', radius: 14, stroke: 1.75, side: "plain", logo: "zuri",
+      light: "#f5f1e4 #fbf8ee #ece6d4 #ddd6c1 #8a836c #1f3236 #566468 #1d6f73 #185f62 #fbf8ee #d9ebe6 #185f63 #cbe4de #b03a33 #f6e0d9 #ede7d6 #1f3236 #526063 #d4e6df #155558 #ddd6c1 #e5dfcb #1f3236 #fbf8ee #5fae74",
+      dark: "#10272c #152f35 #1b373e #26454c #577a80 #d9e3df #9fb2b1 #5cbdb5 #72c8c1 #072124 #1b4246 #7fd0c8 #1f4a4d #ec9a8c #43262a #0c2126 #d9e3df #98abaa #1b4246 #8ad6cf #1b373e #152f35 #1b373e #d9e3df #6cc283" },
+    { id: "neblina", name: "Neblina", font: '"Onest"', radius: 12, stroke: 1.75, side: "plain", logo: "zuri",
+      light: "#eceff4 #f5f7fa #e2e7ef #d4dbe5 #7b879a #2a3242 #566074 #47679a #3d5985 #f5f7fa #dde5f2 #3e5c8b #d0dcef #a8434a #f3e0e2 #e4e9f0 #2a3242 #525c70 #d5dfef #36527e #d4dbe5 #dbe1ea #2e3440 #eceff4 #8fbf7f",
+      dark: "#252a33 #2b313c #333a46 #3d4452 #6f7a8e #dfe4ec #a7b0bf #88b4d6 #9cc2df #16222e #334459 #9fc6e3 #3a4d63 #e3949b #4a2f36 #20242c #dfe4ec #a0a9b8 #334459 #a9cde8 #2b313c #2b313c #333a46 #eceff4 #a3be8c" },
+    { id: "nanquim", name: "Nanquim", font: '"Geist"', radius: 10, stroke: 1.75, side: "plain", logo: "zuri",
+      light: "#f2efe6 #f9f7f0 #e8e4d8 #dcd6c6 #878170 #2a2b3d #5c5d70 #3b4f8c #324377 #f9f7f0 #e0e3f0 #36497f #d3d8ec #a83a3a #f4dfdb #2a2b3d #e8e4d8 #aeabb4 #3b3d58 #e6c384 #36384d #333549 #3b3d58 #f2efe6 #98bb6c",
+      dark: "#1f1f28 #252532 #2c2c3b #363646 #71718b #ddd8c0 #a8a495 #e0b872 #e8c587 #241c0c #3a3427 #e6c384 #433b29 #e8908a #43252a #16161d #ddd8c0 #a19d8e #2d2c3d #e6c384 #252532 #1f1f28 #2d2c3d #ddd8c0 #98bb6c" },
+    { id: "lavanda", name: "Lavanda", font: '"Plus Jakarta Sans"', radius: 16, stroke: 1.6, duo: true, side: "plain", logo: "zuri",
+      light: "#f0eff6 #f8f7fb #e6e4f0 #d9d6e6 #837e98 #34314a #625e78 #6c4fb5 #5d43a0 #f8f7fb #e8e1f7 #5f45a3 #ddd2f3 #b03a55 #f6e0e5 #e8e6f1 #34314a #5e5a74 #ddd3f3 #553d94 #d9d6e6 #dfdcec #34314a #f8f7fb #5fae74",
+      dark: "#24273a #2a2d42 #32354c #3c3f58 #737793 #dcdff2 #a7abc6 #c3a6f2 #cfb6f5 #211a35 #3d3a5e #cdb5f6 #463f6c #ef9db1 #47293a #1f2133 #dcdff2 #a0a4bf #3d3a5e #d4bff8 #2a2d42 #2a2d42 #32354c #dcdff2 #a6da95" },
+    { id: "crepusculo", name: "Crepúsculo", font: '"Sora"', radius: 12, stroke: 1.75, duo: true, side: "plain", logo: "zuri",
+      light: "#f8f1ea #fdf8f3 #f0e6dc #e5d9cd #958579 #35304a #6a6380 #b0566e #9a4a60 #fdf8f3 #f6e1e3 #984a60 #f1d3d8 #a83a3a #f5ddd8 #f2e9e0 #35304a #655f7a #f0d9dc #8a4157 #e5d9cd #ebe0d5 #35304a #fdf8f3 #5fa37e",
+      dark: "#232136 #2a273f #322f4a #3d3a57 #777297 #e2dff0 #aba6c4 #ea9ab2 #f0abc0 #2b1520 #43304a #f0aec2 #4c3352 #f2a08f #47282e #1d1b2e #e2dff0 #a59fbe #43304a #f3b9ca #2a273f #2a273f #322f4a #e2dff0 #9ccfd8" },
+    { id: "ceramica", name: "Cerâmica", font: '"Manrope"', radius: 10, stroke: 2, side: "plain", logo: "zuri",
+      light: "#f3ede4 #f9f5ef #eae2d6 #ddd2c3 #8e8070 #33291f #665a4c #b0532b #984623 #f9f5ef #f4e0d3 #984622 #efd3c1 #a3333c #f4dcdc #ece4d8 #33291f #61564a #efd9c9 #8a3f1f #ddd2c3 #e4dacc #33291f #f9f5ef #6a9e58",
+      dark: "#252321 #2c2a27 #34312e #3f3b37 #7d756c #e6dac8 #ada392 #e3946a #e9a47f #2a160b #46332a #eba57f #523a2e #ef9a95 #47282a #1f1d1b #e6dac8 #a69c8b #46332a #efb08e #2c2a27 #2c2a27 #34312e #e6dac8 #a9b665" },
+  ];
+  const DESCR = {
+    papel: "Papel de livro e tinta sépia; o mais quente e o mais calmo para ler muito.",
+    salvia: "Verde-sálvia sobre cinza esverdeado, conversa com o verde do sinal.",
+    mare: "Creme com verde-mar; no escuro, um petróleo profundo em vez de preto.",
+    neblina: "Cinza azulado frio e azul geada; o escuro é ardósia, não preto.",
+    nanquim: "Papel de arroz com lateral em nanquim; no escuro, tinta azul e dourado.",
+    lavanda: "Lilás suave e cinza lavanda, ícones preenchidos de leve.",
+    crepusculo: "Rosa queimado e ameixa; no escuro, o roxo do fim de tarde.",
+    ceramica: "Argila e terracota, com o escuro de pedra morna.",
+  };
+  function tokenCss() {
+    let css = "";
+    for (const m of MODELS) {
+      const v = (s) => s.split(" ").map((x, i) => `--${K[i]}:${x}`).join(";");
+      const extra = `--font:${m.font},system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;--radius:${m.radius}px;--stroke:${m.stroke};--cap:${m.cap || "round"};--join:${m.cap === "square" ? "miter" : "round"}`;
+      css += `:root[data-model="${m.id}"]{${v(m.light)};${extra}}`;
+      css += `@media (prefers-color-scheme: dark){:root[data-model="${m.id}"]:not([data-theme="light"]){${v(m.dark)};color-scheme:dark}}`;
+      css += `:root[data-model="${m.id}"][data-theme="dark"]{${v(m.dark)};color-scheme:dark}`;
+    }
+    const st = document.createElement("style"); st.textContent = css; document.head.appendChild(st);
+  }
+
+  /* ---------- Ícones próprios (grade de 24, traço variável) ---------- */
+  // "*" no começo: a primeira forma aceita preenchimento no estilo duotom.
+  const ICON = {
+    home: "*<path d='M4 10.5 12 4l8 6.5V19a1 1 0 0 1-1 1h-4.5v-5.5h-5V20H5a1 1 0 0 1-1-1z'/>",
+    chat: "*<path d='M6 5h12a3 3 0 0 1 3 3v6a3 3 0 0 1-3 3h-6l-4.5 3.5V17H6a3 3 0 0 1-3-3V8a3 3 0 0 1 3-3z'/><path d='M8 11h.01M12 11h.01M16 11h.01'/>",
+    newchat: "<path d='M12.5 4.5H6a3 3 0 0 0-3 3V14a3 3 0 0 0 3 3h1.5v3.5L12 17h6a3 3 0 0 0 3-3v-2.5'/><path d='M18.5 3v6M15.5 6h6'/>",
+    tasks: "*<rect x='3.5' y='4' width='17' height='16' rx='4'/><path d='m7.5 10 1.8 1.8 3.2-3.3M15 10h1.5M7.5 15.5h9'/>",
+    notes: "*<path d='M6.5 3.5h8L19 8v11a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 5 19V5a1.5 1.5 0 0 1 1.5-1.5z'/><path d='M14 3.5V8h5M8.5 12.5h7M8.5 16h4.5'/>",
+    memory: "*<circle cx='12' cy='12' r='8.5'/><path d='M12 7.5c.5 2.6 1.9 4 4.5 4.5-2.6.5-4 1.9-4.5 4.5-.5-2.6-1.9-4-4.5-4.5 2.6-.5 4-1.9 4.5-4.5z'/>",
+    auto: "<path d='M19.5 12a7.5 7.5 0 1 1-2.2-5.3'/><path d='M19.5 4v3.5H16'/><path d='M12 8.5V12l2.5 1.5'/>",
+    shield: "*<path d='M12 3.5 19 6v5.5c0 4.3-3 7.5-7 9-4-1.5-7-4.7-7-9V6z'/><circle cx='12' cy='11' r='1.6'/><path d='M12 12.6V15'/>",
+    sliders: "<path d='M4 7h9M17.5 7H20M4 17h2.5M11 17h9'/><circle cx='15.2' cy='7' r='2.2'/><circle cx='8.8' cy='17' r='2.2'/>",
+    search: "<circle cx='10.5' cy='10.5' r='6.5'/><path d='m15.5 15.5 4.5 4.5'/>",
+    bell: "*<path d='M6 16.5V11a6 6 0 0 1 12 0v5.5l1.5 1.5h-15z'/><path d='M10 20.5a2 2 0 0 0 4 0'/>",
+    panel: "<rect x='3.5' y='4.5' width='17' height='15' rx='3.5'/><path d='M9.5 4.5v15'/>",
+    menu: "<path d='M4 7h16M4 12h16M4 17h10'/>",
+    plus: "<path d='M12 5v14M5 12h14'/>",
+    x: "<path d='M6 6l12 12M18 6 6 18'/>",
+    check: "<path d='m5 12.5 4.5 4.5L19 7.5'/>",
+    up: "<path d='M12 19V5M6 11l6-6 6 6'/>",
+    mic: "<rect x='9' y='3.5' width='6' height='11' rx='3'/><path d='M5.5 11.5a6.5 6.5 0 0 0 13 0M12 18v2.5'/>",
+    out: "<path d='M10 4.5H6.5a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2H10'/><path d='m15 16.5 4.5-4.5L15 7.5M19.5 12H9.5'/>",
+    moon: "<path d='M19.5 14.5A7.5 7.5 0 0 1 9.5 4.5a7.5 7.5 0 1 0 10 10z'/>",
+    cal: "*<rect x='3.5' y='5' width='17' height='15' rx='3.5'/><path d='M3.5 10h17M8 3v4M16 3v4'/>",
+    alert: "*<circle cx='12' cy='12' r='8.5'/><path d='M12 7.5v5M12 16h.01'/>",
+    retry: "<path d='M4.5 12a7.5 7.5 0 1 0 2.2-5.3'/><path d='M4.5 4v3.5H8'/>",
+    chev: "<path d='m9 6 6 6-6 6'/>",
+    back: "<path d='m15 6-6 6 6 6'/>",
+    spark: "<path d='M12 4c.6 3.6 2.4 5.4 6 6-3.6.6-5.4 2.4-6 6-.6-3.6-2.4-5.4-6-6 3.6-.6 5.4-2.4 6-6zM18.5 16.5c.2 1.2.8 1.8 2 2-1.2.2-1.8.8-2 2-.2-1.2-.8-1.8-2-2 1.2-.2 1.8-.8 2-2z'/>",
+  };
+  const ic = (n, cls = "") => {
+    const s = ICON[n], f = s[0] === "*";
+    return `<svg class="i${f ? " f" : ""} ${cls}" viewBox="0 0 24 24" aria-hidden="true" focusable="false">${f ? s.slice(1) : s}</svg>`;
+  };
+
+  /* ---------- Logomarca atual ---------- */
+  const LOGO = {
+    // A marca de hoje (apps/web/src/components/Logo.tsx), só com as cores da paleta.
+    zuri: "<rect class='lb' width='64' height='64' rx='16'/><circle class='ld' cx='32' cy='19' r='12' opacity='0.25'/><circle class='ld' cx='32' cy='19' r='7'/><rect class='lf' x='27' y='31' width='10' height='21' rx='5'/>",
+  };
+  const logo = (cls = "logo") => `<svg class="${cls}" viewBox="0 0 64 64" aria-hidden="true" focusable="false">${LOGO[M().logo]}</svg>`;
+
+  /* ---------- Dados de exemplo ---------- */
+  const SECTIONS = [
+    { id: "inicio", label: "Início", icon: "home" },
+    { id: "conversa", label: "Conversa", icon: "chat" },
+    { id: "tarefas", label: "Tarefas", icon: "tasks" },
+    { id: "notas", label: "Notas", icon: "notes" },
+    { id: "memoria", label: "Memória", icon: "memory" },
+    { id: "automacoes", label: "Automações", icon: "auto" },
+    { id: "acessos", label: "Acessos", icon: "shield" },
+    { id: "configuracoes", label: "Configurações", icon: "sliders" },
+  ];
+  const sec = (id) => SECTIONS.find((s) => s.id === id);
+  const CONVS = [
+    { g: "Hoje", t: "Organizar a mudança", s: "Separei quatro tarefas, com prazo até o dia 20." },
+    { g: "Hoje", t: "O que tenho amanhã?", s: "Duas coisas: o dentista às 9h e a feira." },
+    { g: "Ontem", t: "Presente de aniversário da Bia", s: "Ela comentou que queria um livro de receitas." },
+    { g: "Esta semana", t: "Orçamento de novembro", s: "Sobraram R$ 320 depois das contas fixas." },
+    { g: "Esta semana", t: "Pão de fermentação natural", s: "Alimente o fermento 8 horas antes." },
+    { g: "Mais antigas", t: "Treino para a corrida de 10 km", s: "Três treinos por semana até dezembro." },
+  ];
+  const S = {
+    m: "papel", theme: null, view: "inicio", collapsed: false, drawer: false, palette: false, query: "", sel: 0, pop: null, popPos: null,
+    chatOpen: false, notes: "erro",
+    tasks: [
+      { id: 1, t: "Fechar o orçamento da transportadora", tag: "Mudança", when: "Hoje, até 18h", done: false },
+      { id: 2, t: "Pagar o condomínio", tag: "Casa", when: "Venceu ontem", late: true, done: false },
+      { id: 3, t: "Ligar para a Bia", tag: "", when: "Hoje, 15h", done: false },
+    ],
+    toasts: [],
+  };
+  const M = () => MODELS.find((m) => m.id === S.m) || MODELS[0];
+  const pending = () => S.tasks.filter((t) => !t.done).length;
+  const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+  const isDark = () => (S.theme ? S.theme === "dark" : matchMedia("(prefers-color-scheme: dark)").matches);
+
+  /* ---------- Telas ---------- */
+  const taskList = () => `<ul class="list">${S.tasks.map((t) => `
+    <li class="task${t.done ? " done" : ""}">
+      <button class="check" data-act="task" data-id="${t.id}" role="checkbox" aria-checked="${t.done}" aria-label="Concluir: ${esc(t.t)}">${ic("check", "sm")}</button>
+      <div><div class="tt">${esc(t.t)}</div><div class="meta"><span class="${t.late && !t.done ? "late" : ""}">${t.when}</span>${t.tag ? `<span class="tag">${t.tag}</span>` : ""}</div></div>
+    </li>`).join("")}</ul>`;
+  const composer = (ph) => `<div class="composer"><div class="line">
+      <label class="sr" for="cmp">Mensagem para a Zuri</label><input id="cmp" placeholder="${ph}" autocomplete="off">
+      <button class="mic" aria-label="Falar em vez de escrever">${ic("mic")}</button>
+      <button class="send" data-act="send" aria-label="Enviar">${ic("up")}</button></div></div>`;
+  const summary = () => {
+    const n = pending();
+    if (!n) return "Nada pendente para hoje. Bom descanso!";
+    return `${n === 1 ? "Falta uma tarefa" : `Faltam ${["", "", "duas", "três"][n]} tarefas`} para hoje, e o resumo da manhã chega às 7h.`;
+  };
+  function home() {
+    return `<div class="page">
+      <div class="hello"><span class="date">${ic("cal", "sm")}Terça, 3 de novembro</span><h1>Boa noite, Ana</h1><p>${summary()}</p></div>
+      ${composer("Pergunte ou peça algo à Zuri")}
+      <div class="chips"><button class="chip" data-act="palette">${ic("spark", "sm")}Planejar a semana</button><button class="chip" data-act="palette">${ic("spark", "sm")}O que tenho amanhã?</button><button class="chip" data-act="palette">${ic("spark", "sm")}Lembrar de pagar a luz</button></div>
+      <div class="grid2">
+        <section class="box"><h2>Para hoje <a href="#" data-go="tarefas">Ver todas</a></h2>${taskList()}</section>
+        <section class="box"><h2>Vem aí</h2><ul class="timeline">
+          <li><span class="when">7h</span><div class="what"><div class="tt">Resumo da manhã</div><div class="meta">Amanhã</div></div></li>
+          <li><span class="when">9h</span><div class="what"><div class="tt">Dentista</div><div class="meta">Amanhã</div></div></li>
+          <li><span class="when">8h</span><div class="what"><div class="tt">Regar as plantas da varanda</div><div class="meta">Quinta</div></div></li>
+        </ul></section>
+      </div></div>`;
+  }
+  function chat() {
+    let last = "", list = "";
+    CONVS.forEach((c, i) => {
+      if (c.g !== last) { list += `<div class="grp">${c.g}</div>`; last = c.g; }
+      list += `<button class="conv" data-act="open" ${i === 0 ? 'aria-current="page"' : ""}><span class="ct">${c.t}</span><span class="cs">${c.s}</span></button>`;
+    });
+    return `<div class="chatwrap${S.chatOpen ? " open" : ""}">
+      <h1 class="sr">Conversa</h1><aside class="convlist" aria-label="Conversas">
+        <div class="top"><button class="btn primary" data-act="open">${ic("newchat")}Nova conversa</button>
+        <div class="field">${ic("search", "sm")}<label class="sr" for="cf">Procurar nas conversas</label><input id="cf" placeholder="Procurar nas conversas"></div></div>
+        <div class="scroll">${list}</div>
+      </aside>
+      <section class="chat" aria-label="Organizar a mudança">
+        <div class="msgs">
+          <button class="iconbtn only-mob" data-act="close" aria-label="Voltar para as conversas">${ic("back")}</button>
+          <div class="bubble me">Me ajuda a organizar a mudança? As chaves saem no dia 20.</div>
+          <div class="who">${logo()}Zuri</div>
+          <div class="bubble zuri">Separei quatro tarefas no projeto Mudança, com prazo até o dia 20. Dá uma olhada e me diz se posso criar. Nada fica salvo antes do seu ok.</div>
+        </div>
+        <div class="foot">${composer("Responda ou peça outra coisa")}</div>
+      </section></div>`;
+  }
+  function tasks() {
+    return `<div class="page"><div class="pagehead"><h1>Tarefas</h1><p>${pending() ? `${pending()} para hoje` : "Tudo feito por hoje"}</p></div>
+      <div style="margin:18px 0"><button class="btn primary" data-act="toast" data-msg="Tarefa criada.">${ic("plus", "sm")}Nova tarefa</button></div>
+      <section class="box"><h2>Hoje</h2>${taskList()}</section></div>`;
+  }
+  function notes() {
+    let body;
+    if (S.notes === "erro") body = `<div class="page-empty err" role="alert"><span class="ic">${ic("alert")}</span><h2>Não deu para abrir as notas</h2><p>A conexão caiu no meio do caminho. Suas notas estão guardadas; é só tentar de novo.</p><button class="btn ghost" data-act="retry">${ic("retry", "sm")}Tentar de novo</button></div>`;
+    else if (S.notes === "carregando") body = `<div class="skel" aria-busy="true" aria-label="Carregando as notas"><span></span><span></span><span></span></div>`;
+    else body = `<div class="page-empty"><span class="ic">${ic("notes")}</span><h2>Nenhuma nota por aqui</h2><p>Anote uma ideia ou a lista do mercado. Se preferir, peça para a Zuri anotar durante a conversa.</p><button class="btn primary" data-act="toast" data-msg="Nota criada.">${ic("plus", "sm")}Escrever a primeira nota</button></div>`;
+    return `<div class="page"><div class="pagehead"><h1>Notas</h1><p>No protótipo, esta tela passa pelo erro, pelo carregando e pelo vazio.</p></div>${body}</div>`;
+  }
+  function other() {
+    const s = sec(S.view);
+    return `<div class="page"><div class="pagehead"><h1>${s.label}</h1></div><div class="page-empty"><span class="ic">${ic(s.icon)}</span><h2>Esta tela continua igual</h2><p>O protótipo muda só a moldura e as cores. O conteúdo de ${s.label} fica como está hoje.</p></div></div>`;
+  }
+  const content = () => {
+    switch (S.view) {
+      case "inicio": return home();
+      case "conversa": return chat();
+      case "tarefas": return tasks();
+      case "notas": return notes();
+      default: return other();
+    }
+  };
+
+  /* ---------- Moldura A ---------- */
+  function shell() {
+    const nav = ["inicio", "conversa", "tarefas", "notas", "memoria", "automacoes"].map((id) => {
+      const s = sec(id);
+      const extra = id === "tarefas" && pending() ? `<span class="count" aria-label="${pending()} para hoje">${pending()}</span>` : "";
+      return `<li><a href="#" class="row" data-go="${id}"${S.view === id ? ' aria-current="page"' : ""}${S.collapsed ? ` title="${s.label}"` : ""}>${ic(s.icon)}<span class="txt">${s.label}</span>${extra}</a></li>`;
+    }).join("");
+    const title = S.view === "inicio" ? "" : sec(S.view).label;
+    return `<div class="shell${S.collapsed ? " collapsed" : ""}${S.drawer ? " drawer" : ""}">
+      <aside class="side" id="menu-lateral" aria-label="Menu">
+        <div class="side-head">
+          <a href="#" class="brand" data-go="inicio" aria-label="Zuri, ir para o início">${logo()}<span class="wm">Zuri</span></a>
+          <div class="headbtns">
+            <button class="iconbtn" data-act="palette" aria-haspopup="dialog" aria-keyshortcuts="Control+K Meta+K" aria-label="Buscar (Ctrl K)">${ic("search")}</button>
+            <button class="iconbtn collapse" data-act="collapse" aria-expanded="${!S.collapsed}" aria-controls="menu-lateral" aria-label="${S.collapsed ? "Abrir o menu" : "Recolher o menu"}">${ic("panel")}</button>
+            <button class="iconbtn only-mob" data-act="drawer" aria-label="Fechar o menu">${ic("x")}</button>
+          </div>
+        </div>
+        <div class="side-body">
+          <a href="#" class="newchat" data-go="conversa" data-new="1"${S.collapsed ? ' title="Nova conversa"' : ""}>${ic("newchat")}<span class="txt">Nova conversa</span><kbd class="desk">Ctrl ⇧ O</kbd></a>
+          <nav aria-label="Principal"><ul class="nav">${nav}</ul></nav>
+        </div>
+        <div class="side-foot">
+          <button class="acct" data-act="pop" data-pop="conta" aria-haspopup="menu" aria-expanded="${S.pop === "conta"}" aria-label="Sua conta: Ana">
+            <span class="avatar" aria-hidden="true">A</span><span class="nm"><b>Ana</b><small>Conta e ajustes</small></span>${ic("chev", "sm chev")}
+          </button>
+        </div>
+      </aside>
+      ${S.drawer ? '<div class="scrim only-mob" data-act="drawer"></div>' : ""}
+      <div class="main">
+        <header class="topbar">
+          <div class="left">
+            <button class="iconbtn mob" data-act="drawer" aria-label="Abrir o menu" aria-expanded="${S.drawer}">${ic("menu")}</button>
+            ${title ? `<span class="ttl">${title}</span>` : `<span class="mob"><span class="minibrand">${logo()}Zuri</span></span>`}
+          </div>
+          <div style="display:flex">
+            <button class="iconbtn" data-act="pop" data-pop="bell" aria-haspopup="dialog" aria-expanded="${S.pop === "bell"}" aria-label="Avisos, 2 novos">${ic("bell")}<span class="badge" aria-hidden="true">2</span></button>
+            <a href="#" class="iconbtn mob" data-go="conversa" data-new="1" aria-label="Nova conversa">${ic("newchat")}</a>
+          </div>
+        </header>
+        <main id="conteudo" tabindex="-1">${content()}</main>
+      </div></div>`;
+  }
+
+  /* ---------- Camadas ---------- */
+  function paletteOptions() {
+    const q = S.query.trim().toLowerCase();
+    const go = SECTIONS.filter((s) => !q || s.label.toLowerCase().includes(q)).map((s) => ({ g: "Ir para", label: s.label, icon: s.icon, go: s.id }));
+    const acts = [{ label: "Nova conversa", icon: "newchat", go: "conversa" }, { label: "Nova tarefa", icon: "plus", msg: "Tarefa criada." }, { label: "Nova nota", icon: "notes", msg: "Nota criada." }, { label: "Trocar o tema", icon: "moon", act: "theme" }]
+      .filter((a) => !q || a.label.toLowerCase().includes(q)).map((a) => ({ g: "Fazer", ...a }));
+    const found = [...S.tasks.map((t) => ({ label: t.t, icon: "tasks", go: "tarefas" })), ...CONVS.map((c) => ({ label: c.t, icon: "chat", go: "conversa" }))]
+      .filter((x) => q && x.label.toLowerCase().includes(q)).map((x) => ({ g: "Encontrado", ...x }));
+    const ask = q.includes(" ") ? [{ g: "Zuri", label: `Perguntar à Zuri: ${S.query.trim()}`, icon: "spark", go: "conversa", ask: true }] : [];
+    return [...ask, ...found, ...acts, ...go];
+  }
+  function palette() {
+    const opts = paletteOptions();
+    S.sel = Math.min(S.sel, Math.max(0, opts.length - 1));
+    let last = "", html = "";
+    opts.forEach((o, i) => {
+      if (o.g !== last) { html += `<div class="gh" role="presentation">${o.g}</div>`; last = o.g; }
+      html += `<button class="opt${o.ask ? " ask" : ""}" role="option" id="opt-${i}" aria-selected="${i === S.sel}" data-act="pick" data-i="${i}">${ic(o.icon, "sm")}<span>${esc(o.label)}</span></button>`;
+    });
+    if (!opts.length) html = `<div class="page-empty" style="border:0;margin:0;padding:28px 16px"><h2>Nada com "${esc(S.query.trim())}"</h2><p>Tente outra palavra. Se for uma pergunta, escreva a frase inteira que a Zuri responde.</p></div>`;
+    return `<div class="scrim" data-act="palette"></div><div class="palette" role="dialog" aria-modal="true" aria-label="Buscar">
+      <div class="q">${ic("search")}<label class="sr" for="pq">Buscar ou perguntar</label><input id="pq" role="combobox" aria-expanded="true" aria-controls="pres" aria-activedescendant="opt-${S.sel}" placeholder="Procure uma tela, tarefa ou conversa" value="${esc(S.query)}" autocomplete="off"><button class="iconbtn" data-act="palette" aria-label="Fechar a busca">${ic("x")}</button></div>
+      <div class="res" id="pres" role="listbox" aria-label="Resultados">${html}</div></div>`;
+  }
+  function popover() {
+    if (!S.pop) return "";
+    const p = S.popPos || { top: 70, left: 16 };
+    const st = `top:${p.top}px;${p.right != null ? `right:${p.right}px` : `left:${p.left}px`}`;
+    const close = `<div class="scrim" style="background:transparent" data-act="pop" data-pop="${S.pop}"></div>`;
+    if (S.pop === "bell") return `${close}<section class="pop" role="dialog" aria-label="Avisos" style="${st}"><h2>Avisos</h2>
+      <a href="#" class="note" data-go="inicio"><span>O resumo da semana ficou pronto.</span><small>Hoje, 18h02</small></a>
+      <a href="#" class="note" data-go="acessos"><span>Entraram na sua conta por um celular novo. Foi você?</span><small>Hoje, 8h12</small></a>
+      <button class="mi" data-act="toast" data-msg="Avisos marcados como lidos." style="justify-content:center">Marcar tudo como lido</button></section>`;
+    return `${close}<div class="pop" role="menu" aria-label="Sua conta" style="${st}">
+      <div class="me"><span class="avatar" aria-hidden="true">A</span><div><b>Ana</b><small>dono@exemplo.com.br</small></div></div>
+      <a href="#" class="mi" role="menuitem" data-go="configuracoes">${ic("sliders", "sm")}Configurações</a>
+      <a href="#" class="mi" role="menuitem" data-go="acessos">${ic("shield", "sm")}Acessos e segurança</a>
+      <button class="mi" role="menuitem" data-act="theme">${ic("moon", "sm")}Tema: ${isDark() ? "escuro" : "claro"}</button>
+      <button class="mi" role="menuitem" data-act="toast" data-msg="Você saiu da conta.">${ic("out", "sm")}Sair</button>
+      <div class="ver">Versão 0.23.2</div></div>`;
+  }
+  const toasts = () => `<div class="toasts" role="status" aria-live="polite">${S.toasts.map((t) => `<div class="toast"><span>${t.msg}</span>${t.undo ? `<button data-act="undo" data-id="${t.undo}">Desfazer</button>` : ""}</div>`).join("")}</div>`;
+
+  /* ---------- Render e eventos ---------- */
+  const app = document.getElementById("app"), layer = document.getElementById("layer"), root = document.documentElement;
+  function render() {
+    const m = M();
+    root.setAttribute("data-model", m.id);
+    root.classList.toggle("icons-duo", !!m.duo);
+    root.classList.toggle("side-floating", m.side === "floating");
+    const focusId = document.activeElement && document.activeElement.id;
+    app.innerHTML = shell();
+    layer.innerHTML = (S.palette ? palette() : "") + popover() + toasts();
+    document.getElementById("opts-m").innerHTML = MODELS.map((x, i) => {
+      const accent = (isDark() ? x.dark : x.light).split(" ")[7];
+      return `<button data-model-set="${x.id}" aria-pressed="${x.id === m.id}" title="${DESCR[x.id]}"><span class="sw" style="background:${accent}"></span>${i + 1}. ${x.name}</button>`;
+    }).join("");
+    document.getElementById("opts-t").innerHTML = `<button data-theme-set="light" aria-pressed="${!isDark()}">Claro</button><button data-theme-set="dark" aria-pressed="${isDark()}">Escuro</button>`;
+    if (S.palette) { const i = document.getElementById("pq"); i.focus(); i.setSelectionRange(i.value.length, i.value.length); }
+    else if (focusId && document.getElementById(focusId)) document.getElementById(focusId).focus();
+  }
+  function toast(msg, undo) {
+    const t = { msg, undo };
+    S.toasts = [...S.toasts.slice(-2), t]; render();
+    setTimeout(() => { S.toasts = S.toasts.filter((x) => x !== t); render(); }, 5000);
+  }
+  const setTheme = (th) => { S.theme = th; root.setAttribute("data-theme", th); };
+  function go(view, fresh) {
+    S.view = view; S.drawer = false; S.pop = null; S.palette = false; S.chatOpen = !!fresh;
+    if (view === "notas") S.notes = "erro";
+    render(); document.getElementById("conteudo")?.focus();
+  }
+  function pick(i) {
+    const o = paletteOptions()[i]; if (!o) return;
+    S.palette = false;
+    if (o.ask) { go("conversa", true); toast("A Zuri recebeu a pergunta."); return; }
+    if (o.act === "theme") { setTheme(isDark() ? "light" : "dark"); render(); return; }
+    if (o.msg) { render(); toast(o.msg); return; }
+    go(o.go);
+  }
+  document.addEventListener("click", (e) => {
+    const ms = e.target.closest("[data-model-set]");
+    if (ms && MODELS.some((m) => m.id === ms.dataset.modelSet)) { S.m = ms.dataset.modelSet; S.pop = null; history.replaceState(null, "", `#modelo-${S.m}`); render(); return; }
+    const th = e.target.closest("[data-theme-set]");
+    if (th) { setTheme(th.dataset.themeSet === "dark" ? "dark" : "light"); render(); return; }
+    const g = e.target.closest("[data-go]");
+    if (g) { e.preventDefault(); if (sec(g.dataset.go)) go(g.dataset.go, g.dataset.new === "1"); return; }
+    const el = e.target.closest("[data-act]");
+    if (!el) return;
+    switch (el.dataset.act) {
+      case "collapse": S.collapsed = !S.collapsed; render(); break;
+      case "drawer": S.drawer = !S.drawer; render(); break;
+      case "palette": S.palette = !S.palette; S.query = ""; S.sel = 0; render(); break;
+      case "theme": setTheme(isDark() ? "light" : "dark"); S.pop = null; render(); break;
+      case "toast": S.pop = null; toast(el.dataset.msg); break;
+      case "send": toast("Mensagem enviada. A Zuri já está respondendo."); break;
+      case "open": S.chatOpen = true; render(); break;
+      case "close": S.chatOpen = false; render(); break;
+      case "retry": S.notes = "carregando"; render(); setTimeout(() => { S.notes = "vazio"; render(); }, 1200); break;
+      case "task": {
+        const t = S.tasks.find((x) => x.id === Number(el.dataset.id)); if (!t) break;
+        t.done = !t.done; t.done ? toast("Tarefa concluída.", t.id) : render(); break;
+      }
+      case "undo": { const t = S.tasks.find((x) => x.id === Number(el.dataset.id)); if (t) t.done = false; S.toasts = []; render(); break; }
+      case "pick": pick(Number(el.dataset.i)); break;
+      case "pop": {
+        const name = el.dataset.pop === "bell" ? "bell" : "conta";
+        if (S.pop === name) { S.pop = null; render(); break; }
+        const r = el.getBoundingClientRect(), w = innerWidth;
+        S.popPos = r.left > w / 2 ? { top: r.bottom + 6, right: Math.max(12, w - r.right) } : r.top > innerHeight / 2 ? { top: Math.max(12, r.top - 300), left: Math.max(12, r.left) } : { top: r.bottom + 6, left: Math.max(12, r.left) };
+        S.pop = name; render(); break;
+      }
+    }
+  });
+  document.addEventListener("input", (e) => { if (e.target.id === "pq") { S.query = e.target.value; S.sel = 0; render(); } });
+  document.addEventListener("keydown", (e) => {
+    if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === "k") { e.preventDefault(); S.palette = !S.palette; S.query = ""; S.sel = 0; render(); return; }
+    if (e.key === "Escape" && (S.palette || S.pop || S.drawer)) { S.palette = false; S.pop = null; S.drawer = false; render(); return; }
+    if (S.palette && (e.key === "ArrowDown" || e.key === "ArrowUp")) { e.preventDefault(); const n = Math.max(1, paletteOptions().length); S.sel = (S.sel + (e.key === "ArrowDown" ? 1 : n - 1)) % n; render(); return; }
+    if (S.palette && e.key === "Enter") { e.preventDefault(); pick(S.sel); }
+  });
+  // Endereço: #modelo-<id>, com -claro/-escuro, -limpo, uma tela, -recolhido, -gaveta, -aberta, -busca.
+  function fromHash() {
+    const h = location.hash.slice(1).split("-");
+    if (MODELS.some((m) => m.id === h[1])) S.m = h[1];
+    if (h.includes("escuro")) setTheme("dark"); else if (h.includes("claro")) setTheme("light");
+    document.body.classList.toggle("limpo", h.includes("limpo"));
+    const v = h.find((x) => sec(x)); if (v) S.view = v;
+    S.collapsed = h.includes("recolhido"); S.drawer = h.includes("gaveta"); S.chatOpen = h.includes("aberta");
+    if (h.includes("busca")) { S.palette = true; S.query = "lembrar de levar o carro na revisão "; }
+    render();
+  }
+  tokenCss();
+  addEventListener("hashchange", fromHash);
+  fromHash();
+})();
+</script>
+</body>
+</html>

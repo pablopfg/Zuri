@@ -1,6 +1,6 @@
 # Plano · Nova moldura da interface (cinco propostas)
 
-Situação: moldura escolhida em 03/11/2026 (A, sem projetos, recentes em Conversa); esperando o Pablo escolher o modelo visual
+Situação: moldura escolhida em 03/11/2026 (A, sem projetos, recentes em Conversa); rodada 3 com oito paletas de conforto e a logomarca atual; esperando o Pablo escolher a paleta
 Origem: pedido do Pablo em 03/11/2026, com a barra lateral do ChatGPT como referência
 Dependências: nenhuma para escolher. A implementação espera a etapa 18 sair da `AppShell` (outra thread mexe no app agora).
 
@@ -150,6 +150,44 @@ Fontes: cada modelo usa uma fonte do Google Fonts no protótipo. No app, a escol
 
 Acessibilidade: axe-core 4.10.3 sem violações em 280 páginas (7 modelos × 2 temas × computador e celular × 5 telas). O contraste mínimo de texto ficou em 4,5:1 em todas as combinações.
 
+### Rodada 3 · oito paletas de conforto visual
+
+Depois da rodada 2, o Pablo pediu mais combinações bonitas e confortáveis para os olhos, todas com a logomarca atual. A moldura, os ícones e os textos são os da rodada 2; muda a paleta, a fonte e o raio.
+
+Protótipo: `docs/planos/propostas-ui/conforto.html`. Capturas em `docs/capturas/pr/propostas-ui/conforto/`, com `mosaico-claro.png` e `mosaico-escuro.png`.
+
+Regras que as oito seguem:
+
+- Nada de branco puro nem preto puro. O claro é papel (creme, areia, cinza tingido); o escuro é um cinza com o matiz da paleta, nunca `#000`.
+- Texto principal entre 10:1 e 12,5:1 sobre o fundo. Passa do AAA (7:1) sem o brilho de 18:1 a 21:1 do preto no branco, que cansa em leitura longa. Na rodada 2 esse número ficava perto de 16:1.
+- Destaques menos saturados, sobretudo no escuro, onde cores vivas "vibram" sobre fundo escuro. Texto secundário, links e estados com pelo menos 4,5:1; bordas de controle com 3:1.
+- Logomarca de hoje (`apps/web/src/components/Logo.tsx`): o mesmo "i" com o sinal, só com o quadro, o traço e o sinal afinados a cada paleta. O sinal continua verde em todas, num tom que combina com a paleta.
+
+Inspirações: temas de editor feitos para muitas horas de tela (Flexoki, Everforest, Nord, Rosé Pine, Catppuccin, Kanagawa, Gruvbox Material e Solarized), o modo sépia dos leitores de livro digital e o iA Writer. Os valores são nossos; nenhum tema foi copiado.
+
+| Nº | Paleta | Ideia | Destaque (claro / escuro) | Fundo (claro / escuro) | Fonte | Contraste do texto (claro / escuro) |
+| --- | --- | --- | --- | --- | --- | --- |
+| 1 | Papel | papel de livro e tinta sépia | ocre `#8a5a1c` / `#d6a35c` | `#f4f0e6` / `#1e1c18` | Manrope | 12,5 / 12,5 |
+| 2 | Sálvia | verde-sálvia, conversa com o sinal | sálvia `#3f7356` / `#8fc49b` | `#eff1ea` / `#1b201d` | Figtree | 11,9 / 12,5 |
+| 3 | Maré | creme e verde-mar; escuro petróleo | verde-mar `#1d6f73` / `#5cbdb5` | `#f5f1e4` / `#10272c` | Albert Sans | 11,9 / 11,9 |
+| 4 | Neblina | cinza azulado e azul geada; escuro ardósia | azul `#47679a` / `#88b4d6` | `#eceff4` / `#252a33` | Onest | 11,2 / 11,3 |
+| 5 | Nanquim | papel de arroz e lateral em nanquim; escuro azul-tinta com dourado | índigo `#3b4f8c` / dourado `#e0b872` | `#f2efe6` / `#1f1f28` | Geist | 12,1 / 11,4 |
+| 6 | Lavanda | lilás suave, ícones preenchidos de leve | lilás `#6c4fb5` / `#c3a6f2` | `#f0eff6` / `#24273a` | Plus Jakarta Sans | 10,9 / 11,1 |
+| 7 | Crepúsculo | rosa queimado e ameixa | rosa `#b0566e` / `#ea9ab2` | `#f8f1ea` / `#232136` | Sora | 11,2 / 12,0 |
+| 8 | Cerâmica | argila e terracota; escuro pedra morna | terracota `#b0532b` / `#e3946a` | `#f3ede4` / `#252321` | Manrope | 12,2 / 11,4 |
+
+Leitura crítica:
+
+- **Sálvia** é a que mais combina com a logomarca: o verde do sinal vira a cor da casa, e o fundo esverdeado é o mais neutro para os olhos. O risco é o par verde e vermelho para quem não distingue as duas cores; "Venceu ontem" continua escrito, então a cor nunca é a única pista.
+- **Papel** é a melhor para ler muito: parece livro, e o escuro marrom é o mais macio das oito. O ocre deixa a Zuri com cara de caderno, menos de "app de IA".
+- **Maré** tem o escuro mais bonito (petróleo em vez de cinza) e lembra o Solarized, que muita gente usa o dia inteiro.
+- **Neblina** é a mais sóbria e a mais parecida com ferramentas de trabalho; diferencia menos a Zuri.
+- **Nanquim** é a mais marcante: a lateral escura também no claro e o dourado no escuro. É a que mais pede cuidado em telas novas.
+- **Lavanda** e **Crepúsculo** são as mais suaves e afetivas; o rosa da Crepúsculo fica perto do vermelho de erro no claro, então atraso e botão principal ficam parecidos.
+- **Cerâmica** é quente e acolhedora, com o mesmo cuidado da Crepúsculo sobre o vermelho.
+
+Acessibilidade: axe-core 4.10.3 sem violações em 160 páginas (8 paletas × 2 temas × computador e celular × 5 telas). Os contrastes da tabela foram medidos pela fórmula da WCAG 2.1, junto com outras 18 combinações por tema (texto secundário, destaque, lateral, aviso de erro, bordas e logomarca), todas dentro do mínimo.
+
 ### Textos visíveis
 
 Textos novos da moldura e da Início, já revisados com a `humanizer`. Entram no catálogo (pt-BR e en) só na implementação, com as chaves definidas lá.
@@ -264,7 +302,8 @@ Protótipo é HTML estático em `docs/`, fora do pacote servido. Auditoria em mo
 | Data | Pergunta | Resposta |
 | --- | --- | --- |
 | 03/11/2026 | Qual proposta (ou mistura)? Recomendação: A + busca da C + barra de baixo da B | A, sem projetos e com recentes dentro de Conversa |
-| 03/11/2026 | Qual dos sete modelos visuais? Recomendação: 2, Lagoa (calma para uso longo, contraste bom nos dois temas e sem confusão com o vermelho de atraso) | aguardando |
+| 03/11/2026 | Qual dos sete modelos visuais? Recomendação: 2, Lagoa (calma para uso longo, contraste bom nos dois temas e sem confusão com o vermelho de atraso) | Pediu mais paletas, de conforto visual e com a logomarca atual (rodada 3) |
+| 03/11/2026 | Qual paleta de conforto (rodada 3)? Recomendação: 2, Sálvia (combina com o sinal verde da logomarca, fundo neutro e texto a 12:1 nos dois temas) | aguardando |
 | 03/11/2026 | Aceita passar o teto de JS em até ~1 kB para ter Recentes na lateral? | Não se aplica mais: as recentes ficam na tela Conversa, que já carrega sob demanda. Os ícones próprios entram como SVG na moldura no lugar dos da lucide; o tamanho exato sai na implementação. |
 
 ### Perguntas abertas
