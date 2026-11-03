@@ -17,6 +17,7 @@ export const ptBRPalette = {
   "web.palette.keys": "↑ ↓ para escolher · Enter para abrir · Esc para fechar",
   "web.palette.done": "Concluída",
   "web.palette.newAutomation": "Criar automação",
+  "web.palette.newFlow": "Criar fluxo",
   "web.palette.newChat": "Nova conversa",
   "web.palette.ask": "Perguntar à Zuri: “{query}”",
   "web.palette.groupAsk": "Conversa",

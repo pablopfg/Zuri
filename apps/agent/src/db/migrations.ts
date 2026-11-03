@@ -1084,6 +1084,106 @@ export const MIGRATIONS: readonly Migration[] = [
       ...areaTriggers("contacts", "zur_contact_sync", "OF enabled, status, problem, last_ok_at, birthdays, dates, reminder_time, days_ahead, date_match, on_added, copied"),
     ],
   },
+  {
+    version: 24,
+    name: "flows",
+    statements: [
+      // The flows (step 22a): a trigger and up to 20 steps, as JSON checked by
+      // flowDefinitionSchema when saved and again when a run reads it.
+      `CREATE TABLE IF NOT EXISTS zur_flows (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        definition TEXT NOT NULL,
+        enabled INTEGER NOT NULL DEFAULT 0 CHECK (enabled IN (0, 1)),
+        uses_ai INTEGER NOT NULL DEFAULT 0 CHECK (uses_ai IN (0, 1)),
+        next_run TEXT,
+        last_run_at TEXT,
+        last_run_status TEXT,
+        last_problem TEXT,
+        failures INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      )`,
+      `CREATE INDEX IF NOT EXISTS zur_flows_due ON zur_flows (next_run) WHERE enabled = 1 AND next_run IS NOT NULL`,
+      // The services a request step may call. The credential is sealed with
+      // MCP_CREDENTIAL_KEY under its own key ("flows-v1", the row's id as
+      // associated data) and never leaves the database.
+      `CREATE TABLE IF NOT EXISTS zur_flow_connections (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        origin TEXT NOT NULL,
+        methods TEXT NOT NULL,
+        paths TEXT NOT NULL,
+        auth TEXT NOT NULL CHECK (auth IN ('none', 'bearer', 'header')),
+        header_name TEXT,
+        credential TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      )`,
+      // One row per run. `state` holds a waiting run's items and position
+      // (cleared when it ends); `slot` makes a scheduled time run at most once.
+      `CREATE TABLE IF NOT EXISTS zur_flow_runs (
+        id TEXT PRIMARY KEY,
+        flow_id TEXT NOT NULL,
+        flow_name TEXT NOT NULL,
+        trigger TEXT NOT NULL CHECK (trigger IN ('schedule', 'catch_up', 'manual')),
+        slot TEXT,
+        status TEXT NOT NULL CHECK (status IN ('running', 'waiting', 'success', 'error', 'skipped')),
+        problem TEXT,
+        node INTEGER,
+        http_status INTEGER,
+        attempt INTEGER NOT NULL DEFAULT 0,
+        resume_at TEXT,
+        state TEXT,
+        calls INTEGER NOT NULL DEFAULT 0,
+        items INTEGER NOT NULL DEFAULT 0,
+        neurons REAL NOT NULL DEFAULT 0,
+        started_at TEXT NOT NULL,
+        finished_at TEXT
+      )`,
+      `CREATE UNIQUE INDEX IF NOT EXISTS zur_flow_runs_slot ON zur_flow_runs (flow_id, slot) WHERE slot IS NOT NULL`,
+      `CREATE INDEX IF NOT EXISTS zur_flow_runs_started ON zur_flow_runs (started_at, id)`,
+      `CREATE INDEX IF NOT EXISTS zur_flow_runs_flow ON zur_flow_runs (flow_id, started_at, id)`,
+      `CREATE INDEX IF NOT EXISTS zur_flow_runs_resume ON zur_flow_runs (resume_at) WHERE status = 'waiting'`,
+      // "Is this flow busy?" reads its open runs only, not its whole history.
+      `CREATE INDEX IF NOT EXISTS zur_flow_runs_open ON zur_flow_runs (flow_id) WHERE status IN ('running', 'waiting')`,
+      // The history's size, kept by triggers so trimming it reads one row, never the table.
+      `INSERT INTO zur_counts (kind, n) VALUES ('flow_runs', 0) ON CONFLICT (kind) DO NOTHING`,
+      `CREATE TRIGGER IF NOT EXISTS zur_counts_flow_runs_insert AFTER INSERT ON zur_flow_runs BEGIN UPDATE zur_counts SET n = n + 1 WHERE kind = 'flow_runs'; END`,
+      `CREATE TRIGGER IF NOT EXISTS zur_counts_flow_runs_delete AFTER DELETE ON zur_flow_runs BEGIN UPDATE zur_counts SET n = n - 1 WHERE kind = 'flow_runs'; END`,
+      // The caps of the day (500 runs, 3,000 Neurons) read one row: kept by triggers per UTC day of the run's start.
+      `CREATE TABLE IF NOT EXISTS zur_flow_days (
+        day TEXT PRIMARY KEY,
+        runs INTEGER NOT NULL DEFAULT 0,
+        neurons REAL NOT NULL DEFAULT 0
+      )`,
+      `CREATE TRIGGER IF NOT EXISTS zur_flow_days_insert AFTER INSERT ON zur_flow_runs BEGIN
+        INSERT INTO zur_flow_days (day, runs, neurons) VALUES (substr(NEW.started_at, 1, 10), NEW.status != 'skipped', NEW.neurons)
+        ON CONFLICT (day) DO UPDATE SET runs = runs + excluded.runs, neurons = neurons + excluded.neurons;
+      END`,
+      `CREATE TRIGGER IF NOT EXISTS zur_flow_days_update AFTER UPDATE OF status, neurons ON zur_flow_runs BEGIN
+        UPDATE zur_flow_days SET runs = runs + (NEW.status != 'skipped') - (OLD.status != 'skipped'), neurons = neurons + NEW.neurons - OLD.neurons
+        WHERE day = substr(OLD.started_at, 1, 10);
+      END`,
+      // What the site monitor last saw of each address: only status and time, never the page.
+      `CREATE TABLE IF NOT EXISTS zur_flow_sites (
+        flow_id TEXT NOT NULL,
+        url TEXT NOT NULL,
+        state TEXT NOT NULL DEFAULT 'unknown' CHECK (state IN ('up', 'down', 'unknown')),
+        status INTEGER,
+        ms INTEGER,
+        failures INTEGER NOT NULL DEFAULT 0,
+        since TEXT,
+        checked_at TEXT,
+        PRIMARY KEY (flow_id, url)
+      )`,
+      // The Flows tab follows this number; a run moves it through its flow's row, a site only when it goes up or down.
+      `ALTER TABLE zur_area_versions ADD COLUMN flows INTEGER NOT NULL DEFAULT 0`,
+      ...areaTriggers("flows", "zur_flows", "OF name, definition, enabled, next_run, last_run_at, last_run_status, failures"),
+      ...areaTriggers("flows", "zur_flow_connections"),
+      ...areaTriggers("flows", "zur_flow_sites", "OF state"),
+    ],
+  },
 ];
 
 /** The three triggers that move an area's number when a row of `table` is added, changed or removed. Frozen: migration 21 is built from it. */

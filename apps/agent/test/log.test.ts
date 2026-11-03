@@ -57,7 +57,8 @@ describe("log line shape", () => {
 });
 
 describe("nothing personal or secret reaches the log", () => {
-  const forbidden = ["dono@exemplo.com.br", "203.0.113.9", "2001:db8::1", "123456789", "zur_pat_abc123", "senha-secreta", "minha nota"];
+  // Phone numbers too (step 22a: the flows carry contact data).
+  const forbidden = ["dono@exemplo.com.br", "203.0.113.9", "2001:db8::1", "123456789", "zur_pat_abc123", "senha-secreta", "minha nota", "+55 11 98765-4321", "5511987654321"];
 
   it("keeps only the error's name, never its message or stack", () => {
     for (const text of forbidden) {
@@ -80,6 +81,8 @@ describe("nothing personal or secret reaches the log", () => {
     expect(route("https://h/api/tasks/dono@exemplo.com.br")).toBe("PATCH /api/tasks/:id");
     expect(route("https://h/api/tasks/203.0.113.9")).toBe("PATCH /api/tasks/:id");
     expect(route("https://h/api/tasks/Pablo%20Silva")).toBe("PATCH /api/tasks/:id");
+    expect(route("https://h/api/flows/+5511987654321")).toBe("PATCH /api/flows/:id");
+    expect(route("https://h/api/flows/%2B55%2011%2098765-4321/run")).toBe("PATCH /api/flows/:id/run");
     expect(route(`https://h/${"api/".repeat(20)}`)).toBe(`PATCH /${"api/".repeat(8)}…`);
     // Plain words that are not route words are chosen by whoever typed the URL.
     expect(route("https://h/api/senha-secreta")).toBe("PATCH /api/:id");

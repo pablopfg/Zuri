@@ -119,5 +119,40 @@ export async function seed(page: Page, base: string): Promise<{ conversationId: 
     const opened = await page.request.patch(`${base}/api/google/calendars/${encodeURIComponent(id)}`, { headers: CSRF, data: { mode } });
     if (!opened.ok()) throw new Error(`/api/google/calendars: ${opened.status()}`);
   }
+  // Flows (step 22a): over loopback the Worker answers *.exemplo.com.br itself (apps/agent/src/flows/dev-flows.ts),
+  // with fora.exemplo.com.br down and a small client list at api.exemplo.com.br.
+  const monitor = await post("/api/flows", {
+    name: "Sites da loja",
+    definition: {
+      version: 1,
+      trigger: { type: "schedule", schedule: { type: "interval", minutes: 15 } },
+      nodes: [{ type: "monitor", sites: ["https://loja.exemplo.com.br/", "https://blog.exemplo.com.br/", "https://fora.exemplo.com.br/"] }],
+    },
+  });
+  await post(`/api/flows/${(monitor as unknown as { flow: { id: string } }).flow.id}/run`, {});
+  const on = await page.request.patch(`${base}/api/flows/${(monitor as unknown as { flow: { id: string } }).flow.id}`, { headers: CSRF, data: { enabled: true } });
+  if (!on.ok()) throw new Error(`/api/flows: ${on.status()}`);
+  const crm = (await post("/api/flows/connections", {
+    name: "CRM da clínica",
+    origin: "https://api.exemplo.com.br",
+    methods: ["GET", "PATCH"],
+    paths: ["/v1/clientes"],
+    auth: "bearer",
+    headerName: null,
+    credential: "token-de-exemplo-123",
+  })) as unknown as { connection: { id: string } };
+  const proposals = (await post("/api/flows", {
+    name: "Propostas em aberto",
+    definition: {
+      version: 1,
+      trigger: { type: "schedule", schedule: { type: "weekly", days: [1, 2, 3, 4, 5], time: "09:00" } },
+      nodes: [
+        { type: "request", connection: crm.connection.id, method: "GET", path: "/v1/clientes", body: "none", each: false, itemsPath: "data" },
+        { type: "filter", match: "all", rules: [{ field: "etapa", op: "eq", value: "proposta" }] },
+        { type: "notify", title: "Proposta de {{nome}}", body: "Valor: {{valor}}", priority: "normal", each: true },
+      ],
+    },
+  })) as unknown as { flow: { id: string } };
+  await post(`/api/flows/${proposals.flow.id}/run`, {});
   return { conversationId };
 }

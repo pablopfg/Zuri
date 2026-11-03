@@ -35,6 +35,7 @@ export {
   ptBRLive,
   ptBRAgenda,
   ptBRContacts,
+  ptBRFlows,
   t,
 } from "../i18n/index.ts";
 export { AGENT_INSTANCE_NAME } from "./constants.ts";
@@ -139,3 +140,5 @@ export * from "./google-schemas.ts";
 export * from "./areas.ts";
 export * from "./contacts.ts";
 export * from "./contacts-schemas.ts";
+export * from "./flows.ts";
+export * from "./flows-schemas.ts";

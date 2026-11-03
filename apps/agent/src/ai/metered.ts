@@ -7,7 +7,7 @@ import type { AgentEvent, AIProvider, GenerateRequest, ModelMessage, ProviderToo
 import { classifyAiError, estimateTokens, isAbort, isSwitchable } from "./provider.ts";
 import type { Embedder } from "../semantic/embedder.ts";
 import { base64Bytes, estimatedSeconds, type Transcriber } from "./transcription.ts";
-import type { AiLimits, Reservation, UsageMeter } from "./usage.ts";
+import { type AiLimits, type Reservation, stepNeurons, type UsageMeter } from "./usage.ts";
 
 const UTF8 = new TextEncoder();
 
@@ -22,7 +22,15 @@ export function estimateEmbeddingTokens(text: string): number {
 }
 
 /** What a caller passes: the metering hooks belong to this wrapper. */
-export type MeteredRequest = Omit<GenerateRequest, "onStepUsage" | "reserveNextStep">;
+export type MeteredRequest = Omit<GenerateRequest, "onStepUsage" | "reserveNextStep"> & {
+  /**
+   * A caller's own share of the day (the flows' 3,000 Neurons, step 22a): a call
+   * whose estimate passes it is refused with AI_LIMIT_REACHED before it runs.
+   */
+  maxNeurons?: number;
+  /** Told the Neurons of each model call once it is settled, so the caller can count its share. */
+  onNeurons?: (neurons: number) => void;
+};
 export type MeteredToolRequest = Omit<ToolRequest, "onStepUsage" | "reserveNextStep">;
 
 /**
@@ -204,7 +212,8 @@ export class MeteredAI {
       let outcome: Outcome = "error";
       let failure: AppError | null = null;
       try {
-        const result = await provider.generate({ ...clean, signal: call.signal, maxOutputTokens: turn.maxOutputTokens, onStepUsage: turn.onStepUsage });
+        const { maxNeurons: _max, onNeurons: _on, ...request } = clean;
+      const result = await provider.generate({ ...request, signal: call.signal, maxOutputTokens: turn.maxOutputTokens, onStepUsage: turn.onStepUsage });
         outcome = call.outcome();
         if (outcome === "error") throw timeout();
         this.chain.breaker.succeeded(provider);
@@ -418,6 +427,10 @@ export class MeteredAI {
       inputTokens: estimateTokens(req.system.length + JSON.stringify(req.messages).length + extraChars),
       maxOutputTokens,
     };
+    if (req.maxNeurons !== undefined && call.billable) {
+      const estimate = stepNeurons({ model: call.model, billable: true, input: { reported: 0, estimated: call.inputTokens }, output: { reported: 0, estimated: maxOutputTokens } });
+      if (estimate > req.maxNeurons) throw new AppError("AI_LIMIT_REACHED", "error.aiLimit.neurons", { limit: req.maxNeurons });
+    }
     const first = this.meter.reserveChat(call, limits);
     const reservations: Reservation[] = [first];
     const day = first.day;
@@ -430,6 +443,7 @@ export class MeteredAI {
         if (settled >= reservations.length) reservations.push(reservation);
         settled++;
         this.meter.settle(reservation, usage);
+        req.onNeurons?.(stepNeurons(usage));
       },
       reserveNextStep: (inputTokens = 0): boolean => {
         try {

@@ -55,6 +55,12 @@ import { McpService, OAUTH_CALLBACK_PATH } from "../mcp/service.ts";
 import { developmentGoogle, developmentGoogleNetwork } from "../google/dev-google.ts";
 import { GoogleCalendar } from "../google/service.ts";
 import { type ContactNotice, GoogleContacts } from "../google/contacts.ts";
+import { FlowConnections } from "../flows/connections.ts";
+import { developmentFlowNetwork } from "../flows/dev-flows.ts";
+import { SiteStates } from "../flows/monitor.ts";
+import { type FlowNotice, FlowService } from "../flows/service.ts";
+import { McpCredentials } from "../mcp/credentials.ts";
+import { dohResolver } from "../mcp/url.ts";
 import { ALL_TOOLS } from "../tools/index.ts";
 import type { ToolContext } from "../tools/registry.ts";
 import { AgentRunner } from "./runner.ts";
@@ -116,6 +122,8 @@ interface Store {
   google: GoogleCalendar;
   /** The read-only copy of the Google contacts (step 19b). */
   contacts: GoogleContacts;
+  /** The flows and the site monitor (step 22a). */
+  flows: FlowService;
 }
 
 /**
@@ -195,6 +203,7 @@ export class ZuriAgent extends Agent<WorkerEnv> {
       rearm: () => this.store.automations.rearm(),
     }),
     mcp: () => ({ service: this.store.mcp, auth: this.store.auth, automations: this.store.automations }),
+    flows: () => ({ flows: this.store.flows, connections: this.store.flows.connections, auth: this.store.auth, development: () => this.development() }),
     google: () => ({
       google: this.store.google,
       contacts: this.store.contacts,
@@ -253,6 +262,8 @@ export class ZuriAgent extends Agent<WorkerEnv> {
       const { interrupted } = await this.store.automations.reconcile();
       this.#armed = true;
       if (interrupted > 0) log("warn", "automation_interrupted", { count: interrupted });
+      const cut = this.store.flows.reconcile();
+      if (cut > 0) log("warn", "flow_interrupted", { count: cut });
     } catch (error) {
       log("error", "automation_reconcile_failed", { error });
     }
@@ -311,6 +322,12 @@ export class ZuriAgent extends Agent<WorkerEnv> {
       if (await this.store.contacts.tick()) await automations.rearm();
     } catch (error) {
       log("error", "google_alarm_failed", { error });
+    }
+    // The flows (step 22a): waiting runs go on, then the ones due; the alarm is set again inside.
+    try {
+      await this.store.flows.tick();
+    } catch (error) {
+      log("error", "flow_failed", { error });
     }
     await alerts.settled();
   }
@@ -560,7 +577,15 @@ export class ZuriAgent extends Agent<WorkerEnv> {
               return null;
             }
           })();
-          const due = [tries, watch, indexing, tools, channels, people].filter((at): at is string => Boolean(at)).sort()[0] ?? watch;
+          // The flows' runs and waits (step 22a).
+          const flowsDue = (() => {
+            try {
+              return flows.nextDue();
+            } catch {
+              return null;
+            }
+          })();
+          const due = [tries, watch, indexing, tools, channels, people, flowsDue].filter((at): at is string => Boolean(at)).sort()[0] ?? watch;
           // Work already past due is only left there when its step failed on the last
           // alarm (a full disk, say): wait a minute before trying again, never at once,
           // so a step that keeps failing can't spin the alarm through the day's quota.
@@ -630,6 +655,25 @@ export class ZuriAgent extends Agent<WorkerEnv> {
           productivity.tasks.create({ title: t(this.locale(), "contacts.task.title", { name }).slice(0, 200), dueAt });
         },
       });
+      // The flows (step 22a): only the screen changes them; their calls go only to the connections the owner registered.
+      const flowFetch = ((input: RequestInfo | URL, init?: RequestInit) => fetch(input, init)) as typeof fetch;
+      const flows = new FlowService(
+        {
+          db,
+          connections: new FlowConnections(db, new McpCredentials(env.MCP_CREDENTIAL_KEY, "flows-v1")),
+          sites: new SiteStates(db),
+          timeZone: () => settings.field("timeZone"),
+          development: () => this.development(),
+          publicHost: () => this.publicUrl().hostname,
+          ai: () => this.ai(),
+          lockdown: () => auth.lockdown.active(),
+          rearm: () => automations.rearm(),
+          notify: (notice) => flowNotice(alerts, diagnostics, notice, this.locale()),
+        },
+        { fetch: flowFetch, resolve: dohResolver(flowFetch) },
+      );
+      // Local development never reaches a real site (src/flows/dev-flows.ts).
+      if (this.development()) flows.network = developmentFlowNetwork(flows.network);
       // The owner's conversation in the bot (step 14): the same runner, meter and turns as the app.
       const telegramConversation = new TelegramConversation({
         db,
@@ -715,6 +759,7 @@ export class ZuriAgent extends Agent<WorkerEnv> {
         healthy: () => this.healthy(),
         aiAvailable: () => usage.room(this.aiLimits()).neurons > 0,
         mcpSignIn: () => mcp.needingSignIn(),
+        flows: () => flows.summary(),
         calendar: google,
         buttons: commandButtons,
         state,
@@ -755,7 +800,7 @@ export class ZuriAgent extends Agent<WorkerEnv> {
         // Local development never reaches Telegram (src/telegram/dev-telegram.ts).
         ...(this.development() ? { fetcher: developmentTelegramFetcher as typeof fetch } : {}),
       });
-      this.#store = { db, settings, auth, productivity, memories, usage, conversations, actions, plans, automations, alerts, watchers, diagnostics, push, telegram, telegramConversation, semantic, mcp, google, contacts };
+      this.#store = { db, settings, auth, productivity, memories, usage, conversations, actions, plans, automations, alerts, watchers, diagnostics, push, telegram, telegramConversation, semantic, mcp, google, contacts, flows };
     }
     return this.#store;
   }
@@ -819,6 +864,36 @@ export class ZuriAgent extends Agent<WorkerEnv> {
   /** No WebSocket clients: close anything that ever gets this far. */
   override onConnect(connection: { close(code?: number, reason?: string): void }): void {
     connection.close(1008, "WebSockets are not supported");
+  }
+}
+
+/** What a flow tells the owner (step 22a): notices; a failure also goes to Diagnostics, by its code only. */
+function flowNotice(alerts: AlertService, diagnostics: DiagnosticsService, notice: FlowNotice, locale: Locale): void {
+  const source = `flow:${notice.flowId}`;
+  switch (notice.kind) {
+    case "step":
+      alerts.raise({ kind: "flow.notice", category: "routines", priority: notice.priority, params: { title: notice.title }, body: notice.body || null, source, link: "/automacoes/fluxos" });
+      return;
+    case "site": {
+      const { change } = notice;
+      const status = change.status === null ? t(locale, "notice.flow.noAnswer") : String(change.status);
+      alerts.raise({
+        kind: change.state === "down" ? "flow.siteDown" : "flow.siteUp",
+        category: "system",
+        priority: change.state === "down" ? "high" : "normal",
+        params: { host: change.host, name: notice.flowName, status },
+        source,
+        link: "/automacoes/fluxos",
+      });
+      return;
+    }
+    case "failed":
+      diagnostics.record({ source: "automation", code: notice.problem, errorName: "FlowRun" });
+      alerts.raise({ kind: "flow.failed", category: "system", priority: "normal", params: { name: notice.flowName }, source, link: "/automacoes/fluxos", dedupeKey: `flow-failed:${notice.flowId}`, dedupeMs: 6 * 3_600_000 });
+      return;
+    case "paused":
+      alerts.raise({ kind: "flow.paused", category: "system", priority: "high", params: { name: notice.flowName }, source, link: "/automacoes/fluxos" });
+      return;
   }
 }
 

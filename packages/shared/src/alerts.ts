@@ -52,6 +52,11 @@ export const NOTICE_KINDS = [
   "contacts.scope",
   "contacts.too_many",
   "contacts.unavailable",
+  "flow.notice",
+  "flow.siteDown",
+  "flow.siteUp",
+  "flow.failed",
+  "flow.paused",
   "security",
 ] as const;
 export type NoticeKind = (typeof NOTICE_KINDS)[number];
@@ -84,6 +89,8 @@ export const SECURITY_ALERT_EVENTS = [
   "mcp_server_added",
   "mcp_server_changed",
   "mcp_tool_autonomy",
+  "flow_connection_added",
+  "flow_connection_changed",
   "google_connected",
   "google_calendar_write",
   "setup_failure",
@@ -301,7 +308,7 @@ export interface AlertOverview {
 }
 
 /** Pages of the app a notice may open. Anything else is dropped: a notice never carries an address someone else chose. */
-export const NOTICE_LINKS = ["/tarefas", "/automacoes", "/configuracoes/ia", "/configuracoes/diagnostico", "/configuracoes/avisos", "/configuracoes/seguranca", "/acessos", "/configuracoes/integracoes", "/contatos"] as const;
+export const NOTICE_LINKS = ["/tarefas", "/automacoes", "/configuracoes/ia", "/configuracoes/diagnostico", "/configuracoes/avisos", "/configuracoes/seguranca", "/acessos", "/configuracoes/integracoes", "/contatos", "/automacoes/fluxos"] as const;
 export type NoticeLink = (typeof NOTICE_LINKS)[number];
 
 export const noticeCursorSchema = /* @__PURE__ */ z.string().regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z\|[0-9a-f-]{36}$/);

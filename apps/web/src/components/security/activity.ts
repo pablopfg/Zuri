@@ -42,6 +42,8 @@ export const KIND_LABEL: Record<AuthEventKind, MessageKey> = {
   telegram_routines_paused: "web.activity.kind.telegram_routines_paused",
   lockdown_exited: "web.activity.kind.lockdown_exited",
   mcp_server_added: "web.activity.kind.mcp_server_added",
+  flow_connection_added: "web.activity.kind.flow_connection_added",
+  flow_connection_changed: "web.activity.kind.flow_connection_changed",
   mcp_server_changed: "web.activity.kind.mcp_server_changed",
   mcp_tool_autonomy: "web.activity.kind.mcp_tool_autonomy",
   google_connected: "web.activity.kind.google_connected",
