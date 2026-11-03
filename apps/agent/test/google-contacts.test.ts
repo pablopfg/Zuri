@@ -315,6 +315,56 @@ describe("the sync", () => {
     }));
 });
 
+describe("the copy's edges", () => {
+  it("keeps five e-mails and five dates, skips a nameless field and reads a broken row as empty", () =>
+    withChatWorld(async (world) => {
+      add(world, "c1", "Ana", [CLIENTS], {
+        emailAddresses: Array.from({ length: 7 }, (_, i) => ({ value: `ana${i}@exemplo.com.br` })),
+        events: Array.from({ length: 7 }, (_, i) => ({ date: { month: 1, day: i + 1 }, formattedType: `D${i}` })),
+        userDefined: [{ key: "", value: "sem nome" }, { key: "Plano", value: "Mensal" }],
+      });
+      await turnOn(world);
+      const [first] = world.contacts.search({ limit: 5 }).contacts;
+      const whole = world.contacts.get(first?.id ?? "");
+      expect(whole?.emails).toHaveLength(CONTACT_LIMITS.emails);
+      expect(whole?.dates).toHaveLength(CONTACT_LIMITS.dates);
+      expect(whole?.fields).toEqual([{ label: "Plano", value: "Mensal" }]);
+      world.db.run(`UPDATE zur_contacts SET data = '{' WHERE id = ?`, first?.id ?? "");
+      expect(world.contacts.get(first?.id ?? "")).toMatchObject({ phones: [], emails: [], notes: "", fields: [] });
+    }));
+
+  it("pages the screen's list by name and id", () =>
+    withChatWorld(async (world) => {
+      for (const [id, name] of [["c1", "Ana"], ["c2", "Bia"], ["c3", "Caio"]] as const) add(world, id, name, [CLIENTS]);
+      await turnOn(world);
+      const first = world.contacts.search({ limit: 2 });
+      expect(first.contacts.map((contact) => contact.name)).toEqual(["Ana", "Bia"]);
+      const rest = world.contacts.search({ limit: 2, after: first.next ?? "" });
+      expect(rest.contacts.map((contact) => contact.name)).toEqual(["Caio"]);
+      expect(rest.next).toBeNull();
+    }));
+
+  it("stops at the calls of its budget and goes on in the next wake", () =>
+    withChatWorld(async (world) => {
+      add(world, "c1", "Ana", [CLIENTS]);
+      await turnOn(world, []);
+      world.contacts.select([CLIENTS]);
+      expect(await world.contacts.sync("alarm", new GoogleMeter(1))).toBe("partial");
+      expect(sync(world).next_sync).toBe(world.clock.now);
+      expect(await world.contacts.sync("alarm")).toBe("ok");
+      expect(names(world)).toEqual(["Ana"]);
+    }));
+
+  it("refuses to pick labels and stays quiet in the alarm while off", () =>
+    withChatWorld(async (world) => {
+      expect(() => world.contacts.select([CLIENTS])).toThrow();
+      expect(await world.contacts.tick()).toBe(false);
+      expect(world.contacts.count()).toBe(0);
+      world.contacts.remind();
+      expect(world.contactNotices).toEqual([]);
+    }));
+});
+
 describe("the sync's failures", () => {
   it("marks the account when Google refuses the access (invalid_grant) and waits for the owner", () =>
     withChatWorld(async (world) => {
@@ -516,6 +566,40 @@ describe("search_contacts and get_contact", () => {
       await expect(exec.execute("search_contacts", { label: "Família" }, "c1")).rejects.toThrow(ToolError);
       await expect(exec.execute("get_contact", { id: "00000000-0000-4000-8000-000000000000" }, "c2")).rejects.toThrow(/isn't in the copy/);
       await expect(exec.execute("search_contacts", { limit: 11 }, "c3")).rejects.toThrow(ToolError);
+    }));
+
+  it("find a label by part of its name, read a whole contact and a nameless one, and say when there are more", () =>
+    withChatWorld(async (world) => {
+      add(world, "c1", "Ana Souza", [CLIENTS], {
+        nicknames: [{ value: "Aninha" }],
+        phoneNumbers: [{ value: "(11) 99999-0001" }],
+        emailAddresses: [{ value: "ana@exemplo.com.br" }],
+        birthdays: [{ date: { year: 1990, month: 3, day: 9 } }],
+        events: [{ date: { month: 12, day: 15 }, formattedType: "Retorno" }],
+        organizations: [{ name: "Padaria Central", title: "Gerente" }],
+        biographies: [{ value: "Prefere mensagem." }],
+        userDefined: [{ key: "Plano", value: "Mensal" }],
+      });
+      world.googleSim.people.add({ resourceName: "people/c2", memberships: member(CLIENTS) });
+      await turnOn(world);
+      const exec = executor(world);
+      const page = await exec.execute("search_contacts", { label: "client", limit: 1 }, "c1");
+      expect(page).toContain('"more":true');
+      const all = await exec.execute("search_contacts", { label: "Clientes" }, "c2");
+      expect(all).toContain('"name":"(no name)"');
+      expect(all).toContain('"email":"ana@exemplo.com.br"');
+      expect(all).toContain('"birthday":"03-09"');
+      const ids = [...all.matchAll(/"id":"([0-9a-f-]{36})"/g)].map((match) => match[1] ?? "");
+      const whole = await Promise.all(ids.map((id, i) => exec.execute("get_contact", { id }, `g${i}`)));
+      const ana = whole.find((text) => text.includes("Ana Souza")) ?? "";
+      for (const piece of ['"nickname":"Aninha"', '"birthday":"1990-03-09"', '"label":"Retorno"', '"company":"Padaria Central"', '"job_title":"Gerente"', '"notes":"Prefere mensagem."', '"fields":[{"label":"Plano","value":"Mensal"}]']) {
+        expect(ana).toContain(piece);
+      }
+      const nameless = whole.find((text) => text.includes("(no name)")) ?? "";
+      expect(nameless).not.toContain('"notes"');
+      // Off, the tools are gone.
+      world.contacts.disable();
+      await expect(exec.execute("get_contact", { id: ids[0] ?? "" }, "g9")).rejects.toThrow(/not available/);
     }));
 
   it("find today's birthdays for a routine", () =>
