@@ -6,6 +6,11 @@
 // - the "etapas N de T" badge, "A Zuri sai em T etapas", "As etapas 0 a X" and
 //   the "In English" sentence "in T steps; steps 0 to X are merged".
 //
+// The version badge (pedido do Pablo, 03/11/2026) needs no rewrite: shields.io
+// reads the newest tag among the releases and pre-releases that the Versão
+// workflow publishes, so it follows every merge by itself. This script only
+// checks that it is still there, so a pull request cannot drop it again.
+//
 // The source is the stage table of .claude/memoria/progresso.md, which each
 // stage pull request updates, plus the pull requests on GitHub: an open one
 // from feat/etapa-NN-… marks the stage as in progress, and a merged one turns
@@ -34,6 +39,12 @@ export const README_BRANCH = "chore/readme-automatico";
 export const README_TITLE = "docs(readme): atualiza o estado das etapas (automático)";
 export const MAP_START = /<!-- inicio:etapas\b[^>]*-->\n/;
 export const MAP_END = "<!-- fim:etapas -->";
+/**
+ * The version badge: the newest tag by SemVer, pre-releases included (all of 0.x
+ * is pre-release), linked to the releases page.
+ */
+export const VERSION_BADGE =
+  "[![Versão](https://img.shields.io/github/v/release/pablopfg/Zuri?include_prereleases&sort=semver&display_name=tag&label=vers%C3%A3o)](https://github.com/pablopfg/Zuri/releases)";
 
 export type Status = "done" | "doing" | "todo";
 export const STATUS_MARK: Record<Status, string> = { done: "✅", doing: "🚧", todo: "⬜" };
@@ -140,6 +151,7 @@ function replaceOnce(text: string, pattern: RegExp, replacement: string, what: s
 
 /** README.md with the map, the badge and the counts recomputed. */
 export function renderReadme(readme: string, progress: Progress, prs: readonly StagePullRequest[] = []): string {
+  if (!readme.includes(VERSION_BADGE)) throw new Error(`${README}: the version badge not found (${VERSION_BADGE})`);
   const { text, rows } = renderMap(readme, (id) => stageStatus(id, progress, prs));
   const done = rows.filter((r) => r.status === "done").length;
   const total = rows.length;
