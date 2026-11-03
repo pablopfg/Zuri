@@ -20,6 +20,7 @@ import { NOON } from "./ai-fakes.ts";
 import { testEnv } from "./helpers.ts";
 import { type DevGoogle, devGoogle, googleNetwork } from "../src/google/dev-google.ts";
 import { GoogleCalendar } from "../src/google/service.ts";
+import { type ContactNotice, GoogleContacts } from "../src/google/contacts.ts";
 
 export const TIME_ZONE = "America/Sao_Paulo";
 
@@ -44,6 +45,10 @@ export interface ChatWorld {
   /** The Google Calendar (step 19), answered by `googleSim` with its sample calendars. */
   google: GoogleCalendar;
   googleSim: DevGoogle;
+  /** The Google contacts' copy (step 19b), on the same connection; its notices and tasks land in the lists below. */
+  contacts: GoogleContacts;
+  contactNotices: ContactNotice[];
+  contactTasks: { name: string; dueAt: string }[];
   /** The tools' context for a conversation (the chat), or for a scheduled run. */
   ctx(conversationId: string | null, mode?: ToolContext["mode"]): ToolContext;
   services(): Omit<ToolContext, "conversationId" | "mode" | "timeZone">;
@@ -119,7 +124,17 @@ export function withChatWorld<T>(fn: (world: ChatWorld) => T | Promise<T>): Prom
       clock: tick,
     });
     google.network = googleNetwork(googleSim, { fetch: () => Promise.reject(new Error("no network in tests")) });
-    const services = () => ({ db, productivity, memories, conversations, plans, actions, automations, mcpService: mcp, calendar: google });
+    const contactNotices: ContactNotice[] = [];
+    const contactTasks: { name: string; dueAt: string }[] = [];
+    const contacts = new GoogleContacts({
+      db,
+      google,
+      timeZone: () => world.settings.timeZone,
+      notify: (notice) => contactNotices.push(notice),
+      createTask: (name, dueAt) => contactTasks.push({ name, dueAt }),
+      clock: tick,
+    });
+    const services = () => ({ db, productivity, memories, conversations, plans, actions, automations, mcpService: mcp, calendar: google, contacts });
     const world: ChatWorld = {
       db,
       productivity,
@@ -136,6 +151,9 @@ export function withChatWorld<T>(fn: (world: ChatWorld) => T | Promise<T>): Prom
       mcpLockdown,
       google,
       googleSim,
+      contacts,
+      contactNotices,
+      contactTasks,
       services,
       ctx: (conversationId, mode = "chat") => ({ ...services(), timeZone: TIME_ZONE, mode, conversationId }),
       ai: (provider) =>

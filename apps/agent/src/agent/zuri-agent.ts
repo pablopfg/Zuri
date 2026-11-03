@@ -54,6 +54,7 @@ import { McpMeaning } from "../mcp/meaning.ts";
 import { McpService, OAUTH_CALLBACK_PATH } from "../mcp/service.ts";
 import { developmentGoogle, developmentGoogleNetwork } from "../google/dev-google.ts";
 import { GoogleCalendar } from "../google/service.ts";
+import { type ContactNotice, GoogleContacts } from "../google/contacts.ts";
 import { ALL_TOOLS } from "../tools/index.ts";
 import type { ToolContext } from "../tools/registry.ts";
 import { AgentRunner } from "./runner.ts";
@@ -113,6 +114,8 @@ interface Store {
   mcp: McpService;
   /** The Google Calendar (step 19). */
   google: GoogleCalendar;
+  /** The read-only copy of the Google contacts (step 19b). */
+  contacts: GoogleContacts;
 }
 
 /**
@@ -192,7 +195,13 @@ export class ZuriAgent extends Agent<WorkerEnv> {
       rearm: () => this.store.automations.rearm(),
     }),
     mcp: () => ({ service: this.store.mcp, auth: this.store.auth, automations: this.store.automations }),
-    google: () => ({ google: this.store.google, auth: this.store.auth, timeZone: () => this.store.settings.field("timeZone") }),
+    google: () => ({
+      google: this.store.google,
+      contacts: this.store.contacts,
+      auth: this.store.auth,
+      timeZone: () => this.store.settings.field("timeZone"),
+      rearm: () => this.store.automations.rearm(),
+    }),
     telegram: () => ({
       telegram: this.store.telegram,
       auth: this.store.auth,
@@ -214,8 +223,8 @@ export class ZuriAgent extends Agent<WorkerEnv> {
   }
 
   private toolServices(): Omit<ToolContext, "conversationId" | "mode" | "timeZone"> {
-    const { db, productivity, memories, conversations, plans, actions, automations, semantic, mcp, google } = this.store;
-    return { db, productivity, memories, conversations, plans, actions, automations, semantic, mcpService: mcp, calendar: google };
+    const { db, productivity, memories, conversations, plans, actions, automations, semantic, mcp, google, contacts } = this.store;
+    return { db, productivity, memories, conversations, plans, actions, automations, semantic, mcpService: mcp, calendar: google, contacts };
   }
 
   /** How an automation runs: reminders and the digest without AI, routines through the runner. */
@@ -292,6 +301,12 @@ export class ZuriAgent extends Agent<WorkerEnv> {
     // The Google Calendar's push channels (step 19): the open calendars' channels opened or renewed, a few per wake.
     try {
       await this.store.google.renewWatches();
+    } catch (error) {
+      log("error", "google_alarm_failed", { error });
+    }
+    // The contacts' hourly sync and the notice of the day (step 19b).
+    try {
+      await this.store.contacts.tick();
     } catch (error) {
       log("error", "google_alarm_failed", { error });
     }
@@ -534,7 +549,16 @@ export class ZuriAgent extends Agent<WorkerEnv> {
               return null;
             }
           })();
-          const due = [tries, watch, indexing, tools, channels].filter((at): at is string => Boolean(at)).sort()[0] ?? watch;
+          // The contacts' sync and notices (step 19b).
+          const people = (() => {
+            try {
+              const at = contacts.nextDue();
+              return at === null ? null : new Date(at).toISOString();
+            } catch {
+              return null;
+            }
+          })();
+          const due = [tries, watch, indexing, tools, channels, people].filter((at): at is string => Boolean(at)).sort()[0] ?? watch;
           // Work already past due is only left there when its step failed on the last
           // alarm (a full disk, say): wait a minute before trying again, never at once,
           // so a step that keeps failing can't spin the alarm through the day's quota.
@@ -594,6 +618,16 @@ export class ZuriAgent extends Agent<WorkerEnv> {
       });
       // Local development never reaches Google (src/google/dev-google.ts).
       if (this.development()) google.network = developmentGoogleNetwork(developmentGoogle(env.GOOGLE_CLIENT_ID, env.GOOGLE_CLIENT_SECRET));
+      // The copy of the Google contacts (step 19b), on the same connection; its notices go to the center.
+      const contacts = new GoogleContacts({
+        db,
+        google,
+        timeZone: () => settings.field("timeZone"),
+        notify: (notice) => contactNotice(alerts, notice),
+        createTask: (name, dueAt) => {
+          productivity.tasks.create({ title: t(this.locale(), "contacts.task.title", { name }).slice(0, 200), dueAt });
+        },
+      });
       // The owner's conversation in the bot (step 14): the same runner, meter and turns as the app.
       const telegramConversation = new TelegramConversation({
         db,
@@ -627,7 +661,7 @@ export class ZuriAgent extends Agent<WorkerEnv> {
       const telegramApprovals = new TelegramApprovals({
         actions: () => actions,
         tools: ALL_TOOLS,
-        toolContext: (conversationId) => ({ db, productivity, memories, conversations, plans, actions, automations, calendar: google, timeZone: settings.field("timeZone"), mode: "chat", conversationId }),
+        toolContext: (conversationId) => ({ db, productivity, memories, conversations, plans, actions, automations, calendar: google, contacts, timeZone: settings.field("timeZone"), mode: "chat", conversationId }),
         buttons: commandButtons,
         locale: () => this.locale(),
         hour: (ms) => telegramHour(ms, this.locale(), settings.field("timeZone")),
@@ -719,7 +753,7 @@ export class ZuriAgent extends Agent<WorkerEnv> {
         // Local development never reaches Telegram (src/telegram/dev-telegram.ts).
         ...(this.development() ? { fetcher: developmentTelegramFetcher as typeof fetch } : {}),
       });
-      this.#store = { db, settings, auth, productivity, memories, usage, conversations, actions, plans, automations, alerts, watchers, diagnostics, push, telegram, telegramConversation, semantic, mcp, google };
+      this.#store = { db, settings, auth, productivity, memories, usage, conversations, actions, plans, automations, alerts, watchers, diagnostics, push, telegram, telegramConversation, semantic, mcp, google, contacts };
     }
     return this.#store;
   }
@@ -783,5 +817,44 @@ export class ZuriAgent extends Agent<WorkerEnv> {
   /** No WebSocket clients: close anything that ever gets this far. */
   override onConnect(connection: { close(code?: number, reason?: string): void }): void {
     connection.close(1008, "WebSockets are not supported");
+  }
+}
+
+/** A notice of the Google contacts (step 19b): names only in the notice itself, never in a log. */
+function contactNotice(alerts: AlertService, notice: ContactNotice): void {
+  const base = { priority: "normal" as const };
+  switch (notice.kind) {
+    case "contacts.birthdays":
+      alerts.raise({
+        ...base,
+        kind: notice.kind,
+        category: "reminders",
+        params: { names: notice.more > 0 ? `${notice.names} (+${notice.more})` : notice.names },
+        link: "/contatos",
+        dedupeKey: `contacts-birthdays-${notice.day}`,
+        dedupeMs: 36 * 3_600_000,
+      });
+      return;
+    case "contacts.dates":
+      alerts.raise({
+        ...base,
+        kind: notice.kind,
+        category: "reminders",
+        params: { items: notice.more > 0 ? `${notice.items} (+${notice.more})` : notice.items, date: `${notice.day.slice(8, 10)}/${notice.day.slice(5, 7)}` },
+        link: "/contatos",
+        dedupeKey: `contacts-dates-${notice.day}`,
+        dedupeMs: 36 * 3_600_000,
+      });
+      return;
+    case "contacts.added":
+      alerts.raise({ ...base, kind: notice.kind, category: "reminders", params: { name: notice.name, label: notice.label }, link: "/contatos" });
+      return;
+    case "contacts.labelGone":
+      alerts.raise({ ...base, kind: notice.kind, category: "system", link: "/configuracoes/integracoes", dedupeKey: "contacts-label-gone", dedupeMs: 3_600_000 });
+      return;
+    case "contacts.problem":
+      if (notice.problem === "reconnect") return;
+      alerts.raise({ ...base, kind: `contacts.${notice.problem}`, category: "system", link: "/configuracoes/integracoes" });
+      return;
   }
 }

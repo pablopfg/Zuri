@@ -25,6 +25,8 @@ const AREA_KEYS: Record<Area, readonly { queryKey: QueryKey; exact?: boolean }[]
   conversations: [{ queryKey: ["conversations"], exact: true }],
   // The Agenda screen and the Google card in Integrations (step 19).
   calendar: [{ queryKey: ["calendar"] }],
+  // The Contacts screen and the contacts in Integrations (step 19b).
+  contacts: [{ queryKey: ["contacts"] }],
 };
 
 const CHANNEL = "zuri-versions";

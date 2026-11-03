@@ -12,6 +12,7 @@ import { VectorStore } from "../src/semantic/store.ts";
 import { unit } from "../src/semantic/vectors.ts";
 import { CSRF, call, HUMAN_TOKEN, ORIGIN, TEST_EMAIL, TEST_PASSWORD, testEnv } from "./helpers.ts";
 import { mcpFixture } from "./mcp-fixture.ts";
+import { withChatWorld } from "./chat-world.ts";
 
 // What each route costs in the units the Free plan bills: rows read and rows
 // written in the object's SQLite (docs/arquitetura/orcamento-free-tier.md). A
@@ -747,4 +748,67 @@ describe("the Free plan budget of each route", () => {
       });
     }
   });
+});
+
+// Step 19b, the plan's section 10: 2,000 contacts at Google, 500 of them in the chosen labels.
+describe("Google contacts (step 19b)", () => {
+  it("the first sync, an hour with nothing new and an hour with ten changes stay within the plan's numbers", () =>
+    withChatWorld(async (world) => {
+      const member = (label: string) => [{ contactGroupMembership: { contactGroupResourceName: label } }];
+      world.googleSim.people.groups.push(
+        { resourceName: "contactGroups/clientes", name: "Clientes", groupType: "USER_CONTACT_GROUP", memberCount: 500 },
+        { resourceName: "contactGroups/outros", name: "Outros", groupType: "USER_CONTACT_GROUP", memberCount: 1500 },
+      );
+      for (let i = 0; i < 2000; i++) {
+        world.googleSim.people.add({
+          resourceName: `people/c${i}`,
+          names: [{ displayName: `Pessoa ${i}` }],
+          phoneNumbers: [{ value: `(11) 9${String(i).padStart(4, "0")}-0000` }],
+          emailAddresses: [{ value: `p${i}@exemplo.com.br` }],
+          birthdays: [{ date: { month: (i % 12) + 1, day: (i % 28) + 1 } }],
+          memberships: member(i < 500 ? "contactGroups/clientes" : "contactGroups/outros"),
+        });
+      }
+      for (const purpose of ["calendar", "contacts"] as const) {
+        const url = new URL(await world.google.begin("sessao", purpose));
+        await world.google.finish({ state: url.searchParams.get("state") ?? "", code: `dev.${url.searchParams.get("code_challenge") ?? ""}` }, "sessao");
+      }
+      world.contacts.enable();
+      await world.contacts.sync("owner");
+      world.contacts.select(["contactGroups/clientes"]);
+      const measure = async () => {
+        const before = { ...world.db.usage };
+        const calls = world.googleSim.seen.length;
+        expect(await world.contacts.sync("alarm")).toBe("ok");
+        return { read: world.db.usage.rowsRead - before.rowsRead, written: world.db.usage.rowsWritten - before.rowsWritten, calls: world.googleSim.seen.length - calls };
+      };
+      const first = await measure();
+      expect(world.contacts.count()).toBe(500);
+      // The labels and two pages of 1,000: well under the 50 subrequests of a wake.
+      expect(first.calls).toBeLessThanOrEqual(4);
+      // Contacts, keys, labels and dates of 500 contacts, with their indexes (plan: ~3,500).
+      expect(first.written).toBeLessThanOrEqual(3_500 * 2);
+      expect(first.read).toBeLessThanOrEqual(5_000);
+      world.clock.now += 3_600_000;
+      const quiet = await measure();
+      // A token renewal after an hour, the labels and one page.
+      expect(quiet.calls).toBeLessThanOrEqual(3);
+      // Nothing changed: the sync's row only (an hourly sync, 24 a day).
+      expect(quiet.written).toBeLessThanOrEqual(10);
+      expect(quiet.read).toBeLessThanOrEqual(30);
+      for (let i = 0; i < 10; i++) world.googleSim.people.update(`people/c${i}`, { names: [{ displayName: `Pessoa ${i} Lima` }] });
+      world.clock.now += 3_600_000;
+      const busy = await measure();
+      expect(busy.calls).toBeLessThanOrEqual(3);
+      // Ten changed contacts of a normal day (the plan: ~100 rows written a day in all).
+      expect(busy.written).toBeLessThanOrEqual(200);
+      expect(busy.read).toBeLessThanOrEqual(200);
+      console.info(JSON.stringify({ first, quiet, busy }));
+      // A search on the screen reads the copy, never Google.
+      const before = { ...world.db.usage };
+      const calls = world.googleSim.seen.length;
+      world.contacts.search({ query: "pessoa 4", limit: 50 });
+      expect(world.googleSim.seen.length).toBe(calls);
+      expect(world.db.usage.rowsRead - before.rowsRead).toBeLessThanOrEqual(1_000);
+    }));
 });

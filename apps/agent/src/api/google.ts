@@ -2,6 +2,10 @@ import {
   AGENDA_LIMITS,
   type AgendaPage,
   calendarModeSchema,
+  CONTACT_LIMITS,
+  contactLabelsSchema,
+  contactSettingsSchema,
+  contactsQuerySchema,
   googleCallbackSchema,
   googleEventCreateSchema,
   googleEventDeleteSchema,
@@ -12,6 +16,7 @@ import type { Context, Hono } from "hono";
 import type { ClientInfo } from "../auth/client.ts";
 import type { AuthService } from "../auth/service.ts";
 import { CHANNEL_ID, GOOGLE_CHANNEL_HEADER, GOOGLE_PUSH_PATH, GOOGLE_STATE_HEADER, GOOGLE_TOKEN_HEADER, isGooglePushToken } from "../gates/google-push.ts";
+import type { GoogleContacts } from "../google/contacts.ts";
 import { toAppError } from "../google/errors.ts";
 import { type EventDraft, eventBody, localInstant, nextDay } from "../google/events.ts";
 import { type GoogleCalendar, GoogleError, GoogleMeter } from "../google/service.ts";
@@ -21,8 +26,12 @@ import { readJson } from "./http.ts";
 
 export interface GoogleRouteDeps {
   google: GoogleCalendar;
+  /** The copy of the Google contacts (step 19b). */
+  contacts: GoogleContacts;
   auth: AuthService;
   timeZone: () => string;
+  /** Sets the shared alarm again (a sync or a notice became due). */
+  rearm: () => Promise<void>;
 }
 
 /** Calls to Google one owner action may make (rule P9): ten calendars, a token renewal and a retry. */
@@ -76,9 +85,14 @@ export function registerGoogleRoutes(app: Hono<ApiEnv>, deps: () => GoogleRouteD
     const input = await readJson(c.req.raw, googleCallbackSchema, 8 * 1024);
     const { google, auth } = deps();
     auth.requireRecentAuth(c.get("session"));
-    const { replaced } = await owner(() => google.finish(input, c.get("session").id));
+    const { replaced, purpose } = await owner(() => google.finish(input, c.get("session").id));
     auth.events.record("google_connected", client(c), { alert: true });
-    return Response.json({ ...google.status(), replaced });
+    if (purpose === "contacts") {
+      // The first read of the labels runs on the next wake of the alarm, set now.
+      deps().contacts.enable();
+      await deps().rearm();
+    }
+    return Response.json({ ...google.status(), replaced, purpose });
   });
 
   app.post("/google/refresh", async () => {
@@ -109,6 +123,73 @@ export function registerGoogleRoutes(app: Hono<ApiEnv>, deps: () => GoogleRouteD
     await google.disconnect();
     if (connected) auth.events.record("google_disconnected", client(c));
     return Response.json({ disconnected: true });
+  });
+
+  // ---------- Google Contacts (step 19b) ----------
+  // Only these routes, with the owner's session, turn the contacts on, pick the labels or change the
+  // notices: no tool, no command of the bot and no remote token reaches them.
+
+  app.get("/google/contacts", () => Response.json(deps().contacts.status()));
+
+  /** Google's page to add the contacts (read only) to the calendar's grant. */
+  app.post("/google/contacts/connect", async (c) => {
+    const { google, auth } = deps();
+    auth.requireRecentAuth(c.get("session"));
+    return Response.json({ url: await owner(() => google.begin(c.get("session").id, "contacts")) });
+  });
+
+  /** A label more copies more of other people's data: the password typed recently, as for opening a calendar. */
+  app.patch("/google/contacts/labels", async (c) => {
+    const { selected } = await readJson(c.req.raw, contactLabelsSchema, 32 * 1024);
+    const { contacts, auth } = deps();
+    if (!contacts.enabled()) throw new AppError("CONFLICT", "error.googleContactsOff");
+    const before = new Set(contacts.labels().filter((label) => label.selected).map((label) => label.id));
+    if (selected.some((id) => !before.has(id))) auth.requireRecentAuth(c.get("session"));
+    await owner(async () => contacts.select(selected));
+    await deps().rearm();
+    return Response.json(contacts.status());
+  });
+
+  app.patch("/google/contacts/settings", async (c) => {
+    const patch = await readJson(c.req.raw, contactSettingsSchema, 4 * 1024);
+    const { contacts } = deps();
+    if (!contacts.enabled()) throw new AppError("CONFLICT", "error.googleContactsOff");
+    const status = contacts.configure(patch);
+    await deps().rearm();
+    return Response.json(status);
+  });
+
+  /** "Sync now": one sync at a time, the alarm's or this one. */
+  app.post("/google/contacts/sync", async () => {
+    const { contacts } = deps();
+    if (!contacts.enabled()) throw new AppError("CONFLICT", "error.googleContactsOff");
+    const outcome = await contacts.sync("owner");
+    if (outcome === "busy") throw new AppError("CONFLICT", "error.googleContactsBusy");
+    await deps().rearm();
+    return Response.json({ ...contacts.status(), outcome });
+  });
+
+  /** Turns the contacts off and forgets the whole copy (Google keeps the originals). */
+  app.delete("/google/contacts", async (c) => {
+    const { contacts, auth } = deps();
+    auth.requireRecentAuth(c.get("session"));
+    contacts.disable();
+    await deps().rearm();
+    return Response.json(contacts.status());
+  });
+
+  /** The Contacts screen: the copy only, never a call to Google. */
+  app.get("/contacts", (c) => {
+    const query = contactsQuerySchema.safeParse({ q: c.req.query("q") || undefined, label: c.req.query("label") || undefined, after: c.req.query("after") || undefined });
+    if (!query.success) throw new AppError("VALIDATION_FAILED");
+    const { contacts } = deps();
+    return Response.json(contacts.search({ query: query.data.q, label: query.data.label, after: query.data.after, limit: CONTACT_LIMITS.screenPage }));
+  });
+
+  app.get("/contacts/:id", (c) => {
+    const contact = deps().contacts.get(c.req.param("id"));
+    if (!contact) throw new AppError("NOT_FOUND", "error.contactNotFound");
+    return Response.json({ contact });
   });
 
   // ---------- The Agenda screen ----------

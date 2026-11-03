@@ -34,6 +34,7 @@ export {
   ptBRHome,
   ptBRLive,
   ptBRAgenda,
+  ptBRContacts,
   t,
 } from "../i18n/index.ts";
 export { AGENT_INSTANCE_NAME } from "./constants.ts";
@@ -136,3 +137,5 @@ export * from "./mcp-schemas.ts";
 export * from "./google.ts";
 export * from "./google-schemas.ts";
 export * from "./areas.ts";
+export * from "./contacts.ts";
+export * from "./contacts-schemas.ts";
