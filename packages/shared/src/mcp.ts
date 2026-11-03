@@ -8,8 +8,8 @@
 /** How Zuri signs in to a server: none, a static bearer token, or OAuth (step 18b). */
 export const MCP_AUTH_TYPES = ["none", "bearer", "oauth"] as const;
 export type McpAuthType = (typeof MCP_AUTH_TYPES)[number];
-/** The ones the owner can pick today; OAuth comes with step 18b. */
-export const MCP_AUTH_CHOICES = ["none", "bearer"] as const;
+/** What the owner can pick (OAuth since step 18b). */
+export const MCP_AUTH_CHOICES = MCP_AUTH_TYPES;
 
 /** "approve": every call becomes a card; "auto": runs at once, read-only tools only (recent password). */
 export const MCP_TOOL_POLICIES = ["approve", "auto"] as const;
@@ -36,6 +36,8 @@ export const MCP_LIMITS = {
   /** find_tools: its phrase and how many it returns. */
   findQueryMax: 200,
   findResults: 5,
+  /** OAuth: how long a sign-in may wait for the service's answer. */
+  oauthStateMs: 10 * 60_000,
   /** Shortest MCP_CREDENTIAL_KEY accepted. */
   credentialKeyMin: 32,
 } as const;
@@ -54,6 +56,10 @@ export const MCP_SERVER_PROBLEMS = [
   "credential_unreadable",
   "no_tools",
   "truncated",
+  /** OAuth (step 18b): the owner has to sign in to the service (again). */
+  "signin",
+  /** OAuth: the sign-in failed, or the service doesn't let new apps register. */
+  "oauth",
 ] as const;
 export type McpServerProblem = (typeof MCP_SERVER_PROBLEMS)[number];
 
@@ -77,6 +83,8 @@ export interface McpServerInfo {
   reviewCount: number;
   discoveredAt: string | null;
   createdAt: string;
+  /** OAuth: the service's sign-in page, while a sign-in started by the owner waits (10 minutes). */
+  authorizeUrl: string | null;
 }
 
 export type McpToolStatus = "available" | "removed" | "invalid";

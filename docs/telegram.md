@@ -259,6 +259,14 @@ ou sem passkey e sem e-mail, o cartão traz **Abrir no app** no lugar de
 **Aprovar**. `/aprovar` mostra as propostas que ainda esperam por você (até 5)
 e pede a leitura destravada.
 
+Chamadas a ferramentas de servidores MCP (etapa 18b) também se aprovam pelo
+bot. O cartão mostra a ferramenta, o servidor e os argumentos exatos que vão
+sair; argumentos com mais de 600 caracteres só se confirmam pela passkey.
+Depois de aprovada, a resposta do serviço aparece como citação (até 600
+caracteres). Se o servidor, o acesso ou a ferramenta mudaram depois da
+proposta, o bot não deixa aprovar. O `/status` avisa quantos servidores
+precisam de um novo login.
+
 ## Comandos
 
 Nenhum comando usa IA: eles leem e escrevem pelos mesmos serviços do app e

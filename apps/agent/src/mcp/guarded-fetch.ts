@@ -9,6 +9,8 @@ import { McpEndpointError } from "./url.ts";
  */
 export const FETCH_LIMITS = {
   connectTimeoutMs: 10_000,
+  /** A request the SDK sends with no deadline of its own (the OAuth sign-in's): this long at most (rule P5). */
+  unsignedTimeoutMs: 15_000,
   listTimeoutMs: 15_000,
   callTimeoutMs: 30_000,
   /** The longest any one response body may stay open. */
@@ -18,7 +20,15 @@ export const FETCH_LIMITS = {
 
 /** A failure with a code the interface words; the server's own text is never kept or shown. */
 export class McpConnectionError extends Error {
-  constructor(readonly problem: McpServerProblem) {
+  /**
+   * @param oauthLike the text looked like one of the SDK's OAuth failures; it
+   * only counts for a server that signs in with OAuth (another server's error
+   * text is third-party and may say "registration" or "issuer" for any reason).
+   */
+  constructor(
+    readonly problem: McpServerProblem,
+    readonly oauthLike = false,
+  ) {
     super(problem);
     this.name = "McpConnectionError";
   }
@@ -44,11 +54,14 @@ export function classifyMcpError(error: unknown): McpConnectionError {
   const status = statusOf(error);
   const text = error instanceof Error ? `${error.name} ${error.message}` : String(error);
   if (status === 401 || status === 403 || /\bUnauthorized/i.test(text)) return new McpConnectionError("auth");
-  if (/timeout|timed out|AbortError/i.test(text)) return new McpConnectionError("timeout");
-  if (/too large/i.test(text)) return new McpConnectionError("too_large");
-  if (/redirect/i.test(text)) return new McpConnectionError("redirect");
-  if (status !== undefined || /fetch|network|connect|ECONN|socket|HTTP \d{3}/i.test(text)) return new McpConnectionError("unavailable");
-  return new McpConnectionError("protocol");
+  // The SDK's OAuth failures (discovery, registration, the code or the refresh refused, another issuer):
+  // flagged, and only an OAuth server's caller turns the flag into "oauth" (see McpService.problemOf).
+  const oauthLike = /OAuth|InvalidGrant|InvalidClient|issuer|AuthorizationServer|registration/i.test(text);
+  if (/timeout|timed out|AbortError|TimeoutError/i.test(text)) return new McpConnectionError("timeout", oauthLike);
+  if (/too large/i.test(text)) return new McpConnectionError("too_large", oauthLike);
+  if (/redirect/i.test(text)) return new McpConnectionError("redirect", oauthLike);
+  if (status !== undefined || /fetch|network|connect|ECONN|socket|HTTP \d{3}/i.test(text)) return new McpConnectionError("unavailable", oauthLike);
+  return new McpConnectionError("protocol", oauthLike);
 }
 
 /**
@@ -87,8 +100,16 @@ export function limitBody(res: Response, maxBytes: number = FETCH_LIMITS.maxResp
   return new Response(counted, { status: res.status, statusText: res.statusText, headers: res.headers });
 }
 
-/** How a request to the server signs in. The token is attached here, only for the server's own origin. */
-export type FetchAuth = { kind: "none" } | { kind: "bearer"; token: string };
+/**
+ * How a request to the server signs in. A static token is attached here, only
+ * for the server's own origin. With OAuth (step 18b) the MCP SDK adds the
+ * access token itself; `allowOrigin` vets the service's sign-in server (its
+ * metadata, registration and token addresses) before anything goes there.
+ */
+export type FetchAuth =
+  | { kind: "none" }
+  | { kind: "bearer"; token: string }
+  | { kind: "oauth"; provider: import("@modelcontextprotocol/client").OAuthClientProvider; allowOrigin: (url: URL) => Promise<void> };
 
 /** A request made through the protected fetch: counted for the turn's subrequest budget (rule P9). */
 export interface FetchMeter {
@@ -102,18 +123,35 @@ export interface FetchMeter {
  * stream is answered "not supported" here, so no long-lived request keeps the
  * object awake (rule P5).
  */
-export function guardedFetch(endpoint: URL, auth: FetchAuth, base: typeof fetch, meter?: FetchMeter): typeof fetch {
+export function guardedFetch(
+  endpoint: URL,
+  auth: FetchAuth,
+  base: typeof fetch,
+  meter?: FetchMeter,
+  unsignedTimeoutMs: number = FETCH_LIMITS.unsignedTimeoutMs,
+): typeof fetch {
   return (async (input: RequestInfo | URL, init?: RequestInit) => {
-    const request = new Request(input, init);
+    // The SDK's OAuth requests (discovery, registration, token) carry no signal: a third-party
+    // sign-in server that never answers must not hold the request and the object forever.
+    const signed = Boolean(init?.signal) || input instanceof Request;
+    const request = new Request(input, signed ? init : { ...init, signal: AbortSignal.timeout(unsignedTimeoutMs) });
     const url = new URL(request.url);
-    if (url.origin !== endpoint.origin) throw new McpConnectionError("blocked");
-    if (request.method === "GET" && (request.headers.get("accept") ?? "").includes("text/event-stream")) {
-      return new Response(null, { status: 405, statusText: "Method Not Allowed" });
-    }
     const headers = new Headers(request.headers);
     headers.delete("cookie");
-    if (auth.kind === "bearer") headers.set("authorization", `Bearer ${auth.token}`);
-    else headers.delete("authorization");
+    if (url.origin !== endpoint.origin) {
+      // Only an OAuth sign-in reaches another origin, and only one that passed the same checks as the server.
+      if (auth.kind !== "oauth") throw new McpConnectionError("blocked");
+      await auth.allowOrigin(url);
+      // The access token is the MCP server's: it never travels to the sign-in server.
+      if (/^(bearer|dpop) /i.test(headers.get("authorization") ?? "")) headers.delete("authorization");
+      headers.delete("dpop");
+    } else {
+      if (request.method === "GET" && (request.headers.get("accept") ?? "").includes("text/event-stream")) {
+        return new Response(null, { status: 405, statusText: "Method Not Allowed" });
+      }
+      if (auth.kind === "bearer") headers.set("authorization", `Bearer ${auth.token}`);
+      else if (auth.kind === "none") headers.delete("authorization");
+    }
     meter?.take();
     const response = await base(new Request(request, { headers, redirect: "manual" }));
     if (response.status >= 300 && response.status < 400) {

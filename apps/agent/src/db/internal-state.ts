@@ -78,7 +78,9 @@ export type InternalKey =
   | "lockdown_exited_at"
   // Step 17, the search by meaning: one JSON object (on or off, the module's schema version, the
   // generation the vectors belong to, the full pass's place, today's counts and the wait after a failure).
-  | "semantic";
+  | "semantic"
+  // Step 18b, the triage by meaning of the MCP tools: after a failed embedding call, when to try again (ISO).
+  | "mcp_meaning_wait";
 
 export class InternalState {
   constructor(private readonly db: Database) {}

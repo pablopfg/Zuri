@@ -48,7 +48,8 @@ import { log } from "../log.ts";
 import { MockEmbedder, type Embedder, WorkersAIEmbedder } from "../semantic/embedder.ts";
 import { SemanticSearch } from "../semantic/service.ts";
 import { developmentMcpNetwork } from "../mcp/dev-mcp.ts";
-import { McpService } from "../mcp/service.ts";
+import { McpMeaning } from "../mcp/meaning.ts";
+import { McpService, OAUTH_CALLBACK_PATH } from "../mcp/service.ts";
 import { ALL_TOOLS } from "../tools/index.ts";
 import type { ToolContext } from "../tools/registry.ts";
 import { AgentRunner } from "./runner.ts";
@@ -260,6 +261,12 @@ export class ZuriAgent extends Agent<WorkerEnv> {
     // reminder; nothing at all while it is off. The alarm `wake` just set already counts its next round.
     try {
       await this.store.semantic.tick();
+    } catch (error) {
+      log("error", "alert_tick_failed", { error });
+    }
+    // The MCP tools' vectors for the triage (step 18b): after the indexing, one call at most.
+    try {
+      await this.store.mcp.meaning?.tick();
     } catch (error) {
       log("error", "alert_tick_failed", { error });
     }
@@ -481,7 +488,15 @@ export class ZuriAgent extends Agent<WorkerEnv> {
           const tries = alerts.nextDue();
           const watch = watchers.nextDue();
           const indexing = semantic.nextDue();
-          const due = [tries, watch, indexing].filter((at): at is string => Boolean(at)).sort()[0] ?? watch;
+          // `mcp` is made further down: before that (or if it fails) the tools have nothing due.
+          const tools = (() => {
+            try {
+              return mcp.meaning?.nextDue() ?? null;
+            } catch {
+              return null;
+            }
+          })();
+          const due = [tries, watch, indexing, tools].filter((at): at is string => Boolean(at)).sort()[0] ?? watch;
           // Work already past due is only left there when its step failed on the last
           // alarm (a full disk, say): wait a minute before trying again, never at once,
           // so a step that keeps failing can't spin the alarm through the day's quota.
@@ -512,8 +527,19 @@ export class ZuriAgent extends Agent<WorkerEnv> {
         credentialKey: env.MCP_CREDENTIAL_KEY,
         development: () => this.development(),
         lockdown: () => auth.lockdown.active(),
+        // Always PUBLIC_URL, never the request's address: the registration names this one callback.
+        redirectUrl: () => new URL(OAUTH_CALLBACK_PATH, this.publicUrl()).href,
       });
       if (this.development()) mcp.network = developmentMcpNetwork(mcp.network);
+      // The triage by meaning of the tools turned on (step 18b): only with the search by meaning on.
+      mcp.meaning = new McpMeaning({
+        repo: mcp.repo,
+        state,
+        ai: () => this.ai(),
+        enabled: () => semantic.enabled(),
+        lockdown: () => auth.lockdown.active(),
+        neuronsPerDay: () => settings.field("aiNeuronsPerDay"),
+      });
       // The owner's conversation in the bot (step 14): the same runner, meter and turns as the app.
       const telegramConversation = new TelegramConversation({
         db,
@@ -551,6 +577,7 @@ export class ZuriAgent extends Agent<WorkerEnv> {
         locale: () => this.locale(),
         hour: (ms) => telegramHour(ms, this.locale(), settings.field("timeZone")),
         origin: () => this.publicUrl().origin,
+        mcp: () => mcp,
       });
       // Confirmations made outside Telegram (step 15): the passkey on /aprovar or a code by e-mail.
       const telegramConfirmations = new TelegramConfirmations({
@@ -596,6 +623,7 @@ export class ZuriAgent extends Agent<WorkerEnv> {
         diagnostics: () => diagnostics.report(),
         healthy: () => this.healthy(),
         aiAvailable: () => usage.room(this.aiLimits()).neurons > 0,
+        mcpSignIn: () => mcp.needingSignIn(),
         buttons: commandButtons,
         state,
         locale: () => this.locale(),

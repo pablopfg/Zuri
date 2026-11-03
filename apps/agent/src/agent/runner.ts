@@ -140,6 +140,8 @@ export class AgentRunner {
     try {
       const ai = this.deps.ai();
       const registry = this.deps.registry ?? ALL_TOOLS;
+      // The memories' vector of the message first: the external tools' triage by meaning reuses it (step 18b).
+      const meaning = await this.meaning(input.message, input.signal);
       mcp = this.safeExternalTools(conversation.id, input);
       const ctx: ToolContext = { ...this.deps.tools, timeZone: settings.timeZone, mode: "chat", conversationId: conversation.id, source, ...(mcp ? { mcp } : {}) };
       executor = new ToolExecutor(mcp ? [...registry, ...mcp.tools] : registry, ctx, { maxToolCalls: settings.aiMaxIterations > 1 ? settings.aiMaxToolCalls : 0 });
@@ -153,7 +155,6 @@ export class AgentRunner {
 
       // Memories: a fifth of the budget at most, every one a <data> line.
       const repo = this.deps.tools.memories.repo;
-      const meaning = await this.meaning(input.message, input.signal);
       const memories = memoryPromptSection(selectRelevantMemories(repo, input.message, meaning), memoryTokenBudget(budget), (id) => repo.get(id));
       const row = conversations.row(conversation.id);
       let summary = row.summary;
@@ -304,8 +305,17 @@ export class AgentRunner {
     const serverOf = new Map(available.map((t) => [t.tool.exposed_name, t.server.id]));
     const answered = new Set(this.deps.tools.actions.externalAnswered(conversationId));
     for (const list of used) for (const tool of list) if (tool.status === "success" && !tool.actionId && serverOf.has(tool.name)) answered.add(serverOf.get(tool.name) ?? "");
+    // Nothing is embedded here: only the vector the memory recall made of this message, if any.
+    let meaning: ReadonlyMap<string, number> | undefined;
+    try {
+      const vector = this.deps.tools.semantic?.known(input.message) ?? null;
+      meaning = vector && service.meaning ? service.meaning.scores(available.map((t) => t.tool), vector) : undefined;
+    } catch (error) {
+      log("warn", "semantic_recall_failed", { error });
+    }
     return new McpTurnTools(service, available, input.message, recent, input.signal, {
       answered,
+      ...(meaning ? { meaning } : {}),
       // The bot's turn also sends its answer through the Telegram API within the same invocation.
       budget: input.source === "telegram" ? MCP_TELEGRAM_BUDGET : MCP_SUBREQUEST_BUDGET,
     });

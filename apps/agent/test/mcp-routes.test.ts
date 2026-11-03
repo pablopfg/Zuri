@@ -105,7 +105,7 @@ describe("/api/mcp", () => {
       expect(res.status, url).toBe(400);
       expect((await errorBody(res)).code).toBe("VALIDATION_FAILED");
     }
-    for (const body of [{}, { name: "", url: URL_A }, { name: "x".repeat(61), url: URL_A }, { name: "X", url: URL_A, extra: 1 }, { name: "X", url: URL_A, token: "t" }, { name: "X", url: URL_A, authType: "oauth" }, { name: "X", url: URL_A, authType: "bearer" }]) {
+    for (const body of [{}, { name: "", url: URL_A }, { name: "x".repeat(61), url: URL_A }, { name: "X", url: URL_A, extra: 1 }, { name: "X", url: URL_A, token: "t" }, { name: "X", url: URL_A, authType: "oauth", token: "t" }, { name: "X", url: URL_A, authType: "bearer" }]) {
       const res = await api("POST", "/mcp/servers", body);
       expect(res.status, JSON.stringify(body)).toBe(400);
     }

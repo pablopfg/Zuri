@@ -57,6 +57,7 @@ export const CLOSE_TIMEOUT_MS = 5_000;
  */
 export class McpTurn {
   readonly #sessions = new Map<string, Promise<Opened>>();
+  readonly #vetted = new Map<string, Promise<void>>();
   readonly meter: SubrequestMeter;
 
   constructor(
@@ -81,10 +82,7 @@ export class McpTurn {
       this.meter.take();
       await verify();
       const client = new Client({ name: "zuri", version: APP_VERSION }, { capabilities: {} });
-      const transport = new StreamableHTTPClientTransport(endpoint, {
-        fetch: guardedFetch(endpoint, auth, this.fetcher(), this.meter),
-        reconnectionOptions: { maxRetries: 0, initialReconnectionDelay: 1_000, maxReconnectionDelay: 1_000, reconnectionDelayGrowFactor: 1 },
-      });
+      const transport = this.transport(endpoint, auth);
       try {
         await client.connect(transport, { timeout: FETCH_LIMITS.connectTimeoutMs, ...(signal ? { signal } : {}) });
       } catch (error) {
@@ -98,6 +96,46 @@ export class McpTurn {
       return (await opening).client;
     } catch (error) {
       if (this.#sessions.get(serverId) === opening) this.#sessions.delete(serverId);
+      throw error;
+    }
+  }
+
+  private transport(endpoint: URL, auth: FetchAuth): StreamableHTTPClientTransport {
+    return new StreamableHTTPClientTransport(endpoint, {
+      fetch: guardedFetch(endpoint, auth, this.fetcher(), this.meter),
+      ...(auth.kind === "oauth" ? { authProvider: auth.provider } : {}),
+      reconnectionOptions: { maxRetries: 0, initialReconnectionDelay: 1_000, maxReconnectionDelay: 1_000, reconnectionDelayGrowFactor: 1 },
+    });
+  }
+
+  /**
+   * OAuth (step 18b): redeems the code the service's sign-in page sent back,
+   * with the PKCE verifier, through the same protected fetch; the provider
+   * stores the tokens. No session is opened.
+   */
+  async finishSignIn(endpoint: URL, auth: Extract<FetchAuth, { kind: "oauth" }>, code: string, iss?: string): Promise<void> {
+    const params = new URLSearchParams({ code });
+    if (iss !== undefined) params.set("iss", iss);
+    await this.transport(endpoint, auth).finishAuth(params);
+  }
+
+  /**
+   * A sign-in server's origin, vetted once per turn: the same address rules as
+   * an MCP server and the DNS check (two subrequests, counted).
+   */
+  async vetOrigin(url: URL, verify: () => Promise<void>): Promise<void> {
+    const known = this.#vetted.get(url.origin);
+    if (known) return known;
+    const check = (async () => {
+      this.meter.take();
+      this.meter.take();
+      await verify();
+    })();
+    this.#vetted.set(url.origin, check);
+    try {
+      await check;
+    } catch (error) {
+      this.#vetted.delete(url.origin);
       throw error;
     }
   }

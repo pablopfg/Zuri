@@ -35,9 +35,16 @@ etapas ficam detalhadas; as mais antigas viram uma linha na tabela.
 | 16a | mesclada (02/11/2026) | #93 | Aprovações pelo bot: botão **Aprovar** com prévia do servidor, `/aprovar`, confirmação por passkey ou e-mail presa à proposta e ao hash, `TARGET_CHANGED`, alerta `telegram_approved` |
 | 16b | mesclada (02/11/2026) | #96 | Comandos de segurança (`/acessos`, `/sessoes`, `/encerrar_sessoes`, `/tokens`, `/pausar_rotinas`, `/bloquear`), modo de bloqueio com a tela **Sair do bloqueio**, rebloqueio que suspende o vínculo, **Confirmar que vi** no app |
 | 17 | mesclada (02/11/2026) | #99 | Busca por significado opcional: vetores `bge-m3` em `int8` no SQLite do objeto, fila por gatilhos, preparo no alarme único com tetos diários, busca híbrida na paleta, na recordação, na ferramenta `search` e no `/buscar` |
-| 18a | em revisão | — | Servidores MCP remotos (sem login ou token fixo): fetch protegido contra SSRF, token cifrado, catálogo revisado pelo dono, triagem por turno com `find_tools`, cartão com os dados exatos, tela Configurações › Integrações |
+| 18a | mesclada (03/11/2026) | #105 | Servidores MCP remotos (sem login ou token fixo): fetch protegido contra SSRF, token cifrado, catálogo revisado pelo dono, triagem por turno com `find_tools`, cartão com os dados exatos, tela Configurações › Integrações |
+| 18b | em revisão | — | Login OAuth nos servidores MCP (PKCE, registro dinâmico, botão **Entrar no serviço**), triagem das ferramentas pelo significado, aprovação de chamadas externas pelo bot e pela página `/aprovar` |
 
 ## Últimas etapas (detalhe)
+
+### Etapa 18b · Login OAuth, triagem por significado e aprovação pelo bot
+- Entregou: `mcp/oauth.ts` (`ZuriOAuthProvider` sobre o `OAuthClientProvider` do SDK, cliente público, não interativo fora de ações do dono), `mcp/meaning.ts` (`McpMeaning`: vetor int8 por ferramenta ligada, feito no alarme depois de `semantic.tick`, chave FNV de modelo+texto), `mcp/dev-oauth.ts` (servidor de login simulado em `entrar.exemplo.com.br`, código `dev.<challenge>` no local), `POST /api/mcp/oauth/callback` (senha recente, `state` 10 min uso único), `SemanticSearch.known()`, `mcp_call` em `telegram/approvals.ts` (`BOT_MCP_BUDGET = 12`, resposta citada até 600) e na página `/aprovar`, linha no `/status`. Plano: `docs/planos/etapa-18b-mcp-oauth.md`.
+- Migrations: 19 (`authorize_url`, `authorize_expires`, `signed_in_at` em `zur_mcp_servers`; `embedding`, `embedding_scale`, `embedding_key` em `zur_mcp_tools`). A próxima livre é a 20.
+- Decisões técnicas: volta do login em `/configuracoes/integracoes` (rota em português, nada no JS inicial); problema `signin` nunca pausa o servidor; hash de aprovação de servidor OAuth usa `signed_in_at` (renovar token não anula proposta); fora da origem cadastrada só o servidor de login, sem `Authorization`; `find_tools` segue por palavras.
+- Para as próximas: a 19 tem OAuth próprio do Google (cliente do dono, confidencial), não o `ZuriOAuthProvider`; pode cifrar com `MCP_CREDENTIAL_KEY` usando outro `info` no HKDF ou chave própria.
 
 ### Etapa 18a · Servidores MCP remotos
 - Entregou: `apps/agent/src/mcp/` (`url.ts` endereço e DNS sobre HTTPS contra rede particular; `guarded-fetch.ts` `guardedFetch`/`limitBody`/`classifyMcpError`, reaproveitável pelo monitor de sites da 22; `credentials.ts` AES-GCM com `MCP_CREDENTIAL_KEY`; `catalog.ts`; `repository.ts`; `triage.ts`; `session.ts` `McpTurn` com teto de 24 subrequisições; `service.ts` `McpService`; `agent.ts` `McpTurnTools` e `runApprovedExternal`; `dev-mcp.ts` servidor simulado em `*.exemplo.com.br` no local), `find_tools`, `activeTools` no provedor, rotas em `api/mcp.ts`, tela `IntegrationsTab.tsx`, `packages/shared/src/mcp.ts` (constantes, sem Zod) e `mcp-schemas.ts`. Doc: `docs/mcp.md`. Plano: `docs/planos/etapa-18a-mcp-remoto.md`.
@@ -51,14 +58,9 @@ etapas ficam detalhadas; as mais antigas viram uma linha na tabela.
 - Decisões técnicas: embedder só Workers AI ou simulado (D8); preparo até 2.000 textos/dia e 50% do teto de Neurons; 500 buscas/dia com cache de 32; piso 0,55/0,10 no bge-m3; rotas fora de `WHILE_LOCKDOWN`; o ícone novo na paleta estourava o orçamento do JS inicial (139.099 B hoje), então automações usam `Clock`.
 - Para as próximas: item novo com texto (etapas 18–22) que deva aparecer na busca ganha uma entrada em `KIND_SOURCES` e uma migration nova em `SEMANTIC_MIGRATIONS` (só acréscimo).
 
-### Etapa 16b · Comandos de segurança e modo de bloqueio
-- Entregou: `apps/agent/src/telegram/security.ts` (`TelegramSecurity`, `maskAddress`), `apps/agent/src/auth/lockdown.ts` (`Lockdown`, `RemoteTokenHook`/`NO_REMOTE_TOKENS`), recusas no login (`LOCKDOWN_ACTIVE`), na API (lista `WHILE_LOCKDOWN` em `api/app.ts`) e no bot (`#duringLockdown`), `GET /api/lockdown`, `POST /api/lockdown/exit`, `POST /api/notices/:id/acknowledge` (`acknowledgeInApp`, `Notice.ackInApp`), executor com problema `lockdown`, tela `LockdownPage.tsx` (no chunk de `PasswordChangePage`), menu v5. Plano: `docs/planos/etapa-16b-modo-de-bloqueio.md`.
-- Migrations: nenhuma (18 continua livre). Chaves em `zur_settings`: `lockdown_until` (fim da 1ª hora; ligado enquanto existir), `lockdown_source` (`telegram:<vínculo>[|relock]`, fica após a saída), `lockdown_exited_at`.
-- Decisões técnicas: rotinas com IA são puladas (não pausadas) durante o bloqueio; login com código de recuperação sai a qualquer momento; sem 2FA, sair pede só a senha recente; toques em avisos do Telegram durante o bloqueio não agem; textos da tela em `pt-BR-setup.ts` (orçamento do JS inicial: 139.076 B).
-- Para as próximas: a etapa 20 liga os tokens no `RemoteTokenHook` (`suspendAll`/`resumeAll`/`active`) e põe **Revogar** em `/tokens`; etapas 18 e 22 consultam `auth.lockdown.active()` para pausar MCP e workflows; rota nova que precise funcionar no bloqueio entra em `WHILE_LOCKDOWN`.
-
 ### Notas que continuam valendo
 - Um alarme só (P8): use `AutomationService.rearm()`/`otherDue`, nunca outro alarme. O runner aceita `context: "scheduled"` (só leitura, sem dono presente). Toda IA por `agent.ai()`.
+- Bloqueio (16b): a etapa 20 liga os tokens no `RemoteTokenHook` (`suspendAll`/`resumeAll`/`active`) e põe **Revogar** em `/tokens`; IA, MCP e workflows em segundo plano consultam `auth.lockdown.active()`; rota que precise funcionar no bloqueio entra em `WHILE_LOCKDOWN`.
 - JS inicial em ~139,08 kB (teto 139,1): tela nova sob demanda, textos via `addMessages`; tela que trava o app vai no chunk de `PasswordChangePage`.
 
 <!-- Modelo, até 10 linhas por etapa:
@@ -93,6 +95,6 @@ etapas ficam detalhadas; as mais antigas viram uma linha na tabela.
 
 ## Próxima etapa
 
-- Número e nome: 15b · Comandos administrativos, depois que a 15a mesclar
-- Dependências mescladas: 6, 7, 10, 11, 12 (#70), 14 (#75); 15a em revisão
-- Precisa de algo do Pablo antes: não (o bot no @BotFather só é preciso no deploy)
+- Número e nome: 19 · Google Agenda, depois que a 18b mesclar
+- Dependências mescladas: 9, 10, 15b (#89), 18a (#105); 18b em revisão
+- Precisa de algo do Pablo antes: o app OAuth do Google (cliente do próprio dono) só no deploy; o desenvolvimento usa um Google simulado

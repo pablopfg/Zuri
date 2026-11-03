@@ -1,3 +1,4 @@
+import { devOAuth, signInRequired } from "./dev-oauth.ts";
 import type { McpNetwork } from "./service.ts";
 
 /**
@@ -5,9 +6,15 @@ import type { McpNetwork } from "./service.ts";
  * mock AI, the push services and the bot): any https address on
  * `*.exemplo.com.br` is answered here, so `npm run dev`, the e2e tests and the
  * screenshots never reach a real server. Every other address goes out as in
- * production. A token "invalido" is refused, to show the sign-in error.
+ * production. A token "invalido" is refused, to show the sign-in error, and
+ * `conta.exemplo.com.br` asks for an OAuth sign-in (step 18b).
  */
 const SIMULATED = /\.exemplo\.com\.br$/;
+
+/** The simulated service with OAuth sign-in (step 18b): `https://conta.exemplo.com.br/mcp`, signing in at `entrar.exemplo.com.br`. */
+export const DEV_OAUTH_RESOURCE = "https://conta.exemplo.com.br/mcp";
+const oauth = devOAuth(DEV_OAUTH_RESOURCE, "https://entrar.exemplo.com.br");
+oauth.devCodes = true;
 
 const TOOLS = [
   {
@@ -27,6 +34,9 @@ const TOOLS = [
 ];
 
 async function answer(request: Request): Promise<Response> {
+  const signIn = await oauth.handle(request);
+  if (signIn) return signIn;
+  if (new URL(request.url).hostname === "conta.exemplo.com.br" && !oauth.authorized(request)) return signInRequired(DEV_OAUTH_RESOURCE);
   if ((request.headers.get("authorization") ?? "").includes("invalido")) return new Response(null, { status: 401 });
   if (request.method === "DELETE") return new Response(null, { status: 200 });
   if (request.method !== "POST") return new Response(null, { status: 405 });
