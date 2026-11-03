@@ -457,7 +457,7 @@ export class FlowService {
   private claim(row: FlowRow): { flow: FlowRow; runId: string; definition: FlowDefinition } | null {
     return this.db.transaction(() => {
       const fresh = this.db.one<FlowRow>(`SELECT * FROM zur_flows WHERE id = ?`, row.id);
-      if (!fresh || fresh.enabled !== 1 || !fresh.next_run || fresh.next_run !== row.next_run) return null;
+      if (fresh?.enabled !== 1 || !fresh.next_run || fresh.next_run !== row.next_run) return null;
       const slot = fresh.next_run;
       const late = this.now() - Date.parse(slot);
       this.moveOn(fresh);
