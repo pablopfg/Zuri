@@ -11,10 +11,11 @@ import { gzipSync } from "node:zlib";
 // 139.5 kB once the texts only the server says left the first load; 139 kB
 // once the home page's title became the greeting, loaded on demand; 139.1 kB,
 // with the owner's OK on 02/11/2026, for the route of the bot's /aprovar page;
-// 139.4 kB, with the owner's OK on 03/11/2026, for the Agenda item in the side menu).
+// 139.4 kB, with the owner's OK on 03/11/2026, for the Agenda item in the side menu;
+// 139.6 kB, with the owner's OK on 03/11/2026, for the Contatos item and route, step 19b).
 // Never raise it without the owner's OK; the ceiling of P11 is 160 kB and its
 // goal 150 kB.
-const BUDGET_KB = 139.4;
+const BUDGET_KB = 139.6;
 
 const dist = join(import.meta.dirname, "..", "apps", "web", "dist");
 const html = readFileSync(join(dist, "index.html"), "utf8");

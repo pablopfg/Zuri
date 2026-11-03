@@ -31,6 +31,8 @@ export const TOOL_LABEL: Record<ToolName, MessageKey> = {
   notify_owner: "web.chat.tool.notify_owner",
   find_tools: "web.chat.tool.find_tools",
   list_calendar_events: "web.chat.tool.list_calendar_events",
+  search_contacts: "web.chat.tool.search_contacts",
+  get_contact: "web.chat.tool.get_contact",
   create_calendar_event: "web.chat.tool.create_calendar_event",
   update_calendar_event: "web.chat.tool.update_calendar_event",
   delete_calendar_event: "web.chat.tool.delete_calendar_event",

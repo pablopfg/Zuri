@@ -17,6 +17,7 @@ import type { SemanticSearch } from "../semantic/service.ts";
 import { type ExternalTool, type McpTurnTools, runApprovedExternal } from "../mcp/agent.ts";
 import { type McpService, McpToolError } from "../mcp/service.ts";
 import type { GoogleCalendar, GoogleMeter } from "../google/service.ts";
+import type { GoogleContacts } from "../google/contacts.ts";
 
 export type ToolPermission = "read" | "write" | "destructive";
 
@@ -59,6 +60,8 @@ export interface ToolContext {
   routineConversation?: () => string;
   /** The Google Calendar (step 19): its tools are offered only with a calendar open to Zuri. */
   calendar?: GoogleCalendar;
+  /** The copy of the Google contacts (step 19b): its tools are offered only with the contacts on. */
+  contacts?: GoogleContacts;
   /** This turn's count of calls to Google (rule P9), made on first use. */
   calendarMeter?: GoogleMeter;
 }
@@ -81,8 +84,8 @@ interface BaseTool<S extends z.ZodType> {
   detail?: (input: z.output<S>) => string | undefined;
   /** Offered only when this holds (a Google calendar open to Zuri, step 19). */
   offered?: (ctx: ToolContext) => boolean;
-  /** Where its result comes from, for the `<data>` line: "calendar" for Google's events. */
-  source?: "calendar";
+  /** Where its result comes from, for the `<data>` line: "calendar" for Google's events, "contact" for the contacts' copy. */
+  source?: "calendar" | "contact";
 }
 
 export interface ImmediateTool<S extends z.ZodType = z.ZodType> extends BaseTool<S> {
@@ -162,7 +165,7 @@ export const MAX_EXTERNAL_ARGS_CHARS = 4_000;
  * so a note or memory that says "ignore your rules" stays inert text, cut to
  * MAX_TOOL_RESULT_CHARS.
  */
-export function presentResult(name: string, result: unknown, source: "tool" | "mcp" | "calendar" = "tool"): string {
+export function presentResult(name: string, result: unknown, source: "tool" | "mcp" | "calendar" | "contact" = "tool"): string {
   let json = stableStringify(result);
   if (json.length > MAX_TOOL_RESULT_CHARS) {
     json = `${[...json].slice(0, MAX_TOOL_RESULT_CHARS).join("")}… [result cut: ask for less, or open one item at a time]`;
@@ -298,7 +301,7 @@ export class ToolExecutor {
       if (tool.permission === "destructive") return presentResult(tool.name, await this.propose(tool, parsed.data, callId));
       if (tool.permission === "external") return await this.external(tool, parsed.data as Record<string, unknown>, callId);
       const result = await tool.execute(parsed.data, this.ctx);
-      if (tool.source === "calendar") return presentResult(tool.name, result, "calendar");
+      if (tool.source) return presentResult(tool.name, result, tool.source);
       if (result && typeof result === "object" && "planId" in result && typeof result.planId === "string") this.plansByCall.set(callId, result.planId);
       if (result && typeof result === "object" && "routineId" in result && typeof result.routineId === "string") this.automationsByCall.set(callId, result.routineId);
       return presentResult(tool.name, result);

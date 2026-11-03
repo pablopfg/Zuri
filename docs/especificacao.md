@@ -58,7 +58,8 @@ Cada linha é um requisito. A coluna da direita aponta onde o agente estuda a re
 | Canais | Push (Web Push, máx. 3 aparelhos, remoção após 7 dias sem acesso), e-mail pelo Email Routing, Telegram | `push/`, `alerts/email.ts`, `telegram/` |
 | Integrações | Servidores MCP remotos (sem auth, bearer, OAuth), ferramentas desligadas por padrão, aprovação para o que altera | `mcp/`, `docs/mcp.md` |
 | Google Agenda | Leitura e escrita de eventos, rotinas do dia com a agenda | `calendar/`, `docs/google-calendar.md` |
-| Google Contatos | Cópia só leitura dos contatos das etiquetas escolhidas, busca na conversa, aniversários e datas nas automações, fonte de dados dos workflows (novo no Zuri, etapa 19b) | `docs/planos/google-contatos.md` |
+| Google Contatos | Cópia só leitura dos contatos das etiquetas escolhidas, busca na tela e na conversa, avisos de aniversário e datas, fonte de dados dos workflows (novo no Zuri, etapa 19b) | `google/contacts.ts`, `docs/google-contatos.md`, `docs/planos/google-contatos.md` |
+| Avaliações do Google | Leitura das avaliações do perfil da empresa (Business Profile), aviso das negativas à equipe pelo Telegram, rascunhos de resposta no padrão do dono com verificador e aprovação, resposta automática só das positivas (novo no Zuri, etapas 19c e 19d) | `docs/planos/google-business-profile.md` |
 | Acesso remoto | Tokens pessoais com escopo `read` ou `write`, 90 dias, só hash; eventos de entrada do n8n | `remote/`, `docs/remote-access.md` |
 | Workflows | Monitor de sites com Cloudflare Workflows (passos duráveis e novas tentativas) | `workflows/` |
 | Modelos de IA | Workers AI por padrão; Anthropic e OpenAI opcionais, com teto diário em US$ e fallback | `ai/`, `docs/modelos-de-ia.md` |
@@ -295,13 +296,13 @@ Chat: `@cf/zai-org/glm-4.7-flash`. Transcrição: `@cf/openai/whisper-large-v3-t
 
 ### Prompt de sistema
 
-Ordem: nome do agente (uma linha) → instruções fixas → relógio do dono → nome do dono → memórias → resumo → lembrete do idioma → histórico. O relógio (data e hora atuais no fuso das Configurações, em forma humana e ISO com deslocamento, horário de verão, calendário de duas semanas, troca de relógio à frente e as datas relativas da mensagem já resolvidas pelo servidor) e a regra de idioma (só o idioma das Configurações, outro só a pedido explícito do dono, pedido vindo de `<data>` ignorado) estão em `docs/arquitetura/orientacao-temporal-e-idioma.md`. Todo conteúdo guardado entra como `<data source="memory|note|task|tool|mcp|telegram_forward|calendar|remote_event|settings" id="...">…</data>`, um item por linha; dentro do bloco, `<` e `>` viram `‹` e `›`. O nome do dono (`ownerName`) é conteúdo guardado: entra como `<data source="settings" id="ownerName">`, nunca interpolado nas instruções fixas (`docs/seguranca.md`, "Conteúdo guardado no prompt"). As instruções fixas descrevem a personalidade da agente: feminina, simpática e natural, sem tom robótico (decisão do Pablo, 31/10/2026). Referência: `apps/agent/src/agent/{runner.ts,prompt.ts}`. Cada cenário da seção "Prompt injection e segurança das ferramentas" de `docs/seguranca.md` vira um teste com o mock.
+Ordem: nome do agente (uma linha) → instruções fixas → relógio do dono → nome do dono → memórias → resumo → lembrete do idioma → histórico. O relógio (data e hora atuais no fuso das Configurações, em forma humana e ISO com deslocamento, horário de verão, calendário de duas semanas, troca de relógio à frente e as datas relativas da mensagem já resolvidas pelo servidor) e a regra de idioma (só o idioma das Configurações, outro só a pedido explícito do dono, pedido vindo de `<data>` ignorado) estão em `docs/arquitetura/orientacao-temporal-e-idioma.md`. Todo conteúdo guardado entra como `<data source="memory|note|task|tool|mcp|telegram_forward|calendar|contact|remote_event|settings" id="...">…</data>`, um item por linha; dentro do bloco, `<` e `>` viram `‹` e `›`. O nome do dono (`ownerName`) é conteúdo guardado: entra como `<data source="settings" id="ownerName">`, nunca interpolado nas instruções fixas (`docs/seguranca.md`, "Conteúdo guardado no prompt"). As instruções fixas descrevem a personalidade da agente: feminina, simpática e natural, sem tom robótico (decisão do Pablo, 31/10/2026). Referência: `apps/agent/src/agent/{runner.ts,prompt.ts}`. Cada cenário da seção "Prompt injection e segurança das ferramentas" de `docs/seguranca.md` vira um teste com o mock.
 
 ### Classes de ferramentas
 
 | Classe | Ferramentas | Comportamento |
 | --- | --- | --- |
-| `read` | `list_tasks`, `list_projects`, `read_note`, `search_notes`, `search_memories`, `search`, `list_automations`, `list_calendar_events` | Roda direto; única classe da Zuri em execuções agendadas (mais `notify_owner` e as ferramentas MCP liberadas para rotinas) |
+| `read` | `list_tasks`, `list_projects`, `read_note`, `search_notes`, `search_memories`, `search`, `list_automations`, `list_calendar_events`, `search_contacts`, `get_contact` | Roda direto; única classe da Zuri em execuções agendadas (mais `notify_owner` e as ferramentas MCP liberadas para rotinas) |
 | `write` | `create_task`, `update_task`, `complete_task` (máx. 3 por turno), `create_project`, `create_note`, `update_note` (só renomeia ou acrescenta), `remember`, `update_memory`, `create_reminder`, `create_automation`, `create_calendar_event`, `update_calendar_event`, `propose_task_plan` (1 por turno), `propose_ai_routine` | Roda direto no chat; nunca em execuções agendadas |
 | `destructive` | `delete_task`, `delete_note`, `replace_task_description`, `replace_note_content`, `forget_memory`, `cancel_automation`, `delete_calendar_event`, `change_shared_calendar_event` e ferramentas MCP que apagam ou sobrescrevem, na classificação da Zuri confirmada pelo dono (as outras seguem o nível que o dono escolheu) | Vira proposta; só roda com aprovação |
 
@@ -310,6 +311,7 @@ Ordem: nome do agente (uma linha) → instruções fixas → relógio do dono �
 - **Avisos:** copie de `docs/alerts.md` do Talorys a tabela de categorias, as prioridades, os limites padrão por canal (por hora e por dia), a chave de deduplicação e a tabela de vigias com prioridade e repetição.
 - **MCP:** limites de servidores, ferramentas e tamanho de resposta iguais aos de `docs/mcp.md`; numa execução agendada só rodam as ferramentas MCP no nível "também em rotinas e workflows" e as liberadas para aquela rotina (senha, aviso, até 10, nunca destrutiva); a chamada barrada por um limite vira proposta na conversa da rotina, que vale 24 horas, com aviso, e a rotina segue (até 3 propostas por execução e 12 subrequisições externas por despertar do alarme); callback OAuth em `/configuracoes/integracoes` (a rota da tela de Integrações, que lê `code` e `state` e os tira do endereço) → `POST /api/mcp/oauth/callback`.
 - **Google Contatos (etapa 19b):** escopo `https://www.googleapis.com/auth/contacts.readonly`, somado à conexão da agenda com `include_granted_scopes=true`; People API (`people.googleapis.com`) com `contactGroups.list` e `people.connections.list` (`syncToken`, 1.000 por página). O app OAuth fica publicado "Em produção" sem verificação, porque em "Teste" o refresh token de escopo sensível vence em 7 dias (vale também para a agenda).
+- **Avaliações do Google (etapas 19c e 19d):** escopo `https://www.googleapis.com/auth/business.manage`, somado à mesma conexão Google com `include_granted_scopes=true`; avaliações por `mybusiness.googleapis.com/v4/accounts/{a}/locations/{l}/reviews` (50 por página, `updateTime desc`) e resposta por `PUT …/reviews/{r}/reply` (até 4.096 bytes, substitui a existente). O Google libera a API por pedido de acesso (cota 0 antes, 300 por minuto depois). Leitura a cada 15 min no alarme único, sem Pub/Sub (pede faturamento). Avaliação entra no prompt como `<data source="review">`.
 - **Google Agenda:** escopos `https://www.googleapis.com/auth/calendar.events` (leitura e escrita) e `calendar.readonly` (só leitura), refresh token cifrado com `MCP_CREDENTIAL_KEY`, `redirect_uri` = `PUBLIC_URL` + `/settings/google-oauth`.
 - **Eventos remotos:** schema de `docs/alerts.md` (título até 120 caracteres, corpo até 1.000, `priority`, `category`, `dedupeKey`) e rotas por escopo de `docs/remote-access.md`.
 - **Backup:** `{ format: "zuri-backup", version: 1, exportedAt, data: {...} }` com tarefas, notas, projetos, memórias, conversas, automações (chegam pausadas) e configurações não sensíveis. Nunca inclui segredos TOTP, passkeys, sessões, tokens, vínculo do Telegram, credenciais MCP e Google. A importação mescla com ids novos e segue as regras de backup das Regras de segurança.
@@ -334,10 +336,12 @@ Aceito: "hoje", "amanhã", "depois de amanhã", dias da semana com ou sem "-feir
 | 16 | 4, 9, 11, 12 |
 | 17 a 22 | 9 e 11; independentes entre si. 19, 22 e 23 estendem comandos da etapa 15 |
 | 19b | 10, 11 e 19 (usa a conexão Google da 19); a 22 pode ler os contatos se vier depois |
+| 19c | 10, 11, 13, 16a e 19 (usa a conexão Google da 19); vem depois da 19b |
+| 19d | 19c |
 | 23 | 15 |
 | 24 | pode começar após a 5 e é atualizada a cada etapa que cria variável ou segredo |
 | 25 | todas, inclusive a 26 |
-| 26 | todas as outras (0 a 24, a 19b e as que entrarem no cronograma), menos a 25 |
+| 26 | todas as outras (0 a 24, a 19b, a 19c, a 19d e as que entrarem no cronograma), menos a 25 |
 
 ### Critérios de aceite adicionais
 
@@ -348,6 +352,8 @@ Aceito: "hoje", "amanhã", "depois de amanhã", dias da semana com ou sem "-feir
 | 13 | Insistência +15/+60 com relógio falso; o grupo nunca recebe sozinho um alerta de segurança |
 | 17 | A busca híbrida acha "carro" na memória "automóvel" com o mock de embeddings |
 | 19b | Só contatos das etiquetas escolhidas chegam ao banco; token de sincronização vencido leva à leitura completa sozinho; nenhum dado de contato em log ou backup; desconectar revoga e apaga a cópia |
+| 19c | Avaliação de 1 a 3 estrelas nunca é respondida sem o dono e avisa a equipe mesmo sem cota de IA; avaliação maliciosa não muda o comportamento; nenhuma resposta duas vezes nem por cima da resposta de outra pessoa; nada de avaliação em log ou backup |
+| 19d | Automático só para 4 e 5 estrelas aprovadas pelo verificador, depois do período de experiência, com senha recente; o disjuntor volta a "Perguntar sempre" |
 | 20 | Token `read` recebe 403 em toda rota de escrita; nenhum token alcança as rotas proibidas (teste que percorre todas) |
 | 23 | Backup malicioso (automação ligada, MCP, 11 MB, 10.001 memórias) é recusado inteiro |
 | 24 | O deploy falha com `workers_dev` ou `preview_urls` ligados e domínio próprio |
@@ -358,7 +364,7 @@ Aceito: "hoje", "amanhã", "depois de amanhã", dias da semana com ou sem "-feir
 - **Cartão do Telegram:** não configurado (sem token), pronto para conectar, aguardando `/start`, aguardando confirmação no app, vinculado, webhook com erro (último erro de `getWebhookInfo`), suspenso.
 - **Página `/aprovar`:** estados listados na seção do bot.
 - **Sair do bloqueio:** origem do bloqueio, hora, botão Sair (2FA ou código de recuperação), botão Não fui eu: desvincular o Telegram.
-- **Configurações:** Conta (nome, e-mail, senha, idioma, fuso), Segurança (2FA, passkeys, sessões, acessos, acesso remoto, bloqueio), IA (modelos, limites, busca semântica, memória), Avisos (push, Telegram, e-mail, categorias, prioridades), Integrações (MCP, Google Agenda), Dados (backup, armazenamento, lixeira).
+- **Configurações:** Conta (nome, e-mail, senha, idioma, fuso), Segurança (2FA, passkeys, sessões, acessos, acesso remoto, bloqueio), IA (modelos, limites, busca semântica, memória), Avisos (push, Telegram, e-mail, categorias, prioridades), Integrações (MCP, Google Agenda e Contatos), Dados (backup, armazenamento, lixeira).
 
 Cada estado tem chave de i18n e teste e2e.
 
@@ -384,7 +390,7 @@ O agente executor pode começar a fase A sem nenhuma destas respostas; cada linh
 
 ## Etapas de implementação
 
-São 28 etapas (0 a 26, mais a 19b) em 5 fases, cada uma um PR para `develop`. As fases A e B entregam um assistente utilizável pela web; a fase C entrega o bot do administrador; as fases D e E completam a paridade com o Talorys e a operação. As etapas de uma mesma fase marcadas como *independente* podem rodar em paralelo.
+São 30 etapas (0 a 26, mais a 19b, a 19c e a 19d) em 5 fases, cada uma um PR para `develop`. As fases A e B entregam um assistente utilizável pela web; a fase C entrega o bot do administrador; as fases D e E completam a paridade com o Talorys e a operação. As etapas de uma mesma fase marcadas como *independente* podem rodar em paralelo.
 
 ### Fase A — Fundação
 
@@ -522,6 +528,10 @@ O comportamento completo está na seção "Bot do Telegram do administrador"; aq
 **Etapa 19 · Google Agenda** (`feat: integra o Google Agenda`) — OAuth com cliente do próprio dono, agendas só leitura ou leitura e escrita, ferramentas `list_calendar_events`, `create_calendar_event`, `update_calendar_event`, `delete_calendar_event` (esta como proposta), rotinas de briefing às 07:00 e fechamento às 19:00. No bot, `/hoje` passa a incluir a agenda.
 
 **Etapa 19b · Google Contatos** (`feat: sincroniza os contatos do Google por etiqueta`) — escopo `contacts.readonly` somado à conexão Google da etapa 19 (autorização incremental, mesmo refresh token cifrado), cópia só leitura dos contatos das etiquetas escolhidas pelo dono na tela, sincronização incremental com `syncToken` de hora em hora e pelo botão, teto de 5.000 contatos, ferramentas `search_contacts` e `get_contact` (classe `read`, resultado em `<data source="contact">`), automações de aniversários e datas especiais e gatilho de contato novo na etiqueta. Contatos nunca vão para log nem para backup; desconectar revoga e apaga a cópia. A Zuri não manda nada aos contatos. Detalhes, perguntas ao Pablo e custo em `docs/planos/google-contatos.md`.
+
+**Etapa 19c · Avaliações do Google** (`feat: lê e responde as avaliações do Google com aprovação`) — escopo `business.manage` somado à conexão Google da etapa 19, escolha do perfil (até 3 locais), leitura a cada 15 min no alarme único, triagem fixa pela nota (1 a 3 estrelas sempre para a equipe; a IA só deixa mais cauteloso), detector de conteúdo suspeito, aviso das negativas pela central na categoria `reviews` (grupo do Telegram ou privado), agente de avaliações sem ferramentas que escreve rascunhos no padrão do dono, verificador fixo e segunda leitura, publicação só com aprovação (tela ou privado do bot), releitura antes de publicar, tela Avaliações. Avaliações fora de log e backup. Detalhes, travas e perguntas ao Pablo em `docs/planos/google-business-profile.md`.
+
+**Etapa 19d · Resposta automática das avaliações** (`feat: responde sozinha as avaliações positivas`) — nível "Sem perguntar para positivas" liberado depois de 10 aprovações sem edição, com senha recente e alerta de segurança; até 10 respostas automáticas por dia; disjuntor (3 reprovações seguidas, recusa do Google ou resposta apagada pelo dono) que volta a "Perguntar sempre"; lista do que saiu sozinho com **Apagar resposta**.
 
 **Etapa 20 · Acesso remoto e eventos** (`feat: adiciona tokens de acesso remoto e eventos de entrada`) — tokens `zur_pat_` com escopo, 90 dias, só hash, lista de rotas permitidas; `POST /api/remote/events` para n8n e outros (60 por hora, 100 por dia, metade dos limites de canal). Tokens nunca alcançam `/api/telegram`, aprovações nem planos.
 
