@@ -282,7 +282,7 @@ O orçamento de cada cota está em [docs/arquitetura/orcamento-free-tier.md](doc
 | **D · Integrações** | 17 | Busca semântica | ✅ |
 | | 18a | Servidores MCP remotos | ✅ |
 | | 18b | Login OAuth nos servidores MCP | ✅ |
-| | 19 | Google Agenda | ⬜ |
+| | 19 | Google Agenda | 🚧 |
 | | 19b | Google Contatos | ⬜ |
 | | 20 | Acesso remoto e eventos | ⬜ |
 | | 21 | Modelos pagos ⚠️ | ⬜ |
