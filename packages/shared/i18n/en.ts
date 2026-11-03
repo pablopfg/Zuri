@@ -1015,7 +1015,7 @@ export const en: Messages = {
   "error.flowConnectionLimit": "You've reached the limit of {limit} connections.",
   "error.flowConnectionInUse": "This connection is used by a flow. Remove it from the flow first.",
   "error.flowConnectionOrigin": "Use a public https address.",
-  "error.flowCredentialKey": "Credentials can't be kept: MCP_CREDENTIAL_KEY isn't set in the Worker.",
+  "error.flowCredentialKey": "Keeping credentials isn't available in this installation yet. Create the connection without a credential.",
   "error.automationActiveLimit": "You already have 50 active automations. Pause or delete one before turning on another.",
   "error.automationPendingLimit": "10 routines are already waiting for your approval. Review those first.",
   "error.automationPending": "This routine is still waiting for your approval.",

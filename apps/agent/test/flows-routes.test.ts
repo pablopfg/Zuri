@@ -98,7 +98,7 @@ describe("/api/flows", () => {
   it.each([
     ["an IP", "https://203.0.113.10/"],
     ["http", "http://loja.exemplo.com.br/"],
-    ["a password", "https://a:b@loja.exemplo.com.br/"],
+    ["a password", "https://a:b@exemplo.com.br/"],
     ["another port", "https://loja.exemplo.com.br:8443/"],
     ["Zuri's own host", `${ORIGIN}/`],
     ["a long query", `https://loja.exemplo.com.br/?${"q".repeat(201)}`],
@@ -123,6 +123,31 @@ describe("/api/flows", () => {
     const page = (await (await api("GET", `/flows/runs?flow=${flow.id}`)).json()) as { runs: FlowRun[]; nextCursor: string | null };
     expect(page.runs).toHaveLength(1);
     expect((await api("GET", "/flows/runs?flow=nao-e-id")).status).toBe(400);
+  });
+
+  it("turns what a flow tells into the owner's notices", async () => {
+    const kinds = () => inOwner((agent) => agent.store.db.all<{ kind: string; link: string }>(`SELECT kind, link FROM zur_notices WHERE kind LIKE 'flow.%' ORDER BY created_at, rowid`));
+    const step = await createFlow({ version: 1, trigger: { type: "manual" }, nodes: [{ type: "notify", title: "Oi", body: "", priority: "normal", each: false }] });
+    expect((await api("POST", `/flows/${step.id}/run`)).status).toBe(200);
+
+    // A site that was down answers again.
+    const site = await createFlow();
+    await api("POST", `/flows/${site.id}/run`);
+    await inOwner((agent) => agent.store.db.run(`UPDATE zur_flow_sites SET state = 'down'`));
+    await api("POST", `/flows/${site.id}/run`);
+
+    // A service that refuses: a failure, then the fifth in a row pauses the flow.
+    const added = await api("POST", "/flows/connections", connectionBody);
+    const { connection } = (await added.json()) as { connection: FlowConnection };
+    network.handlers.set("api.exemplo.com.br", () => Response.json({ error: "no" }, { status: 404 }));
+    const broken = await createFlow({ version: 1, trigger: { type: "manual" }, nodes: [{ type: "request", connection: connection.id, method: "GET", path: "/v1", body: "none", each: false, itemsPath: "" }] });
+    await api("POST", `/flows/${broken.id}/run`);
+    await inOwner((agent) => agent.store.db.run(`UPDATE zur_flows SET failures = 4 WHERE id = ?`, broken.id));
+    await api("POST", `/flows/${broken.id}/run`);
+
+    const notices = await kinds();
+    expect(notices.map((notice) => notice.kind)).toEqual(expect.arrayContaining(["flow.notice", "flow.siteUp", "flow.failed", "flow.paused"]));
+    expect(notices.every((notice) => notice.link === "/automacoes/fluxos")).toBe(true);
   });
 
   it("deletes a flow; an unknown id is not found", async () => {

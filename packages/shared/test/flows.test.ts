@@ -224,7 +224,7 @@ describe("connections", () => {
     expect(parsed.origin).toBe("https://api.exemplo.com.br");
   });
 
-  it.each(["http://api.exemplo.com.br", "https://api.exemplo.com.br/v1", "https://u:p@api.exemplo.com.br", "https://api.exemplo.com.br?x=1", "https://api.exemplo.com.br/#x", "api"])(
+  it.each(["http://api.exemplo.com.br", "https://api.exemplo.com.br/v1", "https://u:p@exemplo.com.br", "https://api.exemplo.com.br?x=1", "https://api.exemplo.com.br/#x", "api"])(
     "refuses the origin %s",
     (origin) => {
       expect(connectionOriginSchema.safeParse(origin).success).toBe(false);

@@ -39,8 +39,15 @@ etapas ficam detalhadas; as mais antigas viram uma linha na tabela.
 | 18b | mesclada (03/11/2026) | #111 | Login OAuth nos servidores MCP (PKCE, registro dinâmico, botão **Entrar no serviço**), triagem das ferramentas pelo significado, aprovação de chamadas externas pelo bot e pela página `/aprovar` |
 | 19 | mesclada (03/11/2026) | #136 | Google Agenda: OAuth próprio do dono, agendas fechada/só ler/ler e editar, 5 ferramentas (apagar e mudar evento com convidados são propostas), `/hoje` com agenda, modelos de rotina, tela **Agenda** (dia, semana, mês) em tempo real por push do Google |
 | 19b | em revisão (03/11/2026) | — | Google Contatos: cópia só leitura das etiquetas escolhidas (até 5.000, de hora em hora com `syncToken`), tela **Contatos**, avisos de aniversário e datas especiais, `search_contacts` e `get_contact` |
+| 22a | em revisão (03/11/2026) | — | Motor de fluxos no alarme único (7 passos de catálogo fechado), conexões com métodos marcados e credencial cifrada, monitor de sites como modelo, aba **Fluxos** em Automações, `/status` com os sites |
 
 ## Últimas etapas (detalhe)
+
+### Etapa 22a · Motor de fluxos e monitor de sites
+- Entregou: `apps/agent/src/flows/` (`engine.ts` com `advance()` por passo e retomada entre despertares; `service.ts` `FlowService` com `tick` no alarme depois de `contacts.tick`, `claim` por horário único, `runNow`, `reconcile`, `prune` pelo contador; `connections.ts` `FlowConnections.call` com fetch protegido, DNS por host por despertar, caminho por segmento; `monitor.ts` `checkSite` e `SiteStates`; `paths.ts` sem protótipo; `dev-flows.ts` simula `*.exemplo.com.br`), rotas `api/flows.ts`, `MeteredAI.generate` com `maxNeurons`/`onNeurons`, `<data source="flow">`, área `flows`, aba `pages/automations/flows/` (textos em `pt-BR-flows.ts`, carregada sob demanda), `/status` com sites. Doc: `docs/fluxos.md`. Plano: `docs/planos/etapa-22a-motor-de-fluxos.md`.
+- Migrations: 24 (`flows`: `zur_flows`, `zur_flow_connections`, `zur_flow_runs` com contador `flow_runs` em `zur_counts` e índice `zur_flow_runs_open`, `zur_flow_sites`, coluna `flows` em `zur_area_versions`). A próxima livre é a 25.
+- Decisões técnicas: sem Cloudflare Workflows (alarme único, 20 subrequisições por despertar, DNS conta 2); o `tick` só replaneja o alarme quando algo mudou; o monitor guarda na hora o site que respondeu; credenciais com `McpCredentials(MCP_CREDENTIAL_KEY, "flows-v1")` e o id da conexão como dado associado; DNS rebinding é risco aceito (documentado no plano); JS inicial 139.557 B (ícones da aba exclusivos dela, para não dividir pedaços).
+- Para as próximas: a 22b acrescenta a rota de eventos com HMAC e a proposta de fluxo pela conversa (nasce desligado); a 22c pluga `GoogleCalendar` e `GoogleContacts.search` como passos novos em `engine.ts` (tipo novo em `FLOW_NODE_TYPES` + schema + editor); o backup (23) leva os fluxos e conexões **sem** a coluna `credential`.
 
 ### Etapa 19b · Google Contatos
 - Entregou: `apps/agent/src/google/contacts.ts` (`GoogleContacts`: etiquetas, sincronização com trava no banco e `mine(stamp)`, páginas de 1.000 até 10 por despertar, `syncToken` com recomeço único quando vence, teto 5.000, backoff 30 min → 6 h, avisos de aniversário/datas/entrada em etiqueta, busca por nome, pedaço do telefone e e-mail), `contacts-store.ts` (`forgetContacts`), `GoogleCalendar.begin(session, "contacts")` com `include_granted_scopes`, `people()` e erros `expired`/`api_disabled`/`contacts_scope`, People API simulada em `dev-google.ts`, rotas `/api/google/contacts*` e `/api/contacts*` em `api/google.ts`, `tools/contacts.ts` (2 ferramentas `read`, `<data source="contact">`), `ContactsSection.tsx` no cartão do Google, tela `pages/contacts/ContactsPage.tsx` (textos em `pt-BR-contacts.ts`), área `contacts` em `zur_area_versions`. Doc: `docs/google-contatos.md`. Plano: `docs/planos/google-contatos.md`.
@@ -104,6 +111,6 @@ etapas ficam detalhadas; as mais antigas viram uma linha na tabela.
 
 ## Próxima etapa
 
-- Número e nome: 19c · Avaliações do Google Business Profile
-- Dependências mescladas: 19 (Google Agenda), 19b (Google Contatos)
-- Precisa de algo do Pablo antes: as respostas às perguntas do plano `docs/planos/google-business-profile.md` (PR #138) e o pedido de acesso à Business Profile API no Google.
+- Número e nome: 19c · Avaliações do Google Business Profile, se o Pablo já tiver o "Basic API Access"; senão 22b · CRM interno e eventos do n8n
+- Dependências mescladas: 19 (Google Agenda), 19b (Google Contatos), 22a (fluxos) para a 22b
+- Precisa de algo do Pablo antes: para a 19c, ligar as APIs do Business Profile e o pedido de acesso no Google; para a 22b, o volume do CRM (plano `docs/planos/workflows-n8n.md`).

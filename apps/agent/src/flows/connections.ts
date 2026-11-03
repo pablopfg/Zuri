@@ -250,8 +250,9 @@ export class FlowConnections {
     const known = deps.hosts.get(url.host);
     if (known) return known;
     const check = (async () => {
+      // Checked before the lookup: a refusal inside the resolver would read as a DNS failure.
+      if (!deps.meter.room(2)) throw new FlowStepError("calls_limit");
       const resolve: Resolver = async (host, signal) => {
-        if (!deps.meter.room(2)) throw new FlowStepError("calls_limit");
         deps.meter.take();
         deps.meter.take();
         return deps.network.resolve(host, signal);
