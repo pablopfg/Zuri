@@ -2019,4 +2019,9 @@ export const en: Messages = {
   "web.google.freeBusy": "Google only shows free or busy for this calendar, so it stays closed.",
   "web.google.primary": "main",
   "web.google.openAgenda": "Open Calendar",
+  "web.automations.template.label": "Start from a template",
+  "web.automations.template.briefing.name": "Morning briefing",
+  "web.automations.template.briefing.message": "Put together my morning briefing: today's calendar events, the tasks due today or overdue and today's reminders. Keep it short and start with what needs attention first.",
+  "web.automations.template.closing.name": "End of the day",
+  "web.automations.template.closing.message": "Wrap up my day: the tasks left open, what's still on the calendar tonight and tomorrow's events. Suggest at most three priorities for tomorrow.",
 };
