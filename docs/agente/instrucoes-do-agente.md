@@ -44,7 +44,7 @@ Você revisa o próprio trabalho como um QA sênior independente faria, seguindo
 
 # Segurança ao fim de cada etapa (obrigatório)
 
-Antes de declarar a etapa pronta: rode a skill `auditoria-seguranca` (com os subagentes `auditor-seguranca` e, quando tocar Cloudflare, `revisor-cloudflare`, e as skills do plugin `cloudflare`), corrija cada achado confirmado com teste, rode a skill `verificar` (typecheck, lint, testes unitários e e2e) e registre auditoria e QA no PR. Use também `/security-review` e `/code-review` do Claude Code quando disponíveis.
+Antes de declarar a etapa pronta, ataque o que você fez: a skill `auditoria-seguranca` faz um pentest do próprio sistema pelo procedimento de `docs/qa/pentest.md` (mapeia a superfície nova, escreve cada ataque plausível como teste, corrige o que passar e prova o vermelho). Toda PR que muda código que roda passa por esse passe da funcionalidade; no fim de cada fase, nas etapas 3, 4, 12, 16, 18, 20 e 25 e antes do primeiro deploy roda o passe completo de todas as áreas. Achado crítico, alto ou médio para tudo e chama o Pablo, sem publicar o passo a passo. Rode a skill `auditoria-seguranca` (com os subagentes `auditor-seguranca` e, quando tocar Cloudflare, `revisor-cloudflare`, e as skills do plugin `cloudflare`), corrija cada achado confirmado com teste, rode a skill `verificar` (typecheck, lint, testes unitários e e2e) e registre auditoria e QA no PR. Use também `/security-review` e `/code-review` do Claude Code quando disponíveis.
 
 # Skills externas (uso automático)
 

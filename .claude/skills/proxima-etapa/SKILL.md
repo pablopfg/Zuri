@@ -12,8 +12,10 @@ lê só `progresso.md`, `decisoes.md` e o trecho da especificação dela.
 ## 1. Travas (todas precisam passar)
 
 - [ ] CI verde no PR, com todos os checks exigidos.
-- [ ] `revisao-qa` e `auditoria-seguranca` rodaram nesta etapa; nenhum achado
-      alto ou médio aberto; relatórios no corpo do PR.
+- [ ] `revisao-qa` e `auditoria-seguranca` rodaram nesta etapa, com o passe de
+      pentest de `docs/qa/pentest.md` (e o passe completo se a etapa fecha uma
+      fase ou é a 3, 4, 12, 16, 18, 20 ou 25); nenhum achado crítico, alto ou
+      médio aberto; relatórios no corpo do PR.
 - [ ] Matriz de rastreabilidade completa (todo critério de aceite com teste).
 - [ ] Changelog em `changelog/nao-lancado/`, começando por `<!-- versao: minor -->`, e docs atualizados; `progresso.md` atualizado neste PR.
 - [ ] `README.md` atualizado neste PR: "O que já funciona", "O que vem a seguir" e o resumo do aviso do topo. A coluna Situação do mapa, o selo e as contagens são do workflow `README`; não mexa neles à mão (`.claude/rules/readme.md`).

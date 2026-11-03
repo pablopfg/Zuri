@@ -144,7 +144,8 @@ Uma etapa só é mesclada com todos estes itens no PR, com o resultado real:
 3. Rodar a skill `verificar` (inclui cobertura, e2e e Lighthouse antes do PR).
 4. Rodar a skill `revisao-qa` (inclui o subagente `qa-senior` sem as suas
    conclusões) e corrigir o que for confirmado.
-5. Rodar a skill `auditoria-seguranca` e corrigir com teste.
+5. Rodar a skill `auditoria-seguranca`, que faz o pentest do que mudou
+   (`docs/qa/pentest.md`), e corrigir com teste.
 6. Rodar a suíte completa (`npm test` e `npm run test:e2e`) e registrar no PR.
 
 ## Critério de pronto
