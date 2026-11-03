@@ -19,6 +19,54 @@ funciona: [docs/agente/versionamento.md](docs/agente/versionamento.md).
 
 O que já entrou na `develop` e ainda não ganhou número fica em [`changelog/nao-lancado/`](changelog/nao-lancado/) por alguns minutos, até o workflow de versão escrever a seção.
 
+## [0.29.0] - 2026-11-03
+
+Mesclada às 19:53 (UTC-3) · commit [`8bdf664`](https://github.com/pablopfg/Zuri/commit/8bdf664ec00d21cfd501e5b1f636f7746bb0eab5) · PR [#161](https://github.com/pablopfg/Zuri/pull/161) · Adiciona o CRM interno e os eventos do n8n (etapa 22b)
+
+### Adicionado
+
+- Aba **Clientes** em Contatos (`/contatos/clientes`): até 5.000 clientes com
+  telefone, e-mail, aniversário, etapa do funil, etiquetas, anotações, retorno
+  e um histórico com as 100 entradas mais novas de cada um. Filtros por etapa,
+  etiqueta e retorno (atrasado, hoje, próximos 7 dias), e busca por nome,
+  pedaço do telefone ou e-mail.
+- Funil editável, de 2 a 12 etapas. Começa com Novo, Em conversa, Agendado,
+  Cliente e Inativo, e os clientes de uma etapa que você tirar vão para a
+  primeira.
+- Avisos do CRM pela central de avisos: retorno na hora marcada, aniversários
+  do dia às 9 h e cliente novo vindo do n8n (até 20 por dia). Cada um pode
+  ser desligado.
+- **Eventos do n8n**: o n8n manda clientes novos, mudanças, mensagens,
+  agendamentos e retornos por um endereço próprio, com cada evento assinado.
+  Até 300 por hora e 1.000 por dia, e um evento repetido não grava nada de
+  novo. O passo a passo está em `docs/crm.md`.
+- Na conversa, a Zuri busca clientes, resume o funil, cadastra clientes e muda
+  etapa, etiquetas, retorno e anotações sem perguntar. As rotinas leem o CRM,
+  mas não mudam nada.
+- Pedir um fluxo na conversa deixa uma sugestão em **Automações › Fluxos**, na
+  seção **Sugestões da Zuri**. Ela só vira fluxo quando você revisa e salva
+  com a senha, e o fluxo começa desligado.
+
+### Segurança
+
+- Ligar os eventos ou trocar o segredo pede a senha digitada nos últimos 15
+  minutos e gera alerta de segurança. O segredo aparece uma única vez e não
+  fica guardado, e trocá-lo desliga o endereço anterior na hora.
+- A assinatura de cada evento é conferida antes do Cloudflare Access e de
+  novo dentro da Zuri, com janela de 5 minutos. Eventos com formato
+  desconhecido são recusados inteiros.
+- Nenhuma ferramenta da Zuri apaga cliente, mexe no funil, liga os eventos ou
+  fala com clientes. Dados dos clientes entram no prompt marcados como dado,
+  telefone e e-mail só quando você pede, e nada deles vai para o log.
+- No modo de bloqueio, a aba e os eventos respondem 423.
+
+### Atualização
+
+- O banco ganha a migration 25 (clientes, funil, etiquetas, histórico e a
+  fila dos eventos do n8n). Ela roda sozinha na primeira requisição e só
+  acrescenta. Nenhum secret novo: o segredo dos eventos vem do
+  `SESSION_SECRET`.
+
 ## [0.28.2] - 2026-11-03
 
 Mesclada às 18:11 (UTC-3) · commit [`1ab3e0e`](https://github.com/pablopfg/Zuri/commit/1ab3e0e30fa7e12748b4db73c0816c748bed511b) · PR [#159](https://github.com/pablopfg/Zuri/pull/159) · Contador único de subrequisições por despertar do alarme
@@ -2219,7 +2267,8 @@ Mesclada às 22:15 (UTC-3) · commit [`360a79e`](https://github.com/pablopfg/Zur
   `npm audit`), CodeQL, Dependabot e rulesets para a `develop` e a `main`.
 - `LICENSE` (MIT), `NOTICE.md`, `SECURITY.md` e `CONTRIBUTING.md`.
 
-[Não lançado]: https://github.com/pablopfg/Zuri/compare/v0.28.2...develop
+[Não lançado]: https://github.com/pablopfg/Zuri/compare/v0.29.0...develop
+[0.29.0]: https://github.com/pablopfg/Zuri/releases/tag/v0.29.0
 [0.28.2]: https://github.com/pablopfg/Zuri/releases/tag/v0.28.2
 [0.28.1]: https://github.com/pablopfg/Zuri/releases/tag/v0.28.1
 [0.28.0]: https://github.com/pablopfg/Zuri/releases/tag/v0.28.0
