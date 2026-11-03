@@ -19,6 +19,42 @@ funciona: [docs/agente/versionamento.md](docs/agente/versionamento.md).
 
 O que já entrou na `develop` e ainda não ganhou número fica em [`changelog/nao-lancado/`](changelog/nao-lancado/) por alguns minutos, até o workflow de versão escrever a seção.
 
+## [0.25.4] - 2026-11-03
+
+Mesclada às 00:59 (UTC-3) · commit [`2aba183`](https://github.com/pablopfg/Zuri/commit/2aba183998d18bc1f4fb6495b365226bb4ffd85d) · PR [#108](https://github.com/pablopfg/Zuri/pull/108) · Nova organização da interface, textos revisados e atualização automática
+
+### Alterado
+
+- Sem mudança visível: nova organização da interface, textos revisados e atualização automática.
+
+## [0.25.3] - 2026-11-03
+
+Mesclada às 00:46 (UTC-3) · commit [`b11ba8b`](https://github.com/pablopfg/Zuri/commit/b11ba8b78126c0238c72acc32b5de217fd4a7a90) · PR [#117](https://github.com/pablopfg/Zuri/pull/117) · Pentest do próprio sistema depois de cada funcionalidade
+
+### Alterado
+
+- Sem mudança visível: pentest do próprio sistema depois de cada funcionalidade.
+
+## [0.25.2] - 2026-11-03
+
+Mesclada às 00:15 (UTC-3) · commit [`747c69d`](https://github.com/pablopfg/Zuri/commit/747c69dbb592cbbfd892e2dde39be0cc4a00a30d) · PR [#119](https://github.com/pablopfg/Zuri/pull/119) · Cobre de propósito a proposta que vence no dia seguinte
+
+### Alterado
+
+- Sem mudança visível: cobre de propósito a proposta que vence no dia seguinte.
+
+## [0.25.1] - 2026-11-03
+
+Mesclada às 00:02 (UTC-3) · commit [`edf0018`](https://github.com/pablopfg/Zuri/commit/edf0018607aa229281b92027f334b3cf8d20a142) · PR [#114](https://github.com/pablopfg/Zuri/pull/114) · Lista de aparelhos não falha mais quando o id termina em "b1"
+
+### Corrigido
+
+- O teste da lista de aparelhos de aviso não falha mais por acaso quando o id
+  aleatório de um aparelho termina em "b1" (#109).
+- Os testes do cartão de proposta no Telegram não falham mais quando rodam
+  na meia hora antes da meia-noite, quando o prazo da proposta já cai no dia
+  seguinte e o cartão mostra a data junto com a hora.
+
 ## [0.25.0] - 2026-11-02
 
 Mesclada às 23:17 (UTC-3) · commit [`bd0edb6`](https://github.com/pablopfg/Zuri/commit/bd0edb64061be2389500c60a871e81c9feebbaf3) · PR [#111](https://github.com/pablopfg/Zuri/pull/111) · Login OAuth, triagem por significado e aprovação pelo bot nos servidores MCP (etapa 18b)
@@ -1778,7 +1814,11 @@ Mesclada às 22:15 (UTC-3) · commit [`360a79e`](https://github.com/pablopfg/Zur
   `npm audit`), CodeQL, Dependabot e rulesets para a `develop` e a `main`.
 - `LICENSE` (MIT), `NOTICE.md`, `SECURITY.md` e `CONTRIBUTING.md`.
 
-[Não lançado]: https://github.com/pablopfg/Zuri/compare/v0.25.0...develop
+[Não lançado]: https://github.com/pablopfg/Zuri/compare/v0.25.4...develop
+[0.25.4]: https://github.com/pablopfg/Zuri/releases/tag/v0.25.4
+[0.25.3]: https://github.com/pablopfg/Zuri/releases/tag/v0.25.3
+[0.25.2]: https://github.com/pablopfg/Zuri/releases/tag/v0.25.2
+[0.25.1]: https://github.com/pablopfg/Zuri/releases/tag/v0.25.1
 [0.25.0]: https://github.com/pablopfg/Zuri/releases/tag/v0.25.0
 [0.24.1]: https://github.com/pablopfg/Zuri/releases/tag/v0.24.1
 [0.24.0]: https://github.com/pablopfg/Zuri/releases/tag/v0.24.0
