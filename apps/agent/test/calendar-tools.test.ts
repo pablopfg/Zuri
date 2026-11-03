@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { inWake, WakeBudget } from "../src/agent/wake-budget.ts";
 import type { DevEvent } from "../src/google/dev-google.ts";
 import { ALL_TOOLS } from "../src/tools/index.ts";
 import { runApprovedAction, ToolError, ToolExecutor } from "../src/tools/registry.ts";
@@ -229,6 +230,26 @@ describe("delete_calendar_event", () => {
 });
 
 describe("the push channels the alarm keeps", () => {
+  it("never opens a new channel without room in the wake to stop the old one, and leaves the rest for a minute later (issue #152)", () =>
+    withChatWorld(async (world) => {
+      await connect(world);
+      world.clock.now = (world.google.watchDue() ?? 0) + 1_000;
+      const old = new Set(world.googleSim.channels.keys());
+      // Room for two calls: the token's renewal and the watch, not the stop. Nothing is opened.
+      expect(await inWake(new WakeBudget(2, 0), () => world.google.renewWatches())).toBe(0);
+      expect(new Set(world.googleSim.channels.keys())).toEqual(old);
+      expect(world.google.watchDue()).toBe(world.clock.now + 60_000);
+      // Room for one renewal (token, watch, stop) and not a second: one replaced, the other left whole.
+      world.clock.now += 60_000;
+      expect(await inWake(new WakeBudget(4, 0), () => world.google.renewWatches())).toBe(1);
+      expect(world.googleSim.channels.size).toBe(2);
+      expect([...world.googleSim.channels.keys()].filter((id) => old.has(id))).toHaveLength(1);
+      expect(world.google.watchDue()).toBe(world.clock.now + 60_000);
+      world.clock.now += 60_000;
+      expect(await inWake(new WakeBudget(), () => world.google.renewWatches())).toBe(1);
+      expect([...world.googleSim.channels.keys()].some((id) => old.has(id))).toBe(false);
+    }));
+
   it("opens them with the calendar, renews one near its end, retries a refusal an hour later, and costs nothing between", () =>
     withChatWorld(async (world) => {
       expect(world.google.watchDue()).toBeNull();

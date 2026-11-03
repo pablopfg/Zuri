@@ -122,7 +122,10 @@ travada, mostra só as contagens, sem endereços nem nomes de fluxos.
 
 Tudo roda no alarme único do Durable Object, sem Cloudflare Workflows, KV ou
 fila. Cada despertar usa no máximo 20 subrequisições para os fluxos (uma
-consulta DNS conta 2); o que não coube segue no despertar seguinte. Um
+consulta DNS conta 2), dentro do contador único do despertar, que soma
+todas as áreas do alarme e para antes de 45 (veja P9 em
+`docs/arquitetura/orcamento-free-tier.md`); o que não coube segue no despertar
+seguinte. Um
 despertar sem nada devido lê 4 linhas. Uma execução do monitor com 10 sites
 lê cerca de 80 linhas e grava cerca de 40, medido em
 `apps/agent/test/free-tier-budget.test.ts`.

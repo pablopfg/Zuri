@@ -18,6 +18,7 @@ import {
   flowUsesAi,
   nextRun,
 } from "@zuri/shared";
+import { currentWake } from "../agent/wake-budget.ts";
 import type { MeteredAI } from "../ai/metered.ts";
 import { recordActivity } from "../db/activity.ts";
 import type { Database } from "../db/database.ts";
@@ -367,11 +368,13 @@ export class FlowService {
   private newWake(): Wake {
     let used = 0;
     const budget = FLOW_LIMITS.subrequestsPerWake;
+    // In the shared alarm, every call also takes a place in the wake's one count (issue #152).
+    const shared = currentWake();
     return {
       meter: {
-        room: (n) => used + n <= budget,
+        room: (n) => used + n <= budget && (shared?.room(n) ?? true),
         take: () => {
-          if (used >= budget) throw new Error("budget");
+          if (used >= budget || shared?.take() === false) throw new Error("budget");
           used++;
         },
       },

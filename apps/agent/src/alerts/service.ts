@@ -24,11 +24,13 @@ import {
   type Settings,
   t,
 } from "@zuri/shared";
+import { currentWake } from "../agent/wake-budget.ts";
 import type { Database } from "../db/database.ts";
+import { InternalState } from "../db/internal-state.ts";
 import { AppError } from "../http/errors.ts";
 import { log } from "../log.ts";
 import type { StorageGuard } from "../productivity/storage.ts";
-import type { AlertChannel, SendResult } from "./channels.ts";
+import type { AlertChannel, AlertMessage, SendResult } from "./channels.ts";
 import { AlertLearning } from "./learning.ts";
 
 /** Data a notice's text is written from: names and counts, never translated text. */
@@ -103,6 +105,17 @@ const BODY_MAX = 4_000;
  * 50 on the Free plan.
  */
 const SENDS_PER_WAKE = 5;
+/** Tries waiting for room in the next wake (issue #152); past this, a try stays in the bell. */
+const DEFERRED_MAX = 100;
+
+/** A try a wake had no room for: sent again at the next wake. */
+interface DeferredTry {
+  id: string;
+  attempt: number;
+  insist: boolean;
+  /** A security alert's try: never pushed out of a full list. */
+  security?: boolean;
+}
 const HOUR = 3_600_000;
 const DAY = 24 * HOUR;
 /** "Adiar 1 h": the notice comes back this much later. */
@@ -136,12 +149,14 @@ export interface AlertServiceDeps {
 export class AlertService {
   readonly #sending = new Set<Promise<void>>();
   readonly learning: AlertLearning;
+  private readonly state: InternalState;
 
   constructor(
     private readonly db: Database,
     private readonly storage: StorageGuard,
     private readonly deps: AlertServiceDeps,
   ) {
+    this.state = new InternalState(db);
     this.learning = new AlertLearning(db, {
       enabled: () => deps.settings().alertLearning,
       sourceName: (kind) => (Object.hasOwn(SOURCE_NAME, kind) ? t(deps.locale(), SOURCE_NAME[kind as keyof typeof SOURCE_NAME]) : ""),
@@ -262,13 +277,30 @@ export class AlertService {
   private async deliver(row: NoticeRow, attempt: number, insist = true): Promise<void> {
     const locale = this.deps.locale();
     const notice = this.present(row, locale);
+    const message: AlertMessage = { notice, attempt, origin: row.origin };
     const counted = attempt === 1 && row.priority !== "critical" && row.category !== "reminders";
+    // Each channel in order: why it doesn't take this try, or null when it sends.
+    const plan: { channel: AlertChannel; reason: DeliveryReason | null }[] = [];
+    for (const channel of this.deps.channels()) {
+      if (!this.routed(channel.name, row)) continue;
+      if (attempt > 1 && channel.firstTryOnly) continue;
+      plan.push({ channel, reason: this.refusal(channel, row, attempt, counted) });
+    }
+    // In the shared alarm the try takes its calls from the wake's one count (issue #152, rule P9):
+    // when they don't fit, the whole try waits for the next wake, a minute later, instead of failing.
+    const wake = currentWake();
+    const sending = plan.filter((step) => step.reason === null);
+    if (wake && sending.length > 0) {
+      const calls = sending.reduce((sum, { channel }) => sum + Math.max(1, channel.cost?.(message) ?? 1), 0);
+      if (!wake.take(calls, true)) {
+        if (this.defer({ id: row.id, attempt, insist, security: row.category === "security" })) return;
+        // The waiting list is full: this try stays in the bell, like a channel's own cap.
+        for (const step of sending) step.reason = "channel_limit";
+      }
+    }
     let reached = false;
     await Promise.all(
-      this.deps.channels().map(async (channel) => {
-        if (!this.routed(channel.name, row)) return;
-        if (attempt > 1 && channel.firstTryOnly) return;
-        const reason = this.refusal(channel, row, attempt, counted);
+      plan.map(async ({ channel, reason }) => {
         if (reason) {
           this.record(row, channel.name, attempt, "skipped", reason, false);
           return;
@@ -276,7 +308,7 @@ export class AlertService {
         const id = this.record(row, channel.name, attempt, "sending", null, counted);
         let result: SendResult;
         try {
-          result = await withTimeout(channel.send({ notice, attempt, origin: row.origin }), SEND_TIMEOUT_MS);
+          result = await withTimeout(channel.send(message), SEND_TIMEOUT_MS);
         } catch (error) {
           log("error", "alert_delivery_failed", { error, kind: channel.name });
           result = { status: "failed", reason: error instanceof TimeoutError ? "unreachable" : "error" };
@@ -333,8 +365,71 @@ export class AlertService {
     if (started) await this.deps.rearm();
   }
 
+  // ---------- Tries that waited for room ----------
+
+  private waiting(): DeferredTry[] {
+    const raw = this.state.get<string>("alert_deferred");
+    if (typeof raw !== "string") return [];
+    try {
+      const parsed: unknown = JSON.parse(raw);
+      if (!Array.isArray(parsed)) return [];
+      return parsed.filter(
+        (entry): entry is DeferredTry =>
+          typeof entry === "object" &&
+          entry !== null &&
+          typeof entry.id === "string" &&
+          Number.isSafeInteger(entry.attempt) &&
+          typeof entry.insist === "boolean" &&
+          (entry.security === undefined || typeof entry.security === "boolean"),
+      );
+    } catch {
+      return [];
+    }
+  }
+
+  /** Keeps a try for the next wake; false when the list is full. A security alert takes the place of the oldest other try. */
+  private defer(entry: DeferredTry): boolean {
+    const list = this.waiting();
+    if (list.length >= DEFERRED_MAX) {
+      const other = entry.security ? list.findIndex((waiting) => !waiting.security) : -1;
+      if (other < 0) return false;
+      list.splice(other, 1);
+    }
+    list.push(entry);
+    this.state.set("alert_deferred", JSON.stringify(list));
+    return true;
+  }
+
+  /**
+   * The alarm fired: the tries the last wake had no room for go out first, in
+   * the order they came. One that still doesn't fit waits again. A try the
+   * owner answered meanwhile (an insisting one read, muted or done; a first one
+   * read, unless it is a security alert) is dropped; one that fails never keeps
+   * the others from going.
+   */
+  async resumeDeferred(): Promise<number> {
+    const list = this.waiting();
+    if (list.length === 0) return 0;
+    this.state.delete("alert_deferred");
+    let sent = 0;
+    for (const entry of list) {
+      try {
+        const row = this.db.one<NoticeRow>(`SELECT * FROM zur_notices WHERE id = ?`, entry.id);
+        if (!row) continue;
+        if (entry.attempt > 1 ? row.escalation !== "active" : row.read_at !== null && row.category !== "security") continue;
+        sent++;
+        await this.deliver(row, entry.attempt, entry.insist);
+      } catch (error) {
+        log("error", "alert_delivery_failed", { error });
+      }
+    }
+    return sent;
+  }
+
   /** The earliest next try of an insisting notice, or a snoozed one coming back, for the object's one alarm. */
   nextDue(): string | null {
+    // A try that waited for room goes at the next wake (otherDue keeps it a minute out).
+    if (this.waiting().length > 0) return iso(this.now());
     const tries = this.db.one<{ at: string }>(`SELECT next_attempt_at AS at FROM zur_notices WHERE escalation = 'active' ORDER BY next_attempt_at LIMIT 1`)?.at ?? null;
     const snoozed = this.db.one<{ at: string }>(`SELECT snoozed_until AS at FROM zur_notices WHERE snoozed_until IS NOT NULL ORDER BY snoozed_until LIMIT 1`)?.at ?? null;
     if (tries === null) return snoozed;

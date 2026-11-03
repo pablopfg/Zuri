@@ -206,7 +206,21 @@ Numeradas para o PR poder citar ("segue P2 e P4").
   requisição e algumas escritas por batida. Meça no teste de orçamento quando a
   etapa de agendamento entrar. Passos de Workflow ficam abaixo de 10 ms de CPU.
 - **P9. Subrequisições contadas.** Cada turno conta as suas e para antes de 45;
-  no máximo 6 conexões abertas ao mesmo tempo.
+  no máximo 6 conexões abertas ao mesmo tempo. O alarme único tem um contador
+  só por despertar (`apps/agent/src/agent/wake-budget.ts`, issue #152): até 44
+  subrequisições somando rotinas, Google Agenda, contatos, fluxos e avisos.
+  Cada área mantém a própria cota e cada chamada também ocupa um lugar no
+  contador; o trabalho das áreas para 10 lugares antes, guardados para os
+  avisos que ele gera. O que não coube segue no despertar seguinte, um minuto
+  depois: a rotina com IA fica pendente sem ser reivindicada, os canais da
+  Agenda e a página dos contatos esperam, o fluxo espera e o aviso guarda a
+  tentativa (até 100; um alerta de segurança toma o lugar da mais antiga) e
+  sai primeiro no próximo despertar. O canal do Telegram conta a nova tentativa
+  que o cliente faz depois de um 429 (2 chamadas no privado, 6 no grupo), e a
+  Agenda só abre um canal novo com lugar para parar o antigo. Medido em
+  `apps/agent/test/wake-budget.test.ts`: dez lembretes para três aparelhos e um
+  monitor de dez sites, que somavam 48 num despertar, ficam abaixo de 45 e
+  terminam nos seguintes sem perder nada.
 - **P10. Logs enxutos.** O log de invocação já é o evento da requisição; nada de
   `console.log` no caminho comum nem dentro de laço; traces desligados; amostragem só se os logs passarem de 50.000 por
   dia.

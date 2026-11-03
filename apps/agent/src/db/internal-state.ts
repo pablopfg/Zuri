@@ -83,7 +83,9 @@ export type InternalKey =
   | "mcp_meaning_wait"
   // Step 19, the Google Calendar: the sign-in waiting for Google's answer (the state's hash, the sealed
   // PKCE verifier, the session that started it and its end).
-  | "google_oauth_pending";
+  | "google_oauth_pending"
+  // Issue #152: the notices' tries an alarm wake had no room for, sent at the next wake (JSON list).
+  | "alert_deferred";
 
 export class InternalState {
   constructor(private readonly db: Database) {}

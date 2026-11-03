@@ -88,6 +88,8 @@ interface RunRow {
 const RUNS_PER_WAKE = 10;
 /** AI routines per wake: each can take up to the AI deadline, so only two share a handler. */
 const AI_RUNS_PER_WAKE = 2;
+/** A routine with no room in its wake runs at the next one, this much later (issue #152). */
+const NEXT_WAKE_MS = 60_000;
 /** A run that starts this late after its slot is a catch-up (the object was asleep or down). */
 const LATE_MS = 5 * 60_000;
 
@@ -100,6 +102,8 @@ const LATE_MS = 5 * 60_000;
 export class AutomationService {
   /** Runs executing in this instance; a row left "running" without one was interrupted. */
   readonly #inFlight = new Set<string>();
+  /** A wake left a routine due for lack of room (issue #152): the alarm comes back no sooner than this. */
+  #notBefore: number | undefined;
 
   constructor(
     private readonly db: Database,
@@ -391,9 +395,11 @@ export class AutomationService {
    * restart), so a lost alarm is set again and a live one is never doubled.
    */
   async rearm(options: { verify?: boolean } = {}): Promise<void> {
-    const own = this.db.one<{ next_run: string }>(
+    let own = this.db.one<{ next_run: string }>(
       `SELECT next_run FROM zur_automations WHERE status = 'active' AND next_run IS NOT NULL ORDER BY next_run LIMIT 1`,
     )?.next_run;
+    const floor = this.#notBefore;
+    if (own && floor !== undefined && Date.parse(own) < floor) own = new Date(floor).toISOString();
     const other = this.deps.otherDue?.() ?? undefined;
     // ISO strings in UTC sort as times; the earliest of the two wins.
     const due = [own, other].filter((at): at is string => Boolean(at)).sort()[0];
@@ -444,11 +450,17 @@ export class AutomationService {
    * anything runs: its run row is inserted for its slot (unique per automation
    * and slot) and its next run moves on. A second alarm, a restart or a
    * concurrent wake finds nothing left to claim, so a slot never runs twice.
+   *
+   * `ready` says whether a kind of automation fits in this wake (issue #152:
+   * an AI routine needs room for its external calls); one that doesn't stays
+   * due, unclaimed, and runs at the next wake.
    */
-  async wake(firedId: string | null, execute: Executor): Promise<number> {
+  async wake(firedId: string | null, execute: Executor, ready: (kind: Automation["kind"]) => boolean = () => true): Promise<number> {
     const stored = this.storedAlarm();
     if (firedId && stored?.id === firedId) this.state.delete("automation_alarm");
     let ran = 0;
+    // A routine left for the next wake: the alarm comes back a minute out, never at once.
+    let waiting = false;
     try {
       const nowIso = new Date(this.now()).toISOString();
       const due = this.db.all<AutomationRow>(
@@ -461,6 +473,10 @@ export class AutomationService {
         // A wake runs its AI routines one after another: two at most, the rest go to the next wake
         // (the alarm is set again at once), so a long chain can't outlast the handler's time.
         if (row.kind === "agent_prompt" && ai >= AI_RUNS_PER_WAKE) continue;
+        if (!ready(row.kind)) {
+          waiting = true;
+          continue;
+        }
         if (row.kind === "agent_prompt") ai++;
         const claim = this.claim(row);
         if (!claim) continue;
@@ -469,6 +485,8 @@ export class AutomationService {
         await this.execute(claim.automation, claim.runId, claim.trigger, execute);
       }
     } finally {
+      // Every later rearm of this wake keeps it too (the object's memory: after a restart, the alarm may fire at once).
+      this.#notBefore = waiting ? this.now() + NEXT_WAKE_MS : undefined;
       await this.rearm();
     }
     return ran;
