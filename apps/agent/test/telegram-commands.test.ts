@@ -711,17 +711,20 @@ describe("edges", () => {
 
   it("Pausar on a routine already paused or deleted", async () => {
     await linkOwner();
-    const first = await inOwner((agent) => agent.store.automations.create({ name: "A", kind: "task_digest", schedule: { type: "daily", time: "07:00" } }, "app"));
-    const second = await inOwner((agent) => agent.store.automations.create({ name: "B", kind: "task_digest", schedule: { type: "daily", time: "08:00" } }, "app"));
+    const first = await inOwner((agent) => agent.store.automations.create({ name: "Alfa", kind: "task_digest", schedule: { type: "daily", time: "07:00" } }, "app"));
+    const second = await inOwner((agent) => agent.store.automations.create({ name: "Beta", kind: "task_digest", schedule: { type: "daily", time: "08:00" } }, "app"));
     await command("/rotinas");
     const rows = keyboard(lastSent());
+    // The list goes by the next run, which depends on the hour the test runs at.
+    const text = String(lastSent()?.body.text ?? "");
+    const [alfa, beta] = text.indexOf("Alfa") < text.indexOf("Beta") ? [rows[0], rows[1]] : [rows[1], rows[0]];
     await inOwner(async (agent) => {
       await agent.store.automations.update(first.id, { paused: true });
       await agent.store.automations.delete(second.id);
     });
     botCalls.length = 0;
-    await tap(rows[0]?.[0]?.callback_data ?? "", rows);
-    await tap(rows[1]?.[0]?.callback_data ?? "", rows);
+    await tap(alfa?.[0]?.callback_data ?? "", rows);
+    await tap(beta?.[0]?.callback_data ?? "", rows);
     expect(answers()).toEqual(["Essa rotina já não está ativa.", "Esse item não existe mais."]);
   });
 

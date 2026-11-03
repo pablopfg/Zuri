@@ -102,6 +102,7 @@ describe("the migration list", () => {
       19: "15098917e96439840fa87c1d6e7eb725ce5f2c971a4e9b5334d625f8e52f6897",
       20: "ce26f4d3a58b5dea0ce27583268c335af2846eedf66ce2bc575b33993b4a59e9",
       21: "77a1bb6400daf53af88998aec9180efc8546f0550afebf3cf4ad0519e695b8a3",
+      22: "710250c6a5ac9b1b789ba436657e0013925b1c44b409bde00a784c5e0778159a",
     };
     for (const m of MIGRATIONS) {
       const digest = createHash("sha256").update(statementText(m).replace(/\r\n/g, "\n")).digest("hex");
@@ -117,7 +118,7 @@ describe("migrate", () => {
       expect(zurObjects(db)).toEqual([]);
 
       expect(migrate(db)).toBe(LATEST_SCHEMA_VERSION);
-      expect(schemaVersion(db)).toBe(21);
+      expect(schemaVersion(db)).toBe(22);
       // FTS5 keeps shadow tables of its own (zur_notes_fts_data and others): only ours are listed.
       expect(zurObjects(db).filter((name) => !/^table:zur_(notes|memories)_fts_/.test(name))).toEqual([
         "table:zur_activity",
@@ -134,6 +135,12 @@ describe("migrate", () => {
         "trigger:zur_area_automations_automations_delete",
         "trigger:zur_area_automations_automations_insert",
         "trigger:zur_area_automations_automations_update",
+        "trigger:zur_area_calendar_google_account_delete",
+        "trigger:zur_area_calendar_google_account_insert",
+        "trigger:zur_area_calendar_google_account_update",
+        "trigger:zur_area_calendar_google_calendars_delete",
+        "trigger:zur_area_calendar_google_calendars_insert",
+        "trigger:zur_area_calendar_google_calendars_update",
         "trigger:zur_area_conversations_conversations_delete",
         "trigger:zur_area_conversations_conversations_insert",
         "trigger:zur_area_conversations_conversations_update",
@@ -209,6 +216,9 @@ describe("migrate", () => {
         "table:zur_devices",
         "table:zur_diagnostics",
         "index:zur_diagnostics_last",
+        "table:zur_google_account",
+        "table:zur_google_calendars",
+        "index:zur_google_calendars_watch",
         "table:zur_login_attempts",
         "index:zur_login_attempts_at",
         "index:zur_login_attempts_network",
@@ -512,11 +522,35 @@ describe("migrate", () => {
     });
   });
 
+  it("upgrades a database at version 21 to 22: the Google account and calendars, the calendar area moved by what the screens show", async () => {
+    await withEmptyDatabase("from-21", (db) => {
+      expect(migrate(db, MIGRATIONS.slice(0, 21))).toBe(21);
+      db.run(`UPDATE zur_area_versions SET tasks = 5`);
+      expect(migrate(db)).toBe(22);
+      expect(db.one(`SELECT tasks, calendar FROM zur_area_versions`)).toEqual({ tasks: 5, calendar: 0 });
+      db.run(`INSERT INTO zur_google_account (id, email, refresh_token, scopes, connected_at, checked_at) VALUES (1, 'dono@exemplo.com.br', 'selado', 's', 'x', 'x')`);
+      db.run(`INSERT INTO zur_google_calendars (id, name, access_role, updated_at) VALUES ('c1', 'Casa', 'owner', 'x')`);
+      expect(db.one(`SELECT calendar FROM zur_area_versions`)).toEqual({ calendar: 2 });
+      expect(db.one(`SELECT mode, changed, is_primary FROM zur_google_calendars`)).toEqual({ mode: "off", changed: 0, is_primary: 0 });
+      // A renewed watch or a fresh access token moves nothing; a change seen does.
+      db.run(`UPDATE zur_google_calendars SET watch_id = 'w', watch_expires = 1, updated_at = 'y'`);
+      db.run(`UPDATE zur_google_account SET access_token = 't', access_expires_at = 1, checked_at = 'y'`);
+      expect(db.one(`SELECT calendar FROM zur_area_versions`)).toEqual({ calendar: 2 });
+      db.run(`UPDATE zur_google_calendars SET changed = changed + 1`);
+      db.run(`UPDATE zur_google_account SET status = 'revoked'`);
+      expect(db.one(`SELECT calendar FROM zur_area_versions`)).toEqual({ calendar: 4 });
+      // One account only; one calendar per push channel.
+      expect(() => db.run(`INSERT INTO zur_google_account (id, email, refresh_token, scopes, connected_at, checked_at) VALUES (2, 'b', 'c', 's', 'x', 'x')`)).toThrow();
+      db.run(`INSERT INTO zur_google_calendars (id, name, access_role, updated_at, watch_id) VALUES ('c2', 'Outra', 'reader', 'x', 'w2')`);
+      expect(() => db.run(`UPDATE zur_google_calendars SET watch_id = 'w' WHERE id = 'c2'`)).toThrow();
+    });
+  });
+
   it("upgrades a database at version 20 to 21: the areas' numbers start at zero, the done tasks counted, every change moves its area", async () => {
     await withEmptyDatabase("from-20", (db) => {
       expect(migrate(db, MIGRATIONS.slice(0, 20))).toBe(20);
       db.run(`INSERT INTO zur_tasks (id, title, status, created_at, updated_at) VALUES ('t1', 'Feita', 'done', 'x', 'x'), ('t2', 'Aberta', 'todo', 'x', 'x')`);
-      expect(migrate(db)).toBe(21);
+      expect(migrate(db, MIGRATIONS.slice(0, 21))).toBe(21);
       expect(db.one(`SELECT * FROM zur_area_versions`)).toEqual({ id: 1, tasks: 0, projects: 0, notes: 0, trash: 0, memories: 0, automations: 0, conversations: 0 });
       expect(db.one(`SELECT n FROM zur_counts WHERE kind = 'tasks_done'`)).toEqual({ n: 1 });
       expect(db.all(`SELECT id, status FROM zur_tasks ORDER BY id`)).toEqual([

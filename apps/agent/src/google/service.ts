@@ -181,6 +181,11 @@ export class GoogleCalendar {
     this.clock = deps.clock ?? Date.now;
   }
 
+  /** The service's clock: "today" for the tools follows it (and the tests' fixed noon). */
+  now(): Date {
+    return new Date(this.clock());
+  }
+
   get configured(): boolean {
     return !!this.deps.clientId()?.trim() && !!this.deps.clientSecret()?.trim() && this.credentials.available;
   }

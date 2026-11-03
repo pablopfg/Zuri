@@ -18,6 +18,8 @@ import { Productivity } from "../src/productivity/index.ts";
 import type { ToolContext } from "../src/tools/registry.ts";
 import { NOON } from "./ai-fakes.ts";
 import { testEnv } from "./helpers.ts";
+import { type DevGoogle, devGoogle, googleNetwork } from "../src/google/dev-google.ts";
+import { GoogleCalendar } from "../src/google/service.ts";
 
 export const TIME_ZONE = "America/Sao_Paulo";
 
@@ -37,8 +39,11 @@ export interface ChatWorld {
   settings: Settings;
   /** The MCP servers (step 18), with no network until a test gives it a fixture's. */
   mcp: McpService;
-  /** Plays the account's lockdown for the MCP service. */
+  /** Plays the account's lockdown for the MCP service (and the Google Calendar's). */
   mcpLockdown: { active: boolean };
+  /** The Google Calendar (step 19), answered by `googleSim` with its sample calendars. */
+  google: GoogleCalendar;
+  googleSim: DevGoogle;
   /** The tools' context for a conversation (the chat), or for a scheduled run. */
   ctx(conversationId: string | null, mode?: ToolContext["mode"]): ToolContext;
   services(): Omit<ToolContext, "conversationId" | "mode" | "timeZone">;
@@ -101,7 +106,20 @@ export function withChatWorld<T>(fn: (world: ChatWorld) => T | Promise<T>): Prom
     const automations = new AutomationService(db, productivity.storage, new InternalState(db), { timeZone: () => TIME_ZONE, alarm, clock: tick });
     const mcpLockdown = { active: false };
     const mcp = new McpService({ db, credentialKey: testEnv.MCP_CREDENTIAL_KEY, development: () => false, lockdown: () => mcpLockdown.active, redirectUrl: () => "https://zuri.exemplo.com.br/configuracoes/integracoes", clock: tick });
-    const services = () => ({ db, productivity, memories, conversations, plans, actions, automations, mcpService: mcp });
+    const googleSim = devGoogle({ clientId: testEnv.GOOGLE_CLIENT_ID, clientSecret: testEnv.GOOGLE_CLIENT_SECRET });
+    const google = new GoogleCalendar({
+      db,
+      state: new InternalState(db),
+      clientId: () => testEnv.GOOGLE_CLIENT_ID,
+      clientSecret: () => testEnv.GOOGLE_CLIENT_SECRET,
+      credentialKey: testEnv.MCP_CREDENTIAL_KEY,
+      pushSecret: () => testEnv.SESSION_SECRET,
+      publicUrl: () => new URL("https://zuri.exemplo.com.br"),
+      lockdown: () => mcpLockdown.active,
+      clock: tick,
+    });
+    google.network = googleNetwork(googleSim, { fetch: () => Promise.reject(new Error("no network in tests")) });
+    const services = () => ({ db, productivity, memories, conversations, plans, actions, automations, mcpService: mcp, calendar: google });
     const world: ChatWorld = {
       db,
       productivity,
@@ -116,6 +134,8 @@ export function withChatWorld<T>(fn: (world: ChatWorld) => T | Promise<T>): Prom
       settings,
       mcp,
       mcpLockdown,
+      google,
+      googleSim,
       services,
       ctx: (conversationId, mode = "chat") => ({ ...services(), timeZone: TIME_ZONE, mode, conversationId }),
       ai: (provider) =>
