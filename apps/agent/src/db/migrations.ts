@@ -885,6 +885,35 @@ export const MIGRATIONS: readonly Migration[] = [
       `ALTER TABLE zur_mcp_tools ADD COLUMN embedding_key TEXT`,
     ],
   },
+  {
+    version: 20,
+    name: "mcp_autonomy",
+    statements: [
+      // Autonomy per tool (decision of 03/11/2026). The third level, "also in
+      // routines", is `policy = 'auto'` with this flag, so the CHECK of 18 stays.
+      `ALTER TABLE zur_mcp_tools ADD COLUMN routines INTEGER NOT NULL DEFAULT 0 CHECK (routines IN (0, 1))`,
+      // What the tool does, as the owner confirmed it (null: Zuri's own judgement from the definition).
+      // No CHECK here: on this column it made every insert of a catalog read three rows instead of one
+      // (free-tier-budget.test.ts); the code reads anything else as null (repository.ts, kindOf).
+      `ALTER TABLE zur_mcp_tools ADD COLUMN kind TEXT`,
+      // "Without asking" used to hold only for a tool the server marked read-only; a row left at "auto"
+      // without that mark (a definition that changed) goes back to asking, so nothing gains autonomy unseen.
+      `UPDATE zur_mcp_tools SET policy = 'approve'
+       WHERE policy = 'auto' AND (CASE WHEN json_valid(annotations) THEN json_extract(annotations, '$.readOnlyHint') END) IS NOT 1`,
+      // Tools set free for one AI routine only. A changed definition, a new
+      // address or a deleted routine or server takes them out (the code does,
+      // since an exposed name may come back on another tool).
+      `CREATE TABLE IF NOT EXISTS zur_automation_mcp_tools (
+        automation_id TEXT NOT NULL,
+        exposed_name TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        PRIMARY KEY (automation_id, exposed_name)
+      )`,
+      `CREATE INDEX IF NOT EXISTS zur_automation_mcp_tools_tool ON zur_automation_mcp_tools (exposed_name)`,
+      // The conversation where a routine leaves its proposals, made the first time one needs it.
+      `ALTER TABLE zur_automations ADD COLUMN conversation_id TEXT`,
+    ],
+  },
 ];
 
 export const LATEST_SCHEMA_VERSION = MIGRATIONS.at(-1)?.version ?? 0;

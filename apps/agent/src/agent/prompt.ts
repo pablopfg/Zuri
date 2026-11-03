@@ -101,10 +101,12 @@ export function languageReminder(language: string): string {
  * What a scheduled run adds to the prompt. The routine's name is the owner's
  * text, so it goes as data; the instruction itself arrives as the user message.
  */
-export function scheduledInstructions(name: string, quiet: boolean): PromptSection {
+export function scheduledInstructions(name: string, quiet: boolean, external = false): PromptSection {
   const lines = [
     `This is a scheduled run of a routine the owner approved: ${dataLine("tool", "routine", name)}. The owner is not reading along now; your final answer is delivered to them as a notice.`,
-    "You can only read: no tool here creates, changes, deletes or proposes anything. Never say you did any of that.",
+    external
+      ? "Zuri's own tools here only read. The external tools (mcp_…) are the ones the owner let this routine use: each call sends its arguments to that service, so call one only when the routine's instruction asks for it. A call that comes back awaiting approval did not run: say it waits for the owner, never that it ran."
+      : "You can only read: no tool here creates, changes, deletes or proposes anything. Never say you did any of that.",
     "Use notify_owner at most once, only when the notice needs its own title. Keep the answer short.",
   ];
   if (quiet) lines.push("If nothing needs the owner's attention, answer exactly NADA and nothing else.");

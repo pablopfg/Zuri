@@ -100,6 +100,7 @@ describe("the migration list", () => {
       17: "fd290cc5de35dccf4d948273b968436628891a5c4bcdaa43aa16917db22466a2",
       18: "6e59b3b8d2eb9f8dbc3195ea0aa951c60139ebc0fc34400bf6c85e010f96b3fb",
       19: "15098917e96439840fa87c1d6e7eb725ce5f2c971a4e9b5334d625f8e52f6897",
+      20: "ce26f4d3a58b5dea0ce27583268c335af2846eedf66ce2bc575b33993b4a59e9",
     };
     for (const m of MIGRATIONS) {
       const digest = createHash("sha256").update(statementText(m).replace(/\r\n/g, "\n")).digest("hex");
@@ -115,7 +116,7 @@ describe("migrate", () => {
       expect(zurObjects(db)).toEqual([]);
 
       expect(migrate(db)).toBe(LATEST_SCHEMA_VERSION);
-      expect(schemaVersion(db)).toBe(19);
+      expect(schemaVersion(db)).toBe(20);
       // FTS5 keeps shadow tables of its own (zur_notes_fts_data and others): only ours are listed.
       expect(zurObjects(db).filter((name) => !/^table:zur_(notes|memories)_fts_/.test(name))).toEqual([
         "table:zur_activity",
@@ -131,6 +132,8 @@ describe("migrate", () => {
         "index:zur_auth_events_at",
         "table:zur_auth_events_daily",
         "index:zur_auth_events_network",
+        "table:zur_automation_mcp_tools",
+        "index:zur_automation_mcp_tools_tool",
         "table:zur_automation_runs",
         "index:zur_automation_runs_automation",
         "index:zur_automation_runs_slot",
@@ -477,12 +480,35 @@ describe("migrate", () => {
     });
   });
 
+  it("upgrades a database at version 19 to 20: autonomy per tool and per routine, the owner's levels and routines kept", async () => {
+    await withEmptyDatabase("from-19", (db) => {
+      expect(migrate(db, MIGRATIONS.slice(0, 19))).toBe(19);
+      db.run(`INSERT INTO zur_mcp_servers (id, slug, name, url, auth_type, created_at, updated_at) VALUES ('s1', 'docs', 'Docs', 'https://exemplo.com.br/mcp', 'none', 'x', 'x')`);
+      db.run(`INSERT INTO zur_mcp_tools (server_id, name, exposed_name, input_schema, annotations, schema_hash, status, enabled, policy, hint, created_at, updated_at) VALUES ('s1', 'search', 'mcp_docs_search', '{}', '{"readOnlyHint":true}', 'h', 'available', 1, 'auto', '', 'x', 'x')`);
+      // Left at "auto" without the read-only mark (a definition that changed under 18): back to asking.
+      db.run(`INSERT INTO zur_mcp_tools (server_id, name, exposed_name, input_schema, annotations, schema_hash, status, enabled, policy, hint, created_at, updated_at) VALUES ('s1', 'send', 'mcp_docs_send', '{}', '{"readOnlyHint":false}', 'h', 'available', 1, 'auto', '', 'x', 'x')`);
+      db.run(`INSERT INTO zur_mcp_tools (server_id, name, exposed_name, input_schema, annotations, schema_hash, status, enabled, policy, hint, created_at, updated_at) VALUES ('s1', 'odd', 'mcp_docs_odd', '{}', 'not json', 'h', 'available', 1, 'auto', '', 'x', 'x')`);
+      db.run(`INSERT INTO zur_automations (id, name, kind, message, schedule, status, created_at, updated_at) VALUES ('a1', 'Revisão', 'agent_prompt', 'Resuma', '{}', 'active', 'x', 'x')`);
+      expect(migrate(db)).toBe(20);
+      // "Without asking" stays in the chat only: nothing reaches a routine without the owner choosing it.
+      expect(db.all(`SELECT name, policy, routines, kind FROM zur_mcp_tools ORDER BY name`)).toEqual([
+        { name: "odd", policy: "approve", routines: 0, kind: null },
+        { name: "search", policy: "auto", routines: 0, kind: null },
+        { name: "send", policy: "approve", routines: 0, kind: null },
+      ]);
+      expect(db.one(`SELECT name, message, conversation_id FROM zur_automations`)).toEqual({ name: "Revisão", message: "Resuma", conversation_id: null });
+      expect(() => db.run(`UPDATE zur_mcp_tools SET routines = 2`)).toThrow();
+      db.run(`INSERT INTO zur_automation_mcp_tools (automation_id, exposed_name, created_at) VALUES ('a1', 'mcp_docs_search', 'x')`);
+      expect(() => db.run(`INSERT INTO zur_automation_mcp_tools (automation_id, exposed_name, created_at) VALUES ('a1', 'mcp_docs_search', 'y')`)).toThrow();
+    });
+  });
+
   it("upgrades a database at version 18 to 19: the OAuth sign-in and the tools' vectors, servers and tools kept", async () => {
     await withEmptyDatabase("from-18", (db) => {
       expect(migrate(db, MIGRATIONS.slice(0, 18))).toBe(18);
       db.run(`INSERT INTO zur_mcp_servers (id, slug, name, url, auth_type, credential, created_at, updated_at) VALUES ('s1', 'docs', 'Docs', 'https://exemplo.com.br/mcp', 'bearer', 'v1.a.b', 'x', 'x')`);
       db.run(`INSERT INTO zur_mcp_tools (server_id, name, exposed_name, input_schema, schema_hash, status, enabled, hint, created_at, updated_at) VALUES ('s1', 'search', 'mcp_docs_search', '{}', 'h', 'available', 1, 'Docs', 'x', 'x')`);
-      expect(migrate(db)).toBe(19);
+      expect(migrate(db, MIGRATIONS.slice(0, 19))).toBe(19);
       expect(db.one(`SELECT credential, authorize_url, authorize_expires, signed_in_at FROM zur_mcp_servers`)).toEqual({ credential: "v1.a.b", authorize_url: null, authorize_expires: null, signed_in_at: null });
       expect(db.one(`SELECT enabled, hint, embedding, embedding_scale, embedding_key FROM zur_mcp_tools`)).toEqual({ enabled: 1, hint: "Docs", embedding: null, embedding_scale: null, embedding_key: null });
     });

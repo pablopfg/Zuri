@@ -162,6 +162,7 @@ rotinas e workflows, outras sempre pedir aprovação. Proposta:
 - **Entrega:** numa PR própria logo depois da 18b (a 18b já passou por QA e
   auditoria), antes da etapa 19. Substitui a regra antiga "Nenhuma ferramenta
   MCP roda em execução agendada" do item 6 e da especificação.
+  Plano detalhado em `docs/planos/autonomia-mcp.md`.
 
 ## Como fica contra as regras invioláveis
 

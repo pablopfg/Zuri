@@ -9,6 +9,7 @@ import { findTools, stems, type TriageTool, toolCost, triage } from "../src/mcp/
 import { developmentMcpNetwork } from "../src/mcp/dev-mcp.ts";
 import { assertPublicHost, dohResolver, endpointUrl, isPrivateAddress, isPrivateHost, McpEndpointError } from "../src/mcp/url.ts";
 import { visibleJson } from "../src/mcp/visible.ts";
+import { classifyTool, moreCareful, words } from "../src/mcp/classify.ts";
 
 // Step 18: the pieces that keep a remote MCP server at arm's length.
 
@@ -625,3 +626,49 @@ describe("visibleJson", () => {
   });
 });
 
+
+describe("what a tool does, as Zuri judges it (decision of 03/11/2026)", () => {
+  const tool = (name: string, description = "", fields: string[] = [], annotations: Record<string, unknown> | null = null) => ({
+    name,
+    title: null,
+    description,
+    input_schema: JSON.stringify({ type: "object", properties: Object.fromEntries(fields.map((f) => [f, { type: "string" }])) }),
+    annotations: annotations ? JSON.stringify(annotations) : null,
+  });
+
+  it("splits names of every style into plain words, without accents", () => {
+    expect(words("deleteAllIssues")).toEqual(["delete", "all", "issues"]);
+    expect(words("apagar-Página_rápida")).toEqual(["apagar", "pagina", "rapida"]);
+  });
+
+  it("judges by the name first, then the description and the fields, and says where", () => {
+    expect(classifyTool(tool("delete_issue"))).toEqual({ kind: "destructive", reason: { source: "name", word: "delete" } });
+    expect(classifyTool(tool("apagarEvento"))).toEqual({ kind: "destructive", reason: { source: "name", word: "apagar" } });
+    expect(classifyTool(tool("create_issue"))).toEqual({ kind: "write", reason: { source: "name", word: "create" } });
+    expect(classifyTool(tool("search_docs", "Search the documentation pages."))).toEqual({ kind: "read", reason: { source: "name", word: "search" } });
+    expect(classifyTool(tool("buscar_documentos", "Busca páginas na documentação."))).toEqual({ kind: "read", reason: { source: "name", word: "buscar" } });
+    // A look-up name with a deleting word anywhere is still destructive: the more dangerous one wins.
+    expect(classifyTool(tool("search_docs", "Search; can also delete pages.")).kind).toBe("destructive");
+    expect(classifyTool(tool("sync", "", ["overwrite"]))).toEqual({ kind: "destructive", reason: { source: "fields", word: "overwrite" } });
+    // "Lists the open issues": a writing word in the description of a look-up tool doesn't count.
+    expect(classifyTool(tool("list_issues", "Lists the open issues.")).kind).toBe("read");
+    expect(classifyTool(tool("issues", "Send the issue to the team.")).kind).toBe("write");
+  });
+
+  it("counts a tool it knows nothing about as one that changes data", () => {
+    expect(classifyTool(tool("tool_7", "Tool number 7."))).toEqual({ kind: "write", reason: { source: "unknown" } });
+    expect(classifyTool({ ...tool("weird"), input_schema: "not json" }).kind).toBe("write");
+  });
+
+  it("lets the server's marks only make a tool more careful", () => {
+    // Says it only reads: not believed on its own.
+    expect(classifyTool(tool("delete_issue", "", [], { readOnlyHint: true })).kind).toBe("destructive");
+    expect(classifyTool(tool("mystery", "", [], { readOnlyHint: true })).kind).toBe("write");
+    // Says it is not destructive: still destructive by its name.
+    expect(classifyTool(tool("purge_cache", "", [], { readOnlyHint: false, destructiveHint: false })).kind).toBe("destructive");
+    // Says it is destructive: believed.
+    expect(classifyTool(tool("search_docs", "", [], { destructiveHint: true }))).toEqual({ kind: "destructive", reason: { source: "server" } });
+    expect(moreCareful("read", "write")).toBe("write");
+    expect(moreCareful("destructive", "write")).toBe("destructive");
+  });
+});

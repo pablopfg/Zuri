@@ -2,7 +2,7 @@
 import "./zod-config.ts";
 
 import { z } from "zod";
-import { MCP_AUTH_CHOICES, MCP_LIMITS, MCP_TOOL_POLICIES } from "./mcp.ts";
+import { MCP_AUTH_CHOICES, MCP_LIMITS, MCP_TOOL_KINDS, MCP_TOOL_POLICIES } from "./mcp.ts";
 import { hasControlCharacter, line } from "./productivity.ts";
 
 /**
@@ -44,6 +44,7 @@ export const mcpToolUpdateSchema = /* @__PURE__ */ (() =>
     .object({
       enabled: z.boolean().optional(),
       policy: z.enum(MCP_TOOL_POLICIES).optional(),
+      kind: z.enum(MCP_TOOL_KINDS).optional(),
       hint: z
         .string()
         .trim()
@@ -54,6 +55,18 @@ export const mcpToolUpdateSchema = /* @__PURE__ */ (() =>
     .strict()
     .refine((patch) => Object.keys(patch).length > 0))();
 export type McpToolUpdate = z.input<typeof mcpToolUpdateSchema>;
+
+/** The tools set free for one routine: its whole list, replaced. */
+export const mcpRoutineToolsSchema = /* @__PURE__ */ (() =>
+  z
+    .object({
+      tools: z
+        .array(z.string().regex(/^mcp_[a-z0-9_]{1,60}$/))
+        .max(MCP_LIMITS.routineTools)
+        .refine((list) => new Set(list).size === list.length),
+    })
+    .strict())();
+export type McpRoutineTools = z.input<typeof mcpRoutineToolsSchema>;
 
 /**
  * What the service's sign-in page sent back (step 18b): the app's callback
