@@ -27,6 +27,9 @@ export const TEST_ENV = {
   VAPID_PRIVATE_KEY: vapid.d ?? "",
   // Seals the MCP servers' tokens (step 18); made up, at least 32 characters.
   MCP_CREDENTIAL_KEY: "test-mcp-credential-key-0123456789abcdefghij",
+  // A made-up OAuth client of the owner's (step 19): test/google-*.test.ts answer Google in its place.
+  GOOGLE_CLIENT_ID: "teste-cliente.apps.googleusercontent.com",
+  GOOGLE_CLIENT_SECRET: "teste-segredo-do-cliente",
 };
 
 // The agent runs inside workerd, with the bindings of wrangler.jsonc. Nothing

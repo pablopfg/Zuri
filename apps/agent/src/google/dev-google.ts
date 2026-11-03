@@ -84,7 +84,7 @@ export function devGoogle(options: { clientId?: string | undefined; clientSecret
     async handle(request) {
       const url = new URL(request.url);
       if (!GOOGLE_HOSTS.has(url.hostname)) return null;
-      const body = request.method === "GET" || request.method === "DELETE" ? "" : await request.text();
+      const body = request.method === "GET" || request.method === "DELETE" ? "" : new TextDecoder().decode(await request.arrayBuffer());
       const headers: Record<string, string> = {};
       request.headers.forEach((value, key) => {
         headers[key] = value;
