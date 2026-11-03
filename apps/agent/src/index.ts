@@ -8,6 +8,7 @@ import { type AccessConfig, verifyAccessToken } from "./gates/access.ts";
 import { withBodyRead } from "./gates/body.ts";
 import { withApiHeaders, withWebHeaders } from "./gates/headers.ts";
 import { isTelegramWebhookSecret, TELEGRAM_SECRET_HEADER, TELEGRAM_WEBHOOK_PATH } from "./gates/telegram.ts";
+import { GOOGLE_CHANNEL_HEADER, GOOGLE_PUSH_PATH, GOOGLE_STATE_HEADER, GOOGLE_TOKEN_HEADER, isGooglePushToken } from "./gates/google-push.ts";
 import { AppError, errorResponse } from "./http/errors.ts";
 import { log } from "./log.ts";
 
@@ -79,6 +80,7 @@ async function handle(request: Request, env: WorkerEnv): Promise<Response> {
     return refuse(new AppError("NOT_CONFIGURED"));
   }
   if (url.pathname === TELEGRAM_WEBHOOK_PATH) return withApiHeaders(await telegramWebhook(request, url, env));
+  if (url.pathname === GOOGLE_PUSH_PATH) return withApiHeaders(await googlePush(request, url, env));
   // What the sign-in form draws, answered here: public settings need no Durable
   // Object request (they count on the Free plan, and anyone can ask for them).
   if (url.pathname === LOGIN_OPTIONS_PATH && (request.method === "GET" || request.method === "HEAD")) {
@@ -135,6 +137,32 @@ async function telegramWebhook(request: Request, url: URL, env: WorkerEnv): Prom
   return new Response(null, { status: answer.status >= 500 ? 500 : 200 });
 }
 
+/**
+ * Google's push notices of the open calendars (step 19): POST with the
+ * channel's id and token (derived from SESSION_SECRET), checked here before
+ * they cost an object request. A notice has no body; only the channel's id,
+ * token and state go on. Anything that doesn't check out gets the same empty
+ * 200 (Google never retries it and a probe learns nothing).
+ */
+async function googlePush(request: Request, url: URL, env: WorkerEnv): Promise<Response> {
+  await request.body?.cancel();
+  const channel = request.headers.get(GOOGLE_CHANNEL_HEADER);
+  const token = request.headers.get(GOOGLE_TOKEN_HEADER);
+  if (request.method !== "POST" || !(await isGooglePushToken(channel, token, env.SESSION_SECRET))) return new Response(null, { status: 200 });
+  const agent = env.AGENT.getByName(AGENT_INSTANCE_NAME);
+  const forwarded = new Request(new URL(GOOGLE_PUSH_PATH, url.origin), {
+    method: "POST",
+    headers: {
+      [GOOGLE_CHANNEL_HEADER]: channel ?? "",
+      [GOOGLE_TOKEN_HEADER]: token ?? "",
+      [GOOGLE_STATE_HEADER]: (request.headers.get(GOOGLE_STATE_HEADER) ?? "").slice(0, 20),
+    },
+  });
+  const answer = await agent.fetch(forwarded);
+  void answer.body?.cancel();
+  return new Response(null, { status: 200 });
+}
+
 function isApiPath(pathname: string): boolean {
   return pathname === "/api" || pathname.startsWith("/api/");
 }
@@ -188,6 +216,11 @@ async function passesAccess(
     !request.headers.has("cookie") &&
     !request.headers.has("authorization");
   if (telegram && (await isTelegramWebhookSecret(request.headers.get(TELEGRAM_SECRET_HEADER), env.SESSION_SECRET))) {
+    return true;
+  }
+  // Google's push notices (step 19) can't sign in to Access either: the channel's token proves them.
+  const google = request.method === "POST" && url.pathname === GOOGLE_PUSH_PATH && secretsReady && !request.headers.has("cookie") && !request.headers.has("authorization");
+  if (google && (await isGooglePushToken(request.headers.get(GOOGLE_CHANNEL_HEADER), request.headers.get(GOOGLE_TOKEN_HEADER), env.SESSION_SECRET))) {
     return true;
   }
   return verifyAccessToken(request.headers.get("cf-access-jwt-assertion"), access);

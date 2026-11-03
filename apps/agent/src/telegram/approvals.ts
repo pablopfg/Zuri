@@ -22,6 +22,7 @@ export const BOT_APPROVABLE: ReadonlySet<DestructiveToolName> = new Set<Destruct
   "delete_note",
   "forget_memory",
   "cancel_automation",
+  "delete_calendar_event",
 ]);
 /** Destructive tools approved only in the app, never through the bot. */
 export const APP_ONLY: ReadonlySet<DestructiveToolName> = new Set<DestructiveToolName>([]);
@@ -47,6 +48,7 @@ const ACTION_NAME: Record<ApprovalPreview["tool"], MessageKey> = {
   delete_note: "telegram.aprovar.acao.delete_note",
   forget_memory: "telegram.aprovar.acao.forget_memory",
   cancel_automation: "telegram.aprovar.acao.cancel_automation",
+  delete_calendar_event: "telegram.aprovar.acao.delete_calendar_event",
 };
 
 /** Proposal cards under one answer, and in /aprovar (spec: lists show 5 at most). */

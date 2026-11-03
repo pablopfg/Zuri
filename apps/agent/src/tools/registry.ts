@@ -16,6 +16,7 @@ export { stableStringify };
 import type { SemanticSearch } from "../semantic/service.ts";
 import { type ExternalTool, type McpTurnTools, runApprovedExternal } from "../mcp/agent.ts";
 import { type McpService, McpToolError } from "../mcp/service.ts";
+import type { GoogleCalendar, GoogleMeter } from "../google/service.ts";
 
 export type ToolPermission = "read" | "write" | "destructive";
 
@@ -56,6 +57,10 @@ export interface ToolContext {
    * external calls that need the owner (made the first time one does).
    */
   routineConversation?: () => string;
+  /** The Google Calendar (step 19): its tools are offered only with a calendar open to Zuri. */
+  calendar?: GoogleCalendar;
+  /** This turn's count of calls to Google (rule P9), made on first use. */
+  calendarMeter?: GoogleMeter;
 }
 
 /** A notice a scheduled run writes for the owner (notify_owner). */
@@ -74,6 +79,10 @@ interface BaseTool<S extends z.ZodType> {
   maxCallsPerTurn: number;
   /** A short piece of the input that names what the call is about, shown with the activity. */
   detail?: (input: z.output<S>) => string | undefined;
+  /** Offered only when this holds (a Google calendar open to Zuri, step 19). */
+  offered?: (ctx: ToolContext) => boolean;
+  /** Where its result comes from, for the `<data>` line: "calendar" for Google's events. */
+  source?: "calendar";
 }
 
 export interface ImmediateTool<S extends z.ZodType = z.ZodType> extends BaseTool<S> {
@@ -101,11 +110,26 @@ export interface Target {
 export interface DestructiveTool<S extends z.ZodType = z.ZodType> extends BaseTool<S> {
   name: DestructiveToolName;
   permission: "destructive";
-  target: (input: z.output<S>, ctx: ToolContext) => Target;
+  target: (input: z.output<S>, ctx: ToolContext) => Target | Promise<Target>;
   snapshot: (targetId: string, ctx: ToolContext) => unknown;
   commit: (targetId: string, payload: { text: string } | null, ctx: ToolContext) => void;
   /** Work that can't run inside the commit's transaction (setting an alarm again). */
   afterCommit?: (ctx: ToolContext) => Promise<void>;
+  /**
+   * In place of `commit`, for a change made elsewhere (a Google event, step
+   * 19): runs after the checks, outside any transaction. Throws
+   * `TargetGone` when the target changed there, which fails the action as
+   * TARGET_CHANGED.
+   */
+  commitAsync?: (targetId: string, payload: { text: string } | null, ctx: ToolContext) => Promise<void>;
+}
+
+/** The target of an approved action changed or went away where it lives (Google refused with 412 or 404). */
+export class TargetGone extends Error {
+  constructor(readonly gone: boolean) {
+    super(gone ? "target gone" : "target changed");
+    this.name = "TargetGone";
+  }
 }
 
 export type ToolDefinition = ImmediateTool | DestructiveTool | ExternalTool;
@@ -138,7 +162,7 @@ export const MAX_EXTERNAL_ARGS_CHARS = 4_000;
  * so a note or memory that says "ignore your rules" stays inert text, cut to
  * MAX_TOOL_RESULT_CHARS.
  */
-export function presentResult(name: string, result: unknown, source: "tool" | "mcp" = "tool"): string {
+export function presentResult(name: string, result: unknown, source: "tool" | "mcp" | "calendar" = "tool"): string {
   let json = stableStringify(result);
   if (json.length > MAX_TOOL_RESULT_CHARS) {
     json = `${[...json].slice(0, MAX_TOOL_RESULT_CHARS).join("")}… [result cut: ask for less, or open one item at a time]`;
@@ -203,17 +227,18 @@ export class ToolExecutor {
   /** The tools offered in this context: scheduled runs only ever get the read ones, plus notify_owner. */
   available(): ToolDefinition[] {
     if (this.limits.maxToolCalls <= 0) return [];
+    const tools = this.tools.filter((tool) => tool.permission === "external" || !tool.offered || tool.offered(this.ctx));
     // find_tools only when the turn's triage left some external tools out.
     const findable = (this.ctx.mcp?.leftOut ?? 0) > 0;
     // External tools in a scheduled run (decision of 03/11/2026): only the ones the owner let run there (ctx.mcp).
     return this.ctx.mode === "chat"
-      ? this.tools.filter(
+      ? tools.filter(
           (tool) =>
             !((tool.permission === "read" || tool.permission === "write") && tool.scheduledOnly) &&
             (tool.permission !== "external" || this.ctx.mcp !== undefined) &&
             (tool.name !== "find_tools" || findable),
         )
-      : this.tools.filter(
+      : tools.filter(
           (tool) =>
             tool.name !== "find_tools" &&
             (tool.permission === "read" || (tool.permission === "write" && tool.scheduledOnly === true) || (tool.permission === "external" && this.ctx.mcp !== undefined)),
@@ -273,6 +298,7 @@ export class ToolExecutor {
       if (tool.permission === "destructive") return presentResult(tool.name, await this.propose(tool, parsed.data, callId));
       if (tool.permission === "external") return await this.external(tool, parsed.data as Record<string, unknown>, callId);
       const result = await tool.execute(parsed.data, this.ctx);
+      if (tool.source === "calendar") return presentResult(tool.name, result, "calendar");
       if (result && typeof result === "object" && "planId" in result && typeof result.planId === "string") this.plansByCall.set(callId, result.planId);
       if (result && typeof result === "object" && "routineId" in result && typeof result.routineId === "string") this.automationsByCall.set(callId, result.routineId);
       return presentResult(tool.name, result);
@@ -340,7 +366,7 @@ export class ToolExecutor {
   /** Records a proposal the owner approves or cancels in the app. Nothing changes now. */
   private async propose(tool: DestructiveTool, input: unknown, callId: string) {
     if (this.ctx.mode !== "chat" || !this.ctx.conversationId) throw new ToolError(`"${tool.name}" needs the owner's approval and works only in the chat.`);
-    const target = tool.target(input, this.ctx);
+    const target = await tool.target(input, this.ctx);
     if (this.ctx.changed?.has(target.id)) {
       throw new ToolError("You changed this item earlier in this request, so it can't be proposed for deletion or rewriting now. Tell the owner what you changed; they can ask again in a new message.");
     }
@@ -413,6 +439,20 @@ export async function runApprovedAction(tools: readonly ToolDefinition[], ctx: T
   if (row.payload) {
     const parsed = JSON.parse(row.payload) as { text?: unknown };
     if (typeof parsed.text === "string") payload = { text: parsed.text };
+  }
+  if (tool.commitAsync) {
+    // A change made elsewhere: the stored part was checked above; the place it lives checks the rest (If-Match).
+    try {
+      await tool.commitAsync(row.target_id, payload, ctx);
+    } catch (error) {
+      if (error instanceof TargetGone) {
+        actions.fail(actionId, error.gone ? "gone" : "changed");
+        throw new AppError("TARGET_CHANGED", error.gone ? "error.actionTargetGone" : "error.actionTargetChanged");
+      }
+      actions.fail(actionId, "failed");
+      throw error;
+    }
+    return;
   }
   try {
     ctx.db.transaction(() => {
