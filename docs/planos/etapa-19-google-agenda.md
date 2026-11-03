@@ -230,6 +230,7 @@ Migration 22 `google_calendar`, só acréscimo:
 | `create_calendar_event` | write | 3 por turno | só agendas de escrita; sem convidados |
 | `update_calendar_event` | write | 3 por turno | `If-Match` com o etag lido na hora |
 | `delete_calendar_event` | destructive | 3 por turno | proposta; alvo = agenda + evento; etag no payload |
+| `change_shared_calendar_event` | destructive | 3 por turno | proposta para mudar evento com convidados, de outro organizador ou de agenda alheia (decisão de 03/11/2026, auditoria); etag e campos no payload |
 
 Só aparecem quando há agenda aberta (leitura) ou de escrita. Snapshot da
 proposta: conta, agenda, modo e o evento (id); o etag vai ao Google no

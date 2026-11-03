@@ -287,6 +287,7 @@ export const ptBRServer = {
   "telegram.aprovar.acao.delete_note": "apagar a nota",
   "telegram.aprovar.acao.forget_memory": "esquecer a memória",
   "telegram.aprovar.acao.cancel_automation": "cancelar a automação",
+  "telegram.aprovar.acao.change_shared_calendar_event": "mudar um evento que outras pessoas veem",
   "telegram.aprovar.acao.delete_calendar_event": "apagar o evento da agenda",
   "telegram.aprovar.acao.mcp_call": "usar a ferramenta externa",
   "telegram.start.confirmInApp": "Recebi o código! Agora abra a Zuri e toque em Confirmar esta conta, em Configurações › Avisos.",

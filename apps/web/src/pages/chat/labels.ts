@@ -34,6 +34,7 @@ export const TOOL_LABEL: Record<ToolName, MessageKey> = {
   create_calendar_event: "web.chat.tool.create_calendar_event",
   update_calendar_event: "web.chat.tool.update_calendar_event",
   delete_calendar_event: "web.chat.tool.delete_calendar_event",
+  change_shared_calendar_event: "web.chat.tool.change_shared_calendar_event",
 };
 
 export const TOOL_STATUS_LABEL: Record<ToolStatus, MessageKey> = {
@@ -50,6 +51,7 @@ export const APPROVAL_LABEL: Record<DestructiveToolName, MessageKey> = {
   forget_memory: "web.chat.approval.forget_memory",
   cancel_automation: "web.chat.approval.cancel_automation",
   delete_calendar_event: "web.chat.approval.delete_calendar_event",
+  change_shared_calendar_event: "web.chat.approval.change_shared_calendar_event",
 };
 
 export const APPROVAL_STATUS_LABEL: Record<PendingActionStatus, MessageKey> = {

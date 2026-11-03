@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { cleanBlock, cleanText, eventBody, EventInputError, readEvent } from "../src/google/events.ts";
 import { GoogleError, GoogleMeter } from "../src/google/service.ts";
-import { googleNetwork } from "../src/google/dev-google.ts";
+import { developmentGoogle, developmentGoogleNetwork, googleNetwork } from "../src/google/dev-google.ts";
 import type { CommandButtons } from "../src/telegram/callbacks.ts";
 import { TelegramApprovals } from "../src/telegram/approvals.ts";
 import { ALL_TOOLS } from "../src/tools/index.ts";
-import { ToolError, ToolExecutor } from "../src/tools/registry.ts";
+import { runApprovedAction, ToolError, ToolExecutor } from "../src/tools/registry.ts";
 import { type ChatWorld, withChatWorld } from "./chat-world.ts";
 
 // Step 19, after the QA review and the security audit: Google's odd answers,
@@ -152,7 +152,7 @@ describe("event ids that would leave /events/", () => {
 });
 
 describe("events and calendars other people see", () => {
-  it("the model doesn't change an event with guests or organized by someone else", () =>
+  it("an event with guests or organized by someone else changes only through a proposal the owner approves", () =>
     withChatWorld(async (world) => {
       await connect(world);
       world.googleSim.events.set(PRIMARY, [
@@ -160,20 +160,51 @@ describe("events and calendars other people see", () => {
         { id: "o1", etag: '"o1"', summary: "Convite", organizer: { email: "estranho@exemplo.com.br" }, start: { dateTime: "2026-11-03T17:00:00-03:00" }, end: { dateTime: "2026-11-03T18:00:00-03:00" } },
         { id: "m1", etag: '"m1"', summary: "Meu", organizer: { email: PRIMARY, self: true }, start: { dateTime: "2026-11-03T19:00:00-03:00" }, end: { dateTime: "2026-11-03T20:00:00-03:00" } },
       ]);
-      const exec = executor(world, world.conversations.create("x").id);
-      expect(await refused(exec.execute("update_calendar_event", { calendar: PRIMARY, event_id: "g1", description: "dados do dono" }, "u1"))).toMatch(/Other people see this event/);
-      expect(await refused(exec.execute("update_calendar_event", { calendar: PRIMARY, event_id: "o1", description: "dados do dono" }, "u2"))).toMatch(/Other people see this event/);
+      const chat = world.conversations.create("x").id;
+      const exec = executor(world, chat);
+      expect(await refused(exec.execute("update_calendar_event", { calendar: PRIMARY, event_id: "g1", description: "dados do dono" }, "u1"))).toMatch(/change_shared_calendar_event/);
+      expect(await refused(exec.execute("update_calendar_event", { calendar: PRIMARY, event_id: "o1", description: "dados do dono" }, "u2"))).toMatch(/change_shared_calendar_event/);
       expect(world.googleSim.seen.filter((r) => r.method === "PATCH")).toEqual([]);
-      // The owner's own event, without guests, still changes.
+      // The owner's own event, without guests, still changes at once.
       expect(await exec.execute("update_calendar_event", { calendar: PRIMARY, event_id: "m1", title: "Meu evento" }, "u3")).toContain('"updated":true');
+
+      // The proposal: nothing changes until the owner approves; the card shows Google's event and the new values.
+      expect(await exec.execute("change_shared_calendar_event", { calendar: PRIMARY, event_id: "g1", title: "Reunião \u202enova", start: "2026-11-04T10:00" }, "p1")).toContain("awaiting_owner_approval");
+      const actionId = exec.actionFor("p1") ?? "";
+      const view = world.actions.view(actionId);
+      expect(view).toMatchObject({ tool: "change_shared_calendar_event", status: "pending", target: `Com convidados · ${PRIMARY} · 2026-11-03 15:00 – 16:00` });
+      expect(view.preview).toContain('"when": "2026-11-04 10:00 – 11:00"');
+      expect(view.preview).toMatch(/\\u202e/i);
+      expect(world.googleSim.seen.filter((r) => r.method === "PATCH")).toHaveLength(1);
+      await runApprovedAction(ALL_TOOLS, world.ctx(chat), actionId);
+      const patch = world.googleSim.seen.filter((r) => r.method === "PATCH").at(-1);
+      expect(patch?.headers["if-match"]).toBe('"g1"');
+      expect(patch?.url).toContain("sendUpdates=none");
+      expect(world.googleSim.events.get(PRIMARY)?.[0]).toMatchObject({ summary: "Reunião \u202enova", start: { dateTime: "2026-11-04T13:00:00.000Z" } });
+      expect(world.actions.view(actionId).status).toBe("approved");
     }));
 
-  it("the model doesn't create or change events in a calendar someone else owns", () =>
+  it("a proposed change fails as TARGET_CHANGED when the event changed at Google meanwhile", () =>
+    withChatWorld(async (world) => {
+      await connect(world);
+      world.googleSim.events.set(PRIMARY, [{ id: "g1", etag: '"g1"', summary: "Com convidados", attendees: [{}], start: { dateTime: "2026-11-03T15:00:00-03:00" }, end: { dateTime: "2026-11-03T16:00:00-03:00" } }]);
+      const chat = world.conversations.create("x").id;
+      const exec = executor(world, chat);
+      await exec.execute("change_shared_calendar_event", { calendar: PRIMARY, event_id: "g1", location: "Sala 2" }, "p1");
+      const event = world.googleSim.events.get(PRIMARY)?.[0];
+      if (event) event.etag = '"g1-outro"';
+      await expect(runApprovedAction(ALL_TOOLS, world.ctx(chat), exec.actionFor("p1") ?? "")).rejects.toMatchObject({ code: "TARGET_CHANGED" });
+      expect(world.googleSim.events.get(PRIMARY)?.[0]).not.toHaveProperty("location");
+      expect(await refused(exec.execute("change_shared_calendar_event", { calendar: PRIMARY, event_id: "g1" }, "p2"))).toMatch(/Say what to change/);
+    }));
+
+  it("the model creates nothing in a calendar someone else owns, and changes there only by proposal", () =>
     withChatWorld(async (world) => {
       await connect(world, { [PRIMARY]: "write", [WORK]: "write" });
+      world.googleSim.events.set(WORK, [{ id: "w1", etag: '"w1"', summary: "Do time", start: { dateTime: "2026-11-03T15:00:00-03:00" }, end: { dateTime: "2026-11-03T16:00:00-03:00" } }]);
       const exec = executor(world, world.conversations.create("x").id);
       expect(await refused(exec.execute("create_calendar_event", { calendar: "Trabalho", title: "Notas do dono", start: "2026-11-06T15:00" }, "c1"))).toMatch(/belongs to someone else/);
-      expect(await refused(exec.execute("update_calendar_event", { calendar: "Trabalho", event_id: "w1", title: "x" }, "u1"))).toMatch(/belongs to someone else/);
+      expect(await refused(exec.execute("update_calendar_event", { calendar: "Trabalho", event_id: "w1", title: "x" }, "u1"))).toMatch(/change_shared_calendar_event/);
       expect(world.googleSim.seen.filter((r) => r.method !== "GET" && r.url.includes("/events") && !r.url.endsWith("/watch"))).toEqual([]);
     }));
 
@@ -309,6 +340,12 @@ describe("the bot's card for deleting an event", () => {
       expect(result.status).toBe("ok");
       if (result.status !== "ok") return;
       expect(result.preview.target).toBe(`Consulta · ${PRIMARY} · 2026-11-03 15:00 – 16:00`);
+      // A change: the same label, and the new values as "new text".
+      await exec.execute("change_shared_calendar_event", { calendar: PRIMARY, event_id: "d1", title: "Consulta nova" }, "change");
+      const changed = await approvals.preview(exec.actionFor("change") ?? "");
+      expect(changed.status).toBe("ok");
+      if (changed.status !== "ok") return;
+      expect(changed.preview).toMatchObject({ target: `Consulta · ${PRIMARY} · 2026-11-03 15:00 – 16:00`, after: '{\n  "title": "Consulta nova"\n}' });
     }));
 });
 
@@ -329,4 +366,101 @@ describe("push channels Google keeps for less than a day", () => {
       world.clock.now += 31 * 60_000;
       expect(await world.google.renewWatches()).toBe(2);
     }));
+});
+
+describe("what the model reads when Google says no", () => {
+  const tool = (name: string) => {
+    const found = ALL_TOOLS.find((item) => item.name === name);
+    if (!found) throw new Error(name);
+    return found as unknown as {
+      execute: (input: unknown, ctx: unknown) => Promise<unknown>;
+      detail?: (input: unknown) => unknown;
+      commitAsync?: (id: string, payload: { text: string } | null, ctx: unknown) => Promise<void>;
+      commit?: () => void;
+    };
+  };
+
+  const answers: [number, unknown, RegExp][] = [
+    [412, null, /changed in Google Calendar meanwhile/],
+    [429, null, /limiting requests/],
+    [403, { error: { errors: [{ reason: "forbidden" }] } }, /connect the Google Calendar again/],
+    [503, null, /couldn't do that right now/],
+  ];
+  for (const [status, body, words] of answers) {
+    it(`a ${status} reads as words the model can act on`, () =>
+      withChatWorld(async (world) => {
+        await connect(world);
+        answerWith(world, () => (body ? Response.json(body, { status }) : new Response(null, { status })));
+        await expect(tool("create_calendar_event").execute({ title: "x", start: "2026-11-06T15:00" }, world.ctx(world.conversations.create("x").id))).rejects.toThrow(words);
+      }));
+  }
+
+  it("bad dates, a calendar only to read, lockdown and no calendar open", () =>
+    withChatWorld(async (world) => {
+      await connect(world);
+      const ctx = world.ctx(world.conversations.create("x").id);
+      const create = tool("create_calendar_event");
+      await expect(create.execute({ title: "x", start: "2026-11-06", all_day: true, end: "2026-11-06T10:00" }, ctx)).rejects.toThrow(/all-day event's end/);
+      await expect(create.execute({ title: "x", start: "2026-11-06T15:00", end: "2026-11-06" }, ctx)).rejects.toThrow(/Could not understand a date/);
+      expect(create.detail?.({ title: "Dentista" })).toBe("Dentista");
+      expect(tool("update_calendar_event").detail?.({ title: "Dentista" })).toBe("Dentista");
+      expect(tool("list_calendar_events").detail?.({ query: "dentista" })).toBe("dentista");
+      expect(() => tool("delete_calendar_event").commit?.()).toThrow(/commitAsync/);
+      // The calendar closed for writing after the proposal: a target that changed.
+      await world.google.setMode(PRIMARY, "read");
+      await expect(tool("delete_calendar_event").commitAsync?.(`${PRIMARY}\ne1`, { text: '"1"' }, ctx)).rejects.toThrow();
+      await expect(create.execute({ title: "x", start: "2026-11-06T15:00" }, ctx)).rejects.toThrow(/No Google calendar allows changes/);
+      world.mcpLockdown.active = true;
+      await expect(tool("list_calendar_events").execute({}, ctx)).rejects.toThrow(/locked down/);
+    }));
+
+  it("an approved deletion that Google can't do now fails in the owner's words", () =>
+    withChatWorld(async (world) => {
+      await connect(world);
+      answerWith(world, () => new Response(null, { status: 503 }));
+      await expect(tool("delete_calendar_event").commitAsync?.(`${PRIMARY}\ne1`, { text: '"1"' }, world.ctx(world.conversations.create("x").id))).rejects.toThrow();
+    }));
+});
+
+describe("the calendar list read again", () => {
+  it("adds, renames and removes calendars, and keeps the account when the same one connects again", () =>
+    withChatWorld(async (world) => {
+      await connect(world);
+      world.googleSim.calendars.push({ id: "nova@exemplo.com.br", summary: "Nova", accessRole: "owner" });
+      await world.google.refresh();
+      expect(world.google.status().calendars.map((c) => c.id)).toContain("nova@exemplo.com.br");
+      const all = world.googleSim.calendars.splice(0, world.googleSim.calendars.length);
+      await world.google.refresh();
+      expect(world.google.status().calendars).toEqual([]);
+      world.googleSim.calendars.push(...all);
+      // The same account again: nothing is replaced.
+      const url = new URL(await world.google.begin("sessao"));
+      const { replaced } = await world.google.finish({ state: url.searchParams.get("state") ?? "", code: `dev.${url.searchParams.get("code_challenge") ?? ""}` }, "sessao");
+      expect(replaced).toBe(false);
+      expect(world.google.status().connected).toBe(true);
+    }));
+
+  it("refuses to read the list without an account", () =>
+    withChatWorld(async (world) => {
+      expect(await kindOf(world.google.refresh())).toBe("not_connected");
+    }));
+
+  it("a channel Google refuses doesn't stop a calendar from opening", () =>
+    withChatWorld(async (world) => {
+      await connect(world, {});
+      answerWith(world, () => new Response(null, { status: 500 }));
+      await world.google.setMode(READER, "read");
+      expect(world.google.readable().map((c) => c.id)).toEqual([READER]);
+    }));
+});
+
+describe("the development Google", () => {
+  it("seeds sample events around today and answers only Google's addresses", async () => {
+    const sim = developmentGoogle("cliente.apps.googleusercontent.com", "segredo");
+    expect(developmentGoogle(undefined, undefined)).toBe(sim);
+    expect([...sim.events.values()].flat().map((e) => e.summary)).toContain("Café com a Ana");
+    const network = developmentGoogleNetwork(sim);
+    expect((await network.fetch("https://exemplo.com.br/")).status).toBe(502);
+    expect((await network.fetch("https://www.googleapis.com/calendar/v3/users/me/calendarList")).status).toBe(401);
+  });
 });

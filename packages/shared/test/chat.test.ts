@@ -28,8 +28,8 @@ describe("the chat's constants", () => {
     expect(CHAT_MESSAGE_MAX).toBe(8_000);
     expect(CONVERSATION_TITLE_MAX).toBe(120);
     // 26 of step 9 and later, plus find_tools (step 18) and the four calendar tools (step 19).
-    expect(TOOL_NAMES).toHaveLength(31);
-    expect(new Set(TOOL_NAMES).size).toBe(31);
+    expect(TOOL_NAMES).toHaveLength(32);
+    expect(new Set(TOOL_NAMES).size).toBe(32);
     for (const name of DESTRUCTIVE_TOOLS) expect(TOOL_NAMES).toContain(name);
     expect(PENDING_ACTION_TTL_MS).toBe(30 * 60_000);
     expect(TASK_PLAN_TTL_MS).toBe(24 * 3_600_000);

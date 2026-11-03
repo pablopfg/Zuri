@@ -816,13 +816,15 @@ A etapa 19 liga a conta Google do dono pelo cliente OAuth dele mesmo
   `sendUpdates=none`; o corpo mandado ao Google passa por uma lista fixa de
   campos. Editar e apagar mandam o `etag` visto (`If-Match`): se o evento
   mudou no Google, nada é sobrescrito nem apagado (`TARGET_CHANGED`).
-- **O modelo não escreve onde outras pessoas veem.** Uma mudança num evento
-  aparece para os convidados e para quem o organiza, mesmo sem e-mail. Por
-  isso, na conversa, a Zuri não muda evento com convidados nem evento que
-  outra pessoa organiza, e não cria nem muda eventos numa agenda que é de
-  outra pessoa (papel `writer`). Isso fecha o caminho em que o texto de um
-  convite manda a Zuri copiar dados do dono para o evento (auditoria da etapa
-  19). O dono continua mudando esses eventos na tela Agenda.
+- **O modelo não escreve sozinho onde outras pessoas veem.** Uma mudança num
+  evento aparece para os convidados e para quem o organiza, mesmo sem e-mail.
+  Por isso, na conversa, mudar evento com convidados, evento que outra pessoa
+  organiza ou evento de agenda que é de outra pessoa (papel `writer`) é
+  proposta (`change_shared_calendar_event`): o cartão mostra o evento como o
+  Google tem e os valores novos, com caracteres escondidos à vista, e a
+  aprovação manda o `etag` visto. Criar evento numa agenda de outra pessoa
+  pela conversa é recusado. Isso fecha o caminho em que o texto de um convite
+  manda a Zuri copiar dados do dono para o evento (auditoria da etapa 19).
 - **Ids que não saem de `/events/`.** Id de evento só de pontos (`.`, `..`) é
   recusado no schema, na ferramenta e no serviço, antes de qualquer chamada:
   normalizado, ele apontaria para a agenda inteira. Uma agenda fechada não

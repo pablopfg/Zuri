@@ -4,6 +4,7 @@ import { instantToLocal } from "../chat/local-due.ts";
 import { type CalendarEvent, cleanText, DATE, type EventDraft, eventBody, EventInputError, localInstant, localToday, nextDay } from "../google/events.ts";
 import { toAppError } from "../google/errors.ts";
 import { type GoogleCalendar, GoogleError, GoogleMeter } from "../google/service.ts";
+import { type ChangePayload, readChange } from "../google/change.ts";
 import { defineTool, TargetGone, type ToolContext, ToolError } from "./registry.ts";
 
 /**
@@ -136,18 +137,21 @@ function forList(event: CalendarEvent, calendars: Map<string, string>, timeZone:
 }
 
 /**
- * A write the model makes in the chat reaches only the owner. A calendar someone else owns (the
- * owner may only write in it) shows its events to that person: an invite's text could otherwise
- * have the model write the owner's data there (security audit of step 19).
+ * A write the model makes directly reaches only the owner. A calendar someone else owns (the owner
+ * may only write in it) shows its events to that person, and an event with guests or another
+ * organizer shows a change to them: an invite's text could otherwise have the model write the
+ * owner's data there (security audit of step 19). Those changes are proposals the owner approves
+ * (change_shared_calendar_event); a new event there is made on the Agenda screen.
  */
 function notShared(calendar: GoogleCalendarInfo): GoogleCalendarInfo {
   if (calendar.accessRole !== "owner") {
     throw new ToolError(
-      "That calendar belongs to someone else, so events there are not created or changed from the conversation. Nothing was changed: tell the owner they can do it on the Agenda screen or in Google Calendar.",
+      "That calendar belongs to someone else, so events are not created there from the conversation. Nothing was created: tell the owner they can do it on the Agenda screen or in Google Calendar.",
     );
   }
   return calendar;
 }
+
 
 const readable = (ctx: ToolContext) => !!ctx.calendar?.usable() && ctx.calendar.readable().length > 0;
 const writable = (ctx: ToolContext) => ctx.mode === "chat" && !!ctx.calendar?.usable() && ctx.calendar.writable().length > 0;
@@ -158,6 +162,26 @@ const description = z.string().trim().max(GOOGLE_LIMITS.descriptionMax);
 const calendarRef = z.string().trim().max(200);
 // Google's ids are letters, digits and _@.-; never only dots ("..", out of /events/).
 const eventId = z.string().trim().min(1).max(1024).regex(/^(?!\.+$)[A-Za-z0-9_@.-]+$/);
+
+const changeInput = z
+  .object({
+    calendar: calendarRef.describe("Calendar name, as list_calendar_events shows it"),
+    event_id: eventId,
+    title: title.optional(),
+    start: localWhen.optional(),
+    end: localWhen.optional(),
+    all_day: z.boolean().optional(),
+    location: location.optional(),
+    description: description.optional(),
+  })
+  .strict();
+
+function draftOf(input: z.output<typeof changeInput>): EventDraft {
+  const draft: EventDraft = {};
+  for (const key of ["title", "start", "end", "location", "description"] as const) if (input[key] !== undefined) draft[key] = input[key];
+  if (input.all_day !== undefined) draft.allDay = input.all_day;
+  return draft;
+}
 
 /** A destructive target: "<calendar id>\n<event id>". */
 const target = (calendarId: string, id: string) => `${calendarId}\n${id}`;
@@ -172,6 +196,25 @@ function body(draft: EventDraft, timeZone: string, base?: CalendarEvent): Record
   } catch (error) {
     forModel(error);
   }
+}
+
+/**
+ * What an approval on an event depends on here: the same account, the calendar still open for
+ * changes. Google checks the event itself with its etag (If-Match) when the change is sent.
+ */
+function eventSnapshot(id: string, ctx: ToolContext): unknown {
+  const { calendarId, id: event } = parseTarget(id);
+  const calendar = ctx.calendar?.calendar(calendarId);
+  if (!ctx.calendar || calendar?.mode !== "write" || !calendar.writable) return null;
+  return [ctx.calendar.accountEmail(), calendar.id, calendar.mode, event];
+}
+
+/** Google's refusals of an approved change: a target that changed, or the owner's words. */
+function approvedFailure(error: unknown): never {
+  if (error instanceof GoogleError && (error.kind === "changed" || error.kind === "not_found")) throw new TargetGone(error.kind === "not_found");
+  // A calendar closed meanwhile is a target that changed; the rest in the owner's words.
+  if (error instanceof GoogleError && error.kind === "read_only") throw new TargetGone(false);
+  throw toAppError(error);
 }
 
 export const calendarTools = [
@@ -252,32 +295,18 @@ export const calendarTools = [
     permission: "write",
     maxCallsPerTurn: 3,
     offered: writable,
-    input: z
-      .object({
-        calendar: calendarRef.describe("Calendar name, as list_calendar_events shows it"),
-        event_id: eventId,
-        title: title.optional(),
-        start: localWhen.optional(),
-        end: localWhen.optional(),
-        all_day: z.boolean().optional(),
-        location: location.optional(),
-        description: description.optional(),
-      })
-      .strict(),
+    input: changeInput,
     detail: (input) => input.title,
     execute: async (input, ctx) => {
       const calendar = service(ctx);
-      const chosen = notShared(pick(input.calendar, calendar.writable(), "write"));
+      const chosen = pick(input.calendar, calendar.writable(), "write");
       const current = await google(() => calendar.event(chosen.id, input.event_id, meter(ctx)));
-      if (current.shared) {
+      if (current.shared || chosen.accessRole !== "owner") {
         throw new ToolError(
-          "Other people see this event (it has guests or someone else organizes it), so it is not changed from the conversation. Nothing was changed: tell the owner they can change it on the Agenda screen or in Google Calendar.",
+          "Other people see this event (it has guests, someone else organizes it, or the calendar is someone else's), so it is not changed directly. Nothing was changed: propose the same change with change_shared_calendar_event, which the owner approves first.",
         );
       }
-      const draft: EventDraft = {};
-      for (const key of ["title", "start", "end", "location", "description"] as const) if (input[key] !== undefined) draft[key] = input[key];
-      if (input.all_day !== undefined) draft.allDay = input.all_day;
-      const patch = body(draft, ctx.timeZone, current);
+      const patch = body(draftOf(input), ctx.timeZone, current);
       if (Object.keys(patch).length === 0) throw new ToolError("Say what to change: title, start, end, location or description.");
       const updated = await google(() => calendar.updateEvent(chosen.id, current.id, patch, current.etag, meter(ctx)));
       // The model renamed or moved it: a deletion proposed later in this turn would show its own words.
@@ -304,14 +333,7 @@ export const calendarTools = [
         payload: { text: event.etag },
       };
     },
-    // What the approval depends on here: the same account, the calendar still open for changes. Google
-    // checks the event itself with its etag (If-Match) when the deletion is sent.
-    snapshot: (id, ctx) => {
-      const { calendarId, id: event } = parseTarget(id);
-      const calendar = ctx.calendar?.calendar(calendarId);
-      if (!ctx.calendar || calendar?.mode !== "write" || !calendar.writable) return null;
-      return [ctx.calendar.accountEmail(), calendar.id, calendar.mode, event];
-    },
+    snapshot: eventSnapshot,
     commit: () => {
       throw new Error("delete_calendar_event runs through commitAsync");
     },
@@ -320,10 +342,55 @@ export const calendarTools = [
       try {
         await service(ctx).deleteEvent(calendarId, event, payload?.text ?? "", meter(ctx));
       } catch (error) {
-        if (error instanceof GoogleError && (error.kind === "changed" || error.kind === "not_found")) throw new TargetGone(error.kind === "not_found");
-        // A calendar closed meanwhile is a target that changed; the rest in the owner's words.
-        if (error instanceof GoogleError && error.kind === "read_only") throw new TargetGone(false);
-        throw toAppError(error);
+        approvedFailure(error);
+      }
+    },
+  }),
+  defineTool({
+    name: "change_shared_calendar_event",
+    description:
+      "Propose a change to an event other people see (it has guests, someone else organizes it, or the calendar is someone else's), when update_calendar_event says so. The owner approves exactly this change first; nobody is e-mailed.",
+    permission: "destructive",
+    maxCallsPerTurn: 3,
+    offered: writable,
+    input: changeInput,
+    target: async (input, ctx) => {
+      const calendar = service(ctx);
+      const chosen = pick(input.calendar, calendar.writable(), "write");
+      const event = await google(() => calendar.event(chosen.id, input.event_id, meter(ctx)));
+      const patch = body(draftOf(input), ctx.timeZone, event);
+      if (Object.keys(patch).length === 0) throw new ToolError("Say what to change: title, start, end, location or description.");
+      // The card shows the new values as they will be written (the model's words, shown as such) and,
+      // as its label, the event as Google has it now.
+      const show: Record<string, string> = {};
+      if (typeof patch.summary === "string") show.title = patch.summary;
+      if (patch.start !== undefined) {
+        const start = patch.start as { date?: string; dateTime?: string };
+        const end = patch.end as { date?: string; dateTime?: string };
+        const allDay = typeof start.date === "string";
+        show.when = eventWhen({ allDay, start: allDay ? (start.date ?? "") : (start.dateTime ?? ""), end: allDay ? (end.date ?? "") : (end.dateTime ?? "") }, ctx.timeZone);
+      }
+      if (typeof patch.location === "string") show.location = patch.location;
+      if (typeof patch.description === "string") show.description = patch.description;
+      const change: ChangePayload = { etag: event.etag, patch, show };
+      return {
+        id: target(chosen.id, event.id),
+        label: `${event.title || "—"} · ${chosen.name} · ${eventWhen(event, ctx.timeZone)}`,
+        payload: { text: JSON.stringify(change) },
+      };
+    },
+    snapshot: eventSnapshot,
+    commit: () => {
+      throw new Error("change_shared_calendar_event runs through commitAsync");
+    },
+    commitAsync: async (id, payload, ctx) => {
+      const { calendarId, id: event } = parseTarget(id);
+      const change = readChange(payload?.text);
+      if (!change) throw new TargetGone(false);
+      try {
+        await service(ctx).updateEvent(calendarId, event, change.patch, change.etag, meter(ctx));
+      } catch (error) {
+        approvedFailure(error);
       }
     },
   }),

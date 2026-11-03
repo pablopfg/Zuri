@@ -43,7 +43,7 @@ export function ApprovalCard({ action, onChange }: { action: PendingAction; onCh
   const [busy, setBusy] = useState<"approve" | "cancel" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const titleId = useId();
-  const rewrite = action.tool === "replace_note_content" || action.tool === "replace_task_description";
+  const rewrite = action.tool === "replace_note_content" || action.tool === "replace_task_description" || action.tool === "change_shared_calendar_event";
   const external = action.tool === "mcp_call";
 
   async function decide(kind: "approve" | "cancel") {

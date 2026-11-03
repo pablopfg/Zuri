@@ -3,6 +3,7 @@ import type { ActionRow, PendingActionRepository } from "../chat/actions.ts";
 import { AppError } from "../http/errors.ts";
 import { argsOf, runApprovedExternal } from "../mcp/agent.ts";
 import { type McpService, toolLabel } from "../mcp/service.ts";
+import { changePreview } from "../google/change.ts";
 import { runApprovedAction, targetState, type ToolContext, type ToolDefinition } from "../tools/registry.ts";
 import type { CommandButtons } from "./callbacks.ts";
 import { disarm } from "./channel.ts";
@@ -23,6 +24,7 @@ export const BOT_APPROVABLE: ReadonlySet<DestructiveToolName> = new Set<Destruct
   "forget_memory",
   "cancel_automation",
   "delete_calendar_event",
+  "change_shared_calendar_event",
 ]);
 /** Destructive tools approved only in the app, never through the bot. */
 export const APP_ONLY: ReadonlySet<DestructiveToolName> = new Set<DestructiveToolName>([]);
@@ -31,7 +33,7 @@ export const APP_ONLY: ReadonlySet<DestructiveToolName> = new Set<DestructiveToo
  * Proposals whose snapshot does not start with the target's title: the card shows the label read
  * at the proposal (a calendar event: Google's title, calendar and time, never the model's words).
  */
-const LABEL_FROM_ROW: ReadonlySet<DestructiveToolName> = new Set<DestructiveToolName>(["delete_calendar_event"]);
+const LABEL_FROM_ROW: ReadonlySet<DestructiveToolName> = new Set<DestructiveToolName>(["delete_calendar_event", "change_shared_calendar_event"]);
 
 /** The rewrites: their preview shows the text as it is and the text that would be written. */
 const REWRITES: ReadonlySet<DestructiveToolName> = new Set<DestructiveToolName>(["replace_task_description", "replace_note_content"]);
@@ -55,6 +57,7 @@ const ACTION_NAME: Record<ApprovalPreview["tool"], MessageKey> = {
   forget_memory: "telegram.aprovar.acao.forget_memory",
   cancel_automation: "telegram.aprovar.acao.cancel_automation",
   delete_calendar_event: "telegram.aprovar.acao.delete_calendar_event",
+  change_shared_calendar_event: "telegram.aprovar.acao.change_shared_calendar_event",
 };
 
 /** Proposal cards under one answer, and in /aprovar (spec: lists show 5 at most). */
@@ -130,6 +133,8 @@ export class TelegramApprovals {
       preview.before = typeof fields[1] === "string" ? fields[1] : "";
       preview.after = payloadText(row.payload);
     }
+    // A change to a shared event: the values that will be written, field by field.
+    if (tool === "change_shared_calendar_event") preview.after = changePreview(payloadText(row.payload)) ?? "";
     return { status: "ok", preview, targetHash: state.hash, row };
   }
 

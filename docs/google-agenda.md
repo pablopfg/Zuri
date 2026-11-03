@@ -30,11 +30,14 @@ Toda agenda começa **Fechada**. Em cada uma você escolhe:
 | **Só ler** | Os eventos aparecem na tela Agenda, no `/hoje` do bot e nas rotinas, e a Zuri consulta na conversa. Ninguém muda nada por aqui. |
 | **Ler e editar** | Além de ler, você cria, muda e apaga eventos na tela Agenda, e a Zuri cria e muda eventos na conversa. Apagar pela conversa sempre vira um cartão para você aprovar. Só aparece onde o Google deixa a sua conta editar. |
 
-Na conversa, a Zuri não mexe no que outras pessoas veem: eventos com
-convidados, eventos que outra pessoa organiza e agendas que são de outra
-pessoa (em que a sua conta só pode escrever). Esses você muda na tela Agenda
-ou no Google. Assim, o texto de um convite não consegue fazer a Zuri copiar
-os seus dados para um evento que outra pessoa lê.
+Na conversa, o que outras pessoas veem só muda com a sua aprovação: eventos
+com convidados, eventos que outra pessoa organiza e eventos de agendas que
+são de outra pessoa (em que a sua conta só pode escrever). A Zuri propõe a
+mudança e você vê, no cartão, o evento como está no Google e os valores novos,
+no app e no bot. Criar evento numa agenda de outra pessoa pela conversa não
+vale; isso você faz na tela Agenda. Assim, o texto de um convite não consegue
+fazer a Zuri copiar os seus dados para um evento que outra pessoa lê
+(decisão de 03/11/2026).
 
 Abrir uma agenda pede a senha recente; fechar nunca pede. Abrir uma para
 edição gera o alerta de segurança "Agenda liberada para escrita". Agendas em

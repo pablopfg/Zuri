@@ -61,13 +61,14 @@ export const TOOL_NAMES = [
   "create_calendar_event",
   "update_calendar_event",
   "delete_calendar_event",
+  "change_shared_calendar_event",
 ] as const;
 export type ToolName = (typeof TOOL_NAMES)[number];
 /** A remote MCP tool as the model calls it (step 18): never one of TOOL_NAMES. */
 export type ExternalToolName = `mcp_${string}`;
 
 /** The destructive ones: they only ever become a proposal the owner approves. */
-export const DESTRUCTIVE_TOOLS = ["delete_task", "replace_task_description", "replace_note_content", "delete_note", "forget_memory", "cancel_automation", "delete_calendar_event"] as const;
+export const DESTRUCTIVE_TOOLS = ["delete_task", "replace_task_description", "replace_note_content", "delete_note", "forget_memory", "cancel_automation", "delete_calendar_event", "change_shared_calendar_event"] as const;
 export type DestructiveToolName = (typeof DESTRUCTIVE_TOOLS)[number];
 
 export type ToolStatus = "running" | "success" | "error";
