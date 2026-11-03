@@ -19,6 +19,60 @@ funciona: [docs/agente/versionamento.md](docs/agente/versionamento.md).
 
 O que já entrou na `develop` e ainda não ganhou número fica em [`changelog/nao-lancado/`](changelog/nao-lancado/) por alguns minutos, até o workflow de versão escrever a seção.
 
+## [0.26.1] - 2026-11-03
+
+Mesclada às 11:12 (UTC-3) · commit [`44f5b87`](https://github.com/pablopfg/Zuri/commit/44f5b87ea6751801976b6ea10d698fb1c2954c4f) · PR [#141](https://github.com/pablopfg/Zuri/pull/141) · Etapa 19 mesclada
+
+### Alterado
+
+- Sem mudança visível: etapa 19 mesclada.
+
+## [0.26.0] - 2026-11-03
+
+Mesclada às 10:21 (UTC-3) · commit [`081906b`](https://github.com/pablopfg/Zuri/commit/081906b5108a6a0a6275253141fd692663b7a24e) · PR [#136](https://github.com/pablopfg/Zuri/pull/136) · Google Agenda com tela em tempo real (etapa 19)
+
+### Adicionado
+
+- Google Agenda: em Configurações > Integrações, conecte a sua conta do Google
+  pelo seu próprio app OAuth (de graça) e escolha, agenda por agenda, se a
+  Zuri não vê, só lê, ou lê e edita. Tudo começa fechado.
+- Tela Agenda no menu lateral, com os eventos por dia, semana ou mês, no seu
+  fuso. Nas agendas abertas para edição, você cria, edita e apaga eventos ali
+  mesmo. O que muda no Google aparece na tela aberta sem recarregar.
+- Na conversa, a Zuri consulta a agenda, cria e muda eventos. Apagar um evento,
+  ou mudar um que tem convidados ou foi marcado por outra pessoa, vira um
+  cartão para você aprovar, também pelo Telegram.
+- O endereço de volta a cadastrar no Google é
+  `https://exemplo.com.br/rest/oauth2-credential/callback`, com o domínio da sua
+  Zuri.
+- `/hoje` no Telegram mostra os eventos do dia.
+- Em Automações, os modelos de rotina com IA Briefing da manhã (todo dia, 7h)
+  e Fechamento do dia (segunda a sexta, 19h).
+
+### Corrigido
+
+- Ao voltar do login de um serviço MCP, o cartão às vezes continuava em "Falta
+  entrar" até recarregar a página. Agora mostra "Conectado" na hora.
+
+### Segurança
+
+- Conectar a conta e abrir uma agenda pedem a senha digitada há pouco e geram
+  alerta de segurança. Os tokens do Google ficam cifrados e nunca voltam ao
+  navegador, ao log nem ao backup.
+- A Zuri não convida nem avisa ninguém, e editar ou apagar confere a versão do
+  evento: se ele mudou no Google, nada é sobrescrito.
+- Os avisos de mudança do Google só são aceitos com o token do canal, e no
+  modo de bloqueio nenhuma chamada sai para o Google.
+
+### Atualização
+
+- O banco ganha a migration 22 (a conta do Google e as agendas, com o modo de
+  cada uma). Ela roda sozinha na primeira requisição e só acrescenta.
+- Para usar a Agenda, cadastre os secrets `GOOGLE_CLIENT_ID` e
+  `GOOGLE_CLIENT_SECRET` do seu cliente OAuth e tenha o `MCP_CREDENTIAL_KEY`.
+  O passo a passo está em `docs/google-agenda.md`. Sem eles, o cartão do Google
+  explica o que falta e nada mais muda.
+
 ## [0.25.13] - 2026-11-03
 
 Mesclada às 09:45 (UTC-3) · commit [`03c1f5e`](https://github.com/pablopfg/Zuri/commit/03c1f5e649a67ff89cf4c64f4a0cec781a42dd75) · PR [#135](https://github.com/pablopfg/Zuri/pull/135) · Recoloca o selo de versão com atualização automática
@@ -2022,7 +2076,9 @@ Mesclada às 22:15 (UTC-3) · commit [`360a79e`](https://github.com/pablopfg/Zur
   `npm audit`), CodeQL, Dependabot e rulesets para a `develop` e a `main`.
 - `LICENSE` (MIT), `NOTICE.md`, `SECURITY.md` e `CONTRIBUTING.md`.
 
-[Não lançado]: https://github.com/pablopfg/Zuri/compare/v0.25.13...develop
+[Não lançado]: https://github.com/pablopfg/Zuri/compare/v0.26.1...develop
+[0.26.1]: https://github.com/pablopfg/Zuri/releases/tag/v0.26.1
+[0.26.0]: https://github.com/pablopfg/Zuri/releases/tag/v0.26.0
 [0.25.13]: https://github.com/pablopfg/Zuri/releases/tag/v0.25.13
 [0.25.12]: https://github.com/pablopfg/Zuri/releases/tag/v0.25.12
 [0.25.11]: https://github.com/pablopfg/Zuri/releases/tag/v0.25.11
