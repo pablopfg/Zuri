@@ -2,9 +2,11 @@
 
 A partir da etapa 19c, a Zuri lê as avaliações do seu Perfil da Empresa no
 Google, avisa a equipe das negativas e escreve rascunhos de resposta para você
-aprovar. Nada é publicado sem a sua aprovação. A resposta automática das
-avaliações positivas é a etapa 19d. O plano está em
-`docs/planos/google-business-profile.md`.
+aprovar. Nada é publicado sem a sua aprovação, a não ser que você libere a
+Zuri a publicar sozinha as respostas às avaliações positivas (etapa 19d,
+[abaixo](#publicar-sozinha-as-positivas)). Os planos estão em
+`docs/planos/google-business-profile.md` e
+`docs/planos/etapa-19d-resposta-automatica.md`.
 
 ## Para o dono
 
@@ -47,8 +49,10 @@ cautelosa, nunca menos. Mais de 3 negativas numa leitura viram um aviso só, e
 
 ### A aba Avaliações
 
-Em **Contatos › Avaliações** (`/contatos/avaliacoes`) ficam três filtros:
-**Precisa de você**, **Respondidas** e **Todas**, e o filtro por nota. Cada
+Em **Contatos › Avaliações** (`/contatos/avaliacoes`) ficam os filtros
+**Precisa de você**, **Respondidas**, **Publicadas sozinha** (quando o nível
+automático está ligado ou alguma resposta saiu assim) e **Todas**, e o filtro
+por nota. Cada
 avaliação mostra só o primeiro nome de quem avaliou, as estrelas, o texto
 como texto puro e o que a Zuri fez.
 
@@ -68,6 +72,50 @@ nunca é apagada.
 
 **Pausar respostas** (na aba, ou `/pausar_rotinas` no Telegram) segura as
 publicações. A leitura e os avisos continuam. Retomar é só pelo app.
+
+### Publicar sozinha as positivas
+
+Em **O que a Zuri faz**, a terceira opção é **Publica sozinha as positivas**.
+Ela começa bloqueada e libera depois que você aprova **10 rascunhos de
+avaliações positivas sem mudar nada**, contados entre as suas 30 últimas
+decisões sobre esses rascunhos. Aprovar sem mudar conta a favor; aprovar
+editado ou descartar conta contra. A contagem aparece embaixo da opção e
+continua mesmo se você desligar as avaliações.
+
+Ligar pede a sua senha (se ela não foi digitada nos últimos 15 minutos) e
+manda um alerta de segurança em todos os canais. Só a tela muda esse nível:
+a conversa, as rotinas, o bot e qualquer token ficam de fora.
+
+Com o nível ligado, a cada leitura a Zuri publica sozinha, depois de ler a
+avaliação no Google de novo:
+
+- só avaliações de 4 ou 5 estrelas, sem queixa, saúde, outro idioma ou texto
+  suspeito;
+- só quando o rascunho do agente passou pela conferência fixa e pela segunda
+  leitura, ou quando é um modelo seu numa avaliação só com nota. Um modelo
+  que entrou no lugar de um rascunho reprovado, ou porque a IA não pôde
+  escrever, espera você;
+- só o que foi proposto depois de você ligar o nível;
+- até 3 por leitura e 10 por dia. O resto espera você, como antes.
+
+Nada sai sozinho com as respostas pausadas, no modo de bloqueio ou durante um
+pico (5 negativas ou 10 avaliações novas numa hora). No fim de cada leitura
+que publicou alguma coisa, um aviso no privado conta quantas saíram. A aba
+**Publicadas sozinha** lista essas respostas com **Apagar resposta**.
+
+A Zuri volta sozinha para **Escreve rascunhos para eu aprovar** e avisa você
+no privado quando:
+
+- três rascunhos seguidos de avaliações positivas não passam na conferência
+  ou na segunda leitura;
+- o Google recusa uma resposta;
+- uma resposta da Zuri é apagada ou trocada, pela tela ou direto no Google.
+
+Falta de Neurons ou a IA fora do ar não contam como reprovação: nesses casos a
+avaliação ganha um modelo seu e espera a sua aprovação.
+
+O motivo aparece na aba e em Integrações até você ligar de novo. Para voltar
+a publicar sozinha, escolha a opção outra vez (senha e alerta de novo).
 
 ### A conferência de toda resposta
 
@@ -168,6 +216,8 @@ Google Cloud, então a Zuri lê de 15 em 15 minutos.
 | Rascunhos com IA | 30 por dia e 1.000 Neurons por dia (dentro dos 9.000 do dono); 3 por despertar |
 | Avisos por leitura | 3 avulsos, o resto num aviso só |
 | Aprovação | 72 horas, presa à versão vista |
+| Publicadas sozinha (19d) | 3 por leitura e 10 por dia, 2 chamadas ao Google cada (releitura e resposta), sem IA a mais |
+| Período de experiência (19d) | 10 aprovações sem edição entre as 30 últimas decisões |
 | Resposta | 40 a 600 caracteres |
 | Auditoria | 180 dias |
 

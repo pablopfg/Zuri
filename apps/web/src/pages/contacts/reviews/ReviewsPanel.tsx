@@ -9,6 +9,7 @@ import { api, errorMessage } from "../../../lib/api.ts";
 import { addMessages, useI18n } from "../../../lib/i18n.tsx";
 import {
   guardTexts,
+  REVIEW_BREAKER_TEXT,
   REVIEW_PROBLEM_TEXT,
   REVIEW_REASON_TEXT,
   REVIEW_SOURCE_TEXT,
@@ -21,11 +22,11 @@ import {
 // The tab's pt-BR texts travel with its code, not in the first bundle (rule P11).
 addMessages(ptBRReviews);
 
-const TABS: readonly ReviewTab[] = ["needs", "answered", "all"];
-const TAB_TEXT = { needs: "web.reviews.tab.needs", answered: "web.reviews.tab.answered", all: "web.reviews.tab.all" } as const;
+const TAB_TEXT = { needs: "web.reviews.tab.needs", answered: "web.reviews.tab.answered", auto: "web.reviews.tab.auto", all: "web.reviews.tab.all" } as const;
 const EMPTY_TEXT = {
   needs: ["web.reviews.empty.needs.title", "web.reviews.empty.needs.body"],
   answered: ["web.reviews.empty.answered.title", "web.reviews.empty.answered.body"],
+  auto: ["web.reviews.empty.auto.title", "web.reviews.empty.auto.body"],
   all: ["web.reviews.empty.all.title", "web.reviews.empty.all.body"],
 } as const;
 /** States the owner can still act on: approve, write again, discard, mark as handled. */
@@ -57,7 +58,9 @@ function Stars({ rating }: { rating: number }) {
  * The Reviews tab (step 19c): the Google reviews Zuri read, what waits for
  * the owner first. A draft is only a suggestion: the owner edits it and
  * approves; Zuri reads the review again at Google before it publishes. The
- * reviewer's text is shown as plain text, never as markup.
+ * reviewer's text is shown as plain text, never as markup. At the level
+ * "auto" (step 19d) positive ones may go out by themselves: their tab lists
+ * them with "Delete reply", and the breaker's reason shows on top.
  */
 export function ReviewsPanel() {
   const { t, plural, dateTime } = useI18n();
@@ -155,7 +158,7 @@ export function ReviewsPanel() {
             <RefreshCw className="h-4 w-4" aria-hidden />
             {t("web.reviews.check")}
           </Button>
-          {data.level === "approve" && (
+          {data.level !== "off" && (
             <Button variant="ghost" onClick={() => void pause(!data.paused)} loading={busy === "pause"}>
               {t(data.paused ? "web.reviews.resume" : "web.reviews.pause")}
             </Button>
@@ -164,11 +167,14 @@ export function ReviewsPanel() {
       </div>
       {data.problem && <Notice tone="warning">{t(REVIEW_PROBLEM_TEXT[data.problem])}</Notice>}
       {data.paused && <Notice tone="info">{t("web.reviews.paused")}</Notice>}
+      {data.level === "auto" && !data.paused && <Notice tone="info">{t("web.reviews.auto.status", { n: data.autoToday, max: REVIEW_LIMITS.autoPerDay })}</Notice>}
+      {data.breaker && <Notice tone="warning">{t(REVIEW_BREAKER_TEXT[data.breaker.reason], { when: dateTime(data.breaker.at) })}</Notice>}
 
       <div className="flex flex-wrap items-end justify-between gap-3">
         <fieldset className="flex flex-wrap gap-1">
           <legend className="sr-only">{t("web.reviews.tabs")}</legend>
-          {TABS.map((key) => (
+          {/* The "by itself" tab only once the level is on or something went out that way. */}
+          {(["needs", "answered", ...(data.level === "auto" || (counts?.auto ?? 0) > 0 ? (["auto"] as const) : []), "all"] as const satisfies readonly ReviewTab[]).map((key) => (
             <button
               key={key}
               type="button"
@@ -276,6 +282,7 @@ function ReviewCard({ review, paused, level }: { review: ReviewItem; paused: boo
         </div>
         <div className="flex flex-wrap gap-1">
           <Pill tone={review.state === "escalated" ? "danger" : review.state === "proposed" ? "accent" : "neutral"}>{t(REVIEW_STATE_TEXT[review.state])}</Pill>
+          {review.auto && <Pill tone="accent">{t("web.reviews.auto.badge")}</Pill>}
           {review.reasons.map((reason) => (
             <Pill key={reason} tone="warning">
               {t(REVIEW_REASON_TEXT[reason])}
@@ -305,7 +312,7 @@ function ReviewCard({ review, paused, level }: { review: ReviewItem; paused: boo
       {review.state === "uncertain" && <Notice tone="warning">{t("web.reviews.uncertain")}</Notice>}
       {open && suspicious && <Notice tone="warning">{t("web.reviews.suspicious")}</Notice>}
 
-      {open && level === "approve" && (
+      {open && level !== "off" && (
         <div className="space-y-2">
           <label htmlFor={`${id}-reply`} className="text-sm font-medium">
             {t("web.reviews.reply.label")}

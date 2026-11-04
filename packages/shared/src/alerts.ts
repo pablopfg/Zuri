@@ -67,6 +67,8 @@ export const NOTICE_KINDS = [
   "reviews.worse",
   "reviews.draft",
   "reviews.problem",
+  "reviews.auto",
+  "reviews.breaker",
   "security",
 ] as const;
 export type NoticeKind = (typeof NOTICE_KINDS)[number];
@@ -104,6 +106,7 @@ export const SECURITY_ALERT_EVENTS = [
   "crm_events_key",
   "google_connected",
   "google_calendar_write",
+  "reviews_autonomy",
   "setup_failure",
   "setup_locked",
   "owner_created",

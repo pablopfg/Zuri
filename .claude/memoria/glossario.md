@@ -28,3 +28,6 @@
 | Horário (`slot`) | O instante previsto de uma execução. Cada horário é reivindicado uma vez só; o índice único `(automation_id, slot)` impede repetição. |
 | Execução recuperada | Execução de um horário perdido há menos de 24 h, rodada quando o objeto acorda (`catch_up`). Com 24 h ou mais, o horário é pulado. |
 | Só me avise quando houver algo | Modo sentinela de uma rotina: a resposta `NADA` vira "Nada a avisar" e não incomoda o dono. |
+| Publicar sozinha (avaliações) | Nível `auto` das avaliações do Google (etapa 19d): respostas às avaliações de 4 e 5 estrelas cujo rascunho passou nas duas conferências saem sem a aprovação do dono, até 3 por leitura e 10 por dia. Guardado como `auto = 1` em `zur_review_settings`, sobre o nível `approve`. |
+| Período de experiência | Antes de publicar sozinha: 10 rascunhos de avaliações positivas aprovados sem mudança entre as 30 últimas decisões do dono (coluna `trial`, nunca `zur_review_events`, que some em 180 dias). |
+| Disjuntor (avaliações) | Volta do nível automático para "Perguntar sempre" depois de 3 rascunhos reprovados seguidos, uma recusa do Google ou uma resposta da Zuri apagada pelo dono. Avisa no privado e deixa o motivo na tela. |
