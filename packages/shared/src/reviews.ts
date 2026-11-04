@@ -63,10 +63,22 @@ export const REVIEW_LIMITS = {
   screenPage: 30,
   /** Audit rows are kept this long. */
   eventsDays: 180,
+  /** Step 19d: replies published by themselves, per check and per day (the owner's zone). */
+  autoPerCheck: 3,
+  autoPerDay: 10,
+  /** Step 19d: drafts approved without a change, among the owner's last decisions, before publishing by itself unlocks. */
+  trialNeeded: 10,
+  trialWindow: 30,
+  /** Step 19d: drafts of positive reviews failing the checks in a row that turn publishing by itself off. */
+  breakerRejections: 3,
 } as const;
 
-/** Off: only the notices to the team (nothing drafted for approval). Approve: every reply waits for the owner. */
-export const REVIEW_LEVELS = ["off", "approve"] as const;
+/**
+ * Off: only the notices to the team (nothing drafted for approval). Approve:
+ * every reply waits for the owner. Auto (step 19d): positive reviews whose
+ * draft passed both checks go out by themselves; the rest still waits.
+ */
+export const REVIEW_LEVELS = ["off", "approve", "auto"] as const;
 export type ReviewLevel = (typeof REVIEW_LEVELS)[number];
 
 export const REVIEW_TONES = ["close", "formal"] as const;
@@ -102,8 +114,13 @@ export type ReviewGuardCode = (typeof REVIEW_GUARD_CODES)[number];
 export const REVIEW_PROBLEMS = ["reconnect", "no_access", "api_disabled", "unavailable"] as const;
 export type ReviewProblem = (typeof REVIEW_PROBLEMS)[number];
 
-export const REVIEW_TABS = ["needs", "answered", "all"] as const;
+/** "auto": the replies Zuri published by itself (step 19d). */
+export const REVIEW_TABS = ["needs", "answered", "auto", "all"] as const;
 export type ReviewTab = (typeof REVIEW_TABS)[number];
+
+/** Why publishing by itself went back to asking (step 19d): drafts failing the checks in a row, Google refusing one, or the owner deleting a reply of Zuri's. */
+export const REVIEW_BREAKER_REASONS = ["rejected", "refused", "deleted"] as const;
+export type ReviewBreakerReason = (typeof REVIEW_BREAKER_REASONS)[number];
 
 export interface ReviewLocation {
   /** Google's name of the location ("accounts/1/locations/2"). */
@@ -133,6 +150,12 @@ export interface ReviewsStatus {
   pattern: ReviewPattern;
   /** Reviews waiting for the owner (the tab's number). */
   needs: number;
+  /** Step 19d: drafts of positive reviews approved without a change among the owner's last 30 decisions; "auto" unlocks at `needed`. */
+  trial: { approved: number; needed: number };
+  /** Replies published by themselves today. */
+  autoToday: number;
+  /** The last time publishing by itself turned off on its own, until the owner turns it on again. */
+  breaker: { reason: ReviewBreakerReason; at: string } | null;
 }
 
 /** A review as the screen gets it: the first name only, never Google's ids or the photo. */
@@ -155,6 +178,8 @@ export interface ReviewItem {
   reply: string | null;
   /** The reply is Zuri's (only then can it be deleted here). */
   replyMine: boolean;
+  /** Zuri published it by itself, without the owner's approval (step 19d). */
+  auto: boolean;
   /** Ties an approval to this version of the review. */
   version: string;
   /** When a proposal stops being approvable. */

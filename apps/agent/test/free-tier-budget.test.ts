@@ -15,7 +15,7 @@ import { CSRF, call, HUMAN_TOKEN, ORIGIN, TEST_EMAIL, TEST_PASSWORD, testEnv } f
 import { mcpFixture } from "./mcp-fixture.ts";
 import { withChatWorld } from "./chat-world.ts";
 import { addConnection, withFlowWorld } from "./flow-world.ts";
-import { add, draftAnswer, LOCATION, SECOND_OK, turnOn, withReviewsWorld } from "./reviews-world.ts";
+import { add, draftAnswer, LOCATION, PATTERN, SECOND_OK, turnOn, withReviewsWorld } from "./reviews-world.ts";
 
 // What each route costs in the units the Free plan bills: rows read and rows
 // written in the object's SQLite (docs/arquitetura/orcamento-free-tier.md). A
@@ -874,6 +874,53 @@ describe("Google reviews (step 19c)", () => {
       // Two pages of 30 and their counts from zur_counts, whatever the copy holds (1,055 reviews; measured 147).
       expect(world.db.usage.rowsRead - before.rowsRead).toBeLessThanOrEqual(200);
       expect(world.db.all(`SELECT id FROM zur_reviews WHERE location = ?`, LOCATION)).toHaveLength(1_055);
+    }));
+});
+
+// Step 19d: publishing by itself on the same profile; a quiet check costs what 19c's did, three publications two calls each.
+describe("Google reviews published by themselves (step 19d)", () => {
+  it("a quiet check, a check that publishes three and the 'by itself' tab stay within the plan's numbers", () =>
+    withReviewsWorld(async (world) => {
+      await turnOn(world);
+      for (let i = 0; i < 1_000; i++) {
+        world.db.run(
+          `INSERT INTO zur_reviews (id, location, google_name, rating, created_at, updated_at, state, seen_at, auto, reply, reply_hash) VALUES (?, ?, ?, 5, '2025-01-01T00:00:00Z', '2025-01-01T00:00:00Z', ?, ?, ?, ?, ?)`,
+          `old-${i}`,
+          LOCATION,
+          `${LOCATION}/reviews/old-${i}`,
+          i % 4 ? "history" : "replied",
+          world.clock.now - 400 * 86_400_000,
+          i % 4 ? 0 : 1,
+          i % 4 ? null : "Obrigado! Equipe Exemplo",
+          i % 4 ? null : "h",
+        );
+      }
+      world.db.run(`UPDATE zur_review_settings SET trial = '1111111111'`);
+      world.reviews.configure({ locations: [LOCATION], signature: "Equipe Exemplo", tone: "close", templates: [...PATTERN.templates], banned: [], level: "auto" });
+      const measure = async () => {
+        const before = { ...world.db.usage };
+        const calls = world.sim.seen.length;
+        world.clock.now += 16 * 60_000;
+        expect(await world.reviews.check("alarm")).toBe("ok");
+        return { read: world.db.usage.rowsRead - before.rowsRead, written: world.db.usage.rowsWritten - before.rowsWritten, calls: world.sim.seen.length - calls };
+      };
+      const quiet = await measure();
+      // Measured 1 call, 24 rows read and 4 written: the level adds nothing to a quiet check.
+      expect(quiet.calls).toBeLessThanOrEqual(2);
+      expect(quiet.written).toBeLessThanOrEqual(10);
+      expect(quiet.read).toBeLessThanOrEqual(150);
+      for (let i = 0; i < 3; i++) add(world, `s${i}`, 5);
+      const busy = await measure();
+      // One page, then for each of the three a re-read and the reply.
+      expect(busy.calls).toBeLessThanOrEqual(8);
+      expect(world.db.one(`SELECT count(*) AS n FROM zur_reviews WHERE auto = 1 AND state = 'replied' AND id NOT LIKE 'old-%'`)).toEqual({ n: 3 });
+      // Three stored, drafted from a template, claimed, published and audited (measured 142 read and 110 written).
+      expect(busy.written).toBeLessThanOrEqual(150);
+      expect(busy.read).toBeLessThanOrEqual(250);
+      const before = { ...world.db.usage };
+      await world.reviews.list({ tab: "auto" });
+      // A page of 30 through the partial index and the counters, whatever the copy holds (253 published by themselves).
+      expect(world.db.usage.rowsRead - before.rowsRead).toBeLessThanOrEqual(120);
     }));
 });
 

@@ -7,7 +7,7 @@ import { useToast } from "../../components/Toaster.tsx";
 import { Button, Dialog, ErrorNotice, Loading, Notice, SelectField, TextAreaField, TextField } from "../../components/ui.tsx";
 import { ApiError, api, errorMessage } from "../../lib/api.ts";
 import { addMessages, useI18n } from "../../lib/i18n.tsx";
-import { guardTexts, REVIEW_PROBLEM_TEXT, REVIEWS_KEY, REVIEWS_STATUS_KEY } from "../../lib/reviews.ts";
+import { guardTexts, REVIEW_BREAKER_TEXT, REVIEW_PROBLEM_TEXT, REVIEWS_KEY, REVIEWS_STATUS_KEY } from "../../lib/reviews.ts";
 
 // The section's pt-BR texts travel with its code, loaded only with the Google card (rule P11).
 addMessages(ptBRReviews);
@@ -30,7 +30,8 @@ function withoutSignature(text: string, signature: string): string {
 /**
  * Settings › Integrations › Google › Reviews (step 19c): joined to the
  * calendar's grant with Google's consent, then the profiles read, the reply
- * style and what Zuri does. Turning it off forgets Zuri's copy.
+ * style and what Zuri does: off, drafts to approve or (step 19d, after the
+ * trial) positive ones by itself. Turning it off forgets Zuri's copy.
  */
 export function ReviewsSection() {
   const { t, dateTime } = useI18n();
@@ -100,6 +101,7 @@ export function ReviewsSection() {
             <p className="text-sm leading-6 text-fg-muted">{t("web.reviews.card.intro")}</p>
           )}
           {data.problem && <Notice tone="warning">{t(REVIEW_PROBLEM_TEXT[data.problem])}</Notice>}
+          {data.breaker && <Notice tone="warning">{t(REVIEW_BREAKER_TEXT[data.breaker.reason], { when: dateTime(data.breaker.at) })}</Notice>}
           <SettingsForm status={data} />
           {data.enabled && (
             <div className="flex justify-end">
@@ -184,6 +186,7 @@ function SettingsForm({ status }: { status: ReviewsStatus }) {
   };
 
   const options = locations.data ?? status.locations;
+  const unlocked = status.level === "auto" || status.trial.approved >= status.trial.needed;
   return (
     <form className="space-y-4" onSubmit={(e) => void save(e)}>
       <fieldset className="space-y-2">
@@ -284,8 +287,17 @@ function SettingsForm({ status }: { status: ReviewsStatus }) {
       </fieldset>
 
       <TextField label={t("web.reviews.card.banned")} hint={t("web.reviews.card.banned.hint")} value={banned} onChange={(e) => setBanned(e.target.value)} />
-      <SelectField label={t("web.reviews.card.level")} hint={t("web.reviews.card.level.hint")} value={level} onChange={(e) => setLevel(e.target.value as ReviewLevel)}>
+      <SelectField
+        label={t("web.reviews.card.level")}
+        hint={unlocked ? t("web.reviews.card.level.hint") : t("web.reviews.card.level.trial", { n: status.trial.approved, needed: status.trial.needed })}
+        value={level}
+        onChange={(e) => setLevel(e.target.value as ReviewLevel)}
+      >
         <option value="approve">{t("web.reviews.card.level.approve")}</option>
+        {/* Step 19d: by itself only after the trial; the server refuses it before then too. */}
+        <option value="auto" disabled={!unlocked}>
+          {t(unlocked ? "web.reviews.card.level.auto" : "web.reviews.card.level.autoLocked")}
+        </option>
         <option value="off">{t("web.reviews.card.level.off")}</option>
       </SelectField>
       <div className="flex justify-end">

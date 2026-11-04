@@ -591,7 +591,7 @@ describe("the screen's list and turning off", () => {
       const second = await world.reviews.list({ tab: "all", cursor: first.nextCursor ?? undefined });
       expect(second.items).toHaveLength(2);
       expect(second.nextCursor).toBeNull();
-      expect(first.counts).toEqual({ needs: REVIEW_LIMITS.screenPage + 2, answered: 0, all: REVIEW_LIMITS.screenPage + 2 });
+      expect(first.counts).toEqual({ needs: REVIEW_LIMITS.screenPage + 2, answered: 0, auto: 0, all: REVIEW_LIMITS.screenPage + 2 });
       expect((await world.reviews.list({ tab: "needs", rating: 1 })).items.every((item) => item.rating === 1)).toBe(true);
       expect((await world.reviews.list({ tab: "answered" })).items).toEqual([]);
     }));

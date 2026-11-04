@@ -166,10 +166,10 @@ describe("the counters (CF-03)", () => {
       const real = (states: string[] | null) =>
         world.db.one<{ n: number }>(`SELECT count(*) AS n FROM zur_reviews${states ? ` WHERE state IN (${states.map(() => "?").join(", ")})` : ""}`, ...(states ?? []))?.n;
       const counts = async () => (await world.reviews.list({ tab: "all" })).counts;
-      expect(await counts()).toEqual({ needs: real(["new", "escalated", "proposed", "uncertain"]), answered: real(["replied", "replied_elsewhere"]), all: real(null) });
+      expect(await counts()).toEqual({ needs: real(["new", "escalated", "proposed", "uncertain"]), answered: real(["replied", "replied_elsewhere"]), auto: 0, all: real(null) });
       expect((await counts()).all).toBe(4);
       await world.reviews.resolve(row(world, "n")?.id as string, "app");
-      expect(await counts()).toEqual({ needs: 1, answered: 0, all: 4 });
+      expect(await counts()).toEqual({ needs: 1, answered: 0, auto: 0, all: 4 });
       world.reviews.disable();
       expect(world.db.all(`SELECT kind, n FROM zur_counts WHERE kind LIKE 'reviews%' AND n != 0`)).toEqual([]);
     }));

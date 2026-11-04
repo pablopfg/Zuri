@@ -1048,6 +1048,13 @@ export function reviewNotice(alerts: Pick<AlertService, "raise">, notice: Review
     case "reviews.problem":
       alerts.raise({ ...base, kind: notice.kind, priority: "normal", params: {}, link: "/configuracoes/integracoes", dedupeKey: `reviews-problem-${notice.problem}`, dedupeMs: 86_400_000 });
       return;
+    case "reviews.auto":
+      // Step 19d: what went out by itself, to the owner alone (the reply is already public, the list has "Delete reply").
+      alerts.raise({ ...base, kind: notice.kind, priority: "normal", params: { count: notice.count } });
+      return;
+    case "reviews.breaker":
+      alerts.raise({ ...base, kind: notice.kind, priority: "high", params: {}, dedupeKey: `reviews-breaker-${notice.reason}`, dedupeMs: 3_600_000 });
+      return;
   }
 }
 
