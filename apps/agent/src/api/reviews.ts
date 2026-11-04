@@ -31,7 +31,7 @@ function reviewId(c: Context<ApiEnv>): string {
  * and the bot has none: only the owner on the screen picks the profile, the
  * level or approves a reply. Answers never carry Google's ids of a review.
  */
-export function registerReviewRoutes(app: Hono<ApiEnv>, deps: () => GoogleRouteDeps, _client: (c: Context<ApiEnv>) => ClientInfo): void {
+export function registerReviewRoutes(app: Hono<ApiEnv>, deps: () => GoogleRouteDeps, client: (c: Context<ApiEnv>) => ClientInfo): void {
   app.get("/reviews/status", () => Response.json(deps().reviews.status()));
 
   /** Google's page to add the Business Profile to the calendar's grant. */
@@ -44,12 +44,20 @@ export function registerReviewRoutes(app: Hono<ApiEnv>, deps: () => GoogleRouteD
   /** The profiles the account manages, read from Google now. */
   app.get("/reviews/locations", async () => Response.json({ locations: await owner(() => deps().reviews.listLocations()) }));
 
-  /** The profile, the reply style and the level (the password typed recently, since replies go out in the owner's name), then a first read. */
+  /**
+   * The profile, the reply style and the level (the password typed recently,
+   * since replies go out in the owner's name), then a first read. Turning on
+   * "publish positive ones by itself" (step 19d) also raises a security alert
+   * on every channel: only this route sets it, never the chat, the bot, a
+   * routine or a remote token.
+   */
   app.patch("/reviews/settings", async (c) => {
     const input = await readJson(c.req.raw, reviewSettingsSchema, 16 * 1024);
     const { reviews, auth } = deps();
     auth.requireRecentAuth(c.get("session"));
+    const before = reviews.status().level;
     reviews.configure(input);
+    if (input.level === "auto" && before !== "auto") auth.events.record("reviews_autonomy", client(c), { alert: true });
     // The first read now (one page per newly picked profile, kept as history): the owner sees at once
     // whether Google lets Zuri in, instead of a minute later. Its failures land in the status.
     await reviews.firstRead();

@@ -1,13 +1,13 @@
 import { type MessageKey, ptBR, REVIEW_GUARD_CODES } from "@zuri/shared";
 import { describe, expect, it } from "vitest";
 import { ApiError } from "../src/lib/api.ts";
-import { guardTexts, REVIEW_PROBLEM_TEXT, REVIEW_REASON_TEXT, REVIEW_SOURCE_TEXT, REVIEW_STATE_TEXT, refusedCodes } from "../src/lib/reviews.ts";
+import { guardTexts, REVIEW_BREAKER_TEXT, REVIEW_PROBLEM_TEXT, REVIEW_REASON_TEXT, REVIEW_SOURCE_TEXT, REVIEW_STATE_TEXT, refusedCodes } from "../src/lib/reviews.ts";
 
 const t = (key: MessageKey) => ptBR[key];
 
 describe("the reviews' texts", () => {
-  it("has a pt-BR text for every state, reason, source and problem the server sends", () => {
-    for (const map of [REVIEW_STATE_TEXT, REVIEW_REASON_TEXT, REVIEW_SOURCE_TEXT, REVIEW_PROBLEM_TEXT]) {
+  it("has a pt-BR text for every state, reason, source, problem and breaker reason the server sends", () => {
+    for (const map of [REVIEW_STATE_TEXT, REVIEW_REASON_TEXT, REVIEW_SOURCE_TEXT, REVIEW_PROBLEM_TEXT, REVIEW_BREAKER_TEXT]) {
       for (const key of Object.values(map)) expect(ptBR[key], key).toBeTruthy();
     }
   });

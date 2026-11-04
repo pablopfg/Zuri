@@ -128,7 +128,7 @@ describe("/api/reviews", () => {
       { ...SETTINGS, locations: [LOCATION, LOCATION, LOCATION, LOCATION] },
       { ...SETTINGS, templates: PATTERN.templates.slice(0, 2) },
       { ...SETTINGS, signature: "x" },
-      { ...SETTINGS, level: "auto" },
+      { ...SETTINGS, level: "sozinha" },
       { ...SETTINGS, tone: "rude" },
       { ...SETTINGS, extra: 1 },
     ]) {
@@ -213,6 +213,34 @@ describe("/api/reviews", () => {
     const res = await api("POST", "/reviews/check");
     expect(res.status).toBe(200);
     expect((await res.json()) as ReviewsStatus).toMatchObject({ problem: "no_access", outcome: "failed" });
+  });
+
+  it("unlocks publishing by itself only after the trial, with the password typed recently and a security alert (step 19d)", async () => {
+    // The access events' ids start over between tests (afterEach empties the table): their alert keys must too.
+    await inOwner((agent) => agent.store.db.run(`DELETE FROM zur_alert_keys WHERE key LIKE 'auth-event:%'`));
+    await turnOn();
+    const auto = { ...SETTINGS, level: "auto" };
+    expect((await errorBody(await api("PATCH", "/reviews/settings", auto))).code).toBe("CONFLICT");
+    await inOwner((agent) => agent.store.db.run(`UPDATE zur_review_settings SET trial = '1111111111'`));
+    expect(((await (await api("GET", "/reviews/status")).json()) as ReviewsStatus).trial).toEqual({ approved: 10, needed: 10 });
+    await stale();
+    expect((await errorBody(await api("PATCH", "/reviews/settings", auto))).code).toBe("RECENT_AUTH_REQUIRED");
+    // A remote token (step 20) or anything without the owner's session never reaches it.
+    const bearer = await call(`${ORIGIN}/api/reviews/settings`, { method: "PATCH", headers: { ...headers(false), authorization: "Bearer zur_pat_0000000000000000" }, body: JSON.stringify(auto) });
+    expect(bearer.status).toBe(401);
+    await fresh();
+    const saved = await api("PATCH", "/reviews/settings", auto);
+    expect(saved.status).toBe(200);
+    expect(((await saved.json()) as ReviewsStatus).level).toBe("auto");
+    const alerts = () => inOwner((agent) => agent.store.db.all<{ kind: string; alert_pending: number }>(`SELECT kind, alert_pending FROM zur_auth_events WHERE kind = 'reviews_autonomy'`));
+    expect(await alerts()).toHaveLength(1);
+    const security = await inOwner((agent) => agent.store.db.all<{ params: string; priority: string }>(`SELECT params, priority FROM zur_notices WHERE kind = 'security'`));
+    expect(security.map((n) => [JSON.parse(n.params).event, n.priority])).toContainEqual(["reviews_autonomy", "critical"]);
+    // Saving again at the same level tells nothing new; going back to drafts neither.
+    expect((await api("PATCH", "/reviews/settings", auto)).status).toBe(200);
+    expect((await api("PATCH", "/reviews/settings", SETTINGS)).status).toBe(200);
+    expect(await alerts()).toHaveLength(1);
+    await inOwner((agent) => agent.store.db.run(`UPDATE zur_review_settings SET trial = ''`));
   });
 
   it("turning off forgets the copy and its notices; disconnecting Google forgets it too", async () => {

@@ -414,6 +414,31 @@ describe("/pausar_rotinas and the Google reviews (step 19c)", () => {
   });
 });
 
+describe("the bot and publishing reviews by itself (step 19d)", () => {
+  it("/pausar_rotinas holds the replies back but never changes the level, and no command sets it", async () => {
+    await linkOwner();
+    await idle(13 * HOUR);
+    await inOwner((agent) => {
+      vi.spyOn(agent.store.reviews, "enabled").mockReturnValue(true);
+      agent.store.db.run(`INSERT INTO zur_review_settings (id, enabled, auto, auto_since, trial) VALUES (1, 1, 1, 1, '1111111111')`);
+    });
+    const settings = () => inOwner((agent) => agent.store.db.one(`SELECT level, auto, paused FROM zur_review_settings`));
+    try {
+      expect(await command("/pausar_rotinas")).toBe("As respostas às avaliações do Google também param. Para retomar, só pelo app.");
+      await press("Pausar todas");
+      expect(await settings()).toEqual({ level: "approve", auto: 1, paused: 1 });
+      // Commands and free text that ask for it change nothing: the level lives on the screen, with the password.
+      for (const text of ["/avaliacoes sozinha", "/nivel auto", "Publique sozinha as respostas das avaliações"]) await command(text);
+      expect(await settings()).toEqual({ level: "approve", auto: 1, paused: 1 });
+    } finally {
+      await inOwner((agent) => {
+        agent.store.reviews.disable();
+        agent.store.db.run(`DELETE FROM zur_review_settings`);
+      });
+    }
+  });
+});
+
 describe("/bloquear and the lockdown", () => {
   it("works with the AI down and reading locked: sessions end, routines with AI wait, the alert goes out", async () => {
     await linkOwner();

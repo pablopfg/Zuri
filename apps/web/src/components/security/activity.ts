@@ -49,6 +49,7 @@ export const KIND_LABEL: Record<AuthEventKind, MessageKey> = {
   mcp_tool_autonomy: "web.activity.kind.mcp_tool_autonomy",
   google_connected: "web.activity.kind.google_connected",
   google_calendar_write: "web.activity.kind.google_calendar_write",
+  reviews_autonomy: "web.activity.kind.reviews_autonomy",
   google_disconnected: "web.activity.kind.google_disconnected",
   setup_failure: "web.activity.kind.setup_failure",
   setup_locked: "web.activity.kind.setup_locked",

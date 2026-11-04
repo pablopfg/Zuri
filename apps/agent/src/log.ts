@@ -37,6 +37,8 @@ export const LOG_EVENTS = [
   "reviews_checked",
   "reviews_ignored",
   "reviews_check_failed",
+  "reviews_breaker",
+  "reviews_auto_stopped",
   "reviews_draft_failed",
   "review_replied",
   "automation_interrupted",

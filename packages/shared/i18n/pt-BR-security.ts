@@ -103,5 +103,6 @@ export const ptBRSecurity = {
   "web.activity.kind.mcp_tool_autonomy": "Ferramenta externa com mais autonomia",
   "web.activity.kind.google_connected": "Google Agenda conectada",
   "web.activity.kind.google_calendar_write": "Agenda do Google liberada para escrita",
+  "web.activity.kind.reviews_autonomy": "Avaliações do Google respondidas sem perguntar",
   "web.activity.kind.google_disconnected": "Google Agenda desconectada",
 } as const;
