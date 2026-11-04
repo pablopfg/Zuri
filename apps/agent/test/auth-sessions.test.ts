@@ -1,7 +1,7 @@
 import { hashPassword, isPasswordHash } from "@zuri/shared";
 import { describe, expect, it, vi } from "vitest";
 import type { AppError } from "../src/http/errors.ts";
-import { client, HOUR, live, MINUTE, noCookies, outcome, pushCount, rebuild, right, seedPush, TEST_PASSWORD, withAuth } from "./auth-harness.ts";
+import { client, HOUR, live, MINUTE, noCookies, outcome, pushCount, rebuild, remoteTokensSpy, right, seedPush, TEST_PASSWORD, withAuth } from "./auth-harness.ts";
 import { testEnv } from "./helpers.ts";
 
 const NET = "203.0.113.7";
@@ -404,7 +404,8 @@ describe("weak current password", () => {
 });
 
 describe("reset from the Cloudflare panel", () => {
-  it("a new OWNER_PASSWORD_HASH discards the stored password and ends every session", async () => {
+  it("a new OWNER_PASSWORD_HASH discards the stored password, ends every session and revokes the remote tokens", async () => {
+    const tokens = remoteTokensSpy();
     await withAuth("reset-hash", async (h) => {
       const signed = await h.auth.login(right(), client(NET), noCookies);
       const row = await live(h.auth, signed.token);
@@ -412,6 +413,8 @@ describe("reset from the Cloudflare panel", () => {
       // The same secrets again: nothing happens.
       const same = rebuild(h, {});
       expect(await same.validate(changed.token, true)).not.toBeNull();
+      // The password change revoked once; the same secrets again revoke nothing more.
+      expect(tokens.revoked).toBe(1);
 
       seedPush(h.db, "browser-a");
       const resetTo = "nova senha do painel bem longa";
@@ -421,8 +424,9 @@ describe("reset from the Cloudflare panel", () => {
       expect(await outcome(after.login(right({ password: NEW_PASSWORD }), client("198.51.100.5"), noCookies))).toBe("INVALID_CREDENTIALS");
       expect(await outcome(after.login(right({ password: resetTo }), client("198.51.100.6"), noCookies))).toBe("ok");
       expect(h.events().find((e) => e.kind === "credentials_reset")).toMatchObject({ alert_pending: 1 });
+      expect(tokens.revoked).toBe(2);
       expect(pushCount(h.db)).toBe(0);
-    });
+    }, { remoteTokens: tokens });
   });
 
   it("SEC-3-01: the old password can't sign in even as the first request after the reset", async () => {

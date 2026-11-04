@@ -611,6 +611,60 @@ describe("the Free plan budget of each route", () => {
       agent.store.db.run(`DELETE FROM zur_settings WHERE key LIKE 'lockdown_%'`);
     });
   });
+  it("remote access (step 20): the screen, a new token, a token's read and write, a refused try and an event read and write a handful of rows", async () => {
+    const bearerCost = async (token: string, method: string, path: string, ip: string, body?: unknown) => {
+      const usage = () => runInDurableObject(owner(), (agent: ZuriAgent) => ({ ...agent.store.db.usage }));
+      const before = await usage();
+      const res = await call(`${ORIGIN}/api${path}`, {
+        method,
+        headers: { authorization: `Bearer ${token}`, "content-type": "application/json", "cf-connecting-ip": ip },
+        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      });
+      await res.arrayBuffer();
+      const after = await usage();
+      return { read: after.rowsRead - before.rowsRead, written: after.rowsWritten - before.rowsWritten, status: res.status };
+    };
+    expect((await cost("POST", "/auth/confirm", { password: TEST_PASSWORD })).status).toBe(204);
+    const on = await cost("PATCH", "/remote", { enabled: true });
+    expect(on.status).toBe(200);
+    const made = await cost("POST", "/remote/tokens", { name: "n8n", scope: "write" });
+    expect(made.status).toBe(201);
+    const events = await runInDurableObject(owner(), async (agent: ZuriAgent) => (await agent.store.remoteTokens.create({ name: "eventos", scope: "events" })).secret);
+    const write = await runInDurableObject(owner(), async (agent: ZuriAgent) => (await agent.store.remoteTokens.create({ name: "escrita", scope: "write" })).secret);
+    const screen = await cost("GET", "/remote");
+    const read = await bearerCost(write, "GET", "/tasks/counts", "198.51.100.90");
+    const wrote = await bearerCost(write, "POST", "/tasks", "198.51.100.90", { title: "Vinda do n8n" });
+    const refused = await bearerCost(`zur_pat_${"C".repeat(43)}`, "GET", "/tasks/counts", "198.51.100.91");
+    const event = await bearerCost(events, "POST", "/remote/events", "198.51.100.92", { title: "Backup falhou", source: "n8n" });
+    // Turning on and making a token: the state, the access event and its alert (notice and deliveries).
+    for (const step of [on, made]) {
+      expect(step.read).toBeLessThanOrEqual(30);
+      expect(step.written).toBeLessThanOrEqual(32);
+    }
+    expect(screen).toMatchObject({ status: 200, written: 0 });
+    expect(screen.read).toBeLessThanOrEqual(12);
+    // A token's read costs the route's own reads (the counts read the open tasks) plus the gate:
+    // one token row, and at most last_used_at and the day's count written.
+    expect(read.status).toBe(200);
+    expect(read.read).toBeLessThanOrEqual(600);
+    expect(read.written).toBeLessThanOrEqual(4);
+    expect(wrote.status).toBe(201);
+    expect(wrote.read).toBeLessThanOrEqual(15);
+    expect(wrote.written).toBeLessThanOrEqual(16);
+    // A refused try: the network's count and one folded access event.
+    expect(refused.status).toBe(401);
+    expect(refused.read).toBeLessThanOrEqual(10);
+    expect(refused.written).toBeLessThanOrEqual(6);
+    // An event: the window, the notice, its deliveries and the hourly sweep.
+    expect(event.status).toBe(201);
+    expect(event.read).toBeLessThanOrEqual(30);
+    expect(event.written).toBeLessThanOrEqual(24);
+    await runInDurableObject(owner(), (agent: ZuriAgent) => {
+      for (const table of ["zur_remote_tokens", "zur_remote_failures", "zur_notices"]) agent.store.db.run(`DELETE FROM ${table}`);
+      agent.store.db.run(`DELETE FROM zur_settings WHERE key LIKE 'remote_%'`);
+    });
+  });
+
   it("search by meaning (step 17): the state, on, off, reindex and a search over every memory read about one row per block", async () => {
     await runInDurableObject(owner(), (agent: ZuriAgent) => {
       agent.testEmbedder = new MockEmbedder();

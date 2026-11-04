@@ -1443,6 +1443,29 @@ export const MIGRATIONS: readonly Migration[] = [
       END`,
     ],
   },
+  {
+    version: 28,
+    name: "remote_access",
+    statements: [
+      // Personal access tokens (step 20). Only HMAC(SESSION_SECRET, token) is kept: the token itself is
+      // shown once and can't be read back. `suspended`: a lockdown put it on hold (it comes back on leaving).
+      // Never in the backup.
+      `CREATE TABLE IF NOT EXISTS zur_remote_tokens (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        token_hash TEXT NOT NULL UNIQUE,
+        hint TEXT NOT NULL,
+        scope TEXT NOT NULL CHECK (scope IN ('read', 'write', 'events')),
+        created_at INTEGER NOT NULL,
+        expires_at INTEGER NOT NULL,
+        last_used_at INTEGER,
+        suspended INTEGER NOT NULL DEFAULT 0 CHECK (suspended IN (0, 1))
+      )`,
+      // Refused Bearer attempts per network (15 minutes are enough; older rows go as new ones come).
+      `CREATE TABLE IF NOT EXISTS zur_remote_failures (network TEXT NOT NULL, at INTEGER NOT NULL)`,
+      `CREATE INDEX IF NOT EXISTS zur_remote_failures_network ON zur_remote_failures (network, at)`,
+    ],
+  },
 ];
 
 /** The three triggers that move an area's number when a row of `table` is added, changed or removed. Frozen: migration 21 is built from it. */

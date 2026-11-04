@@ -44,9 +44,14 @@ const OWNER_KINDS: readonly AuthEventKind[] = [
   "telegram_routines_paused",
   "lockdown_exited",
   "password_recovered",
+  "remote_enabled",
+  "remote_disabled",
+  "remote_token_created",
+  "remote_token_revoked",
+  "telegram_token_revoked",
 ];
 /** Repeated refusals from one network in the window fold into one row with a count. */
-const FOLDED_KINDS: readonly AuthEventKind[] = ["login_rate_limited", "login_turnstile", "setup_failure", "recovery_requested"];
+const FOLDED_KINDS: readonly AuthEventKind[] = ["login_rate_limited", "login_turnstile", "setup_failure", "recovery_requested", "remote_token_rejected", "remote_write"];
 /** A folded row's count reaches storage at most this often, so hammering a blocked sign-in costs no extra writes. */
 const FOLD_WRITE_INTERVAL_MS = 60_000;
 const PRUNE_INTERVAL_MS = 3600_000;

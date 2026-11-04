@@ -66,6 +66,7 @@ export {
 } from "./settings.ts";
 export * from "./auth.ts";
 export * from "./lockdown.ts";
+export * from "./remote.ts";
 export * from "./auth-activity.ts";
 export * from "./user-agent.ts";
 export * from "./setup.ts";

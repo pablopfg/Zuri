@@ -20,6 +20,7 @@ import {
   type NoticeOrigin,
   type NoticePage,
   noticeCursorSchema,
+  REMOTE_EVENTS,
   type SecurityAlertEvent,
   type Settings,
   t,
@@ -251,13 +252,19 @@ export class AlertService {
     if (!counted) return null;
     const settings = this.deps.settings();
     const nowMs = this.now();
-    const used = (since: number) =>
+    const used = (since: number, kind?: NoticeKind) =>
       this.db.one<{ n: number }>(
-        `SELECT count(*) AS n FROM zur_alert_deliveries WHERE channel = ? AND counted = 1 AND at > ? AND status != 'skipped'`,
+        `SELECT count(*) AS n FROM zur_alert_deliveries WHERE channel = ? AND counted = 1 AND at > ? AND status != 'skipped'${kind ? " AND kind = ?" : ""}`,
         channel.name,
         iso(since),
+        ...(kind ? [kind] : []),
       )?.n ?? 0;
-    if (attempt === 1 && (used(nowMs - HOUR) >= settings.alertPerHour || used(nowMs - DAY) >= settings.alertPerDay)) return "channel_limit";
+    if (attempt !== 1) return null;
+    if (used(nowMs - HOUR) >= settings.alertPerHour || used(nowMs - DAY) >= settings.alertPerDay) return "channel_limit";
+    // Events from outside (step 20) take at most half of each limit: the other half stays free for the owner's own notices.
+    if (row.kind === "remote.event" && (used(nowMs - HOUR, row.kind) >= Math.floor(settings.alertPerHour / 2) || used(nowMs - DAY, row.kind) >= Math.floor(settings.alertPerDay / 2))) {
+      return "channel_limit";
+    }
     return null;
   }
 
@@ -353,6 +360,11 @@ export class AlertService {
       if (row.category !== "security") {
         const insisting = this.db.one<{ n: number }>(`SELECT count(*) AS n FROM zur_notices WHERE escalation = 'active' AND category != 'security'`)?.n ?? 0;
         if (insisting >= ALERT_LIMITS.maxEscalating) return false;
+        // Events from outside (step 20): only a few insist at once; the rest go out once.
+        if (row.kind === "remote.event") {
+          const events = this.db.one<{ n: number }>(`SELECT count(*) AS n FROM zur_notices WHERE escalation = 'active' AND kind = 'remote.event'`)?.n ?? 0;
+          if (events >= REMOTE_EVENTS.maxInsisting) return false;
+        }
       }
       // Answered already (read, muted, deleted) while the first try was going out: nothing to insist on.
       const { rowsWritten } = this.db.run(
@@ -779,6 +791,7 @@ const KIND_TEXT: Record<Exclude<NoticeKind, "security">, Text> = {
   "reviews.problem": { title: "notice.reviews.problem.title", body: "notice.reviews.problem.body" },
   "reviews.auto": { title: "notice.reviews.auto.title", body: "notice.reviews.auto.body" },
   "reviews.breaker": { title: "notice.reviews.breaker.title", body: "notice.reviews.breaker.body" },
+  "remote.event": { title: "notice.remote.event.title", body: null },
 };
 
 /** Security alerts: what happened and what to do if it was not the owner, never where it came from (it may show on a locked screen). */
@@ -820,6 +833,9 @@ const SECURITY_TEXT: Record<SecurityAlertEvent, Text> = {
   owner_created: { title: "notice.security.owner_created.title", body: "notice.security.owner_created.body" },
   access_recovered: { title: "notice.security.access_recovered.title", body: "notice.security.access_recovered.body" },
   password_recovered: { title: "notice.security.password_recovered.title", body: "notice.security.password_recovered.body" },
+  remote_enabled: { title: "notice.security.remote_enabled.title", body: "notice.security.remote_enabled.body" },
+  remote_token_created: { title: "notice.security.remote_token_created.title", body: "notice.security.remote_token_created.body" },
+  telegram_token_revoked: { title: "notice.security.telegram_token_revoked.title", body: "notice.security.telegram_token_revoked.body" },
 };
 
 /** Title and body from the catalog; a stored body (the owner's or the agent's text) wins over the catalog's. */

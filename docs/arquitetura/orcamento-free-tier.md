@@ -74,6 +74,11 @@ Medido dentro do workerd por `apps/agent/test/free-tier-budget.test.ts`, com
 | `PATCH /api/mcp/servers/:id/tools/:tool` | até 20 | até 3 |
 | `POST /api/chat` com uma ferramenta externa (conversa curta) | 41 (teto 80) | 18 (teto 30) |
 | `POST /api/actions/:id/approve` de uma chamada externa | 13 (teto 25) | 2 (teto 12) |
+| `PATCH /api/remote` (ligar) e `POST /api/remote/tokens` (etapa 20) | 22 (teto 30) | 27 (teto 32: estado, evento de acesso e alerta) |
+| Pedido com token (porteiro, além da própria rota) | 1 a 3 | até 2 (`last_used_at` e a conta do dia, cada um no máximo 1 vez por minuto) |
+| `POST /api/tasks` com token `write` | 10 (teto 15) | 12 (teto 16) |
+| Token recusado | 6 (teto 10) | 5 (teto 6); 0 com o acesso desligado, de rede já segura ou passado o teto global de 200 tentativas |
+| `POST /api/remote/events` | 21 (teto 30) | 19 (teto 24) |
 
 Os números contam só o SQL do Zuri (`Database.usage`): a cada despertar o
 Agents SDK lê algumas linhas das tabelas `cf_agents_*`, quase vazias hoje. O

@@ -61,6 +61,8 @@ import { developmentFlowNetwork } from "../flows/dev-flows.ts";
 import { SiteStates } from "../flows/monitor.ts";
 import { type FlowNotice, FlowService } from "../flows/service.ts";
 import { CrmEvents } from "../crm/events.ts";
+import { RemoteEvents } from "../remote/events.ts";
+import { RemoteTokens } from "../remote/tokens.ts";
 import { type CrmNotice, CrmService } from "../crm/service.ts";
 import { McpCredentials } from "../mcp/credentials.ts";
 import { dohResolver } from "../mcp/url.ts";
@@ -133,6 +135,9 @@ interface Store {
   /** The internal CRM (step 22b) and n8n's signed events. */
   crm: CrmService;
   crmEvents: CrmEvents;
+  /** Remote access tokens and the events they send (step 20). */
+  remoteTokens: RemoteTokens;
+  remoteEvents: RemoteEvents;
 }
 
 /**
@@ -214,6 +219,7 @@ export class ZuriAgent extends Agent<WorkerEnv> {
     mcp: () => ({ service: this.store.mcp, auth: this.store.auth, automations: this.store.automations }),
     flows: () => ({ flows: this.store.flows, connections: this.store.flows.connections, auth: this.store.auth, development: () => this.development() }),
     crm: () => ({ crm: this.store.crm, events: this.store.crmEvents, auth: this.store.auth, rearm: () => this.store.automations.rearm() }),
+    remote: () => ({ tokens: this.store.remoteTokens, events: this.store.remoteEvents }),
     google: () => ({
       google: this.store.google,
       contacts: this.store.contacts,
@@ -512,9 +518,12 @@ export class ZuriAgent extends Agent<WorkerEnv> {
       db.onWrite = () => this.#live.schedule();
       const settings = new SettingsRepository(db, { timeZone: this.env.DEFAULT_TIMEZONE });
       const env = this.env;
+      // Remote access tokens (step 20): the lockdown suspends them and a new password revokes them, through the auth.
+      const remoteTokens = new RemoteTokens({ db, state: new InternalState(db), secret: () => env.SESSION_SECRET });
       const auth = new AuthService({
         db,
         state: new InternalState(db),
+        remoteTokens,
         settings,
         secrets: {
           sessionSecret: env.SESSION_SECRET,
@@ -748,6 +757,8 @@ export class ZuriAgent extends Agent<WorkerEnv> {
       if (this.development()) flows.network = developmentFlowNetwork(flows.network);
       // The internal CRM (step 22b): its notices go to the center; nothing in it ever reaches a log.
       const crm = new CrmService({ db, timeZone: () => settings.field("timeZone"), locale: () => this.locale(), notify: (notice) => crmNotice(alerts, notice), assertBytes: () => productivity.storage.assertBytes() });
+      // Events from n8n and other systems with an events token (step 20): notices in the "events" category.
+      const remoteEvents = new RemoteEvents({ db, state, alerts, agentName: () => env.AGENT_NAME });
       const crmEvents = new CrmEvents({
         db,
         crm,
@@ -852,6 +863,7 @@ export class ZuriAgent extends Agent<WorkerEnv> {
       // The security commands and the lockdown (step 16b): no AI, so they work with it down.
       const telegramSecurity = new TelegramSecurity({
         auth,
+        tokens: remoteTokens,
         automations,
         buttons: commandButtons,
         locale: () => this.locale(),
@@ -890,7 +902,7 @@ export class ZuriAgent extends Agent<WorkerEnv> {
         // Local development never reaches Telegram (src/telegram/dev-telegram.ts).
         ...(this.development() ? { fetcher: developmentTelegramFetcher as typeof fetch } : {}),
       });
-      this.#store = { db, settings, auth, productivity, memories, usage, conversations, actions, plans, automations, alerts, watchers, diagnostics, push, telegram, telegramConversation, semantic, mcp, google, contacts, reviews, flows, crm, crmEvents };
+      this.#store = { db, settings, auth, productivity, memories, usage, conversations, actions, plans, automations, alerts, watchers, diagnostics, push, telegram, telegramConversation, semantic, mcp, google, contacts, reviews, flows, crm, crmEvents, remoteTokens, remoteEvents };
     }
     return this.#store;
   }

@@ -43,9 +43,16 @@ etapas ficam detalhadas; as mais antigas viram uma linha na tabela.
 | 19d | mesclada (04/11/2026) | #174 | Avaliações do Google publicadas sozinha: nível **Publica sozinha as positivas** depois de 10 aprovações sem edição nas últimas 30 (senha e alerta), só 4 e 5 estrelas aprovadas nas duas conferências, 3 por leitura e 10 por dia, pausa no pico, disjuntor, aba **Publicadas sozinha** |
 | 22a | mesclada (03/11/2026) | #153 | Motor de fluxos no alarme único (7 passos de catálogo fechado), conexões com métodos marcados e credencial cifrada, monitor de sites como modelo, aba **Fluxos** em Automações, `/status` com os sites |
 | 22b | mesclada (03/11/2026) | #161 | CRM interno na aba **Clientes** de Contatos (funil editável, etiquetas, retorno, aniversário, histórico), avisos do CRM, eventos do n8n assinados com HMAC, 5 ferramentas do CRM, sugestões de fluxo da conversa na aba Fluxos |
-| 22c | em revisão (04/11/2026) | — | Passos **Ler a agenda**, **Criar evento** (sem convidados, até 10 por execução, chave contra repetição) e **Buscar contatos** (cópia local) nos fluxos; Google simulado segue o dia de São Paulo (#178) |
+| 22c | mesclada (04/11/2026) | #180 | Passos **Ler a agenda**, **Criar evento** (sem convidados, até 10 por execução, chave contra repetição) e **Buscar contatos** (cópia local) nos fluxos; Google simulado segue o dia de São Paulo (#178) |
+| 20 | em revisão (04/11/2026) | — | Acesso remoto: tokens `zur_pat_` com escopo (só ler, ler e escrever, só eventos), 90 dias, só HMAC no banco, lista fechada de rotas com teste que percorre todas, `POST /api/remote/events` para a central (60/h, 100/dia, metade do canal), cartão em Configurações › Segurança, **Revogar** em `/tokens` |
 
 ## Últimas etapas (detalhe)
+
+### Etapa 20 · Acesso remoto e eventos
+- Entregou: `apps/agent/src/remote/` (`tokens.ts` `RemoteTokens` implementa `RemoteTokenHook` com `revokeAll`; `events.ts` `RemoteEvents`; `allowlist.ts` `remoteAllowed` puro), `api/remote.ts` (porteiro Bearer registrado primeiro em `createApi`, rotas `/api/remote*`), `packages/shared/src/remote.ts`, aviso `remote.event` (categoria `events`, metade do limite do canal, 3 insistindo), `/tokens` com **Revogar**, cartão `components/security/RemoteAccessCard.tsx`. Doc: `docs/acesso-remoto.md`. Plano: `docs/planos/etapa-20-acesso-remoto.md`.
+- Migrations: 28 (`remote_access`: `zur_remote_tokens`, `zur_remote_failures`). A próxima livre é a 29.
+- Decisões técnicas: token não apaga memória nem automação, não cria nem muda `agent_prompt` e não faz busca por significado; caminho comparado como chegou (UUID no fim vira `:id`); troca de senha, recuperação e redefinição revogam todos; bloqueio suspende e a saída devolve; Access sem exceção (service token documentado).
+- Para as próximas: rota nova fica fora dos tokens até entrar em `READ`/`WRITE` de `allowlist.ts` (o teste que percorre as rotas cobra); o backup (23) deixa `zur_remote_*` de fora.
 
 ### Etapa 22c · Passos da agenda e dos contatos
 - Entregou: `apps/agent/src/flows/google-steps.ts` (`readCalendar`, `createEvents`, `searchContacts`, `FlowGoogle`), tipos `calendar`, `calendar_create` e `contacts` em `FLOW_NODE_TYPES` + schemas, `EngineDeps.google`, `FlowList.google` (agendas abertas e etiquetas copiadas para o editor), `GoogleCalendar.createEvent(…, id)` com id base32hex (409 = já existe), `GoogleMeter` aceita o contador dos fluxos, campos em `FlowEditor.tsx` (`GoogleFields`), descrição do `propose_flow`. Plano: `docs/planos/etapa-22c-passos-agenda-contatos.md`.
@@ -97,15 +104,9 @@ etapas ficam detalhadas; as mais antigas viram uma linha na tabela.
 - Migrations: 20 (`mcp_autonomy`). A próxima livre é a 21. Coluna acrescentada por `ALTER` não leva `CHECK` (ver `armadilhas.md`).
 - Para as próximas: a 22 (workflows) reaproveita a liberação por automação; ferramenta nova da Zuri que escreve continua fora das rotinas.
 
-### Etapa 18b · Login OAuth, triagem por significado e aprovação pelo bot
-- Entregou: `mcp/oauth.ts` (`ZuriOAuthProvider` sobre o `OAuthClientProvider` do SDK, cliente público, não interativo fora de ações do dono), `mcp/meaning.ts` (`McpMeaning`: vetor int8 por ferramenta ligada, feito no alarme depois de `semantic.tick`, chave FNV de modelo+texto), `mcp/dev-oauth.ts` (servidor de login simulado em `entrar.exemplo.com.br`, código `dev.<challenge>` no local), `POST /api/mcp/oauth/callback` (senha recente, `state` 10 min uso único), `SemanticSearch.known()`, `mcp_call` em `telegram/approvals.ts` (`BOT_MCP_BUDGET = 12`, resposta citada até 600) e na página `/aprovar`, linha no `/status`. Plano: `docs/planos/etapa-18b-mcp-oauth.md`.
-- Migrations: 19 (`authorize_url`, `authorize_expires`, `signed_in_at` em `zur_mcp_servers`; `embedding`, `embedding_scale`, `embedding_key` em `zur_mcp_tools`). A próxima livre é a 20.
-- Decisões técnicas: volta do login em `/configuracoes/integracoes` (rota em português, nada no JS inicial); problema `signin` nunca pausa o servidor; hash de aprovação de servidor OAuth usa `signed_in_at` (renovar token não anula proposta); fora da origem cadastrada só o servidor de login, sem `Authorization`; `find_tools` segue por palavras.
-- Para as próximas: a 19 tem OAuth próprio do Google (cliente do dono, confidencial), não o `ZuriOAuthProvider`; pode cifrar com `MCP_CREDENTIAL_KEY` usando outro `info` no HKDF ou chave própria.
-
 ### Notas que continuam valendo
 - Um alarme só (P8): use `AutomationService.rearm()`/`otherDue`, nunca outro alarme. O runner aceita `context: "scheduled"` (ferramentas da Zuri só leem; externas só as liberadas para rotinas, o resto vira proposta de 24 h). Toda IA por `agent.ai()`.
-- Bloqueio (16b): a etapa 20 liga os tokens no `RemoteTokenHook` (`suspendAll`/`resumeAll`/`active`) e põe **Revogar** em `/tokens`; IA, MCP e workflows em segundo plano consultam `auth.lockdown.active()`; rota que precise funcionar no bloqueio entra em `WHILE_LOCKDOWN`.
+- Bloqueio (16b): os tokens remotos (20) entram pelo `RemoteTokenHook` (`suspendAll`/`resumeAll`/`active`/`revokeAll`); IA, MCP e workflows em segundo plano consultam `auth.lockdown.active()`; rota que precise funcionar no bloqueio entra em `WHILE_LOCKDOWN`.
 - Busca por significado (17): item novo com texto pesquisável ganha entrada em `KIND_SOURCES` e migration nova em `SEMANTIC_MIGRATIONS`.
 - JS inicial em ~138,2 kB (teto 139,4): tela nova sob demanda, textos via `addMessages`; tela que trava o app vai no chunk de `PasswordChangePage`.
 
@@ -142,6 +143,6 @@ etapas ficam detalhadas; as mais antigas viram uma linha na tabela.
 
 ## Próxima etapa
 
-- Número e nome: 20 · Acesso remoto e eventos
-- Dependências mescladas: 22a (#153), 22b (#161) e 22c (#180). Próxima migration livre: 28.
-- Precisa de algo do Pablo antes: nada para codar.
+- Número e nome: 21 · Modelos pagos (Anthropic e OpenAI com teto de gasto). Só começa com OK do Pablo (gera cobrança).
+- Dependências mescladas: 20 (esta PR). Próxima migration livre: 29.
+- Precisa de algo do Pablo antes: o OK para a etapa 21; sem ele, seguem 23 a 26.
