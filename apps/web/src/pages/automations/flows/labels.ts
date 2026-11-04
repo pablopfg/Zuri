@@ -10,6 +10,9 @@ export const NODE_LABEL: Record<FlowNodeType, MessageKey> = {
   notify: "web.flows.node.notify",
   ai: "web.flows.node.ai",
   monitor: "web.flows.node.monitor",
+  calendar: "web.flows.node.calendar",
+  calendar_create: "web.flows.node.calendar_create",
+  contacts: "web.flows.node.contacts",
 };
 
 export const RUN_STATUS_LABEL: Record<FlowRunStatus, MessageKey> = {
@@ -50,6 +53,11 @@ export const PROBLEM_LABEL: Record<FlowRunProblem, MessageKey> = {
   not_json: "web.flows.problem.not_json",
   interrupted: "web.flows.problem.interrupted",
   failed: "web.flows.problem.failed",
+  google_access: "web.flows.problem.google_access",
+  calendar_missing: "web.flows.problem.calendar_missing",
+  contacts_off: "web.flows.problem.contacts_off",
+  invalid_date: "web.flows.problem.invalid_date",
+  events_limit: "web.flows.problem.events_limit",
 };
 
 export const SITE_LABEL: Record<FlowSiteState, MessageKey> = {

@@ -67,6 +67,14 @@ export const siteUrlSchema = /* @__PURE__ */ (() =>
       return url;
     }))();
 
+/** A Google calendar's id as stored by step 19 (an address-like id, never a path). */
+const calendarIdSchema = /* @__PURE__ */ (() => z.string().min(1).max(1024).regex(/^[^\s/?#\\]+$/))();
+
+/** A text with `{{field}}` placeholders whose fields are valid paths. */
+function template(max: number, oneLine: boolean) {
+  return (oneLine ? line(max) : text(max)).refine((value) => [...value.matchAll(/\{\{([^}]*)\}\}/g)].every((match) => fieldPathSchema.safeParse(match[1]?.trim()).success));
+}
+
 /** The flows' schedule: the automations' rules, with an interval down to 15 minutes. */
 const flowScheduleSchema = /* @__PURE__ */ (() =>
   z.union([
@@ -139,6 +147,36 @@ const nodeSchema = /* @__PURE__ */ (() =>
           .min(1)
           .max(FLOW_LIMITS.sites)
           .transform((sites) => [...new Set(sites)]),
+      })
+      .strict(),
+    z
+      .object({
+        type: z.literal("calendar"),
+        calendar: z.union([z.literal(""), calendarIdSchema]),
+        startDays: z.number().int().min(FLOW_LIMITS.calendarStartMin).max(FLOW_LIMITS.calendarStartMax),
+        days: z.number().int().min(1).max(FLOW_LIMITS.calendarDays),
+        query: z.union([z.literal(""), line(FLOW_LIMITS.calendarQuery)]),
+      })
+      .strict(),
+    z
+      .object({
+        type: z.literal("calendar_create"),
+        calendar: calendarIdSchema,
+        title: template(FLOW_LIMITS.eventTitle, true),
+        start: template(FLOW_LIMITS.value, true),
+        minutes: z.number().int().min(FLOW_LIMITS.eventMinutesMin).max(FLOW_LIMITS.eventMinutesMax),
+        description: z.union([z.literal(""), template(FLOW_LIMITS.body, false)]),
+        key: z.union([z.literal(""), template(FLOW_LIMITS.eventKey, true)]),
+      })
+      .strict(),
+    z
+      .object({
+        type: z.literal("contacts"),
+        query: z.union([z.literal(""), template(FLOW_LIMITS.contactsQuery, true)]),
+        label: z.union([z.literal(""), z.string().max(200).regex(/^contactGroups\/[A-Za-z0-9_-]{1,100}$/)]),
+        birthday: z.enum(["", "today", "week"]),
+        limit: z.number().int().min(1).max(FLOW_LIMITS.contacts),
+        each: z.boolean(),
       })
       .strict(),
   ]))();

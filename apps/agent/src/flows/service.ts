@@ -5,6 +5,7 @@ import {
   type FlowDraft,
   type Flow,
   type FlowDefinition,
+  type FlowGoogleInfo,
   type FlowList,
   type FlowPriority,
   type FlowRun,
@@ -30,6 +31,7 @@ import { endpointUrl } from "../mcp/url.ts";
 import { parse } from "../productivity/validate.ts";
 import type { FlowConnections, FlowNetwork } from "./connections.ts";
 import { type Advance, advance, type RunState, startState, type Wake } from "./engine.ts";
+import type { FlowGoogle } from "./google-steps.ts";
 import type { SiteChange, SiteStates } from "./monitor.ts";
 
 interface FlowRow {
@@ -87,6 +89,8 @@ export interface FlowServiceDeps {
   /** Sets the shared alarm again (AutomationService.rearm). */
   rearm: () => Promise<void>;
   notify: (notice: FlowNotice) => void;
+  /** The Google calendar and contacts the Google steps use (step 22c). */
+  google: FlowGoogle;
   clock?: () => number;
 }
 
@@ -162,6 +166,21 @@ export class FlowService {
       },
       credentialsAvailable: this.deps.connections.credentialsAvailable,
       drafts: this.drafts(),
+      google: this.googleInfo(),
+    };
+  }
+
+  /** The calendars open to Zuri and the contacts' chosen labels, for the Google steps' fields. */
+  private googleInfo(): FlowGoogleInfo {
+    const calendar = this.deps.google.calendar();
+    const contacts = this.deps.google.contacts();
+    const connected = calendar.connected();
+    const on = connected && contacts.enabled();
+    return {
+      connected,
+      calendars: connected ? calendar.readable().map((info) => ({ id: info.id, name: info.name, writable: info.mode === "write" && info.writable })) : [],
+      contacts: on,
+      labels: on ? contacts.labels().filter((label) => label.selected).map((label) => ({ id: label.id, name: label.name })) : [],
     };
   }
 
@@ -632,6 +651,7 @@ export class FlowService {
           neuronsLeft: () => FLOW_LIMITS.neuronsPerDay - this.neuronsToday() - (state.neurons - kept),
           lockdown: this.deps.lockdown,
           clock: () => this.now(),
+          google: this.deps.google,
         },
         wake,
       );

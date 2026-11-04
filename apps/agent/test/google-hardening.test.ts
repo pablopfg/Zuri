@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { cleanBlock, cleanText, eventBody, EventInputError, readEvent } from "../src/google/events.ts";
 import { GoogleError, GoogleMeter } from "../src/google/service.ts";
-import { developmentGoogle, developmentGoogleNetwork, googleNetwork } from "../src/google/dev-google.ts";
+import { developmentGoogle, developmentGoogleNetwork, devGoogle, googleNetwork, seedSamples } from "../src/google/dev-google.ts";
 import type { CommandButtons } from "../src/telegram/callbacks.ts";
 import { TelegramApprovals } from "../src/telegram/approvals.ts";
 import { ALL_TOOLS } from "../src/tools/index.ts";
@@ -480,6 +480,26 @@ describe("the development Google", () => {
     const network = developmentGoogleNetwork(sim);
     expect((await network.fetch("https://exemplo.com.br/")).status).toBe(502);
     expect((await network.fetch("https://www.googleapis.com/calendar/v3/users/me/calendarList")).status).toBe(401);
+  });
+
+  // Issue #178: a server started at 23:56 in São Paulo kept the sample events on the day before.
+  it("moves the sample events to the owner's new day after midnight in São Paulo, keeping the owner's own", async () => {
+    const sim = devGoogle();
+    const clock = { now: Date.parse("2026-11-04T02:56:00Z") };
+    seedSamples(sim, clock.now);
+    const owners = sim.events.get(PRIMARY) ?? [];
+    owners.push({ id: "meu1", etag: '"1"', summary: "Meu evento", start: { dateTime: "2026-11-03T20:00:00-03:00" }, end: { dateTime: "2026-11-03T21:00:00-03:00" } });
+    const coffee = () => (sim.events.get(PRIMARY) ?? []).find((event) => event.summary === "Café com a Ana");
+    expect(coffee()?.start.dateTime).toBe("2026-11-03T09:00:00-03:00");
+    const network = developmentGoogleNetwork(sim, () => clock.now);
+    await network.fetch("https://www.googleapis.com/calendar/v3/users/me/calendarList");
+    expect(coffee()?.start.dateTime).toBe("2026-11-03T09:00:00-03:00");
+    clock.now = Date.parse("2026-11-04T03:10:00Z");
+    await network.fetch("https://www.googleapis.com/calendar/v3/users/me/calendarList");
+    expect(coffee()?.start.dateTime).toBe("2026-11-04T09:00:00-03:00");
+    const titles = (sim.events.get(PRIMARY) ?? []).map((event) => event.summary);
+    expect(titles.filter((title) => title === "Café com a Ana")).toHaveLength(1);
+    expect(titles).toContain("Meu evento");
   });
 });
 

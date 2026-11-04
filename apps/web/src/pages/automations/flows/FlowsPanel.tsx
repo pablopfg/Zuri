@@ -160,7 +160,7 @@ export function FlowsPanel() {
           </>
         )
       )}
-      {editing && data && <FlowEditor editing={editing} connections={data.connections} onClose={() => setEditing(null)} />}
+      {editing && data && <FlowEditor editing={editing} connections={data.connections} google={data.google} onClose={() => setEditing(null)} />}
       {connection && data && <ConnectionDialog editing={connection} credentialsAvailable={data.credentialsAvailable} onClose={() => setConnection(null)} />}
       <RemoveDialog removing={removing} onClose={() => setRemoving(null)} />
     </div>
