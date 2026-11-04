@@ -52,7 +52,7 @@ export function registerReviewRoutes(app: Hono<ApiEnv>, deps: () => GoogleRouteD
     reviews.configure(input);
     // The first read now (one page per newly picked profile, kept as history): the owner sees at once
     // whether Google lets Zuri in, instead of a minute later. Its failures land in the status.
-    await reviews.check("owner");
+    await reviews.firstRead();
     await deps().rearm();
     return Response.json(reviews.status());
   });

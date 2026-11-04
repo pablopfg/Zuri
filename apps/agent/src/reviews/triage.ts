@@ -16,9 +16,9 @@ export function ratingOf(star: string | undefined): number {
   return (star && STARS[star]) || 0;
 }
 
-/** Lower case, without accents or marks: "Péssimo" and "pessimo" are the same word. */
+/** Lower case, without accents or marks, wide and styled letters made plain: "Péssimo", "pessimo" and "ｐｅｓｓｉｍｏ" are the same word. */
 export function fold(text: string): string {
-  return text.normalize("NFD").replace(/\p{M}+/gu, "").toLowerCase();
+  return text.normalize("NFKD").replace(/\p{M}+/gu, "").toLowerCase();
 }
 
 /** The words of a text, folded. */
@@ -76,6 +76,17 @@ const COMMANDS = [
   "chatgpt",
   "modelo",
   "model",
+  "mencione",
+  "mencionem",
+  "inclua",
+  "incluam",
+  "desconsidere",
+  "desconsiderem",
+  "esqueca",
+  "mention",
+  "include",
+  "disregard",
+  "forget",
 ];
 
 /** Words of a complaint: a good rating with one of these goes to the team. */
@@ -171,14 +182,29 @@ const URL_LIKE = /(?:https?:|www\.|:\/\/|\b[\p{L}\p{N}-]+\.(?:com|br|net|org|io|
 const EMAIL = /[^\s@]+@[^\s@]+\.[^\s@]+/;
 /** Eight digits or more, with the usual separators between them: a phone or a document. */
 const PHONE = /(?:\d[\s().-]*){8,}/;
-const TAG = /<\s*\/?\s*[a-z!]|<\/|&lt;|&#0*60/i;
+const TAG = /<\s*\/?\s*[a-z!]|<\/|&lt;|&#0*60|&#x0*3c/i;
+/** Invisible marks a person doesn't type (zero width, bidi, soft hyphen); the emoji joiner and selectors aside. */
+const INVISIBLE = /[\u00ad\u061c\u200b\u200c\u200e\u200f\u202a-\u202e\u2060-\u2064\u2066-\u2069\ufeff]/u;
+/** Letters spaced one by one ("i g n o r e"), the way to slip a word past a list. */
+const SPACED = /(?:^|[^\p{L}])(?:\p{L}[ .\-_]){4,}\p{L}(?![\p{L}])/u;
 const REPEAT = /(.)\1{20,}/su;
 
-/** Signs of a message meant for the machine, not for the business. Any one sends the review to the team, without a draft. */
-export function suspicious(comment: string): boolean {
-  if ([...comment].length > REVIEW_LIMITS.commentForAi) return true;
-  if (TAG.test(comment) || URL_LIKE.test(comment) || EMAIL.test(comment) || PHONE.test(comment) || REPEAT.test(comment)) return true;
-  if (has(comment, COMMANDS)) return true;
+/**
+ * Signs of a message meant for the machine, not for the business. Any one
+ * sends the review to the team, without a draft. `raw` is Google's text
+ * before cleaning: an invisible mark in it counts even after it's gone.
+ * Wide and styled characters ("ｈｔｔｐｓ：／／", "exemplo․com") are made plain first.
+ */
+export function suspicious(comment: string, raw = comment): boolean {
+  if (INVISIBLE.test(raw)) return true;
+  const text = comment.normalize("NFKC");
+  if ([...text].length > REVIEW_LIMITS.commentForAi) return true;
+  if (TAG.test(text) || URL_LIKE.test(text) || EMAIL.test(text) || PHONE.test(text) || REPEAT.test(text) || SPACED.test(text)) return true;
+  if (has(text, COMMANDS)) return true;
+  // A word that mixes alphabets ("Ignоre" with a Cyrillic o) is made to look like another word.
+  for (const word of text.split(/[^\p{L}]+/u)) {
+    if (/\p{Script=Latin}/u.test(word) && /[^\p{Script=Latin}]/u.test(word)) return true;
+  }
   const letters = [...comment].filter((char) => /\p{L}/u.test(char));
   if (letters.length >= 10) {
     const foreign = letters.filter((char) => !/\p{Script=Latin}/u.test(char)).length;
@@ -196,12 +222,12 @@ export function health(comment: string): boolean {
 }
 
 /** The team or a positive reply, and why. Never asks the AI: that comes after, and only for positives. */
-export function triage(review: { rating: number; comment: string }): { route: "team" | "positive"; reasons: ReviewReason[] } {
+export function triage(review: { rating: number; comment: string; raw?: string }): { route: "team" | "positive"; reasons: ReviewReason[] } {
   const reasons: ReviewReason[] = [];
   if (review.rating < 4) reasons.push("low_rating");
   const text = review.comment.trim();
-  if (text) {
-    if (suspicious(text)) reasons.push("suspicious");
+  if (text || review.raw) {
+    if (suspicious(text, review.raw ?? text)) reasons.push("suspicious");
     else {
       if (complaint(text)) reasons.push("complaint");
       if (health(text)) reasons.push("health");

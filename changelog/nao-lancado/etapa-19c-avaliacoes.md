@@ -33,8 +33,9 @@
   sumiu ou já tem resposta, nada sai. A aprovação vale 72 horas, só para a
   versão vista, e duas abas nunca publicam duas vezes.
 - A IA só deixa uma avaliação mais cautelosa, nunca menos. Texto com cara de
-  ordem, link ou contato vai para a equipe e a IA não o lê. O texto da
-  avaliação entra no prompt marcado como dado.
+  ordem, link ou contato vai para a equipe e a IA não o lê, mesmo disfarçado
+  com letras largas, de outro alfabeto, espaçadas ou marcas invisíveis. O
+  texto da avaliação entra no prompt marcado como dado.
 - Nome, texto e ids das avaliações ficam fora do log. No modo de bloqueio
   nada lê o Google nem publica. Desligar as avaliações ou desconectar o
   Google apaga a cópia guardada.

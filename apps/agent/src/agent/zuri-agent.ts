@@ -1026,7 +1026,7 @@ function crmNotice(alerts: AlertService, notice: CrmNotice): void {
  * in full), never in a log. Never learns a lower priority (source null): a
  * negative review must always reach the team.
  */
-function reviewNotice(alerts: AlertService, notice: ReviewNotice): void {
+export function reviewNotice(alerts: Pick<AlertService, "raise">, notice: ReviewNotice): void {
   const base = { category: "system" as const, link: "/contatos/avaliacoes" as const, source: null };
   switch (notice.kind) {
     case "reviews.negative":
@@ -1036,7 +1036,8 @@ function reviewNotice(alerts: AlertService, notice: ReviewNotice): void {
         kind: notice.kind,
         priority: "normal",
         params: { n: notice.rating },
-        body: [notice.firstName, notice.comment].filter(Boolean).join(": ") || null,
+        // One line: a review's line breaks could fake the notice's footer or another notice in the group.
+        body: [notice.firstName, notice.comment].filter(Boolean).join(": ").replace(/\s+/g, " ").trim() || null,
       });
       return;
     case "reviews.many":

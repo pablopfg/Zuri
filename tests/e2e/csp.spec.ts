@@ -35,6 +35,8 @@ test("no page breaks the Content Security Policy @mobile", async ({ page }) => {
     ["/memoria", "Memória"],
     ["/automacoes", "Automações"],
     ["/automacoes/fluxos", "Automações"],
+    ["/contatos/avaliacoes", "Contatos"],
+    ["/configuracoes/integracoes", "Configurações"],
     ["/configuracoes/seguranca", "Configurações"],
     ["/configuracoes/ia", "Configurações"],
     ["/configuracoes/dados", "Configurações"],

@@ -457,6 +457,10 @@ describe("publishing", () => {
       expect(await code(world.reviews.approve(item.id, { text: SIGNED, version: item.version }, "app"))).toBe("TARGET_CHANGED:error.reviewChanged");
       expect(row(world, "p1")).toMatchObject({ state: "escalated", rating: 1, draft: null });
       expect(world.sim.business.reviews.get(LOCATION)?.[0]?.reviewReply).toBeUndefined();
+      // The team hears of it now (the row holds Google's time, so the next check sees nothing new), once.
+      expect(world.notices.filter((n) => n.kind === "reviews.negative")).toEqual([{ kind: "reviews.negative", rating: 1, firstName: "Ana", comment: "Mudei de ideia" }]);
+      await later(world);
+      expect(world.notices.filter((n) => n.kind === "reviews.negative")).toHaveLength(1);
     }));
 
   it("expires a proposal after 72 hours", () =>

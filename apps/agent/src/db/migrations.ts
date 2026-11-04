@@ -1325,6 +1325,8 @@ export const MIGRATIONS: readonly Migration[] = [
         running_since INTEGER,
         next_check INTEGER,
         checked_now_at INTEGER,
+        listed_at INTEGER,
+        saved_read_at INTEGER,
         last_ok_at INTEGER,
         day TEXT NOT NULL DEFAULT '',
         drafts_today INTEGER NOT NULL DEFAULT 0,
@@ -1365,6 +1367,7 @@ export const MIGRATIONS: readonly Migration[] = [
         replied_at TEXT,
         seen_at INTEGER NOT NULL,
         escalated_at INTEGER,
+        sending_at INTEGER,
         insisted INTEGER NOT NULL DEFAULT 0 CHECK (insisted IN (0, 1))
       )`,
       `CREATE INDEX IF NOT EXISTS zur_reviews_state ON zur_reviews (state, updated_at)`,
@@ -1372,6 +1375,19 @@ export const MIGRATIONS: readonly Migration[] = [
       `CREATE INDEX IF NOT EXISTS zur_reviews_list ON zur_reviews (updated_at, id)`,
       `CREATE INDEX IF NOT EXISTS zur_reviews_drafts ON zur_reviews (needs_draft, seen_at) WHERE needs_draft = 1`,
       `CREATE INDEX IF NOT EXISTS zur_reviews_seen ON zur_reviews (seen_at)`,
+      `CREATE INDEX IF NOT EXISTS zur_reviews_escalated ON zur_reviews (escalated_at) WHERE escalated_at IS NOT NULL`,
+      // Counters of all and per state, so the tab's numbers and /status read a few rows, never the table.
+      `INSERT INTO zur_counts (kind, n) VALUES ('reviews', 0), ('reviews_history', 0), ('reviews_new', 0), ('reviews_escalated', 0), ('reviews_proposed', 0), ('reviews_sending', 0), ('reviews_uncertain', 0), ('reviews_replied', 0), ('reviews_replied_elsewhere', 0), ('reviews_resolved', 0), ('reviews_removed', 0) ON CONFLICT (kind) DO NOTHING`,
+      `CREATE TRIGGER IF NOT EXISTS zur_counts_reviews_insert AFTER INSERT ON zur_reviews BEGIN
+        UPDATE zur_counts SET n = n + 1 WHERE kind IN ('reviews', 'reviews_' || new.state);
+      END`,
+      `CREATE TRIGGER IF NOT EXISTS zur_counts_reviews_delete AFTER DELETE ON zur_reviews BEGIN
+        UPDATE zur_counts SET n = n - 1 WHERE kind IN ('reviews', 'reviews_' || old.state);
+      END`,
+      `CREATE TRIGGER IF NOT EXISTS zur_counts_reviews_state AFTER UPDATE OF state ON zur_reviews WHEN old.state != new.state BEGIN
+        UPDATE zur_counts SET n = n - 1 WHERE kind = 'reviews_' || old.state;
+        UPDATE zur_counts SET n = n + 1 WHERE kind = 'reviews_' || new.state;
+      END`,
       // What happened to each review (who approved, the checker's codes): never the text. 180 days.
       `CREATE TABLE IF NOT EXISTS zur_review_events (
         id INTEGER PRIMARY KEY,

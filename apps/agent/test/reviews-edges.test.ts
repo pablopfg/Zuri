@@ -1,5 +1,5 @@
 import { REVIEW_LIMITS } from "@zuri/shared";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { AppError } from "../src/http/errors.ts";
 import { add, consent, draftAnswer, later, LOCATION, PATTERN, row, SECOND_OK, turnOn, withReviewsWorld, type ReviewsWorld } from "./reviews-world.ts";
 
@@ -103,6 +103,11 @@ describe("Google's odd answers and failures", () => {
         ["accounts/101/locations/202", "Exemplo Filial"],
       ]);
       world.sim.business.locations.set("accounts/102", []);
+      // Within a minute the copy answers (Google's quota is shared with the checks); after it, Google again.
+      const business = vi.spyOn(world.google, "business");
+      expect((await world.reviews.listLocations()).map((item) => item.id)).toContain("accounts/102/locations/301");
+      expect(business).not.toHaveBeenCalled();
+      world.clock.now += 60_000;
       expect((await world.reviews.listLocations()).map((item) => item.id)).not.toContain("accounts/102/locations/301");
     }));
 
@@ -289,6 +294,8 @@ describe("publishing at the edges", () => {
       const item = await proposed(world);
       world.clock.now += REVIEW_LIMITS.eventsDays * 86_400_000 + 1;
       await world.reviews.discard(item.id, "app");
+      // The old ones go at the next check, once per check rather than on every event.
+      await world.reviews.check("alarm");
       expect(world.db.all<{ action: string }>(`SELECT action FROM zur_review_events`).map((e) => e.action)).toEqual(["discarded"]);
     }));
 

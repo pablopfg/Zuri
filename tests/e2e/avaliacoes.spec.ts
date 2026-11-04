@@ -6,7 +6,8 @@ import { CSRF, expectAccessible, signIn, tooSmallControls } from "./ui-helpers.t
 // two old reviews, which the first read keeps as history, and three that
 // "arrive" after it. Only Google's consent page is played here.
 
-test.use({ locale: "pt-BR", timezoneId: "America/Sao_Paulo" });
+// The device in another time zone than the owner's: the dates on the cards follow the owner's.
+test.use({ locale: "pt-BR", timezoneId: "Asia/Tokyo" });
 
 // The account is one per installation: the test leaves it disconnected (which forgets the copy too).
 test.afterEach(async ({ page }) => {
@@ -69,6 +70,13 @@ test("turns the reviews on, tells the team of a negative one and publishes an ap
   await expect(reply).toHaveValue(/Equipe Exemplo$/);
   await expectAccessible(page, "contatos-avaliacoes");
   expect(await tooSmallControls(page), "every control of the screen is a 44 px target").toEqual([]);
+  await page.emulateMedia({ colorScheme: "dark" });
+  await expectAccessible(page, "contatos-avaliacoes escuro");
+  await page.emulateMedia({ colorScheme: "light" });
+  // The keyboard reaches the draft and its main action.
+  await reply.focus();
+  await page.keyboard.press("Tab");
+  await expect(carla.getByRole("button", { name: "Aprovar e publicar" })).toBeFocused();
 
   // The fixed checker refuses a promise and a missing signature, whoever wrote it.
   const draft = await reply.inputValue();

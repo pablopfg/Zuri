@@ -45,6 +45,8 @@ import { firstName, ratingOf, triage } from "./triage.ts";
 const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;
 const LOCK_MS = 10 * MINUTE;
+// A publication waits for at most two Google calls of 10 s: one "sending" older than this was cut halfway.
+const SENDING_STALE_MS = 5 * MINUTE;
 /** How far behind the watermark a check still looks: Google may list a review a little after its time. */
 const OVERLAP_MS = HOUR;
 const BACKOFF_MAX_MS = 6 * HOUR;
@@ -99,6 +101,8 @@ interface SettingsRow {
   running_since: number | null;
   next_check: number | null;
   checked_now_at: number | null;
+  listed_at: number | null;
+  saved_read_at: number | null;
   last_ok_at: number | null;
   day: string;
   drafts_today: number;
@@ -138,6 +142,7 @@ export interface ReviewRow {
   replied_at: string | null;
   seen_at: number;
   escalated_at: number | null;
+  sending_at: number | null;
   insisted: number;
 }
 
@@ -178,8 +183,10 @@ export class ReviewService {
   }
 
   private settings(): SettingsRow {
+    const row = this.row();
+    if (row) return row;
     this.db.run(`INSERT INTO zur_review_settings (id) VALUES (1) ON CONFLICT (id) DO NOTHING`);
-    return this.db.one<SettingsRow>(`SELECT * FROM zur_review_settings WHERE id = 1`) as SettingsRow;
+    return this.row() as SettingsRow;
   }
 
   private row(): SettingsRow | null {
@@ -219,7 +226,13 @@ export class ReviewService {
   }
 
   needs(): number {
-    return this.db.one<{ n: number }>(`SELECT count(*) AS n FROM zur_reviews WHERE state IN ('new', 'escalated', 'proposed', 'uncertain')`)?.n ?? 0;
+    return this.counted(NEEDS);
+  }
+
+  /** How many reviews are in these states (all of them with null), from the counters the triggers keep: never the table. */
+  private counted(states: readonly ReviewState[] | null): number {
+    const kinds = states ? states.map((state) => `reviews_${state}`) : ["reviews"];
+    return this.db.one<{ n: number | null }>(`SELECT sum(n) AS n FROM zur_counts WHERE kind IN (${kinds.map(() => "?").join(", ")})`, ...kinds)?.n ?? 0;
   }
 
   status(): ReviewsStatus {
@@ -248,6 +261,14 @@ export class ReviewService {
   /** The profiles the account manages, read from Google (accounts, then their locations), up to 20. */
   async listLocations(): Promise<ReviewLocation[]> {
     if (!this.deps.google.connected() || !this.deps.google.granted(BUSINESS_SCOPE)) throw new GoogleError("not_connected");
+    // Google's list at most once a minute: a page opened again, or a script, reads the copy (Google's quota is shared with the checks).
+    const now = this.clock();
+    const listedAt = this.settings().listed_at;
+    if (listedAt !== null && listedAt > now - MINUTE) {
+      const copy = this.locations();
+      if (copy.length) return copy;
+    }
+    this.db.run(`UPDATE zur_review_settings SET listed_at = ? WHERE id = 1`, now);
     const meter = new GoogleMeter(LOCATIONS_BUDGET);
     const accounts = await this.deps.google.business(GOOGLE_ACCOUNTS_API, "/accounts", meter, { query: { pageSize: "20" } });
     const names = (Array.isArray(accounts?.accounts) ? accounts.accounts : [])
@@ -312,6 +333,8 @@ export class ReviewService {
           );
         } else if (!on && location.selected === 1) {
           this.db.run(`UPDATE zur_review_locations SET selected = 0, watermark = NULL, page_token = NULL, page_top = NULL, enabled_at = NULL WHERE google_name = ?`, location.google_name);
+          // Its audit goes with it: nothing of an unticked profile stays behind.
+          this.db.run(`DELETE FROM zur_review_events WHERE review_id IN (SELECT id FROM zur_reviews WHERE location = ?)`, location.google_name);
           this.db.run(`DELETE FROM zur_reviews WHERE location = ?`, location.google_name);
         }
       }
@@ -350,17 +373,31 @@ export class ReviewService {
 
   /** When the alarm has a check to make (ms), or null while off or not allowed. */
   nextDue(): number | null {
+    // Without the Business Profile's permission (the owner left it out when connecting again) nothing is
+    // due: check() would only answer "off", and a due time in the past would wake the alarm every minute.
     const row = this.onRow();
-    if (!row || !this.deps.google.connected()) return null;
+    if (!row || !this.enabled()) return null;
     return row.next_check;
   }
 
   /** From the alarm: the check, when due. True when it ran (the next time moved). */
   async tick(): Promise<boolean> {
     const row = this.onRow();
-    if (!row || !this.deps.google.connected() || row.next_check === null || row.next_check > this.clock()) return false;
+    if (!row || !this.enabled() || row.next_check === null || row.next_check > this.clock()) return false;
     await this.check("alarm");
     return true;
+  }
+
+  /** The first read right after saving, once a minute at most (its own room, beside "check now"'s): saving again and again can't spend Google's quota. */
+  async firstRead(): Promise<void> {
+    if (!this.enabled()) return;
+    const now = this.clock();
+    const done = this.db.run(
+      `UPDATE zur_review_settings SET saved_read_at = ? WHERE id = 1 AND (saved_read_at IS NULL OR saved_read_at <= ?)`,
+      now,
+      now - REVIEW_LIMITS.checkNowEveryMs,
+    ).rowsWritten;
+    if (done) await this.check("owner");
   }
 
   /** "Check now": once a minute at most. */
@@ -395,6 +432,9 @@ export class ReviewService {
     const found: Found = { negatives: [], worse: [], drafts: 0 };
     try {
       let more = false;
+      // A publication cut halfway (the object restarted between the claim and the answer): it may have gone out.
+      this.db.run(`UPDATE zur_reviews SET state = 'uncertain', sending_at = NULL WHERE state = 'sending' AND sending_at < ?`, now - SENDING_STALE_MS);
+      this.db.run(`DELETE FROM zur_review_events WHERE at < ?`, now - REVIEW_LIMITS.eventsDays * 86_400_000);
       await this.reconcileUncertain(meter, stamp);
       for (const location of this.db.all<LocationRow>(`SELECT * FROM zur_review_locations WHERE selected = 1 ORDER BY google_name`)) {
         if (!this.mine(stamp)) return "off";
@@ -469,7 +509,14 @@ export class ReviewService {
         }
         if (first || older || !next) {
           const mark = [location.watermark, top].filter((value): value is string => !!value).sort().at(-1) ?? new Date(this.clock()).toISOString();
-          this.db.run(`UPDATE zur_review_locations SET watermark = ?, page_token = NULL, page_top = NULL WHERE google_name = ?`, mark, location.google_name);
+          // Written only when it moved: a quiet check writes nothing here.
+          this.db.run(
+            `UPDATE zur_review_locations SET watermark = ?, page_token = NULL, page_top = NULL
+             WHERE google_name = ? AND (watermark IS NOT ? OR page_token IS NOT NULL OR page_top IS NOT NULL)`,
+            mark,
+            location.google_name,
+            mark,
+          );
         } else {
           this.db.run(`UPDATE zur_review_locations SET page_token = ?, page_top = ? WHERE google_name = ?`, next, top, location.google_name);
         }
@@ -481,8 +528,8 @@ export class ReviewService {
     return true;
   }
 
-  /** A reply hash: what tells Zuri's reply from anyone else's. */
-  private static replyHash(text: string): string {
+  /** The hash that tells Zuri's reply from anyone else's (exposed for the tests). */
+  static replyHash(text: string): string {
     // Synchronous FNV-1a over the normalized text: enough to tell two replies apart, never a secret.
     let hash = 0x811c9dc5;
     for (const char of text.replace(/\s+/g, " ").trim()) {
@@ -536,7 +583,7 @@ export class ReviewService {
         if (reply !== row.reply) this.applyReply(row, reply);
         return;
       }
-      this.changed(row, { rating, name, anonymous, comment, updated, reply }, found);
+      this.changed(row, { rating, name, anonymous, comment, raw: typeof review.comment === "string" ? review.comment : "", updated, reply }, found);
       return;
     }
     // Written before the owner turned the profile on and left out of the first read (only one page): never new.
@@ -550,7 +597,7 @@ export class ReviewService {
     if (first || old) state = "history";
     else if (reply) state = "replied_elsewhere";
     else {
-      const route = triage({ rating, comment });
+      const route = triage({ rating, comment, raw: typeof review.comment === "string" ? review.comment : "" });
       reasons = route.reasons;
       if (route.route === "team") {
         state = "escalated";
@@ -586,7 +633,7 @@ export class ReviewService {
   }
 
   /** A review edited at Google. One already answered keeps its reply (never replaced by Zuri); one waiting is triaged again. */
-  private changed(row: ReviewRow, next: { rating: number; name: string; anonymous: number; comment: string; updated: string; reply: string | null }, found: Found): void {
+  private changed(row: ReviewRow, next: { rating: number; name: string; anonymous: number; comment: string; raw?: string; updated: string; reply: string | null }, found: Found): void {
     const now = this.clock();
     if (row.state === "sending") return;
     this.db.run(
@@ -609,7 +656,7 @@ export class ReviewService {
       return;
     }
     // Waiting: the old draft and any proposal were for another text (an approval of it gets TARGET_CHANGED).
-    const route = triage({ rating: next.rating, comment: next.comment });
+    const route = triage({ rating: next.rating, comment: next.comment, raw: next.raw ?? next.comment });
     const team = route.route === "team";
     const needsDraft = team ? (route.reasons.includes("suspicious") ? 0 : 1) : this.level(this.row()) === "off" ? 0 : 1;
     this.db.run(
@@ -720,26 +767,32 @@ export class ReviewService {
   private async draftOne(row: ReviewRow): Promise<boolean> {
     const pattern = this.pattern(this.row());
     const positive = row.state === "new";
+    // Every write below holds only for the version read: a review edited at Google while the AI wrote
+    // (the check reads it meanwhile) keeps waiting for a draft of its new text.
+    const same = `AND updated_at = ? AND rating = ? AND comment = ?`;
+    const version = [row.updated_at, row.rating, row.comment] as const;
     const propose = (text: string, source: ReviewDraftSource, fallback: ReviewGuardCode[]) => {
       this.db.run(
-        `UPDATE zur_reviews SET draft = ?, draft_source = ?, fallback = ?, needs_draft = 0, proposed_at = ?, state = CASE WHEN state = 'new' THEN 'proposed' ELSE state END WHERE id = ? AND needs_draft = 1`,
+        `UPDATE zur_reviews SET draft = ?, draft_source = ?, fallback = ?, needs_draft = 0, proposed_at = ?, state = CASE WHEN state = 'new' THEN 'proposed' ELSE state END
+         WHERE id = ? AND needs_draft = 1 ${same}`,
         text,
         source,
         JSON.stringify(fallback),
         this.clock(),
         row.id,
+        ...version,
       );
       this.event(row.id, "drafted", "check", fallback);
     };
     const fallback = (codes: ReviewGuardCode[]): boolean => {
       if (!positive) {
-        this.db.run(`UPDATE zur_reviews SET needs_draft = 0 WHERE id = ?`, row.id);
+        this.db.run(`UPDATE zur_reviews SET needs_draft = 0 WHERE id = ? ${same}`, row.id, ...version);
         if (codes.length) this.event(row.id, "draft_failed", "check", codes);
         return false;
       }
       const text = this.template(row, pattern);
       if (!text) {
-        this.db.run(`UPDATE zur_reviews SET needs_draft = 0 WHERE id = ?`, row.id);
+        this.db.run(`UPDATE zur_reviews SET needs_draft = 0 WHERE id = ? ${same}`, row.id, ...version);
         return false;
       }
       propose(text, "template", codes);
@@ -785,7 +838,8 @@ export class ReviewService {
       }
       const reply = withSignature(answer.reply, pattern.signature);
       const language = answer.language === "other" ? null : answer.language;
-      const codes = guard(reply, this.guardContext(row, pattern, language ?? languageOf(row.comment)));
+      // The review's language is measured, never taken from the AI; its label only counts where nothing could be measured.
+      const codes = guard(reply, this.guardContext(row, pattern, languageOf(row.comment) ?? language));
       if (codes.length) return fallback(codes);
       if (left <= 0 || !(await this.responder.secondRead(reply, left, onNeurons))) return fallback(["second_read"]);
       propose(reply, "ai", []);
@@ -842,10 +896,30 @@ export class ReviewService {
     const codes = guard(text, this.guardContext(row, pattern, languageOf(row.comment)));
     if (codes.length) throw new AppError("VALIDATION_FAILED", "error.reviewRejected", { codes });
     // One publication at a time per review: the claim is one statement, so two tabs can't both send.
-    const claimed = this.db.run(`UPDATE zur_reviews SET state = 'sending' WHERE id = ? AND state = ? AND updated_at = ?`, id, row.state, row.updated_at).rowsWritten;
-    if (!claimed) throw new AppError("CONFLICT", "error.reviewHandled");
-    const restore = () => this.db.run(`UPDATE zur_reviews SET state = ? WHERE id = ? AND state = 'sending'`, row.state, id);
     const source: ReviewDraftSource = row.draft !== null && text === row.draft ? (row.draft_source ?? "owner") : "owner";
+    const hash = ReviewService.replyHash(text);
+    // The text and its hash go with the claim: if the object stops before Google answers, the check finds the
+    // row "sending" past its time, makes it "uncertain" and reads Google to learn whether it went out.
+    const claimed = this.db.run(
+      `UPDATE zur_reviews SET state = 'sending', sending_at = ?, draft = ?, draft_source = ?, reply_hash = ? WHERE id = ? AND state = ? AND updated_at = ?`,
+      this.clock(),
+      text,
+      source,
+      hash,
+      id,
+      row.state,
+      row.updated_at,
+    ).rowsWritten;
+    if (!claimed) throw new AppError("CONFLICT", "error.reviewHandled");
+    const restore = () =>
+      this.db.run(
+        `UPDATE zur_reviews SET state = ?, sending_at = NULL, draft = ?, draft_source = ?, reply_hash = ? WHERE id = ? AND state = 'sending'`,
+        row.state,
+        row.draft,
+        row.draft_source,
+        row.reply_hash,
+        id,
+      );
     this.event(id, "approved", actor);
     const meter = new GoogleMeter(PUBLISH_BUDGET);
     let current: GoogleReview;
@@ -868,7 +942,11 @@ export class ReviewService {
     if (updated !== row.updated_at || ratingOf(current.starRating) !== row.rating || comment !== row.comment) {
       // Changed at Google since the owner read it: triaged again, nothing published.
       restore();
-      this.db.transaction(() => this.changed(this.byId(id) as ReviewRow, { rating: ratingOf(current.starRating), name: firstName(current.reviewer?.displayName, current.reviewer?.isAnonymous), anonymous: current.reviewer?.isAnonymous ? 1 : 0, comment, updated, reply: cleanBlock(current.reviewReply?.comment, REVIEW_LIMITS.commentMax) || null }, { negatives: [], worse: [], drafts: 0 }));
+      const found: Found = { negatives: [], worse: [], drafts: 0 };
+      const next = { rating: ratingOf(current.starRating), name: firstName(current.reviewer?.displayName, current.reviewer?.isAnonymous), anonymous: current.reviewer?.isAnonymous ? 1 : 0, comment, raw: typeof current.comment === "string" ? current.comment : "", updated, reply: cleanBlock(current.reviewReply?.comment, REVIEW_LIMITS.commentMax) || null };
+      this.db.transaction(() => this.changed(this.byId(id) as ReviewRow, next, found));
+      // The row now holds Google's time, so the next check sees nothing new: the team hears of it here.
+      this.tell(found);
       throw new AppError("TARGET_CHANGED", "error.reviewChanged");
     }
     const elsewhere = cleanBlock(current.reviewReply?.comment, REVIEW_LIMITS.commentMax);
@@ -878,13 +956,21 @@ export class ReviewService {
       this.event(id, "replied_elsewhere", "check");
       throw new AppError("CONFLICT", "error.reviewAnswered");
     }
-    const hash = ReviewService.replyHash(text);
+    // A lockdown or a pause that came while Google was read again stops it here, before anything goes out.
+    if (this.deps.lockdown()) {
+      restore();
+      throw new AppError("LOCKDOWN_ACTIVE", "auth.lockdown.active");
+    }
+    if (this.row()?.paused === 1) {
+      restore();
+      throw new AppError("CONFLICT", "error.reviewsPaused");
+    }
     try {
       await this.deps.google.business(GOOGLE_REVIEWS_API, `/${row.google_name}/reply`, meter, { method: "PUT", body: { comment: text } });
     } catch (error) {
       if (error instanceof GoogleError && (error.kind === "unavailable" || error.kind === "budget")) {
         // No answer: it may have gone out. The next check reads it again before anything else.
-        this.db.run(`UPDATE zur_reviews SET state = 'uncertain', draft = ?, draft_source = ?, reply_hash = ? WHERE id = ?`, text, source, hash, id);
+        this.db.run(`UPDATE zur_reviews SET state = 'uncertain', sending_at = NULL WHERE id = ?`, id);
         this.event(id, "uncertain", "check");
         throw new AppError("SERVICE_UNAVAILABLE", "error.reviewUncertain");
       }
@@ -894,12 +980,9 @@ export class ReviewService {
     }
     const at = new Date(this.clock()).toISOString();
     this.db.run(
-      `UPDATE zur_reviews SET state = 'replied', reply = ?, reply_hash = ?, replied_at = ?, draft = ?, draft_source = ?, needs_draft = 0 WHERE id = ?`,
+      `UPDATE zur_reviews SET state = 'replied', reply = ?, replied_at = ?, sending_at = NULL, needs_draft = 0 WHERE id = ?`,
       text,
-      hash,
       at,
-      text,
-      source,
       id,
     );
     this.event(id, "published", actor);
@@ -999,7 +1082,6 @@ export class ReviewService {
   private event(reviewId: string, action: string, actor: ReviewActor, codes: ReviewGuardCode[] = []): void {
     const now = this.clock();
     this.db.run(`INSERT INTO zur_review_events (review_id, action, actor, codes, at) VALUES (?, ?, ?, ?, ?)`, reviewId, action, actor, JSON.stringify(codes), now);
-    this.db.run(`DELETE FROM zur_review_events WHERE at < ?`, now - REVIEW_LIMITS.eventsDays * 86_400_000);
   }
 
   /** Why a check stopped: counted, told to the owner when it needs them, never with a review's content. */
@@ -1100,10 +1182,7 @@ export class ReviewService {
       : [];
     const page = rows.slice(0, REVIEW_LIMITS.screenPage);
     const last = page.at(-1);
-    const count = (list: readonly ReviewState[] | null) =>
-      this.enabled()
-        ? (this.db.one<{ n: number }>(`SELECT count(*) AS n FROM zur_reviews${list ? ` WHERE state IN (${list.map(() => "?").join(", ")})` : ""}`, ...(list ?? []))?.n ?? 0)
-        : 0;
+    const count = (list: readonly ReviewState[] | null) => (this.enabled() ? this.counted(list) : 0);
     return {
       items: await Promise.all(page.map((row) => this.item(row))),
       nextCursor: rows.length > REVIEW_LIMITS.screenPage && last ? `${last.updated_at}|${last.id}` : null,

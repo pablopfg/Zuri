@@ -66,7 +66,7 @@ export function languageOf(text: string): "pt-BR" | "en" | null {
   return pt > en ? "pt-BR" : "en";
 }
 
-const CONTACT = /[\p{Nd}@#]|https?:|www\.|:\/\/|\b[\p{L}\p{N}-]+\.(?:com|br|net|org|io|me|app|link|ly|info|biz|xyz|site|online|store|shop)\b/iu;
+const CONTACT = /[\p{N}@#]|https?:|www\.|:\/\/|\b[\p{L}\p{N}-]+\.(?:com|br|net|org|io|me|app|link|ly|info|biz|xyz|site|online|store|shop)\b/iu;
 const MARKUP = /[<>{}[\]`]|\*\*|__|~~|^\s*[-*+]\s|^\s*\d+[.)]\s|\]\(/mu;
 const EMOJI = /\p{Extended_Pictographic}/gu;
 /** Controls (line breaks aside), invisible format characters, bidi marks and variation selectors past the emoji ones. */
@@ -121,16 +121,22 @@ export function guard(text: string, ctx: GuardContext): ReviewGuardCode[] {
   if (HIDDEN.test(text.replace(/\n/g, " "))) codes.add("hidden");
   const language = languageOf(text);
   if (ctx.language && language && language !== ctx.language) codes.add("language");
-  if (CONTACT.test(text)) codes.add("contact");
-  if (MARKUP.test(text) || (text.match(EMOJI)?.length ?? 0) > 1) codes.add("markup");
+  // Wide and styled look-alikes made plain first: "exemplo．com", "＠perfil" and "①" are a link, a handle and a digit.
+  const plain = text.normalize("NFKC");
+  // Letters of another alphabet are another language, and the way to dress one word up as another.
+  if ([...plain].some((char) => /\p{L}/u.test(char) && !/\p{Script=Latin}/u.test(char))) codes.add("language");
+  if (CONTACT.test(plain)) codes.add("contact");
+  if (MARKUP.test(plain) || (text.match(EMOJI)?.length ?? 0) > 1) codes.add("markup");
   const allowed = new Set([...words(ctx.signature), ...(ctx.ownWords ?? []).flatMap((value) => words(value)), ...(ctx.firstName ? [fold(ctx.firstName)] : [])]);
   if (namesIn(text).some((name) => !allowed.has(name))) codes.add("name");
   if (copied(text, ctx.comment)) codes.add("copied");
-  const all = ` ${words(text).join(" ")} `;
+  // A banned word the owner's own signature carries ("Equipe Sistema Exemplo") is theirs to use, in the signature only.
+  const sign = words(ctx.signature).join(" ");
+  let body = words(text).join(" ");
+  if (sign && body.endsWith(sign)) body = body.slice(0, body.length - sign.length);
+  const all = ` ${body} `;
   const banned = [...BANNED, ...ctx.banned.map((word) => words(word).join(" ")).filter(Boolean)];
-  // A banned word the owner's own signature carries ("Equipe Sistema Exemplo") is theirs to use.
-  const signature = ` ${words(ctx.signature).join(" ")} `;
-  if (banned.some((word) => all.includes(` ${word} `) && !signature.includes(` ${word} `))) codes.add("banned");
+  if (banned.some((word) => all.includes(` ${word} `))) codes.add("banned");
   if (!signed(text, ctx.signature)) codes.add("signature");
   return [...codes];
 }

@@ -106,7 +106,7 @@ describe("the migration list", () => {
       23: "5a2aa2b2a2bed010c38ab88ef70332d8f0e26857c4e03d98f8b2fc043509fb60",
       24: "02637c24812ac7cc5acd9322e995a05e0859f73f66f5e1f895c58f6f61221746",
       25: "ce608a49fa98841c41f6e75c05fb6af4a60fee7cf274f7b9d3627385b7380eb5",
-      26: "409d269640ed532a4505ff9a36d9026d52385cff136ae60972aceac4649af7eb",
+      26: "68b48f4a81ab4bc174381a62492aca4b71b7d64d5441f1d111527c6b80654b68",
     };
     for (const m of MIGRATIONS) {
       const digest = createHash("sha256").update(statementText(m).replace(/\r\n/g, "\n")).digest("hex");
@@ -260,6 +260,9 @@ describe("migrate", () => {
         "trigger:zur_counts_notices_insert",
         "trigger:zur_counts_projects_delete",
         "trigger:zur_counts_projects_insert",
+        "trigger:zur_counts_reviews_delete",
+        "trigger:zur_counts_reviews_insert",
+        "trigger:zur_counts_reviews_state",
         "trigger:zur_counts_tasks_delete",
         "trigger:zur_counts_tasks_done_delete",
         "trigger:zur_counts_tasks_done_insert",
@@ -367,6 +370,7 @@ describe("migrate", () => {
         "table:zur_review_settings",
         "table:zur_reviews",
         "index:zur_reviews_drafts",
+        "index:zur_reviews_escalated",
         "index:zur_reviews_list",
         "index:zur_reviews_location",
         "index:zur_reviews_seen",

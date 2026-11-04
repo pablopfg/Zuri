@@ -15,7 +15,7 @@ export function forgetReviews(db: Database): void {
   db.run(`DELETE FROM zur_notices WHERE kind IN ('reviews.negative', 'reviews.many', 'reviews.worse', 'reviews.draft', 'reviews.burst')`);
   db.run(
     `UPDATE zur_review_settings SET enabled = 0, paused = 0, problem = NULL, problem_noticed_at = NULL, failures = 0, running_since = NULL,
-       next_check = NULL, checked_now_at = NULL, last_ok_at = NULL, burst_noticed_at = NULL
+       next_check = NULL, checked_now_at = NULL, listed_at = NULL, saved_read_at = NULL, last_ok_at = NULL, burst_noticed_at = NULL
      WHERE id = 1`,
   );
 }

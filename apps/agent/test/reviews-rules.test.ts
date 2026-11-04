@@ -81,7 +81,7 @@ describe("triage", () => {
   });
 
   it("counts the 2000-character edge", () => {
-    expect(suspicious("a".repeat(5).concat(" b".repeat((REVIEW_LIMITS.commentForAi - 5) / 2)))).toBe(false);
+    expect(suspicious("ab ".repeat(700).slice(0, REVIEW_LIMITS.commentForAi))).toBe(false);
     expect(suspicious("ab ".repeat(700).slice(0, REVIEW_LIMITS.commentForAi + 1))).toBe(true);
   });
 });

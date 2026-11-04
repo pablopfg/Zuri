@@ -21,7 +21,8 @@ avaliações positivas é a etapa 19d. O plano está em
    escolha o tom, confira os 3 a 5 modelos de agradecimento e toque em
    **Salvar avaliações**.
 
-Ao salvar, a Zuri faz a primeira leitura na hora. O que já existe no perfil
+Ao salvar, a Zuri faz a primeira leitura na hora (no máximo uma por minuto;
+salvar de novo logo depois deixa a leitura para o alarme). O que já existe no perfil
 vira **histórico**: não gera aviso nem rascunho. Só as avaliações que chegam
 depois disso entram na fila.
 
@@ -141,9 +142,13 @@ Google Cloud, então a Zuri lê de 15 em 15 minutos.
   do dono em `<data source="settings">`. A resposta dele é JSON validado por
   Zod; qualquer outra coisa conta como rascunho falho.
 - Publicação: a avaliação fica em `sending` numa única instrução (duas abas
-  não publicam duas vezes), é lida de novo no Google e só então vai o
-  `PUT …/reply`. Sem resposta do Google, ela fica `uncertain` e a próxima
-  leitura confere antes de tudo. Um hash da resposta diz o que é da Zuri.
+  não publicam duas vezes), já com o texto e o hash dele, é lida de novo no
+  Google, o bloqueio e a pausa são conferidos de novo, e só então vai o
+  `PUT …/reply`. Sem resposta do Google, ou com um `sending` parado há mais de
+  5 minutos (o objeto reiniciou no meio), ela fica `uncertain` e a próxima
+  leitura confere no Google antes de tudo. O hash diz o que é da Zuri.
+- Contadores: o total e cada estado ficam em `zur_counts`, mantidos por
+  gatilhos, então a aba e o `/status` não leem a tabela inteira.
 - Avisos: categoria "system", sem prioridade que aprende. No Telegram, os
   tipos `reviews.*` vão para o tópico "Avaliações" do grupo; rascunho pronto,
   pico e problema de acesso vão só ao chat privado. O título nunca leva o
