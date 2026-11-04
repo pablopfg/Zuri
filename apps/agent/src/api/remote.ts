@@ -29,9 +29,16 @@ export function registerRemoteGate(app: Hono<ApiEnv>, deps: ApiDeps, client: (c:
   app.use("*", async (c, next) => {
     const header = c.req.header("authorization");
     if (header === undefined) return next();
-    const who = client(c);
     const remote = deps.remote?.();
     if (!remote) throw new AppError("UNAUTHORIZED", "remote.invalidToken");
+    // No client address (never behind Cloudflare): nothing to count the try against, so the
+    // token isn't even looked at, and the answer is the same 401 as a bad token's.
+    let who: ClientInfo;
+    try {
+      who = client(c);
+    } catch {
+      throw new AppError("UNAUTHORIZED", "remote.invalidToken");
+    }
     remote.tokens.assertNetworkAllowed(who.network);
     const raw = BEARER.exec(header)?.[1];
     const caller = raw ? await remote.tokens.validate(raw) : null;
