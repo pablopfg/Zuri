@@ -72,7 +72,7 @@ export const ptBRSettings = {
   "web.unit.hours.one": "{count} hora",
   "web.unit.hours.other": "{count} horas",
   "web.security.laterTitle": "Em breve nesta aba",
-  "web.security.laterBody": "Lista de sessões abertas, acesso remoto por token e modo de bloqueio.",
+  "web.security.laterBody": "Lista de sessões abertas e modo de bloqueio.",
   "web.settings.description": "Sua conta, a segurança e o que a Zuri pode usar.",
   "web.settings.later.data": "Backup e uso do armazenamento chegam numa próxima versão.",
   "web.passwordNow.mfaTitle": "Antes de ligar, confirme que é você",

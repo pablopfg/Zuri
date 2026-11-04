@@ -24,6 +24,7 @@ import {
   pushCount,
   rawRebuild,
   rebuild,
+  remoteTokensSpy,
   seedPush,
   withAuth,
 } from "./auth-harness.ts";
@@ -380,7 +381,8 @@ describe("recovering the access with a new code", () => {
     return { next, t, old };
   }
 
-  it("the registered e-mail and a new password: sessions end, data and settings stay, the code is spent", async () => {
+  it("the registered e-mail and a new password: sessions end, remote tokens go, data and settings stay, the code is spent", async () => {
+    const tokens = remoteTokensSpy();
     await withAuth("setup-recover", async (h) => {
       const { next, t, old } = await recoverable(h);
       seedPush(h.db, "browser-a");
@@ -389,10 +391,11 @@ describe("recovering the access with a new code", () => {
       expect(pushCount(h.db)).toBe(0);
       expect(h.settings.get().timeZone).toBe("America/Recife");
       expect(h.events().find((e) => e.kind === "access_recovered")?.alert_pending).toBe(1);
+      expect(tokens.revoked).toBe(1);
       expect(await outcome(next.login({ email: OWNER_EMAIL, password: OWNER_PASSWORD }, client(NET), noCookies))).toBe("INVALID_CREDENTIALS");
       expect(await outcome(next.login({ email: OWNER_EMAIL, password: NEW_PASSWORD }, client(NET), noCookies))).toBe("ok");
       expect(await outcome(next.setupCheckCode({ code: OTHER_CODE }, client(NET)))).toBe("INVALID_CREDENTIALS");
-    }, fresh());
+    }, { ...fresh(), remoteTokens: tokens });
   });
 
   it("a wrong e-mail is refused and counts as the network's try: the 6th in 15 minutes waits", async () => {

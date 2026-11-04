@@ -908,6 +908,68 @@ que a Zuri lê. O que protege:
   Desligar as avaliações ou desconectar o Google apaga a cópia guardada; no
   Google nada muda.
 
+## Acesso remoto por token
+
+Etapa 20. Guia do dono e de quem integra em
+[acesso-remoto.md](acesso-remoto.md).
+
+- **Token.** `zur_pat_` mais 32 bytes aleatórios em base64url (256 bits). O
+  banco guarda só `HMAC(SESSION_SECRET, token)` e os 4 últimos caracteres para
+  reconhecer; o token aparece uma vez, no diálogo da criação. Vale 90 dias.
+  Até 20. Sem `SESSION_SECRET` de 32 caracteres ou mais, criar responde
+  `NOT_CONFIGURED`.
+- **Desligado por padrão.** Ligar e criar pedem a senha digitada nos últimos
+  15 minutos e geram um alerta de segurança em todos os canais
+  (`remote_enabled`, `remote_token_created`). Desligar suspende todos (401) sem
+  apagar.
+- **Porteiro Bearer.** Registrado antes de tudo em `createApi`. Com
+  `Authorization`, na ordem: limite de falhas da rede, formato
+  `Bearer zur_pat_…`, token válido (ligado, não suspenso, não vencido), limite
+  por token, escopo e lista de rotas. Qualquer falha termina ali (401 ou 403);
+  o pedido nunca cai para o cookie de sessão. Só o chamador aprovado pula o
+  CSRF e a sessão, porque um Bearer não vai sozinho pelo navegador e a Zuri não
+  libera CORS.
+- **Negado por padrão.** `remoteAllowed(escopo, método, caminho)` compara o
+  caminho como chegou (um UUID no último segmento vira `:id`; `%`, barras
+  dobradas ou no fim e `:` são recusados, nunca decodificados). Um teste
+  percorre todas as rotas registradas e confere que nenhum token chega a
+  autenticação, Telegram, aprovações, planos, bloqueio, conversa, fluxos, CRM,
+  MCP, Google, configurações ou à tela de tokens, e que o escopo `read` recebe
+  403 em toda escrita. Token não apaga memória nem automação e não cria nem muda
+  rotina com IA (`agent_prompt`, 403 `remote.agentPrompt`). Não reescreve memória
+  (a edição não guarda histórico) e a memória que cria fica com autor `agent`,
+  marcada no prompt como não confirmada. Automação criada por token fica em
+  prioridade baixa ou normal (403 `remote.highPriority`).
+- **Força bruta e excesso.** 10 tokens recusados por rede (o endereço no IPv4,
+  `/64` no IPv6) em 15 minutos seguram a rede com 429, até com o token certo;
+  120 pedidos por minuto por token (contador na memória do objeto, zera quando
+  ele reinicia); 10.000 pedidos e 1.000 escritas por dia somando todos os
+  tokens (gravado no estado no máximo uma vez por minuto), para a cota diária do
+  Free não acabar. Com o acesso desligado, uma tentativa não grava nada; ligado,
+  no máximo 200 tentativas recusadas contadas de todas as redes em 15 minutos, e
+  depois disso a recusa não grava nada. Cabeçalho fora do formato
+  `Bearer zur_pat_` + 43 caracteres para no Worker, sem pedido ao objeto. Tokens recusados e escritas por token vão para a Atividade de
+  acesso agrupados por rede e motivo.
+- **Eventos.** `POST /api/remote/events` só com token `events` (a sessão e os
+  outros escopos recebem 403). 60 por hora e 100 por dia somando todos, corpo
+  até 2 KB, `critical` recusado, só a categoria `events`. O corpo perde
+  caracteres invisíveis e de direção; a central guarda no máximo 250 eventos. O aviso leva a origem no título, numa linha,
+  com links desarmados; uma origem com "zuri" ou o nome da agente aparece como
+  `remote`. O texto é dado guardado: nunca entra como instrução. Eventos usam
+  no máximo metade do limite de cada canal e no máximo 3 insistem ao mesmo
+  tempo.
+- **Criação.** A conferência final roda na mesma transação do INSERT: um
+  bloqueio, uma senha nova ou uma sessão encerrada enquanto o hash era feito
+  recusam o token (nunca sobra um token vivo depois deles).
+- **Revogação.** Tela (um ou todos), `/tokens` do bot (alerta
+  `telegram_token_revoked`, que só o app reconhece), troca de senha,
+  recuperação e redefinição das credenciais revogam; o bloqueio suspende e a
+  saída devolve.
+- **Cloudflare Access.** Sem exceção para Bearer: com o Access ligado, o
+  cliente remoto manda também um service token do Access.
+- **Nunca no log.** Token, corpo e query não vão para log, Atividade nem
+  aviso; só o nome do token e o escopo.
+
 ## Dados apagados
 
 Apagar uma memória (ou esvaziar a lixeira) tira o registro da tabela e do
@@ -1149,7 +1211,7 @@ Etapa 12, fundação. O bot obedece a uma conta só, no chat privado
   e um alerta de origem `bot` em todos os canais. `/bloquear`, numa
   transação, grava `lockdown_until` (fim da primeira hora) e
   `lockdown_source` em `zur_settings`, apaga todas as sessões e suspende os
-  tokens remotos pelo `RemoteTokenHook` (vazio até a etapa 20). Enquanto
+  tokens remotos pelo `RemoteTokenHook` (etapa 20: voltam ao sair). Enquanto
   durar: a API responde 423 `LOCKDOWN_ACTIVE` a tudo fora da lista curta
   (sessão, sair, confirmar senha, `GET /api/lockdown`,
   `POST /api/lockdown/exit`, `GET /api/settings`, `GET` e `DELETE
