@@ -13,7 +13,7 @@
 [![Licença: MIT](https://img.shields.io/badge/licen%C3%A7a-MIT-0b0f19)](LICENSE)
 [![Roda na Cloudflare](https://img.shields.io/badge/roda%20na-Cloudflare-f38020?logo=cloudflare&logoColor=white)](https://developers.cloudflare.com/workers/)
 [![Plano Free](https://img.shields.io/badge/plano%20Free-compat%C3%ADvel-22c55e)](#-plano-free-sem-surpresa-na-fatura)
-[![Etapas](https://img.shields.io/badge/etapas-26%20de%2035-22c55e)](#️-mapa-das-etapas)
+[![Etapas](https://img.shields.io/badge/etapas-28%20de%2035-22c55e)](#️-mapa-das-etapas)
 [![Sem telemetria](https://img.shields.io/badge/telemetria-nenhuma-0b0f19)](#-segurança-e-privacidade)
 [![Node.js 24+](https://img.shields.io/badge/node-24%2B-339933?logo=nodedotjs&logoColor=white)](.nvmrc)
 
@@ -26,7 +26,7 @@ de um Durable Object e conversa com você pelo navegador e pelo Telegram.
 
 > [!NOTE]
 > **Em construção.** A Zuri sai em 35 etapas, uma por PR, a partir da [especificação](docs/especificacao.md).
-> As etapas 0 a 19b estão na `develop`,
+> As etapas 0 a 19d estão na `develop`,
 > da conversa com o agente às automações, à central de avisos e ao bot do Telegram, que já manda avisos, conversa por texto e voz, responde a comandos rápidos sem IA, trava a leitura depois de horas sem uso, aprova as propostas da Zuri com passkey ou código por e-mail e liga o modo de bloqueio numa emergência. O [mapa das etapas](#️-mapa-das-etapas) mostra o que já existe e o que vem a seguir; o estado detalhado fica em [`progresso.md`](.claude/memoria/progresso.md).
 
 ## Sumário
@@ -289,8 +289,8 @@ O orçamento de cada cota está em [docs/arquitetura/orcamento-free-tier.md](doc
 | | 18b | Login OAuth nos servidores MCP | ✅ |
 | | 19 | Google Agenda | ✅ |
 | | 19b | Google Contatos | ✅ |
-| | 19c | Avaliações do Google com aprovação | 🚧 |
-| | 19d | Resposta automática das avaliações | ⬜ |
+| | 19c | Avaliações do Google com aprovação | ✅ |
+| | 19d | Resposta automática das avaliações | ✅ |
 | | 20 | Acesso remoto e eventos | ⬜ |
 | | 21 | Modelos pagos ⚠️ | ⬜ |
 | | 22a | Motor de fluxos e monitor de sites | ✅ |
@@ -385,7 +385,7 @@ Leia o [CONTRIBUTING.md](CONTRIBUTING.md) e o [AGENTS.md](AGENTS.md). Em resumo:
 ## 🌎 In English
 
 **Zuri** is a self-hosted, single-owner AI assistant that runs entirely in your own Cloudflare account: one Worker, one Durable Object with SQLite and Workers AI, designed to fit the Free plan. It has a web app (PWA) and a Telegram admin bot that sends notifications, chats, answers quick commands and approves the agent's proposals with a passkey or an e-mailed code. Sign-in uses Turnstile, TOTP 2FA and passkeys, and the agent has no shell, code execution or open HTTP.
-It's built in public in 35 steps; steps 0 to 19b are merged.
+It's built in public in 35 steps; steps 0 to 19d are merged.
 The docs and the UI default to Brazilian Portuguese, and the interface is also available in English.
 
 ## 🙌 Créditos e licença
