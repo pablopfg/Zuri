@@ -19,6 +19,61 @@ funciona: [docs/agente/versionamento.md](docs/agente/versionamento.md).
 
 O que já entrou na `develop` e ainda não ganhou número fica em [`changelog/nao-lancado/`](changelog/nao-lancado/) por alguns minutos, até o workflow de versão escrever a seção.
 
+## [0.30.0] - 2026-11-03
+
+Mesclada às 22:55 (UTC-3) · commit [`58f9193`](https://github.com/pablopfg/Zuri/commit/58f91935cf0f8a9f1ccd7409dc19b395fa1f74f4) · PR [#169](https://github.com/pablopfg/Zuri/pull/169) · Lê e responde as avaliações do Google com aprovação
+
+### Adicionado
+
+- Aba **Avaliações** em Contatos (`/contatos/avaliacoes`): a Zuri lê as
+  avaliações do seu Perfil da Empresa no Google a cada 15 minutos (até 3
+  perfis) e mostra o que precisa de você, o que já foi respondido e tudo o
+  mais, com filtro por nota. **Conferir agora** lê na hora.
+- Avaliação de 1 a 3 estrelas avisa a equipe no tópico "Avaliações" do grupo
+  do Telegram, mesmo com a IA fora do ar, e ganha um rascunho cuidadoso para
+  você revisar. Sem solução em 48 horas, a Zuri avisa mais uma vez.
+- Avaliação de 4 ou 5 estrelas ganha rascunho: com um dos seus modelos quando
+  não tem texto, ou escrito por um agente próprio, sem ferramentas, quando o
+  texto é só elogio. Queixa, assunto de saúde ou outro idioma vão para a
+  equipe.
+- Você edita o rascunho e toca em **Aprovar e publicar**. Também dá para
+  escrever de novo, descartar o rascunho, marcar como resolvida fora da Zuri
+  e apagar uma resposta que a Zuri publicou.
+- Em **Configurações › Integrações**, o cartão do Google ganha a seção
+  **Avaliações do Google**: perfis, assinatura, tom, 3 a 5 modelos de
+  agradecimento e palavras proibidas. A primeira leitura guarda o que já
+  existe como histórico, sem aviso.
+- `/status` no Telegram mostra as avaliações, e `/pausar_rotinas` também
+  pausa as respostas.
+
+### Segurança
+
+- Nada é publicado sem a sua aprovação. Toda resposta, inclusive a que você
+  escreve, passa por uma conferência fixa: tamanho, idioma, sem números,
+  links ou contatos, sem nomes além do primeiro nome de quem avaliou, sem
+  promessas, preços, saúde ou assunto jurídico, e com a sua assinatura no
+  fim. O rascunho da IA passa ainda por uma segunda leitura.
+- Antes de publicar, a Zuri lê a avaliação de novo no Google. Se ela mudou,
+  sumiu ou já tem resposta, nada sai. A aprovação vale 72 horas, só para a
+  versão vista, e duas abas nunca publicam duas vezes.
+- A IA só deixa uma avaliação mais cautelosa, nunca menos. Texto com cara de
+  ordem, link ou contato vai para a equipe e a IA não o lê, mesmo disfarçado
+  com letras largas, de outro alfabeto, espaçadas ou marcas invisíveis. O
+  texto da avaliação entra no prompt marcado como dado.
+- Nome, texto e ids das avaliações ficam fora do log. No modo de bloqueio
+  nada lê o Google nem publica. Desligar as avaliações ou desconectar o
+  Google apaga a cópia guardada.
+
+### Atualização
+
+- O banco ganha a migration 26 (configuração, perfis, avaliações e a
+  auditoria de 180 dias). Ela roda sozinha e só acrescenta. Nenhum secret
+  novo e nenhum recurso novo da Cloudflare.
+- Para ligar, o projeto do Google Cloud precisa das três APIs do Perfil da
+  Empresa, do Basic API Access aprovado pelo Google e do escopo
+  `business.manage` na tela de consentimento. Passo a passo em
+  `docs/avaliacoes-google.md`.
+
 ## [0.29.1] - 2026-11-03
 
 Mesclada às 20:46 (UTC-3) · commit [`719aed4`](https://github.com/pablopfg/Zuri/commit/719aed4f0b670fd61d433a98f3865db0b2e4401c) · PR [#165](https://github.com/pablopfg/Zuri/pull/165) · Etapa 22b mesclada (#161)
@@ -2275,7 +2330,8 @@ Mesclada às 22:15 (UTC-3) · commit [`360a79e`](https://github.com/pablopfg/Zur
   `npm audit`), CodeQL, Dependabot e rulesets para a `develop` e a `main`.
 - `LICENSE` (MIT), `NOTICE.md`, `SECURITY.md` e `CONTRIBUTING.md`.
 
-[Não lançado]: https://github.com/pablopfg/Zuri/compare/v0.29.1...develop
+[Não lançado]: https://github.com/pablopfg/Zuri/compare/v0.30.0...develop
+[0.30.0]: https://github.com/pablopfg/Zuri/releases/tag/v0.30.0
 [0.29.1]: https://github.com/pablopfg/Zuri/releases/tag/v0.29.1
 [0.29.0]: https://github.com/pablopfg/Zuri/releases/tag/v0.29.0
 [0.28.2]: https://github.com/pablopfg/Zuri/releases/tag/v0.28.2
