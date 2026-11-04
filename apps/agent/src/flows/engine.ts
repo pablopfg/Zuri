@@ -3,6 +3,7 @@ import { dataLine } from "../agent/data.ts";
 import type { MeteredAI } from "../ai/metered.ts";
 import { AppError } from "../http/errors.ts";
 import { type FlowConnections, type FlowNetwork, FlowStepError, type WakeMeter } from "./connections.ts";
+import { createEvents, type FlowGoogle, readCalendar, searchContacts } from "./google-steps.ts";
 import { checkSite, type SiteChange, type SiteCheck, type SiteStates } from "./monitor.ts";
 import { asText, fill, fillValue, type Item, type Json, newItem, plain, readPath } from "./paths.ts";
 
@@ -23,10 +24,12 @@ export interface RunState {
   calls: number;
   neurons: number;
   notices: number;
+  /** Events the run's "create event" steps made (step 22c); absent in a state stored before it. */
+  created?: number;
 }
 
 export function startState(): RunState {
-  return { node: 0, items: [newItem()], attempt: 0, partial: null, checks: null, calls: 0, neurons: 0, notices: 0 };
+  return { node: 0, items: [newItem()], attempt: 0, partial: null, checks: null, calls: 0, neurons: 0, notices: 0, created: 0 };
 }
 
 export interface EngineDeps {
@@ -45,6 +48,8 @@ export interface EngineDeps {
   neuronsLeft: () => number;
   lockdown: () => boolean;
   clock: () => number;
+  /** The Google calendar and contacts (step 22c). */
+  google: FlowGoogle;
 }
 
 /** What one wake shares between its runs: the subrequests (rule P9), the time and the DNS checks. */
@@ -135,6 +140,12 @@ async function step(node: FlowNode, state: RunState, deps: EngineDeps, wake: Wak
       return { kind: "items", items: await ai(node, state, deps) };
     case "monitor":
       return monitor(node, state, deps, wake);
+    case "calendar":
+      return { kind: "items", items: await readCalendar(node, state, deps.google, wake.meter, deps.clock()) };
+    case "calendar_create":
+      return { kind: "items", items: await createEvents(node, state, deps.google, wake.meter, deps.flowId) };
+    case "contacts":
+      return { kind: "items", items: searchContacts(node, state, deps.google) };
   }
 }
 

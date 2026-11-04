@@ -43,8 +43,16 @@ etapas ficam detalhadas; as mais antigas viram uma linha na tabela.
 | 19d | mesclada (04/11/2026) | #174 | Avaliações do Google publicadas sozinha: nível **Publica sozinha as positivas** depois de 10 aprovações sem edição nas últimas 30 (senha e alerta), só 4 e 5 estrelas aprovadas nas duas conferências, 3 por leitura e 10 por dia, pausa no pico, disjuntor, aba **Publicadas sozinha** |
 | 22a | mesclada (03/11/2026) | #153 | Motor de fluxos no alarme único (7 passos de catálogo fechado), conexões com métodos marcados e credencial cifrada, monitor de sites como modelo, aba **Fluxos** em Automações, `/status` com os sites |
 | 22b | mesclada (03/11/2026) | #161 | CRM interno na aba **Clientes** de Contatos (funil editável, etiquetas, retorno, aniversário, histórico), avisos do CRM, eventos do n8n assinados com HMAC, 5 ferramentas do CRM, sugestões de fluxo da conversa na aba Fluxos |
+| 22c | em revisão (04/11/2026) | — | Passos **Ler a agenda**, **Criar evento** (sem convidados, até 10 por execução, chave contra repetição) e **Buscar contatos** (cópia local) nos fluxos; Google simulado segue o dia de São Paulo (#178) |
 
 ## Últimas etapas (detalhe)
+
+### Etapa 22c · Passos da agenda e dos contatos
+- Entregou: `apps/agent/src/flows/google-steps.ts` (`readCalendar`, `createEvents`, `searchContacts`, `FlowGoogle`), tipos `calendar`, `calendar_create` e `contacts` em `FLOW_NODE_TYPES` + schemas, `EngineDeps.google`, `FlowList.google` (agendas abertas e etiquetas copiadas para o editor), `GoogleCalendar.createEvent(…, id)` com id base32hex (409 = já existe), `GoogleMeter` aceita o contador dos fluxos, campos em `FlowEditor.tsx` (`GoogleFields`), descrição do `propose_flow`. Plano: `docs/planos/etapa-22c-passos-agenda-contatos.md`.
+- Migrations: nenhuma. A próxima livre continua a 28.
+- Decisões técnicas: id do evento = SHA-256 hex de fluxo, agenda e chave; leitura precisa de lugar para todas as agendas no despertar (uma chamada cada, mais o token) ou espera; sem chave, falha passageira na criação para em vez de repetir (o evento pode ter saído); `<` e `>` dos itens saem da descrição; instante ISO conferido parte por parte.
+- Ficou para depois: gatilho de fluxo por evento do CRM ou da agenda; teto diário de eventos criados (hoje 10 por execução; a cada 15 min dá até 960 por dia, documentado); ligar cliente do CRM a contato do Google.
+- Corrigido junto: #178 (`freshenSamples` em `dev-google.ts`).
 
 ### Etapa 19d · Resposta automática das avaliações
 - Entregou: nível `auto` em `ReviewLevel` (no banco `auto = 1` sobre `level = 'approve'`, porque o `CHECK` da 26 não aceita valor novo); período de experiência na coluna `trial` (até 30 decisões "1"/"0" do dono sobre rascunhos de positivas: aprovar sem mudar, aprovar editado, descartar), fora de `zur_review_events`; `ReviewService.publish` (claim, releitura, `PUT`, incerto) usado por `approve` e por `autoPublish` no fim de `check`, depois da rajada; `trip()` do disjuntor em `rejected()` (3 rascunhos reprovados seguidos), recusa do Google e `applyReply` (resposta da Zuri sumiu); avisos `reviews.auto` e `reviews.breaker` só no privado; alerta de segurança `reviews_autonomy` em `PATCH /api/reviews/settings`; aba `auto` com contador `reviews_auto` em `zur_counts`. Plano: `docs/planos/etapa-19d-resposta-automatica.md`.
@@ -134,6 +142,6 @@ etapas ficam detalhadas; as mais antigas viram uma linha na tabela.
 
 ## Próxima etapa
 
-- Número e nome: 22c · Passos da agenda e dos contatos (plano em `docs/planos/workflows-n8n.md`)
-- Dependências mescladas: 19 (#136), 19b (#144), 22a (#153), 22b (#161); 19d (#174, 04/11/2026). Próxima migration livre: 28.
-- Precisa de algo do Pablo antes: nada para codar (Google simulado).
+- Número e nome: 20 · Acesso remoto e eventos
+- Dependências mescladas: 22a (#153), 22b (#161) e 22c (#180). Próxima migration livre: 28.
+- Precisa de algo do Pablo antes: nada para codar.

@@ -739,6 +739,8 @@ export class ZuriAgent extends Agent<WorkerEnv> {
           lockdown: () => auth.lockdown.active(),
           rearm: () => automations.rearm(),
           notify: (notice) => flowNotice(alerts, diagnostics, notice, this.locale()),
+          // The Google steps (step 22c): the connection of step 19 and the copy of step 19b.
+          google: { calendar: () => google, contacts: () => contacts, timeZone: () => settings.field("timeZone") },
         },
         { fetch: flowFetch, resolve: dohResolver(flowFetch) },
       );

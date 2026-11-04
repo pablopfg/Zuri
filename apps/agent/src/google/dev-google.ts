@@ -384,7 +384,10 @@ export function devGoogle(options: { clientId?: string | undefined; clientSecret
       if (method === "POST") {
         if (!canWrite) return json({ error: { code: 403 } }, 403);
         const input = JSON.parse(body || "{}") as Partial<DevEvent>;
-        const event: DevEvent = { ...(input as DevEvent), id: `ev${random().replace(/[-_]/g, "").toLowerCase().slice(0, 12)}`, etag: nextEtag() };
+        // As Google does: an id the caller chose is base32hex, and one already used (even cancelled) is refused.
+        if (input.id !== undefined && !/^[a-v0-9]{5,1024}$/.test(input.id)) return json({ error: { code: 400 } }, 400);
+        if (input.id !== undefined && events.some((event) => event.id === input.id)) return json({ error: { code: 409 } }, 409);
+        const event: DevEvent = { ...(input as DevEvent), id: input.id ?? `ev${random().replace(/[-_]/g, "").toLowerCase().slice(0, 12)}`, etag: nextEtag() };
         events.push(event);
         return json(event);
       }
@@ -479,10 +482,36 @@ export function googleNetwork(google: DevGoogle, real: GoogleNetwork = { fetch: 
 
 const pad = (n: number) => String(n).padStart(2, "0");
 
-/** A few sample events around today, for `npm run dev`, the e2e and the screenshots. */
-function seed(google: DevGoogle): void {
-  // Today in America/Sao_Paulo (UTC-3), the sample owner's zone, so "today" is the owner's day at any hour.
-  const [y, m, d] = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(new Date()).split("-").map(Number) as [number, number, number];
+/** The owner's day in America/Sao_Paulo (UTC-3), the sample owner's zone, at `now`. */
+function sampleDay(now: number): [number, number, number] {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(new Date(now)).split("-").map(Number) as [number, number, number];
+}
+
+/** The day the sample events were laid on, per simulator. */
+const sampleDays = new WeakMap<DevGoogle, string>();
+
+/** A few sample events, for `npm run dev`, the e2e and the screenshots. */
+function seed(google: DevGoogle, now: number): void {
+  seedEvents(google, now);
+  const [, m, d] = sampleDay(now);
+  seedContacts(google, m, d);
+  seedReviews(google);
+}
+
+/**
+ * Lays the sample events around the owner's day at `now`, replacing the ones a
+ * previous day laid (the owner's own events stay). Issue #178: a server started
+ * before midnight in São Paulo kept "today" on the day before.
+ */
+function seedEvents(google: DevGoogle, now: number): void {
+  const [y, m, d] = sampleDay(now);
+  sampleDays.set(google, `${y}-${m}-${d}`);
+  for (const [calendarId, events] of google.events) {
+    google.events.set(
+      calendarId,
+      events.filter((event) => !event.id.startsWith(SAMPLE_PREFIX)),
+    );
+  }
   const day = (offset: number) => {
     const date = new Date(Date.UTC(y, m - 1, d + offset));
     return `${date.getUTCFullYear()}-${pad(date.getUTCMonth() + 1)}-${pad(date.getUTCDate())}`;
@@ -491,7 +520,7 @@ function seed(google: DevGoogle): void {
   let n = 0;
   const add = (calendarId: string, summary: string, start: DevEvent["start"], end: DevEvent["end"], extra: Partial<DevEvent> = {}) => {
     const events = google.events.get(calendarId) ?? [];
-    events.push({ id: `exemplo${n++}`, etag: `"seed${n}"`, summary, start, end, ...extra });
+    events.push({ id: `${SAMPLE_PREFIX}${n++}`, etag: `"seed${n}"`, summary, start, end, ...extra });
     google.events.set(calendarId, events);
   };
   add("dono@exemplo.com.br", "Café com a Ana", { dateTime: at(0, 9) }, { dateTime: at(0, 10) }, { location: "Padaria Central" });
@@ -501,8 +530,20 @@ function seed(google: DevGoogle): void {
   add("trabalho@exemplo.com.br", "Revisão do projeto", { dateTime: at(2, 10) }, { dateTime: at(2, 11) });
   add("consultorio@exemplo.com.br", "Atendimento", { dateTime: at(0, 16) }, { dateTime: at(0, 17) });
   add("consultorio@exemplo.com.br", "Atendimento", { dateTime: at(1, 8) }, { dateTime: at(1, 9) });
-  seedContacts(google, m, d);
-  seedReviews(google);
+}
+
+const SAMPLE_PREFIX = "exemplo";
+
+/** Seeds a simulator as `npm run dev` does, at `now` (the tests set the hour). */
+export function seedSamples(google: DevGoogle, now: number): void {
+  seed(google, now);
+}
+
+/** Lays the sample events again when the owner's day changed since they were laid. */
+export function freshenSamples(google: DevGoogle, now: number): void {
+  const laid = sampleDays.get(google);
+  const [y, m, d] = sampleDay(now);
+  if (laid !== undefined && laid !== `${y}-${m}-${d}`) seedEvents(google, now);
 }
 
 /** A sample profile with reviews (step 19c): two old ones the first read keeps as history, and three that arrive after it. */
@@ -565,16 +606,18 @@ let development: DevGoogle | null = null;
 export function developmentGoogle(clientId: string | undefined, clientSecret: string | undefined): DevGoogle {
   if (!development) {
     development = devGoogle({ clientId: clientId?.trim() || undefined, clientSecret: clientSecret?.trim() || undefined });
-    seed(development);
+    seed(development, Date.now());
   }
   return development;
 }
 
 /** The development network: nothing addressed to Google leaves the machine. */
-export function developmentGoogleNetwork(google: DevGoogle): GoogleNetwork {
+export function developmentGoogleNetwork(google: DevGoogle, clock: () => number = Date.now): GoogleNetwork {
   return {
     fetch: (async (input: RequestInfo | URL, init?: RequestInit) => {
       const request = new Request(input, init);
+      // The sample events follow the owner's day, whenever the server started (issue #178).
+      freshenSamples(google, clock());
       return (await google.handle(request)) ?? new Response(null, { status: 502 });
     }) as typeof fetch,
   };
