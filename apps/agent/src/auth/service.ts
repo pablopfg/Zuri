@@ -267,6 +267,8 @@ export class AuthService {
         this.events.forgetDevices();
         this.#push.retireAll();
         this.#recovery.clear();
+        // Tokens made under the old password stop working with it (step 20).
+        (this.deps.remoteTokens ?? NO_REMOTE_TOKENS).revokeAll();
         this.events.record("credentials_reset", null, { alert: true, reason: newPepper ? "pepper" : "password" });
         // A new pepper is the full reset (lost password and phone): the sealed
         // secret can't be opened with it anyway, so the second step goes too.
@@ -749,11 +751,6 @@ export class AuthService {
     });
   }
 
-  /** Remote tokens active now (for /tokens; none before step 20). */
-  remoteTokensActive(): number {
-    return (this.deps.remoteTokens ?? NO_REMOTE_TOKENS).active();
-  }
-
   // ---------- Password again, and changing it ----------
 
   /** Opens the 15-minute window. Same limit as the sign-in; a wrong password leaves the session as it was. */
@@ -854,6 +851,8 @@ export class AuthService {
       this.events.forgetDevices();
       this.#push.retireAll();
       this.#recovery.clear();
+      // Tokens made under the old password stop working with it (step 20).
+      (this.deps.remoteTokens ?? NO_REMOTE_TOKENS).revokeAll();
       this.events.record("password_changed", client, { session: next.row.id.slice(0, 16), alert: true });
     });
     return { token: next.token, session: next.row };
@@ -960,6 +959,8 @@ export class AuthService {
       this.events.forgetDevices();
       this.#push.retireAll();
       this.#recovery.clear();
+      // Tokens made under the old password stop working with it (step 20).
+      (this.deps.remoteTokens ?? NO_REMOTE_TOKENS).revokeAll();
       this.events.record("password_recovered", client, { alert: true });
     });
     if (!used) throw this.recoveryExpired();
@@ -1137,6 +1138,8 @@ export class AuthService {
       this.events.forgetDevices();
       this.#push.retireAll();
       this.#recovery.clear();
+      // Tokens made under the old password stop working with it (step 20).
+      (this.deps.remoteTokens ?? NO_REMOTE_TOKENS).revokeAll();
       this.events.record("access_recovered", client, { alert: true });
       return true;
     });

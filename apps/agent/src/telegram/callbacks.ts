@@ -95,6 +95,8 @@ export const COMMAND_ACTIONS = [
   "routines_pause",
   "lockdown",
   "sec_cancel",
+  // Step 20: Revogar under /tokens.
+  "token_revoke",
 ] as const;
 
 /** Buttons a tap never uses up: Aprovar can be asked again, and reuses the open confirmation (step 16). */

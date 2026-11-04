@@ -57,6 +57,13 @@ export const KIND_LABEL: Record<AuthEventKind, MessageKey> = {
   access_recovered: "web.activity.kind.access_recovered",
   recovery_requested: "web.activity.kind.recovery_requested",
   password_recovered: "web.activity.kind.password_recovered",
+  remote_enabled: "web.activity.kind.remote_enabled",
+  remote_disabled: "web.activity.kind.remote_disabled",
+  remote_token_created: "web.activity.kind.remote_token_created",
+  remote_token_revoked: "web.activity.kind.remote_token_revoked",
+  remote_token_rejected: "web.activity.kind.remote_token_rejected",
+  remote_write: "web.activity.kind.remote_write",
+  telegram_token_revoked: "web.activity.kind.telegram_token_revoked",
 };
 
 /** The filter groups, as the access log's select names them. */

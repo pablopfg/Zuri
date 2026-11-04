@@ -49,7 +49,11 @@ export function registerAutomationRoutes(app: Hono<ApiEnv>, deps: () => Automati
 
   app.post("/automations", async (c) => {
     const input = await readJson(c.req.raw, anyObject, BODY_MAX_BYTES);
-    if (input.kind === "agent_prompt") deps().guardRoutine?.(c.get("session"));
+    if (input.kind === "agent_prompt") {
+      // A routine with AI holds the model and its tools: never within reach of a token (step 20).
+      if (c.get("remote")) throw new AppError("FORBIDDEN", "remote.agentPrompt");
+      deps().guardRoutine?.(c.get("session"));
+    }
     return Response.json({ automation: await deps().service.create(input, "app") }, { status: 201 });
   });
 
@@ -61,6 +65,7 @@ export function registerAutomationRoutes(app: Hono<ApiEnv>, deps: () => Automati
     const id = recordId(c.req.param("id"));
     const input = await readJson(c.req.raw, anyObject, BODY_MAX_BYTES);
     const current = deps().service.get(id);
+    if (current.kind === "agent_prompt" && c.get("remote")) throw new AppError("FORBIDDEN", "remote.agentPrompt");
     if (current.kind === "agent_prompt" && typeof input.message === "string" && input.message.trim() !== current.message) deps().guardRoutine?.(c.get("session"));
     return Response.json({ automation: await deps().service.update(id, input) });
   });

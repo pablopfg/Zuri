@@ -157,7 +157,7 @@ describe("SEC-16b-B4: a session opened in the first hour", () => {
 describe("the remote tokens' hook", () => {
   it("suspends them once on entering, and brings them back once on leaving, by the screen or by a recovery code", async () => {
     const calls = { suspend: 0, resume: 0 };
-    const remoteTokens = { suspendAll: () => ++calls.suspend, resumeAll: () => ++calls.resume, active: () => 0 };
+    const remoteTokens = { suspendAll: () => ++calls.suspend, resumeAll: () => ++calls.resume, active: () => 0, revokeAll: () => 0 };
     await withAuth(
       "lockdown-tokens",
       async (h) => {
