@@ -1,5 +1,6 @@
 import { ActivityCard } from "../../components/security/ActivityCard.tsx";
 import { PasskeysCard } from "../../components/security/PasskeysCard.tsx";
+import { RemoteAccessCard } from "../../components/security/RemoteAccessCard.tsx";
 import { SessionLimitsCard } from "../../components/security/SessionLimitsCard.tsx";
 import { TwoStepCard } from "../../components/security/TwoStepCard.tsx";
 import { Card } from "../../components/ui.tsx";
@@ -13,6 +14,7 @@ export function SecurityTab() {
       <PasskeysCard />
       <SessionLimitsCard />
       <ActivityCard />
+      <RemoteAccessCard />
       <Card title={t("web.security.laterTitle")}>
         <p className="text-sm leading-6 text-fg-muted">{t("web.security.laterBody")}</p>
       </Card>

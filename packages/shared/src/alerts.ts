@@ -69,6 +69,7 @@ export const NOTICE_KINDS = [
   "reviews.problem",
   "reviews.auto",
   "reviews.breaker",
+  "remote.event",
   "security",
 ] as const;
 export type NoticeKind = (typeof NOTICE_KINDS)[number];
@@ -112,6 +113,9 @@ export const SECURITY_ALERT_EVENTS = [
   "owner_created",
   "access_recovered",
   "password_recovered",
+  "remote_enabled",
+  "remote_token_created",
+  "telegram_token_revoked",
 ] as const satisfies readonly AuthEventKind[];
 export type SecurityAlertEvent = (typeof SECURITY_ALERT_EVENTS)[number];
 

@@ -92,10 +92,11 @@ afterEach(async () => {
       "zur_automation_runs",
       "zur_auth_events",
       "zur_sessions",
+      "zur_remote_tokens",
     ]) {
       db.run(`DELETE FROM ${table}`);
     }
-    db.run(`DELETE FROM zur_settings WHERE key LIKE 'telegram_%' OR key LIKE 'lockdown_%' OR key IN ('bot_read_lock_hours', 'bot_unlocked_until')`);
+    db.run(`DELETE FROM zur_settings WHERE key LIKE 'telegram_%' OR key LIKE 'lockdown_%' OR key IN ('bot_read_lock_hours', 'bot_unlocked_until', 'remote_enabled')`);
     await agent.store.automations.rearm();
   });
   vi.restoreAllMocks();
@@ -245,6 +246,50 @@ describe("/acessos and /tokens", () => {
       expect(await command(name)).toContain("travei a leitura por segurança");
     }
     expect((await audit()).filter((row) => row.result === "locked").map((row) => row.name)).toEqual(["acessos", "sessoes", "tokens"]);
+  });
+});
+
+describe("/tokens with Revogar (step 20)", () => {
+  it("lists the active tokens, and Revogar removes that one at once with the bot's alert", async () => {
+    await linkOwner();
+    const made = await inOwner(async (agent) => {
+      agent.store.remoteTokens.setEnabled(true);
+      const n8n = await agent.store.remoteTokens.create({ name: "n8n", scope: "events" });
+      const casa = await agent.store.remoteTokens.create({ name: "Casa", scope: "read" });
+      return { n8n: n8n.secret, casa: casa.secret };
+    });
+    const out = await command("/tokens");
+    expect(out).toBe("Tokens de acesso remoto ativos\n\n1. n8n (só eventos), último uso: nunca\n2. Casa (só ler), último uso: nunca\n\nToque em Revogar e o token para de funcionar na hora. Para criar outro, só pelo app.");
+    expect(lastKeyboard().map((row) => row[0]?.text)).toEqual(["Revogar 1", "Revogar 2"]);
+    for (const b of lastKeyboard().flat()) expect(b.callback_data).toMatch(/^v1:token_revoke:[A-Za-z0-9_-]{16}$/);
+    const rows = lastKeyboard();
+    await press("Revogar 1");
+    expect(answers()).toEqual(["Token revogado"]);
+    expect(keyboard(sent("editMessageReplyMarkup")[0]).map((row) => row[0]?.text)).toEqual(["Revogar 2"]);
+    const bearer = (token: string) => call(`${ORIGIN}/api/remote/events`, { method: "POST", headers: { authorization: `Bearer ${token}`, "content-type": "application/json", "cf-connecting-ip": "198.51.100.61" }, body: JSON.stringify({ title: "Oi" }) });
+    expect((await bearer(made.n8n)).status).toBe(401);
+    // The same button again: already used.
+    botCalls.length = 0;
+    await tap(rows[0]?.[0]?.callback_data ?? "", rows);
+    expect(answers()).toEqual(["Isso já foi feito."]);
+    expect((await securityNotices()).filter((n) => n.origin === "bot").map((n) => JSON.parse(n.params).event)).toEqual(["telegram_token_revoked"]);
+    expect((await events("telegram_token_revoked")).map((e) => e.reason)).toEqual(["events"]);
+    expect(aiCalls).toBe(0);
+  });
+
+  it("shows only tokens that work now: none while remote access is off or during a lockdown", async () => {
+    await linkOwner();
+    await inOwner(async (agent) => {
+      agent.store.remoteTokens.setEnabled(true);
+      await agent.store.remoteTokens.create({ name: "Casa", scope: "read" });
+      agent.store.remoteTokens.setEnabled(false);
+    });
+    expect(await command("/tokens")).toBe("Nenhum token de acesso remoto ativo.");
+    await inOwner((agent) => agent.store.remoteTokens.setEnabled(true));
+    await command("/bloquear");
+    await press("Bloquear agora");
+    expect(await command("/tokens")).not.toContain("Casa");
+    expect((await inOwner((agent) => agent.store.remoteTokens.list()))[0]?.suspended).toBe(true);
   });
 });
 

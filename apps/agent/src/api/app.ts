@@ -60,11 +60,14 @@ import { registerReviewRoutes } from "./reviews.ts";
 import { type FlowRouteDeps, registerFlowRoutes } from "./flows.ts";
 import { type CrmRouteDeps, registerCrmEvents, registerCrmRoutes } from "./crm.ts";
 import { registerTelegramRoutes, registerTelegramWebhook, type TelegramDeps } from "./telegram.ts";
+import { type RemoteRouteDeps, registerRemoteGate, registerRemoteRoutes } from "./remote.ts";
+import type { RemoteCaller } from "../remote/tokens.ts";
 import { log, rayOf, routeLabel } from "../log.ts";
 
 export interface ApiEnv {
   Bindings: WorkerEnv;
-  Variables: { session: SessionRow };
+  /** `remote`: set only by the Bearer gate, for a token it validated (step 20); then there is no session. */
+  Variables: { session: SessionRow; remote?: RemoteCaller };
 }
 
 /** What the API needs from the Durable Object that runs it. */
@@ -99,6 +102,8 @@ export interface ApiDeps {
   flows?(): FlowRouteDeps;
   /** The internal CRM and n8n's events (step 22b). Absent only in tests of other routes. */
   crm?(): CrmRouteDeps;
+  /** Remote access tokens and the events they send (step 20). Absent: every Bearer token is refused. */
+  remote?(): RemoteRouteDeps;
   /** The number of each screen area, sent with the session check and the heartbeat (nova UI, PR 2). Absent only in tests of other routes. */
   versions?(): AreaVersions;
   /** True when a password secret is set, so the health check can answer without opening the database. */
@@ -162,6 +167,12 @@ export function createApi(deps: ApiDeps) {
   });
   app.notFound(() => errorResponse(new AppError("NOT_FOUND"), deps.locale()));
 
+  const client = (c: Context<ApiEnv>): ClientInfo => clientInfo(c.req.raw, deps.development());
+
+  // Gate 5 for a Bearer token (step 20), before every route: a request with Authorization reaches only
+  // the routes its token's scope allows, without CSRF or a session, and a bad token never falls back to the cookie.
+  registerRemoteGate(app, deps, client);
+
   // Public: says only whether the Worker is up and configured. Never data, never
   // which setting is missing (the Worker's log says that).
   app.get("/health", () => {
@@ -184,11 +195,10 @@ export function createApi(deps: ApiDeps) {
   if (crm) registerCrmEvents(app, () => crm());
 
   app.use("*", async (c, next) => {
-    checkCsrf(c.req.raw, deps.origin());
+    // A validated token comes from a server, not a browser: there is no cookie for a forged request to ride on.
+    if (!c.get("remote")) checkCsrf(c.req.raw, deps.origin());
     await next();
   });
-
-  const client = (c: Context<ApiEnv>): ClientInfo => clientInfo(c.req.raw, deps.development());
 
   const signInCookies = (c: Context<ApiEnv>) => ({ session: readSessionCookie(c.req.raw), device: readDeviceCookie(c.req.raw) });
 
@@ -328,6 +338,8 @@ export function createApi(deps: ApiDeps) {
   if (telegram) registerApprovalRoutes(app, () => telegram(), client);
 
   app.use("*", async (c, next) => {
+    // A validated token passed its own gate; only its allowed routes are left, none of which reads the session.
+    if (c.get("remote")) return next();
     const token = readSessionCookie(c.req.raw);
     // Without a cookie there is nothing to look up: the database is not needed to say no.
     if (token === null) throw new AppError("UNAUTHORIZED");
@@ -505,6 +517,8 @@ export function createApi(deps: ApiDeps) {
   const flows = deps.flows;
   if (flows) registerFlowRoutes(app, () => flows(), client);
   if (crm) registerCrmRoutes(app, () => crm(), client);
+  const remote = deps.remote;
+  if (remote) registerRemoteRoutes(app, () => remote(), () => deps.auth(), client);
 
   // Step 8: what the AI used today and the last 7 days. Read only: the limits change through /settings.
   app.get("/usage", () => Response.json(deps.aiUsage()));

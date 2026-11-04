@@ -1,4 +1,4 @@
-import { MEMORY_BODY_MAX_BYTES, memoryListQuerySchema, RECORD_ID } from "@zuri/shared";
+import { MEMORY_BODY_MAX_BYTES, type MemoryAuthor, memoryListQuerySchema, RECORD_ID } from "@zuri/shared";
 import type { Hono } from "hono";
 import { z } from "zod";
 import { AppError } from "../http/errors.ts";
@@ -31,12 +31,16 @@ function readQuery<S extends z.ZodType>(url: string, schema: S): z.output<S> {
  * signed in, the CSRF header and the owner's Origin. Named routes
  * (/memories/reviews) come before /memories/:id; ids are only the server's UUIDs.
  */
+const by = (remote: unknown): MemoryAuthor => (remote ? "agent" : "owner");
+
 export function registerMemoryRoutes(app: Hono<ApiEnv>, memories: () => MemoryService): void {
   app.get("/memories", (c) => Response.json(memories().list(readQuery(c.req.url, memoryListQuerySchema))));
 
   app.post("/memories", async (c) => {
     const input = await readJson(c.req.raw, anyObject, MEMORY_BODY_MAX_BYTES);
-    const result = memories().create(input, "app");
+    // A token's memory is never the owner's word (SEC-A6-04): it stays "saved, not confirmed" in the prompt,
+    // and repeating one the assistant saved doesn't confirm it either.
+    const result = memories().create(input, "app", by(c.get("remote")));
     return Response.json(result, { status: result.duplicate ? 200 : 201 });
   });
 

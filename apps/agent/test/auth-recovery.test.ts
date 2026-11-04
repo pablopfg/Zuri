@@ -9,6 +9,7 @@ import {
   noCookies,
   outcome,
   pushCount,
+  remoteTokensSpy,
   right,
   seedPush,
   TEST_EMAIL,
@@ -206,8 +207,9 @@ describe("links from every network together", () => {
 });
 
 describe("using a recovery link", () => {
-  it("sets the new password once, ends every session, retires push devices and tells the owner", async () => {
+  it("sets the new password once, ends every session, retires push devices, revokes the remote tokens and tells the owner", async () => {
     const box = mailbox();
+    const tokens = remoteTokensSpy();
     await withAuth(
       "recovery-complete",
       async (h) => {
@@ -220,13 +222,14 @@ describe("using a recovery link", () => {
         expect(await h.auth.validate(before.token, true)).toBeNull();
         expect(pushCount(h.db)).toBe(0);
         expect(h.events().find((e) => e.kind === "password_recovered")).toMatchObject({ alert_pending: 1 });
+        expect(tokens.revoked).toBe(1);
         expect(await outcome(h.auth.login(right(), client("198.51.100.122"), noCookies))).toBe("INVALID_CREDENTIALS");
         expect(await outcome(h.auth.login(right({ password: NEW_PASSWORD }), client("198.51.100.123"), noCookies))).toBe("ok");
         // Used once.
         expect((await failure(h.auth.checkRecovery(token)))?.code).toBe("RECOVERY_EXPIRED");
         expect(await outcome(h.auth.completeRecovery({ token, password: `${NEW_PASSWORD} b` }, client(NET)))).toBe("RECOVERY_EXPIRED");
       },
-      { recoveryMail: box.mail },
+      { recoveryMail: box.mail, remoteTokens: tokens },
     );
   });
 

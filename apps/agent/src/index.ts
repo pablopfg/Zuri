@@ -1,4 +1,4 @@
-import { AGENT_INSTANCE_NAME, CRM_EVENTS_PATH, CRM_LIMITS, CRM_SIGNATURE_HEADER, CRM_TIMESTAMP_HEADER, GOOGLE_CALLBACK_PATH, GOOGLE_RETURN_PAGE, LIVE_PATH, LOGIN_OPTIONS_PATH, type LoginOptions, TELEGRAM_LIMITS } from "@zuri/shared";
+import { AGENT_INSTANCE_NAME, CRM_EVENTS_PATH, REMOTE_BEARER, CRM_LIMITS, CRM_SIGNATURE_HEADER, CRM_TIMESTAMP_HEADER, GOOGLE_CALLBACK_PATH, GOOGLE_RETURN_PAGE, LIVE_PATH, LOGIN_OPTIONS_PATH, type LoginOptions, TELEGRAM_LIMITS } from "@zuri/shared";
 import { checkCsrf, readBodyLimited } from "./api/http.ts";
 import { CLIENT_GEO_HEADER, geoFromCf } from "./auth/client.ts";
 import { TURNSTILE_ORIGIN, turnstileSiteKey } from "./auth/turnstile.ts";
@@ -100,6 +100,14 @@ async function handle(request: Request, env: WorkerEnv): Promise<Response> {
   }
   // Zuri has no sub-agents; the object refuses these too (onBeforeSubAgent).
   if (url.pathname.split("/").includes("sub")) return refuse(new AppError("NOT_FOUND"));
+
+  // Gate 5's cheap half for remote access (step 20): an Authorization that isn't shaped like a token
+  // is refused here, without an object request (P6). The object still checks the token itself.
+  const authorization = request.headers.get("authorization");
+  if (authorization !== null && !REMOTE_BEARER.test(authorization)) {
+    await request.body?.cancel();
+    return refuse(new AppError("UNAUTHORIZED", "remote.invalidToken"));
+  }
 
   // Gate 6: the one instance, by a name no client can change. A plain stub, not
   // getAgentByName: that adds an RPC per request, and each one counts toward the

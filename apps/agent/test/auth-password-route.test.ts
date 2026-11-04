@@ -6,6 +6,7 @@ import { createApi } from "../src/api/app.ts";
 import { TURNSTILE_VERIFY_URL } from "../src/auth/turnstile.ts";
 import { InternalState } from "../src/db/internal-state.ts";
 import { Database } from "../src/db/database.ts";
+import { RemoteTokens } from "../src/remote/tokens.ts";
 import { call, CSRF, errorBody, HUMAN_TOKEN, ORIGIN, TEST_EMAIL, TEST_PASSWORD, testEnv } from "./helpers.ts";
 
 // Its own file: it changes the owner's password.
@@ -169,6 +170,14 @@ describe("POST /api/auth/password", () => {
     const ip = "192.0.2.43";
     const other = await signIn("192.0.2.44");
     const token = await signIn(ip);
+    // A remote token made under the old password (step 20).
+    const pat = await inOwner((state, db) => {
+      const tokens = new RemoteTokens({ db, state, secret: () => testEnv.SESSION_SECRET });
+      tokens.setEnabled(true);
+      return tokens.create({ name: "n8n", scope: "read" });
+    });
+    const tasks = () => call(`${ORIGIN}/api/tasks`, { headers: { authorization: `Bearer ${pat.secret}`, "cf-connecting-ip": "192.0.2.47" } });
+    expect((await tasks()).status).toBe(200);
     const breach = fakeBreachApi("clean");
     const res = await call(`${ORIGIN}/api/auth/password`, json(ip, token, { currentPassword: TEST_PASSWORD, newPassword: NEW_PASSWORD }));
     expect(res.status).toBe(200);
@@ -183,5 +192,9 @@ describe("POST /api/auth/password", () => {
     expect((await session(fresh)).status).toBe(200);
     expect((await call(`${ORIGIN}/api/auth/login`, json("192.0.2.45", null, { email: TEST_EMAIL, password: TEST_PASSWORD, turnstileToken: HUMAN_TOKEN }))).status).toBe(401);
     await signIn("192.0.2.46", NEW_PASSWORD);
+    // The new password revoked every remote token: the old one opens nothing.
+    expect(await inOwner((_s, db) => db.all(`SELECT id FROM zur_remote_tokens`))).toEqual([]);
+    expect((await tasks()).status).toBe(401);
+    await inOwner((state) => state.delete("remote_enabled"));
   });
 });
