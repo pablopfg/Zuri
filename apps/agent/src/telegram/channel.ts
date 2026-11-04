@@ -21,9 +21,10 @@ import type { GroupLink, TelegramLinks, TopicKey } from "./links.ts";
  * The Google reviews' notices (step 19c) go to the group's own "Avaliações"
  * topic (the owner's choice: the team handles negative reviews there). The
  * ones meant for the owner alone (a draft to approve, a burst, a problem of
- * the connection) never go to the group.
+ * the connection, what went out by itself and the breaker, step 19d) never
+ * go to the group.
  */
-const REVIEWS_PRIVATE = new Set(["reviews.draft", "reviews.burst", "reviews.problem"]);
+const REVIEWS_PRIVATE = new Set(["reviews.draft", "reviews.burst", "reviews.problem", "reviews.auto", "reviews.breaker"]);
 const topicOf = (notice: { kind: string; category: AlertCategory }): TopicKey => (notice.kind.startsWith("reviews.") ? "reviews" : notice.category);
 const privateOnly = (notice: { kind: string; security: boolean }, attempt: number) => notice.security || attempt >= ESCALATION.tries || REVIEWS_PRIVATE.has(notice.kind);
 

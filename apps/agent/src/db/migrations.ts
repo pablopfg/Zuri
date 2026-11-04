@@ -1404,6 +1404,45 @@ export const MIGRATIONS: readonly Migration[] = [
       ...areaTriggers("reviews", "zur_review_locations", "OF title, selected"),
     ],
   },
+  {
+    version: 27,
+    name: "reviews_auto",
+    statements: [
+      // Replies to positive reviews published by themselves (step 19d). The level's CHECK of migration 26 only
+      // knows 'off' and 'approve', so "by itself" is its own flag on top of 'approve' (no table to rebuild).
+      // trial: the owner's last decisions on drafts of positive reviews ("1" approved unchanged, "0" edited or
+      // discarded), newest last, up to 30 — never counted from zur_review_events, which forgets after 180 days.
+      `ALTER TABLE zur_review_settings ADD COLUMN auto INTEGER NOT NULL DEFAULT 0 CHECK (auto IN (0, 1))`,
+      `ALTER TABLE zur_review_settings ADD COLUMN auto_since INTEGER`,
+      `ALTER TABLE zur_review_settings ADD COLUMN trial TEXT NOT NULL DEFAULT ''`,
+      `ALTER TABLE zur_review_settings ADD COLUMN rejections INTEGER NOT NULL DEFAULT 0`,
+      `ALTER TABLE zur_review_settings ADD COLUMN breaker TEXT CHECK (breaker IN ('rejected', 'refused', 'deleted'))`,
+      `ALTER TABLE zur_review_settings ADD COLUMN breaker_at INTEGER`,
+      `ALTER TABLE zur_review_settings ADD COLUMN auto_day TEXT NOT NULL DEFAULT ''`,
+      `ALTER TABLE zur_review_settings ADD COLUMN auto_today INTEGER NOT NULL DEFAULT 0`,
+      // A reply Zuri published without the owner's approval: the "Published by itself" tab.
+      `ALTER TABLE zur_reviews ADD COLUMN auto INTEGER NOT NULL DEFAULT 0 CHECK (auto IN (0, 1))`,
+      `CREATE INDEX IF NOT EXISTS zur_reviews_auto ON zur_reviews (updated_at, id) WHERE auto = 1`,
+      // Its tab's number from a counter, like the states' (migration 26): the screen never counts the table.
+      `INSERT INTO zur_counts (kind, n) VALUES ('reviews_auto', 0) ON CONFLICT (kind) DO NOTHING`,
+      `CREATE TRIGGER IF NOT EXISTS zur_counts_reviews_auto_insert AFTER INSERT ON zur_reviews WHEN new.auto = 1 BEGIN
+        UPDATE zur_counts SET n = n + 1 WHERE kind = 'reviews_auto';
+      END`,
+      `CREATE TRIGGER IF NOT EXISTS zur_counts_reviews_auto_delete AFTER DELETE ON zur_reviews WHEN old.auto = 1 BEGIN
+        UPDATE zur_counts SET n = n - 1 WHERE kind = 'reviews_auto';
+      END`,
+      `CREATE TRIGGER IF NOT EXISTS zur_counts_reviews_auto_update AFTER UPDATE OF auto ON zur_reviews WHEN old.auto != new.auto BEGIN
+        UPDATE zur_counts SET n = n + new.auto - old.auto WHERE kind = 'reviews_auto';
+      END`,
+      // The screen follows the level, the trial and the breaker (the triggers of migration 26 list their columns).
+      `CREATE TRIGGER IF NOT EXISTS zur_area_reviews_review_settings_auto AFTER UPDATE OF auto, trial, breaker ON zur_review_settings BEGIN
+        UPDATE zur_area_versions SET reviews = reviews + 1 WHERE id = 1;
+      END`,
+      `CREATE TRIGGER IF NOT EXISTS zur_area_reviews_reviews_auto AFTER UPDATE OF auto ON zur_reviews BEGIN
+        UPDATE zur_area_versions SET reviews = reviews + 1 WHERE id = 1;
+      END`,
+    ],
+  },
 ];
 
 /** The three triggers that move an area's number when a row of `table` is added, changed or removed. Frozen: migration 21 is built from it. */

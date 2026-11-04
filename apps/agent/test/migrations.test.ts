@@ -107,6 +107,7 @@ describe("the migration list", () => {
       24: "02637c24812ac7cc5acd9322e995a05e0859f73f66f5e1f895c58f6f61221746",
       25: "ce608a49fa98841c41f6e75c05fb6af4a60fee7cf274f7b9d3627385b7380eb5",
       26: "68b48f4a81ab4bc174381a62492aca4b71b7d64d5441f1d111527c6b80654b68",
+      27: "bd5cc460cb9a3c2eb73e6da9de0bf3184b287412936417abedd2b6d9f275bf68",
     };
     for (const m of MIGRATIONS) {
       const digest = createHash("sha256").update(statementText(m).replace(/\r\n/g, "\n")).digest("hex");
@@ -122,7 +123,7 @@ describe("migrate", () => {
       expect(zurObjects(db)).toEqual([]);
 
       expect(migrate(db)).toBe(LATEST_SCHEMA_VERSION);
-      expect(schemaVersion(db)).toBe(26);
+      expect(schemaVersion(db)).toBe(27);
       // FTS5 keeps shadow tables of its own (zur_notes_fts_data and others): only ours are listed.
       expect(zurObjects(db).filter((name) => !/^table:zur_(notes|memories)_fts_/.test(name))).toEqual([
         "table:zur_activity",
@@ -193,9 +194,11 @@ describe("migrate", () => {
         "trigger:zur_area_reviews_review_locations_delete",
         "trigger:zur_area_reviews_review_locations_insert",
         "trigger:zur_area_reviews_review_locations_update",
+        "trigger:zur_area_reviews_review_settings_auto",
         "trigger:zur_area_reviews_review_settings_delete",
         "trigger:zur_area_reviews_review_settings_insert",
         "trigger:zur_area_reviews_review_settings_update",
+        "trigger:zur_area_reviews_reviews_auto",
         "trigger:zur_area_reviews_reviews_delete",
         "trigger:zur_area_reviews_reviews_insert",
         "trigger:zur_area_reviews_reviews_update",
@@ -260,6 +263,9 @@ describe("migrate", () => {
         "trigger:zur_counts_notices_insert",
         "trigger:zur_counts_projects_delete",
         "trigger:zur_counts_projects_insert",
+        "trigger:zur_counts_reviews_auto_delete",
+        "trigger:zur_counts_reviews_auto_insert",
+        "trigger:zur_counts_reviews_auto_update",
         "trigger:zur_counts_reviews_delete",
         "trigger:zur_counts_reviews_insert",
         "trigger:zur_counts_reviews_state",
@@ -369,6 +375,7 @@ describe("migrate", () => {
         "table:zur_review_locations",
         "table:zur_review_settings",
         "table:zur_reviews",
+        "index:zur_reviews_auto",
         "index:zur_reviews_drafts",
         "index:zur_reviews_escalated",
         "index:zur_reviews_list",
@@ -729,11 +736,64 @@ describe("migrate", () => {
     });
   });
 
+  it("upgrades a database at version 26 to 27: publishing by itself off, the owner's settings kept, the screen moved by the level, the trial and the breaker", async () => {
+    await withEmptyDatabase("from-26", (db) => {
+      expect(migrate(db, MIGRATIONS.slice(0, 26))).toBe(26);
+      db.run(`INSERT INTO zur_review_settings (id, enabled, signature) VALUES (1, 1, 'Equipe')`);
+      db.run(`INSERT INTO zur_reviews (id, location, google_name, rating, created_at, updated_at, state, seen_at) VALUES ('a', 'l', 'l/reviews/a', 5, 'x', 'x', 'replied', 1)`);
+      expect(migrate(db)).toBe(27);
+      expect(db.one(`SELECT enabled, signature, level, auto, auto_since, trial, rejections, breaker, breaker_at, auto_day, auto_today FROM zur_review_settings`)).toEqual({
+        enabled: 1,
+        signature: "Equipe",
+        level: "approve",
+        auto: 0,
+        auto_since: null,
+        trial: "",
+        rejections: 0,
+        breaker: null,
+        breaker_at: null,
+        auto_day: "",
+        auto_today: 0,
+      });
+      // A reply published before 19d was the owner's approval, never "by itself".
+      expect(db.one(`SELECT auto FROM zur_reviews`)).toEqual({ auto: 0 });
+      const area = () => db.one<{ reviews: number }>(`SELECT reviews FROM zur_area_versions`)?.reviews;
+      const before = area() ?? 0;
+      // The check's bookkeeping moves nothing; the level, the trial and the breaker do.
+      db.run(`UPDATE zur_review_settings SET rejections = 2, auto_today = 3, auto_day = 'd', auto_since = 5`);
+      expect(area()).toBe(before);
+      db.run(`UPDATE zur_review_settings SET trial = '1'`);
+      expect(area()).toBe(before + 1);
+      db.run(`UPDATE zur_review_settings SET auto = 1`);
+      expect(area()).toBe(before + 2);
+      db.run(`UPDATE zur_review_settings SET breaker = 'deleted', breaker_at = 9`);
+      expect(area()).toBe(before + 3);
+      db.run(`UPDATE zur_reviews SET auto = 1`);
+      expect(area()).toBe(before + 4);
+      expect(() => db.run(`UPDATE zur_review_settings SET auto = 2`)).toThrow();
+      expect(() => db.run(`UPDATE zur_review_settings SET breaker = 'other'`)).toThrow();
+      expect(() => db.run(`UPDATE zur_reviews SET auto = 2`)).toThrow();
+      // The level's own CHECK stays: "by itself" lives in its flag.
+      expect(() => db.run(`UPDATE zur_review_settings SET level = 'auto'`)).toThrow();
+      // The tab's counter follows every change and the forgetting.
+      const counted = () => db.one<{ n: number }>(`SELECT n FROM zur_counts WHERE kind = 'reviews_auto'`)?.n;
+      expect(counted()).toBe(1);
+      db.run(`UPDATE zur_reviews SET auto = 1`);
+      expect(counted()).toBe(1);
+      db.run(`INSERT INTO zur_reviews (id, location, google_name, rating, created_at, updated_at, state, seen_at, auto) VALUES ('b', 'l', 'l/reviews/b', 5, 'x', 'x', 'replied', 1, 1)`);
+      expect(counted()).toBe(2);
+      db.run(`UPDATE zur_reviews SET auto = 0 WHERE id = 'a'`);
+      expect(counted()).toBe(1);
+      db.run(`DELETE FROM zur_reviews`);
+      expect(counted()).toBe(0);
+    });
+  });
+
   it("upgrades a database at version 25 to 26: the reviews off, their area moved only by what the Reviews tab shows, the checks holding", async () => {
     await withEmptyDatabase("from-25", (db) => {
       expect(migrate(db, MIGRATIONS.slice(0, 25))).toBe(25);
       db.run(`UPDATE zur_area_versions SET crm = 3`);
-      expect(migrate(db)).toBe(26);
+      expect(migrate(db, MIGRATIONS.slice(0, 26))).toBe(26);
       expect(db.one(`SELECT crm, reviews FROM zur_area_versions`)).toEqual({ crm: 3, reviews: 0 });
       db.run(`INSERT INTO zur_review_settings (id) VALUES (1)`);
       expect(db.one(`SELECT enabled, level, paused, tone, templates FROM zur_review_settings`)).toEqual({ enabled: 0, level: "approve", paused: 0, tone: "close", templates: "[]" });

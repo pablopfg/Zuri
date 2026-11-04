@@ -777,6 +777,8 @@ const KIND_TEXT: Record<Exclude<NoticeKind, "security">, Text> = {
   "reviews.burst": { title: "notice.reviews.burst.title", body: "notice.reviews.burst.body" },
   "reviews.draft": { title: "notice.reviews.draft.title", body: "notice.reviews.draft.body" },
   "reviews.problem": { title: "notice.reviews.problem.title", body: "notice.reviews.problem.body" },
+  "reviews.auto": { title: "notice.reviews.auto.title", body: "notice.reviews.auto.body" },
+  "reviews.breaker": { title: "notice.reviews.breaker.title", body: "notice.reviews.breaker.body" },
 };
 
 /** Security alerts: what happened and what to do if it was not the owner, never where it came from (it may show on a locked screen). */
@@ -812,6 +814,7 @@ const SECURITY_TEXT: Record<SecurityAlertEvent, Text> = {
   crm_events_key: { title: "notice.security.crm_events_key.title", body: "notice.security.crm_events_key.body" },
   google_connected: { title: "notice.security.google_connected.title", body: "notice.security.google_connected.body" },
   google_calendar_write: { title: "notice.security.google_calendar_write.title", body: "notice.security.google_calendar_write.body" },
+  reviews_autonomy: { title: "notice.security.reviews_autonomy.title", body: "notice.security.reviews_autonomy.body" },
   setup_failure: { title: "notice.security.setup_failure.title", body: "notice.security.setup_failure.body" },
   setup_locked: { title: "notice.security.setup_locked.title", body: "notice.security.setup_locked.body" },
   owner_created: { title: "notice.security.owner_created.title", body: "notice.security.owner_created.body" },

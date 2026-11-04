@@ -1,4 +1,4 @@
-import type { MessageKey, ReviewDraftSource, ReviewGuardCode, ReviewProblem, ReviewReason, ReviewState } from "@zuri/shared";
+import type { MessageKey, ReviewBreakerReason, ReviewDraftSource, ReviewGuardCode, ReviewProblem, ReviewReason, ReviewState } from "@zuri/shared";
 import { ApiError } from "./api.ts";
 
 /** Everything about the reviews starts with this key: the live channel's "reviews" area refreshes it (lib/versions.ts). */
@@ -10,6 +10,13 @@ export const REVIEW_PROBLEM_TEXT: Record<ReviewProblem, MessageKey> = {
   no_access: "web.reviews.problem.no_access",
   api_disabled: "web.reviews.problem.api_disabled",
   unavailable: "web.reviews.problem.unavailable",
+};
+
+/** Why publishing by itself went back to asking (step 19d). */
+export const REVIEW_BREAKER_TEXT: Record<ReviewBreakerReason, MessageKey> = {
+  rejected: "web.reviews.breaker.rejected",
+  refused: "web.reviews.breaker.refused",
+  deleted: "web.reviews.breaker.deleted",
 };
 
 export const REVIEW_STATE_TEXT: Record<ReviewState, MessageKey> = {
