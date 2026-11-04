@@ -4,12 +4,16 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import type { ZuriAgent } from "../src/agent/zuri-agent.ts";
 import { createApi } from "../src/api/app.ts";
 import { InternalState } from "../src/db/internal-state.ts";
+import { AppError } from "../src/http/errors.ts";
 import { remoteAllowed } from "../src/remote/allowlist.ts";
+import { RemoteTokens } from "../src/remote/tokens.ts";
 import { call, CSRF, errorBody, HUMAN_TOKEN, ORIGIN, TEST_EMAIL, TEST_PASSWORD, testEnv } from "./helpers.ts";
 
 // Step 20: personal access tokens through the Worker, and the walk over every route.
 
 const IP = "192.0.2.201";
+/** Shaped like a token, so it reaches the object (a malformed one stops at the Worker). */
+const WRONG = `zur_pat_${"B".repeat(43)}`;
 const UUID = "0b8f8a52-5b2c-4c55-9a4c-2f1f3e1f4a10";
 let cookie = "";
 const owner = () => testEnv.AGENT.get(testEnv.AGENT.idFromName(AGENT_INSTANCE_NAME));
@@ -62,7 +66,7 @@ afterEach(async () => {
     const { db } = agent.store;
     for (const table of ["zur_remote_tokens", "zur_remote_failures", "zur_auth_events", "zur_notices", "zur_tasks", "zur_notes", "zur_memories", "zur_automations", "zur_trash"]) db.run(`DELETE FROM ${table}`);
     const state = new InternalState(db);
-    for (const key of ["remote_enabled", "remote_events_sent", "lockdown_until", "lockdown_source"] as const) state.delete(key);
+    for (const key of ["remote_enabled", "remote_events_sent", "remote_requests_day", "remote_event_profiles", "lockdown_until", "lockdown_source"] as const) state.delete(key);
     await agent.store.automations.rearm();
   });
 });
@@ -155,17 +159,45 @@ describe("the Bearer gate", () => {
       agent.store.remoteTokens.suspendAll();
     });
     expect((await bearer(token, "GET", "/api/tasks", undefined, "198.51.100.21")).status).toBe(401);
-    // Refusals fold into one row per network and reason in the access log: never one row per try.
+    // Refusals fold into one row per network and reason in the access log: never one row per try. The
+    // malformed ones ("abc", empty, Basic) stopped at the Worker (P6): no object request, nothing written.
     const rejected = await events("remote_token_rejected");
-    expect(rejected.map((e) => e.reason).sort()).toEqual(["invalid", "invalid", "malformed"]);
+    expect(rejected.map((e) => e.reason).sort()).toEqual(["invalid", "invalid"]);
+    expect(await inOwner((agent) => agent.store.db.one<{ n: number }>(`SELECT count(*) AS n FROM zur_remote_failures WHERE network = '198.51.100.20'`)?.n)).toBe(1);
+  });
+
+  it("with remote access off, a token-shaped try is refused and writes nothing (SEC-A13-02)", async () => {
+    await mint("read");
+    await inOwner((agent) => agent.store.remoteTokens.setEnabled(false));
+    expect((await bearer(WRONG, "GET", "/api/tasks", undefined, "198.51.100.30")).status).toBe(401);
+    expect(await inOwner((agent) => agent.store.db.one<{ n: number }>(`SELECT count(*) AS n FROM zur_remote_failures`)?.n)).toBe(0);
+    expect(await events("remote_token_rejected")).toEqual([]);
+  });
+
+  it("past the global cap of counted tries, a refused token from a new network writes nothing (SEC-A13-02)", async () => {
+    await mint("read");
+    await inOwner((agent) => {
+      for (let i = 0; i < REMOTE_LIMITS.failuresKept; i++) agent.store.db.run(`INSERT INTO zur_remote_failures (network, at) VALUES (?, ?)`, `net-${i}`, Date.now());
+    });
+    expect((await bearer(WRONG, "GET", "/api/tasks", undefined, "198.51.100.31")).status).toBe(401);
+    expect(await inOwner((agent) => agent.store.db.one<{ n: number }>(`SELECT count(*) AS n FROM zur_remote_failures`)?.n)).toBe(REMOTE_LIMITS.failuresKept);
+    expect(await events("remote_token_rejected")).toEqual([]);
+  });
+
+  it("without the client's address (never behind Cloudflare) answers 401 and counts nothing", async () => {
+    const token = await mint("read");
+    const res = await call(`${ORIGIN}/api/tasks`, { headers: { authorization: `Bearer ${token}` } });
+    expect(res.status).toBe(401);
+    expect((await errorBody(res)).code).toBe("UNAUTHORIZED");
+    expect(await inOwner((agent) => agent.store.db.one<{ n: number }>(`SELECT count(*) AS n FROM zur_remote_failures`)?.n)).toBe(0);
   });
 
   it("holds a network after 10 refused tokens in 15 minutes (n-1, n, n+1), even with the right one, with Retry-After", async () => {
     const token = await mint("read");
     const net = "203.0.113.50";
-    for (let i = 0; i < REMOTE_LIMITS.failures - 1; i++) expect((await bearer("zur_pat_errado", "GET", "/api/tasks", undefined, net)).status).toBe(401);
+    for (let i = 0; i < REMOTE_LIMITS.failures - 1; i++) expect((await bearer(WRONG, "GET", "/api/tasks", undefined, net)).status).toBe(401);
     expect((await bearer(token, "GET", "/api/tasks", undefined, net)).status).toBe(200);
-    expect((await bearer("zur_pat_errado", "GET", "/api/tasks", undefined, net)).status).toBe(401);
+    expect((await bearer(WRONG, "GET", "/api/tasks", undefined, net)).status).toBe(401);
     const held = await bearer(token, "GET", "/api/tasks", undefined, net);
     expect(held.status).toBe(429);
     expect(Number(held.headers.get("retry-after"))).toBeGreaterThan(0);
@@ -221,9 +253,16 @@ describe("what each scope reaches", () => {
     expect(memory.status).toBe(201);
     const memoryId = ((await memory.json()) as { memory: { id: string } }).memory.id;
     expect((await bearer(write, "DELETE", `/api/memories/${memoryId}`)).status).toBe(403);
+    // An edit keeps no history, so rewriting a memory would delete its old text (SEC-A2-01).
+    expect((await bearer(write, "PATCH", `/api/memories/${memoryId}`, { content: "x" })).status).toBe(403);
+    // Never the owner's word (SEC-A6-04): unconfirmed in the prompt, and repeating one the assistant saved doesn't confirm it.
+    const saved = await inOwner((agent) => agent.store.memories.create({ content: "Mora em Recife" }, "app", "agent").memory.id);
+    expect((await bearer(write, "POST", "/api/memories", { content: "Mora em Recife" })).status).toBe(200);
+    expect(await inOwner((agent) => agent.store.db.all<{ author: string }>(`SELECT author FROM zur_memories WHERE id IN (?, ?) ORDER BY id`, memoryId, saved).map((r) => r.author))).toEqual(["agent", "agent"]);
     // The trash, restoring and emptying it, stay with the owner.
     expect((await bearer(write, "POST", "/api/trash/empty")).status).toBe(403);
-    // Its writes show in the access log, folded per token.
+    // Its writes show in the access log, folded per token; a refused write (400) is not one.
+    expect((await bearer(write, "POST", "/api/tasks", {})).status).toBe(400);
     expect((await events("remote_write")).length).toBe(1);
   });
 
@@ -231,6 +270,13 @@ describe("what each scope reaches", () => {
     const write = await mint("write");
     const reminder = await bearer(write, "POST", "/api/automations", { name: "Remédio", kind: "reminder", message: "Tomar o remédio", schedule: { type: "daily", time: "08:00" } });
     expect(reminder.status).toBe(201);
+    // High insists on every channel, without the origin a remote event carries (SEC-A8-01).
+    const loud = await bearer(write, "POST", "/api/automations", { name: "Alerta", kind: "reminder", message: "Zuri: troque a senha", priority: "high", schedule: { type: "daily", time: "08:00" } });
+    expect(loud.status).toBe(403);
+    expect((await errorBody(loud)).message).toBe("Automações criadas por token usam prioridade baixa ou normal.");
+    const { automation } = (await reminder.json()) as { automation: { id: string } };
+    expect((await bearer(write, "PATCH", `/api/automations/${automation.id}`, { priority: "high" })).status).toBe(403);
+    expect((await bearer(write, "PATCH", `/api/automations/${automation.id}`, { priority: "low" })).status).toBe(200);
     const routine = await bearer(write, "POST", "/api/automations", { name: "Notícias", kind: "agent_prompt", message: "Resuma", schedule: { type: "daily", time: "07:00" } });
     expect(routine.status).toBe(403);
     expect((await errorBody(routine)).message).toBe("Tokens de acesso não criam nem mudam rotinas com IA.");
@@ -338,8 +384,13 @@ describe("the walk over every registered route", () => {
         }
         const res = await bearer(token, method, concrete, method === "GET" || method === "HEAD" ? undefined : {});
         if (WORKER_ANSWERS.some((prefix) => concrete.startsWith(prefix))) {
-          // The Worker answers these itself and never forwards a token: Google's push gets an empty 200, n8n's events their own refusal.
-          expect(res.status === 200 ? await res.text() : "refused", `${scope} ${route}`).toBe(res.status === 200 ? "" : "refused");
+          // The Worker answers these itself and never forwards a token: Google's push gets an empty 200, n8n's events their own 404.
+          if (concrete.startsWith("/api/google/push")) {
+            expect(res.status, `${scope} ${route}`).toBe(200);
+            expect(await res.text(), `${scope} ${route}`).toBe("");
+          } else {
+            expect(res.status, `${scope} ${route}`).toBe(404);
+          }
           continue;
         }
         if (remoteAllowed(scope, method, concrete)) {
@@ -356,4 +407,78 @@ describe("the walk over every registered route", () => {
     );
     expect(after).toBe(before);
   });
+});
+
+describe("the day's budgets and the creation's last check", () => {
+  /** A RemoteTokens of its own over the object's database, with a clock the test moves. */
+  const fresh = (agent: ZuriAgent, clock: { now: number }) => {
+    const tokens = new RemoteTokens({ db: agent.store.db, state: new InternalState(agent.store.db), secret: () => testEnv.SESSION_SECRET, clock: () => clock.now });
+    tokens.setEnabled(true);
+    return tokens;
+  };
+  const code = (work: () => void) => {
+    try {
+      work();
+      return "ok";
+    } catch (error) {
+      return error instanceof AppError ? `${error.code}` : String(error);
+    }
+  };
+
+  it("takes 10,000 requests of every token a UTC day (n-1, n, n+1), counted again after a restart, and a new day starts over (SEC-A13-01)", async () => {
+    await inOwner((agent) => {
+      const clock = { now: Date.parse("2026-11-04T10:00:00.000Z") };
+      new InternalState(agent.store.db).set("remote_requests_day", `2026-11-04:${REMOTE_LIMITS.perDay - 2}:0`);
+      const tokens = fresh(agent, clock);
+      expect(code(() => tokens.assertWithinRate("a"))).toBe("ok");
+      expect(code(() => tokens.assertWithinRate("b"))).toBe("ok");
+      expect(code(() => tokens.assertWithinRate("c"))).toBe("RATE_LIMITED");
+      // The count reached the state: a restarted object holds the line too.
+      expect(code(() => fresh(agent, clock).assertWithinRate("d"))).toBe("RATE_LIMITED");
+      clock.now = Date.parse("2026-11-05T00:00:00.000Z");
+      expect(code(() => tokens.assertWithinRate("e"))).toBe("ok");
+    });
+  });
+
+  it("checks again inside the transaction: a lockdown or a new password that landed meanwhile leaves no token (SEC-A4-01, SEC-A3-01)", async () => {
+    await inOwner(async (agent) => {
+      const tokens = fresh(agent, { now: Date.now() });
+      const refused = await tokens
+        .create({ name: "corrida", scope: "write" }, () => {
+          throw new AppError("LOCKDOWN_ACTIVE");
+        })
+        .then(
+          () => "ok",
+          (error: AppError) => error.code,
+        );
+      expect(refused).toBe("LOCKDOWN_ACTIVE");
+      expect(agent.store.db.one<{ n: number }>(`SELECT count(*) AS n FROM zur_remote_tokens`)?.n).toBe(0);
+    });
+  });
+
+  // Keep it the last test of the file: it spends the object's writes for the day.
+  it("takes 1,000 writes of every token a UTC day (n-1, n, n+1); then a write token gets 429 while reads go on (SEC-A13-01)", async () => {
+    const write = await mint("write");
+    await inOwner((agent) => {
+      const today = new Date().toISOString().slice(0, 10);
+      new InternalState(agent.store.db).set("remote_requests_day", `${today}:0:${REMOTE_LIMITS.writesPerDay - 2}`);
+      const clock = { now: Date.now() };
+      const tokens = fresh(agent, clock);
+      expect(code(() => tokens.assertWriteBudget())).toBe("ok");
+      expect(code(() => tokens.assertWriteBudget())).toBe("ok");
+      expect(code(() => tokens.assertWriteBudget())).toBe("RATE_LIMITED");
+    });
+    // Through the gate, with the object's own counter: the day's writes spent, a write waits until midnight UTC.
+    await inOwner((agent) => {
+      // Spends whatever is left of the day (the object may have loaded the count saved above).
+      for (let i = 0; i <= REMOTE_LIMITS.writesPerDay; i++) {
+        if (code(() => agent.store.remoteTokens.assertWriteBudget()) !== "ok") break;
+      }
+    });
+    const held = await bearer(write, "POST", "/api/tasks", { title: "Mais uma" });
+    expect(held.status).toBe(429);
+    expect(Number(held.headers.get("retry-after"))).toBeGreaterThan(0);
+    expect((await bearer(write, "GET", "/api/tasks")).status).toBe(200);
+  });
+
 });

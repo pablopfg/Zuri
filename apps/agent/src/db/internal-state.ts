@@ -84,9 +84,12 @@ export type InternalKey =
   // Step 19, the Google Calendar: the sign-in waiting for Google's answer (the state's hash, the sealed
   // PKCE verifier, the session that started it and its end).
   | "google_oauth_pending"
-  // Step 20: remote access on (true) or off, and when the last events came in ("<ms>,<ms>…", the last 24 hours).
+  // Step 20: remote access on (true) or off; when the last events came in ("<ms>,<ms>…", the last 24 hours);
+  // the source+kind pairs that learn their own priority (one per line); the day's requests and writes of every token ("<YYYY-MM-DD>:<requests>:<writes>").
   | "remote_enabled"
   | "remote_events_sent"
+  | "remote_event_profiles"
+  | "remote_requests_day"
   // Issue #152: the notices' tries an alarm wake had no room for, sent at the next wake (JSON list).
   | "alert_deferred";
 

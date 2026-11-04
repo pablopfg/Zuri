@@ -27,6 +27,7 @@ const TOUCH_INTERVAL_MS = 60_000;
 /** Longer than any token we make: anything past it is not one, and is not even hashed. */
 const MAX_TOKEN_LENGTH = 128;
 const DAY_MS = 24 * 3600_000;
+const SWEEP_INTERVAL_MS = 3600_000;
 
 export interface RemoteTokenDeps {
   db: Database;
@@ -46,6 +47,10 @@ export interface RemoteTokenDeps {
 export class RemoteTokens implements RemoteTokenHook {
   /** Per-token request windows, in memory: they reset when the object restarts (accepted, spec). */
   readonly #windows = new Map<string, { start: number; count: number }>();
+  /** Every token's requests today (UTC), loaded once from the state and written back at most once a minute. */
+  #day: { day: string; count: number; writes: number; savedAt: number } | null = null;
+  /** Refused tries of networks that never came back are swept at most this often. */
+  #sweptAt = 0;
   readonly #clock: () => number;
 
   constructor(private readonly deps: RemoteTokenDeps) {
@@ -68,8 +73,13 @@ export class RemoteTokens implements RemoteTokenHook {
       .map(info);
   }
 
-  /** Makes a token. Checks and insert in one transaction, after the hash: two at once can't pass the cap together. */
-  async create(input: RemoteTokenCreate): Promise<RemoteTokenInfo & { secret: string }> {
+  /**
+   * Makes a token. Checks and insert in one transaction, after the hash: two at once can't pass the cap
+   * together. `stillAllowed` runs in that transaction too (SEC-A4-01, SEC-A3-01): a lockdown, a new
+   * password or an ended session that landed while the hash was made refuses the token, never leaves
+   * one alive after them.
+   */
+  async create(input: RemoteTokenCreate, stillAllowed: () => void = () => undefined): Promise<RemoteTokenInfo & { secret: string }> {
     const parsed = remoteTokenCreateSchema.safeParse(input);
     if (!parsed.success) throw new AppError("VALIDATION_FAILED", undefined, { fields: [...new Set(parsed.error.issues.map((i) => i.path.join(".") || "_body"))] });
     const { name, scope } = parsed.data;
@@ -79,6 +89,7 @@ export class RemoteTokens implements RemoteTokenHook {
     const secret = REMOTE_TOKEN_PREFIX + randomToken(32);
     const hash = await hmacSha256Hex(key, secret);
     return this.deps.db.transaction(() => {
+      stillAllowed();
       if (!this.enabled()) throw new AppError("FORBIDDEN", "remote.off");
       const count = this.deps.db.one<{ n: number }>(`SELECT count(*) AS n FROM zur_remote_tokens`)?.n ?? 0;
       if (count >= REMOTE_LIMITS.maxTokens) throw new AppError("CONFLICT", "remote.tooMany");
@@ -144,15 +155,24 @@ export class RemoteTokens implements RemoteTokenHook {
     throw rateLimited((row?.oldest ?? nowMs) + REMOTE_LIMITS.failureWindowMs - nowMs);
   }
 
-  /** Counts one refused token; true when it is the network's first in the window (worth one line in the log). */
+  /** Counts one refused token; false when nothing was written (the network's or the global cap was full). */
   recordFailure(network: string): boolean {
     const nowMs = this.#clock();
     const since = nowMs - REMOTE_LIMITS.failureWindowMs;
-    this.deps.db.run(`DELETE FROM zur_remote_failures WHERE at <= ?`, since);
+    // Through the (network, at) index; networks that never came back are swept once an hour (P2).
+    this.deps.db.run(`DELETE FROM zur_remote_failures WHERE network = ? AND at <= ?`, network, since);
+    if (nowMs - this.#sweptAt >= SWEEP_INTERVAL_MS) {
+      this.#sweptAt = nowMs;
+      this.deps.db.run(`DELETE FROM zur_remote_failures WHERE at <= ?`, since);
+    }
     const prior = this.deps.db.one<{ n: number }>(`SELECT count(*) AS n FROM zur_remote_failures WHERE network = ?`, network)?.n ?? 0;
     // Only as many as the limit needs: a flood from one network keeps the table small.
-    if (prior < REMOTE_LIMITS.failures) this.deps.db.run(`INSERT INTO zur_remote_failures (network, at) VALUES (?, ?)`, network, nowMs);
-    return prior === 0;
+    if (prior >= REMOTE_LIMITS.failures) return false;
+    // And a flood spread over many networks stops writing at the global cap (at most failuresKept rows to count).
+    const all = this.deps.db.one<{ n: number }>(`SELECT count(*) AS n FROM zur_remote_failures`)?.n ?? 0;
+    if (all >= REMOTE_LIMITS.failuresKept) return false;
+    this.deps.db.run(`INSERT INTO zur_remote_failures (network, at) VALUES (?, ?)`, network, nowMs);
+    return true;
   }
 
   /** Counts one request against the token's window; RATE_LIMITED past it. */
@@ -164,8 +184,47 @@ export class RemoteTokens implements RemoteTokenHook {
       this.#windows.set(tokenId, window);
     }
     window.count += 1;
-    if (window.count <= REMOTE_LIMITS.perWindow) return;
-    throw rateLimited(window.start + REMOTE_LIMITS.windowMs - nowMs);
+    if (window.count > REMOTE_LIMITS.perWindow) throw rateLimited(window.start + REMOTE_LIMITS.windowMs - nowMs);
+    this.#countDay(nowMs);
+  }
+
+  /**
+   * Every token together, per UTC day: a client stuck in a loop can't spend the Free plan's daily
+   * requests and leave the owner's app and bot without theirs. Past it, 429 until midnight UTC.
+   */
+  #countDay(nowMs: number): void {
+    const today = this.#today(nowMs);
+    if (today.count >= REMOTE_LIMITS.perDay) throw rateLimited(midnightUtc(nowMs) - nowMs);
+    today.count += 1;
+    this.#save(nowMs, today.count >= REMOTE_LIMITS.perDay);
+  }
+
+  /** One more write by a token today (SEC-A13-01); 429 until midnight UTC past REMOTE_LIMITS.writesPerDay. */
+  assertWriteBudget(): void {
+    const nowMs = this.#clock();
+    const today = this.#today(nowMs);
+    if (today.writes >= REMOTE_LIMITS.writesPerDay) throw rateLimited(midnightUtc(nowMs) - nowMs);
+    today.writes += 1;
+    this.#save(nowMs, today.writes >= REMOTE_LIMITS.writesPerDay);
+  }
+
+  /** Today's counts (UTC), loaded once from the state; a new day starts from zero. */
+  #today(nowMs: number): { day: string; count: number; writes: number; savedAt: number } {
+    const day = new Date(nowMs).toISOString().slice(0, 10);
+    if (!this.#day) {
+      const [savedDay = "", savedCount, savedWrites] = String(this.deps.state.get<string>("remote_requests_day") ?? "").split(":");
+      this.#day = { day: savedDay, count: Number(savedCount) || 0, writes: Number(savedWrites) || 0, savedAt: nowMs };
+    }
+    if (this.#day.day !== day) this.#day = { day, count: 0, writes: 0, savedAt: 0 };
+    return this.#day;
+  }
+
+  /** Written back at most once a minute (and at a cap): a restart loses at most a minute of counts. */
+  #save(nowMs: number, now: boolean): void {
+    const today = this.#day;
+    if (!today || (!now && nowMs - today.savedAt < TOUCH_INTERVAL_MS)) return;
+    today.savedAt = nowMs;
+    this.deps.state.set("remote_requests_day", `${today.day}:${today.count}:${today.writes}`);
   }
 
   // ---------- Revoking, and the lockdown's hook ----------
@@ -202,6 +261,10 @@ export class RemoteTokens implements RemoteTokenHook {
     const key = this.deps.secret();
     return key !== undefined && key.length >= 32 ? key : null;
   }
+}
+
+function midnightUtc(nowMs: number): number {
+  return Date.parse(`${new Date(nowMs).toISOString().slice(0, 10)}T00:00:00.000Z`) + DAY_MS;
 }
 
 function info(row: TokenRow): RemoteTokenInfo {

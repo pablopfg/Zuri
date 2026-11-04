@@ -58,6 +58,7 @@ export const en: Messages = {
   "remote.tooMany": "You already have 20 tokens. Revoke one before making another.",
   "remote.nameTaken": "A token with this name already exists.",
   "remote.agentPrompt": "Access tokens can't create or change routines with AI.",
+  "remote.highPriority": "Automations made with a token use low or normal priority.",
   "error.storageFull": "Zuri's storage is full. Empty the trash or delete what you no longer need to save new things.",
   "error.storageLimit.tasks": "You reached the task limit. Delete finished tasks you no longer need to add new ones.",
   "error.storageLimit.notes": "You reached the note limit. Delete notes you no longer need to add new ones.",

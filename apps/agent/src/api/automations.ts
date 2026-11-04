@@ -40,6 +40,14 @@ function query(url: string): Record<string, string> {
 }
 
 /**
+ * A token's reminders stay at normal priority or below (SEC-A8-01): high insists on every channel, and
+ * text from outside would get it without the origin in front that remote events carry.
+ */
+function refuseRemoteHigh(remote: unknown, input: Record<string, unknown>): void {
+  if (remote && input.priority !== undefined && input.priority !== "low" && input.priority !== "normal") throw new AppError("FORBIDDEN", "remote.highPriority");
+}
+
+/**
  * Automations (step 10), after the session check: owner signed in, CSRF header
  * and the owner's Origin on every route. /automations/runs comes before
  * /automations/:id; ids are only the server's UUIDs.
@@ -49,6 +57,7 @@ export function registerAutomationRoutes(app: Hono<ApiEnv>, deps: () => Automati
 
   app.post("/automations", async (c) => {
     const input = await readJson(c.req.raw, anyObject, BODY_MAX_BYTES);
+    refuseRemoteHigh(c.get("remote"), input);
     if (input.kind === "agent_prompt") {
       // A routine with AI holds the model and its tools: never within reach of a token (step 20).
       if (c.get("remote")) throw new AppError("FORBIDDEN", "remote.agentPrompt");
@@ -65,6 +74,7 @@ export function registerAutomationRoutes(app: Hono<ApiEnv>, deps: () => Automati
     const id = recordId(c.req.param("id"));
     const input = await readJson(c.req.raw, anyObject, BODY_MAX_BYTES);
     const current = deps().service.get(id);
+    refuseRemoteHigh(c.get("remote"), input);
     if (current.kind === "agent_prompt" && c.get("remote")) throw new AppError("FORBIDDEN", "remote.agentPrompt");
     if (current.kind === "agent_prompt" && typeof input.message === "string" && input.message.trim() !== current.message) deps().guardRoutine?.(c.get("session"));
     return Response.json({ automation: await deps().service.update(id, input) });

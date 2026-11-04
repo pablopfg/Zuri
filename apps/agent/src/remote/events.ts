@@ -44,16 +44,21 @@ export class RemoteEvents {
     this.deps.state.set("remote_events_sent", [...recent, nowMs].join(","));
     const source = input.source ?? "remote";
     const kind = input.kind ?? "event";
+    const dedupe = input.dedupeKey ?? input.id;
     const notice = this.deps.alerts.raise({
       kind: "remote.event",
       category: "events",
       priority: input.priority ?? "normal",
       params: { title: clip(oneLine(`${this.#shown(source)}: ${disarmLinks(input.title)}`), TITLE_MAX) },
-      body: input.body ? disarmLinks(input.body) : null,
-      ...(input.id ? { dedupeKey: `remote:${source}:${input.id}` } : {}),
+      body: input.body ? plainBody(disarmLinks(input.body)) : null,
+      ...(dedupe ? { dedupeKey: `remote:${source}:${dedupe}` } : {}),
       dedupeMs: REMOTE_EVENTS.dedupeHours * HOUR_MS,
       source: this.#profile(source, kind),
     });
+    // On the first event of each hour, the oldest past the events' own cap go (P13): outside systems
+    // never push the owner's notices out of the center. Not on every event: the sweep reads the notices.
+    const last = recent.at(-1);
+    if (last === undefined || Math.floor(last / HOUR_MS) !== Math.floor(nowMs / HOUR_MS)) this.#prune();
     if (!notice) return { event: null, duplicate: true };
     const priority = notice.priority === "low" || notice.priority === "high" ? notice.priority : "normal";
     return { event: { id: notice.id, priority }, duplicate: false };
@@ -70,6 +75,15 @@ export class RemoteEvents {
       .sort((a, b) => a - b);
   }
 
+  #prune(): void {
+    this.deps.db.run(
+      `DELETE FROM zur_notices WHERE id IN (
+         SELECT id FROM zur_notices WHERE kind = 'remote.event' AND coalesce(escalation, '') != 'active'
+         ORDER BY created_at DESC, id DESC LIMIT -1 OFFSET ?)`,
+      REMOTE_EVENTS.kept,
+    );
+  }
+
   /** An origin that carries "zuri" or the agent's name shows as "remote": nobody outside speaks as her. */
   #shown(source: string): string {
     const squash = (text: string) => text.toLowerCase().replace(/[^\p{L}\p{N}]/gu, "");
@@ -83,11 +97,26 @@ export class RemoteEvents {
    */
   #profile(source: string, kind: string): string {
     const key = `remote:${source}:${kind}`;
-    const known = this.deps.db.one(`SELECT 1 AS x FROM zur_notices WHERE kind = 'remote.event' AND learn_key = ? LIMIT 1`, key);
-    if (known) return key;
-    const pairs = this.deps.db.one<{ n: number }>(`SELECT count(DISTINCT learn_key) AS n FROM zur_notices WHERE kind = 'remote.event'`)?.n ?? 0;
-    return pairs < REMOTE_EVENTS.maxProfiles ? key : "remote:other";
+    // The pairs live in the state (one row), not counted over the notices on every event (P2).
+    const raw = this.deps.state.get<unknown>("remote_event_profiles");
+    const pairs = typeof raw === "string" && raw !== "" ? raw.split("\n") : [];
+    if (pairs.includes(key)) return key;
+    if (pairs.length >= REMOTE_EVENTS.maxProfiles) return "remote:other";
+    this.deps.state.set("remote_event_profiles", [...pairs, key].join("\n"));
+    return key;
   }
+}
+
+/**
+ * The body keeps its lines, but no invisible or direction-changing characters (SEC-A9-03) and no run
+ * of blank lines that would set text apart as if it were another message.
+ */
+function plainBody(text: string): string {
+  return text
+    .replace(/\r\n?/g, "\n")
+    .replace(/[\p{Cf}\p{Zl}\p{Zp}]|[^\P{Cc}\n\t]/gu, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
 }
 
 /** One line: a title from outside must not spill into another line of a message. */

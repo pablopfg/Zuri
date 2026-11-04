@@ -31,6 +31,8 @@ export function registerRemoteGate(app: Hono<ApiEnv>, deps: ApiDeps, client: (c:
     if (header === undefined) return next();
     const remote = deps.remote?.();
     if (!remote) throw new AppError("UNAUTHORIZED", "remote.invalidToken");
+    // Off (the default): no token works, so nothing is counted or written for a try either (SEC-A13-02).
+    if (!remote.tokens.enabled()) throw new AppError("UNAUTHORIZED", "remote.invalidToken");
     // No client address (never behind Cloudflare): nothing to count the try against, so the
     // token isn't even looked at, and the answer is the same 401 as a bad token's.
     let who: ClientInfo;
@@ -43,9 +45,9 @@ export function registerRemoteGate(app: Hono<ApiEnv>, deps: ApiDeps, client: (c:
     const raw = BEARER.exec(header)?.[1];
     const caller = raw ? await remote.tokens.validate(raw) : null;
     if (!caller) {
-      remote.tokens.recordFailure(who.network);
-      // Folded by network: a flood of bad tokens is one row of the access log, not a thousand.
-      deps.auth().events.record("remote_token_rejected", who, { reason: raw ? "invalid" : "malformed" });
+      // Folded by network: a flood of bad tokens is one row of the access log, not a thousand; past the
+      // global cap of counted tries, nothing more is written at all (SEC-A13-02).
+      if (remote.tokens.recordFailure(who.network)) deps.auth().events.record("remote_token_rejected", who, { reason: raw ? "invalid" : "malformed" });
       throw new AppError("UNAUTHORIZED", "remote.invalidToken");
     }
     remote.tokens.assertWithinRate(caller.id);
@@ -55,10 +57,12 @@ export function registerRemoteGate(app: Hono<ApiEnv>, deps: ApiDeps, client: (c:
       const key = caller.scope === "events" ? "remote.eventsOnly" : caller.scope === "read" && remoteAllowed("write", method, path) ? "remote.readOnly" : "remote.routeNotAllowed";
       throw new AppError("FORBIDDEN", key);
     }
+    // Writes have their own daily budget (SEC-A13-01): a client stuck in a loop can't spend the day's rows.
+    if (isWrite(method) && caller.scope === "write") remote.tokens.assertWriteBudget();
     c.set("remote", caller);
     await next();
     // What a token changed shows in the access log, folded per token and network: a busy client is one row.
-    if (isWrite(method) && caller.scope !== "events") deps.auth().events.record("remote_write", who, { reason: caller.id.slice(0, 8) });
+    if (isWrite(method) && caller.scope !== "events" && c.res.ok) deps.auth().events.record("remote_write", who, { reason: caller.id.slice(0, 8) });
   });
 }
 
@@ -89,7 +93,12 @@ export function registerRemoteRoutes(app: Hono<ApiEnv>, deps: () => RemoteRouteD
   app.post("/remote/tokens", async (c) => {
     auth().requireRecentAuth(c.get("session"));
     const input = await readJson(c.req.raw, remoteTokenCreateSchema, 4 * 1024);
-    const token = await deps().tokens.create(input);
+    const sessionId = c.get("session").id;
+    const token = await deps().tokens.create(input, () => {
+      if (auth().lockdown.active()) throw new AppError("LOCKDOWN_ACTIVE", "auth.lockdown.active");
+      // Ended meanwhile (a new password, /encerrar_sessoes, a lockdown): no token from it.
+      if (!auth().sessions.get(sessionId)) throw new AppError("UNAUTHORIZED");
+    });
     auth().events.record("remote_token_created", client(c), { session: c.get("session").id.slice(0, 16), reason: token.scope, alert: true });
     return Response.json({ token }, { status: 201 });
   });

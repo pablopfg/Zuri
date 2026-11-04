@@ -21,7 +21,9 @@ const READ = new Set([
 /**
  * What a write token also reaches. Tasks and notes it deletes go to the
  * 30-day trash; memories and automations have no trash, so a token never
- * deletes them (an automation can be paused instead). Creating or changing a
+ * deletes them (an automation can be paused instead), and never rewrites a
+ * memory either (SEC-A2-01: an edit keeps no history, so it would delete the
+ * old text). A memory it adds stays unconfirmed in the prompt (SEC-A6-04). Creating or changing a
  * routine with AI is refused in the automations' routes.
  */
 const WRITE = new Set([
@@ -32,7 +34,6 @@ const WRITE = new Set([
   "PATCH /api/notes/:id",
   "DELETE /api/notes/:id",
   "POST /api/memories",
-  "PATCH /api/memories/:id",
   "POST /api/automations",
   "PATCH /api/automations/:id",
 ]);

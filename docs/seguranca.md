@@ -936,19 +936,31 @@ Etapa 20. Guia do dono e de quem integra em
   autenticação, Telegram, aprovações, planos, bloqueio, conversa, fluxos, CRM,
   MCP, Google, configurações ou à tela de tokens, e que o escopo `read` recebe
   403 em toda escrita. Token não apaga memória nem automação e não cria nem muda
-  rotina com IA (`agent_prompt`, 403 `remote.agentPrompt`).
+  rotina com IA (`agent_prompt`, 403 `remote.agentPrompt`). Não reescreve memória
+  (a edição não guarda histórico) e a memória que cria fica com autor `agent`,
+  marcada no prompt como não confirmada. Automação criada por token fica em
+  prioridade baixa ou normal (403 `remote.highPriority`).
 - **Força bruta e excesso.** 10 tokens recusados por rede (o endereço no IPv4,
   `/64` no IPv6) em 15 minutos seguram a rede com 429, até com o token certo;
   120 pedidos por minuto por token (contador na memória do objeto, zera quando
-  ele reinicia). Tokens recusados e escritas por token vão para a Atividade de
+  ele reinicia); 10.000 pedidos e 1.000 escritas por dia somando todos os
+  tokens (gravado no estado no máximo uma vez por minuto), para a cota diária do
+  Free não acabar. Com o acesso desligado, uma tentativa não grava nada; ligado,
+  no máximo 200 tentativas recusadas contadas de todas as redes em 15 minutos, e
+  depois disso a recusa não grava nada. Cabeçalho fora do formato
+  `Bearer zur_pat_` + 43 caracteres para no Worker, sem pedido ao objeto. Tokens recusados e escritas por token vão para a Atividade de
   acesso agrupados por rede e motivo.
 - **Eventos.** `POST /api/remote/events` só com token `events` (a sessão e os
   outros escopos recebem 403). 60 por hora e 100 por dia somando todos, corpo
-  até 2 KB, `critical` recusado. O aviso leva a origem no título, numa linha,
+  até 2 KB, `critical` recusado, só a categoria `events`. O corpo perde
+  caracteres invisíveis e de direção; a central guarda no máximo 250 eventos. O aviso leva a origem no título, numa linha,
   com links desarmados; uma origem com "zuri" ou o nome da agente aparece como
   `remote`. O texto é dado guardado: nunca entra como instrução. Eventos usam
   no máximo metade do limite de cada canal e no máximo 3 insistem ao mesmo
   tempo.
+- **Criação.** A conferência final roda na mesma transação do INSERT: um
+  bloqueio, uma senha nova ou uma sessão encerrada enquanto o hash era feito
+  recusam o token (nunca sobra um token vivo depois deles).
 - **Revogação.** Tela (um ou todos), `/tokens` do bot (alerta
   `telegram_token_revoked`, que só o app reconhece), troca de senha,
   recuperação e redefinição das credenciais revogam; o bloqueio suspende e a

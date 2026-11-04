@@ -56,6 +56,7 @@ Chaves `web.remote.*` em `pt-BR-security.ts` (tela) e `en.ts`; `telegram.seg.tok
 | Validade | 90 dias | 401 depois |
 | Nome | 1 a 64, único sem caixa | 400 / 409 |
 | Pedidos por token | 120 por 60 s (memória do objeto) | 429 + `Retry-After` |
+| Pedidos e escritas de todos os tokens | 10.000 e 1.000 por dia UTC | 429 até a meia-noite UTC |
 | Bearer inválido | 10 por rede em 15 min | 429 + `Retry-After`, mesmo com token certo |
 | Eventos | 60/h e 100/dia, todos os tokens | 429 + `Retry-After` |
 | Corpo do evento | 2 KB; título 1–120, corpo ≤ 1.000 | 400 |
@@ -67,10 +68,10 @@ Rotas permitidas (caminho comparado como chegou, `:id` = UUID; `HEAD` = `GET`):
 | Escopo | Rotas |
 | --- | --- |
 | `read` | `GET /api/health`, `GET /api/tasks`, `/api/tasks/counts`, `/api/tasks/:id`, `/api/notes`, `/api/notes/:id`, `/api/projects`, `/api/memories`, `/api/memories/:id`, `/api/automations`, `/api/automations/:id` |
-| `write` | o de `read` + `POST /api/tasks`, `PATCH`/`DELETE /api/tasks/:id`, `POST /api/notes`, `PATCH`/`DELETE /api/notes/:id`, `POST /api/memories`, `PATCH /api/memories/:id`, `POST /api/automations`, `PATCH /api/automations/:id` |
+| `write` | o de `read` + `POST /api/tasks`, `PATCH`/`DELETE /api/tasks/:id`, `POST /api/notes`, `PATCH`/`DELETE /api/notes/:id`, `POST /api/memories`, `POST /api/automations`, `PATCH /api/automations/:id` |
 | `events` | só `POST /api/remote/events` (nenhum outro token nem a sessão chega a ela) |
 
-- Tarefas e notas apagadas por token vão para a lixeira (30 dias). Memórias e automações não se apagam por token (a memória não tem lixeira; a automação pode ser pausada com `PATCH {enabled:false}`): decisão técnica de segurança, reversível depois.
+- Tarefas e notas apagadas por token vão para a lixeira (30 dias). Memórias e automações não se apagam por token (a memória não tem lixeira; a automação pode ser pausada com `PATCH {paused:true}`), e memória não se reescreve por token (a edição não guarda histórico; auditoria SEC-A2-01): decisão técnica de segurança, reversível depois.
 - Automações por token: só `reminder` e `task_digest`. Criar ou mudar uma `agent_prompt` dá 403 (o modelo e as ferramentas não ficam ao alcance de um token vazado).
 - Acesso remoto desligado por padrão; desligar suspende todos (401) e mantém a lista; ligar pede senha recente e gera alerta.
 
@@ -111,7 +112,7 @@ Nenhum. Os eventos não chamam IA nem saem para a rede (só os canais de aviso j
 
 ## 8. Custo e cotas do plano Free
 
-Sem recurso novo. Cada pedido remoto é um pedido ao Worker e ao objeto (100 mil/dia no Free); o teto de 120 por minuto por token e 20 tokens limita o pior caso, e a validação faz 1 SELECT por pedido (gravação de `last_used_at` no máximo 1 vez por minuto). Eventos: até 100 avisos/dia, metade do limite de canal. Zero Neurons (busca semântica fora).
+Sem recurso novo. Cada pedido remoto é um pedido ao Worker e ao objeto (100 mil/dia no Free). O teto de 120 por minuto por token não basta sozinho (um token no teto daria 172.800 por dia; auditoria): valem também 10.000 pedidos e 1.000 escritas por dia somando todos os tokens, o que deixa ao app e ao bot ao menos 90% dos pedidos e das linhas gravadas. A validação faz 1 SELECT por pedido (`last_used_at` e a conta do dia gravados no máximo 1 vez por minuto). Cabeçalho fora do formato para no Worker; com o acesso desligado nada é gravado; recusas contadas param em 200 por 15 min. Eventos: até 100 avisos/dia, metade do limite de canal, no máximo 250 guardados. Medido em `free-tier-budget.test.ts` e `docs/arquitetura/orcamento-free-tier.md`. Zero Neurons (busca semântica fora).
 
 ## 9. Segurança e privacidade
 

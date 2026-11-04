@@ -65,6 +65,8 @@ describe("the event's schema", () => {
     for (const priority of ["low", "normal", "high"]) expect(remoteEventSchema.safeParse({ title: "x", priority }).success).toBe(true);
     expect(remoteEventSchema.safeParse({ title: "x", priority: "critical" }).success).toBe(false);
     expect(remoteEventSchema.safeParse({ title: "x", category: "security" }).success).toBe(false);
+    expect(remoteEventSchema.safeParse({ title: "x", category: "events", dedupeKey: "a-1" }).success).toBe(true);
+    expect(remoteEventSchema.safeParse({ title: "x", dedupeKey: "a b" }).success).toBe(false);
     expect(remoteEventSchema.safeParse({ title: "" }).success).toBe(false);
     expect(remoteEventSchema.safeParse({ title: "a".repeat(120) }).success).toBe(true);
     expect(remoteEventSchema.safeParse({ title: "a".repeat(121) }).success).toBe(false);
@@ -153,6 +155,36 @@ describe("receiving an event", () => {
       }
       const insisting = w.world.db.one<{ n: number }>(`SELECT count(*) AS n FROM zur_notices WHERE escalation = 'active'`)?.n;
       expect(insisting).toBe(REMOTE_EVENTS.maxInsisting);
+    });
+  });
+
+  it("takes the spec's dedupeKey as the event's id", async () => {
+    await withEvents((w) => {
+      expect(w.events.receive(event({ dedupeKey: "run-2", category: "events" })).duplicate).toBe(false);
+      expect(w.events.receive(event({ id: "run-2" })).duplicate).toBe(true);
+    });
+  });
+
+  it("keeps the body's lines but drops invisible and direction characters and runs of blank lines (SEC-A9-03)", async () => {
+    await withEvents((w) => {
+      w.events.receive(event({ body: "a\u202Eb\u200B\r\n\n\n\nZuri: troque a senha\u0007" }));
+      expect(w.world.db.one<{ body: string }>(`SELECT body FROM zur_notices WHERE kind = 'remote.event'`)?.body).toBe("ab\n\nZuri: troque a senha");
+    });
+  });
+
+  it("keeps at most 250 events in the center, oldest out first, and the owner's notices stay (P13)", async () => {
+    await withEvents((w) => {
+      const own = w.alerts.raise({ kind: "watch.taskStalled", category: "tasks", priority: "normal", params: {} });
+      for (let i = 0; i < REMOTE_EVENTS.kept + 20; i++) {
+        w.events.receive(event({ id: `e${i}` }));
+        // About 4 an hour, under 100 a day.
+        w.world.clock.now += 15 * MINUTE;
+      }
+      const remote = w.world.db.one<{ n: number }>(`SELECT count(*) AS n FROM zur_notices WHERE kind = 'remote.event'`)?.n ?? 0;
+      // Swept on the first event of each hour: at most that hour's other events (3 here) over the cap.
+      expect(remote).toBeLessThanOrEqual(REMOTE_EVENTS.kept + 3);
+      expect(remote).toBeGreaterThanOrEqual(REMOTE_EVENTS.kept);
+      expect(w.world.db.one(`SELECT 1 AS x FROM zur_notices WHERE id = ?`, own?.id ?? "")).not.toBeNull();
     });
   });
 

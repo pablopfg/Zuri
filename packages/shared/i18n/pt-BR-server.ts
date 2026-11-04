@@ -48,6 +48,7 @@ export const ptBRServer = {
   "remote.tooMany": "Você já tem 20 tokens. Revogue um antes de criar outro.",
   "remote.nameTaken": "Já existe um token com esse nome.",
   "remote.agentPrompt": "Tokens de acesso não criam nem mudam rotinas com IA.",
+  "remote.highPriority": "Automações criadas por token usam prioridade baixa ou normal.",
   "error.storageFull": "O armazenamento da Zuri está cheio. Esvazie a lixeira ou apague o que não precisa mais para guardar coisas novas.",
   "error.storageLimit.tasks": "Você chegou ao limite de tarefas. Apague as concluídas que não precisa mais para criar novas.",
   "error.storageLimit.notes": "Você chegou ao limite de notas. Apague as que não precisa mais para criar novas.",

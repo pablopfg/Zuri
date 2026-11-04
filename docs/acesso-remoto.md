@@ -28,7 +28,7 @@ canais. Cabem 20 tokens.
 | Escopo | O que alcança |
 | --- | --- |
 | **Só ler** | Ler tarefas, contagens, notas, projetos, memórias e automações; `GET /api/health` |
-| **Ler e escrever** | O de **Só ler**, mais criar e mudar tarefas, notas, memórias e automações; apagar tarefas e notas (vão para a lixeira) |
+| **Ler e escrever** | O de **Só ler**, mais criar e mudar tarefas, notas e automações, criar memórias; apagar tarefas e notas (vão para a lixeira) |
 | **Só eventos** | Só `POST /api/remote/events` |
 
 Nenhum token chega a login, sessões, senha, 2FA, Telegram, aprovações, modo
@@ -36,9 +36,12 @@ de bloqueio, conversa, fluxos, CRM, MCP, Google, avaliações, configurações,
 lixeira, avisos, busca ou à própria tela de tokens. Também não:
 
 - apaga memórias nem automações (a memória não tem lixeira; pause a automação
-  com `PATCH {"enabled": false}`);
+  com `PATCH {"paused": true}`);
+- muda o texto de uma memória (a edição não guarda histórico, então apagaria o
+  texto antigo). Uma memória criada por token entra na conversa como "salva, não
+  confirmada", como as que a Zuri guarda sozinha, até você editar na tela;
 - cria nem muda uma rotina com IA (`agent_prompt`), só lembretes e resumos de
-  tarefas;
+  tarefas, com prioridade baixa ou normal;
 - faz busca por significado (gastaria a cota de IA do dia).
 
 ### Revogar
@@ -83,7 +86,8 @@ curl -X POST "https://exemplo.com.br/api/remote/events" \
 | `priority` | `low`, `normal` (padrão) ou `high`; `critical` é recusado |
 | `source` | Opcional, até 40 caracteres: letras, números, `.`, `-` e `_` (padrão `remote`) |
 | `kind` | Opcional, no mesmo formato; separa tipos de evento da mesma origem |
-| `id` | Opcional, até 100 caracteres; o mesmo `source` + `id` em 24 h é descartado |
+| `id` ou `dedupeKey` | Opcional, até 100 caracteres; o mesmo `source` + `id` em 24 h é descartado (`dedupeKey` é o nome da especificação; vale o mesmo) |
+| `category` | Opcional; só `events` |
 
 Respostas: 201 com o aviso criado; 200 com `{"event": null, "duplicate": true}`
 para uma repetição; 400 `VALIDATION_FAILED` para um campo fora da regra, um
@@ -96,7 +100,9 @@ JSON.
 ### O que a Zuri faz com um evento
 
 - Vira um aviso na categoria **Eventos** da central, com a origem no título
-  ("n8n: Backup falhou"), em uma linha, com links desarmados. O texto é
+  ("n8n: Backup falhou"), em uma linha, com links desarmados. O corpo mantém as
+  linhas, sem caracteres invisíveis ou de direção e sem linhas em branco em
+  sequência. O texto é
   guardado como dado: nunca vira instrução para a Zuri.
 - Uma origem com "zuri" ou com o nome da agente aparece como `remote`, para
   um evento não se passar pela Zuri.
@@ -104,20 +110,27 @@ JSON.
   o resto divide um só).
 - Eventos usam no máximo metade do limite por hora e por dia de cada canal,
   para os seus avisos continuarem saindo. No máximo 3 eventos insistem ao
-  mesmo tempo.
+  mesmo tempo. A central guarda os 250 eventos mais novos, para eles nunca
+  tirarem os seus avisos de lá.
 
 ### Limites
 
 | Limite | Valor | Resposta |
 | --- | --- | --- |
 | Pedidos por token | 120 por minuto | 429 + `Retry-After` |
+| Pedidos de todos os tokens | 10.000 por dia (UTC) | 429 até a meia-noite UTC |
+| Escritas de todos os tokens | 1.000 por dia (UTC) | 429 até a meia-noite UTC; a leitura continua |
 | Tokens recusados por rede | 10 em 15 minutos (até o token certo é barrado) | 429 + `Retry-After` |
+| Tentativas recusadas contadas | 200 de todas as redes em 15 minutos; passado isso, uma recusa não grava nada | 401 |
 | Eventos | 60 por hora e 100 por dia, somando todos os tokens | 429 + `Retry-After` |
 | Rota fora do escopo | — | 403 `FORBIDDEN` |
 | Token inválido, vencido, revogado ou suspenso | — | 401 `UNAUTHORIZED` |
 
 Um token errado nunca cai para o cookie de sessão: ou ele vale, ou o pedido
-termina em 401.
+termina em 401. Um cabeçalho que nem tem o formato de um token é recusado antes
+de chegar ao banco, e com o acesso remoto desligado nenhuma tentativa grava
+nada. Os tetos por dia existem para um cliente preso num laço não gastar a cota
+diária do plano Free e deixar o app e o bot sem a deles.
 
 ### Com o Cloudflare Access ligado
 
