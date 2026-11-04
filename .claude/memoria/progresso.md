@@ -135,5 +135,5 @@ etapas ficam detalhadas; as mais antigas viram uma linha na tabela.
 ## Próxima etapa
 
 - Número e nome: 19d · Resposta automática às avaliações positivas; depois dela, 22c · Passos da agenda e dos contatos
-- Dependências mescladas: 19c (quando a PR dela entrar)
+- Dependências mescladas: 19c (#169, 04/11/2026)
 - Precisa de algo do Pablo antes: nada para codar (Google simulado); para usar de verdade, o "Basic API Access" aprovado pelo Google.
