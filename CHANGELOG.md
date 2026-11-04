@@ -19,6 +19,43 @@ funciona: [docs/agente/versionamento.md](docs/agente/versionamento.md).
 
 O que já entrou na `develop` e ainda não ganhou número fica em [`changelog/nao-lancado/`](changelog/nao-lancado/) por alguns minutos, até o workflow de versão escrever a seção.
 
+## [0.32.0] - 2026-11-04
+
+Mesclada às 02:04 (UTC-3) · commit [`f4a4dfa`](https://github.com/pablopfg/Zuri/commit/f4a4dfa30f6e9908e8a912c4acbdd99f95f61ff3) · PR [#180](https://github.com/pablopfg/Zuri/pull/180) · Adiciona passos da agenda e dos contatos aos fluxos (etapa 22c)
+
+### Adicionado
+
+- Três passos novos nos fluxos, em **Automações › Fluxos**:
+  - **Ler a agenda**: lê os eventos de uma agenda aberta à Zuri (ou de todas),
+    de tantos dias a partir de hoje, por 1 a 31 dias. Cada evento vira um item.
+  - **Criar evento**: cria um evento por item numa agenda em "ler e editar",
+    até 10 por execução. Ninguém é convidado nem recebe e-mail. Uma chave
+    opcional, como `{{id}}`, impede que o mesmo item vire um segundo evento.
+  - **Buscar contatos**: busca na cópia dos seus contatos do Google por nome,
+    telefone, e-mail, etiqueta ou aniversário, sem chamar o Google. Com "um
+    por item", cada item ganha o contato que bate com ele.
+- O editor lista as agendas abertas e as etiquetas copiadas, e avisa quando o
+  Google ou os contatos estão desligados.
+- A Zuri também pode sugerir esses passos quando você pede um fluxo na
+  conversa. A sugestão continua nascendo desligada.
+
+### Corrigido
+
+- No ambiente de desenvolvimento, os eventos de exemplo da Agenda passam a
+  seguir o dia de São Paulo mesmo quando o servidor sobe antes da meia-noite
+  (#178).
+
+### Segurança
+
+- Nenhum passo muda ou apaga evento, e uma agenda só de leitura nunca recebe
+  evento. O que vem da agenda e dos contatos chega à IA só como dado. As
+  chamadas ao Google entram no mesmo teto de chamadas da execução e do
+  despertar.
+
+### Atualização
+
+- Nenhuma migration nem secret novo.
+
 ## [0.31.1] - 2026-11-04
 
 Mesclada às 01:26 (UTC-3) · commit [`92822cd`](https://github.com/pablopfg/Zuri/commit/92822cddf6072cc480d6b04581efa8aa5fb11c3a) · PR [#179](https://github.com/pablopfg/Zuri/pull/179) · Etapa 19d mesclada (#174)
@@ -2380,7 +2417,8 @@ Mesclada às 22:15 (UTC-3) · commit [`360a79e`](https://github.com/pablopfg/Zur
   `npm audit`), CodeQL, Dependabot e rulesets para a `develop` e a `main`.
 - `LICENSE` (MIT), `NOTICE.md`, `SECURITY.md` e `CONTRIBUTING.md`.
 
-[Não lançado]: https://github.com/pablopfg/Zuri/compare/v0.31.1...develop
+[Não lançado]: https://github.com/pablopfg/Zuri/compare/v0.32.0...develop
+[0.32.0]: https://github.com/pablopfg/Zuri/releases/tag/v0.32.0
 [0.31.1]: https://github.com/pablopfg/Zuri/releases/tag/v0.31.1
 [0.31.0]: https://github.com/pablopfg/Zuri/releases/tag/v0.31.0
 [0.30.1]: https://github.com/pablopfg/Zuri/releases/tag/v0.30.1
