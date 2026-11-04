@@ -628,6 +628,34 @@ describe("the notices' group", () => {
     expect(sent("createForumTopic")).toHaveLength(0);
   });
 
+  it("step 19c: reviews go to their own topic 'Avaliações'; drafts, bursts and problems only to the private chat", async () => {
+    await linkOwner();
+    await linkGroup({ forum: true });
+    await raise({ kind: "reviews.negative", category: "system", priority: "normal", params: { n: 2 }, body: "Ana: Demorou", link: "/contatos/avaliacoes", origin: "system" });
+    expect(sent("createForumTopic").map((c) => c.body.name)).toEqual(["Avaliações"]);
+    expect(sent().map((m) => [m.body.chat_id, m.body.message_thread_id])).toEqual([[GROUP, topicIds]]);
+    botCalls.length = 0;
+    for (const kind of ["reviews.draft", "reviews.burst", "reviews.problem"] as const) {
+      await raise({ kind, category: "system", priority: "normal", params: { count: 2 }, link: "/contatos/avaliacoes", origin: "system" });
+    }
+    expect(sent().map((m) => m.body.chat_id)).toEqual([OWNER, OWNER, OWNER]);
+    expect(sent("createForumTopic")).toHaveLength(0);
+  });
+
+  it("step 19c (SEC-A9-01): a review in the group stays discreet even with the full text of 'system' turned on", async () => {
+    await linkOwner();
+    await linkGroup({ forum: true });
+    await json(await api("PATCH", "/settings", { alertFullText: ["system"] }), 200);
+    await raise({ kind: "reviews.negative", category: "system", priority: "normal", params: { n: 2 }, body: "Ana: Demorou demais", link: "/contatos/avaliacoes", origin: "system" });
+    const [message] = sent();
+    expect(message?.body.chat_id).toBe(GROUP);
+    expect(String(message?.body.text)).not.toContain("Demorou");
+    botCalls.length = 0;
+    // Any other notice of the category keeps the owner's choice.
+    await raise({ kind: "reviews.draft", category: "system", priority: "normal", params: { count: 1 }, body: "Texto do sistema", link: "/contatos/avaliacoes", origin: "system" });
+    expect(String(sent()[0]?.body.text)).toContain("Texto do sistema");
+  });
+
   it("a deleted topic: the notice goes to the general topic and the topic is made again next time", async () => {
     await linkOwner();
     await linkGroup({ forum: true });

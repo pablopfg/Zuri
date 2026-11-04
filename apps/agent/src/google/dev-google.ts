@@ -1,4 +1,4 @@
-import { CONTACTS_SCOPE, GOOGLE_CALLBACK_PATH, toBase64Url } from "@zuri/shared";
+import { BUSINESS_SCOPE, CONTACTS_SCOPE, GOOGLE_CALLBACK_PATH, toBase64Url } from "@zuri/shared";
 import type { GoogleNetwork } from "./service.ts";
 
 /**
@@ -64,8 +64,40 @@ export interface DevPeople {
   remove(resourceName: string): void;
 }
 
+/** A review as the Business Profile API sends it (step 19c). */
+export interface DevReview {
+  name: string;
+  reviewId: string;
+  reviewer?: { displayName?: string; isAnonymous?: boolean };
+  starRating: string;
+  comment?: string;
+  createTime: string;
+  updateTime: string;
+  reviewReply?: { comment: string; updateTime: string };
+  /** Sample data only: hidden from the location's first list, then shown as written at that moment (a review that "arrives"). */
+  arrives?: boolean;
+  [field: string]: unknown;
+}
+
+export interface DevBusiness {
+  accounts: { name: string; accountName: string }[];
+  /** Each account's locations, as the Business Information API names them ("locations/123"). */
+  locations: Map<string, { name: string; title: string }[]>;
+  /** Each location's reviews ("accounts/1/locations/2"). */
+  reviews: Map<string, DevReview[]>;
+  /** Makes every Business Profile call answer this status and body (403 before the access is granted), or null. */
+  failure: { status: number; body: unknown } | null;
+  /** Makes only the reply's PUT answer this status, or throw (a timeout) with "throw". */
+  replyFailure: number | "throw" | null;
+  add(location: string, review: { id: string; rating: number; name?: string; anonymous?: boolean; comment?: string; at?: string; reply?: string; arrives?: boolean }): DevReview;
+  edit(location: string, id: string, patch: Partial<Omit<DevReview, "name" | "reviewId">>): void;
+  /** Sample data only: the profile as it was, after the access is revoked (each e2e test starts over). */
+  restart?: () => void;
+}
+
 export interface DevGoogle {
   people: DevPeople;
+  business: DevBusiness;
   clientId: string;
   clientSecret: string;
   calendars: DevCalendar[];
@@ -93,9 +125,11 @@ async function s256(verifier: string): Promise<string> {
   return toBase64Url(new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier))));
 }
 
-const GOOGLE_HOSTS = new Set(["oauth2.googleapis.com", "www.googleapis.com", "people.googleapis.com"]);
-// What the consent page grants by default: the calendar and, joined to it, the contacts (step 19b).
-const SCOPES = ["https://www.googleapis.com/auth/calendar.calendarlist.readonly", "https://www.googleapis.com/auth/calendar.events", CONTACTS_SCOPE];
+const BUSINESS_HOSTS = new Set(["mybusinessaccountmanagement.googleapis.com", "mybusinessbusinessinformation.googleapis.com", "mybusiness.googleapis.com"]);
+const GOOGLE_HOSTS = new Set(["oauth2.googleapis.com", "www.googleapis.com", "people.googleapis.com", ...BUSINESS_HOSTS]);
+// What the consent page grants by default: the calendar and, joined to it, the contacts (step 19b) and the reviews (step 19c).
+const SCOPES = ["https://www.googleapis.com/auth/calendar.calendarlist.readonly", "https://www.googleapis.com/auth/calendar.events", CONTACTS_SCOPE, BUSINESS_SCOPE];
+const STARS = ["STAR_RATING_UNSPECIFIED", "ONE", "TWO", "THREE", "FOUR", "FIVE"];
 
 export function devGoogle(options: { clientId?: string | undefined; clientSecret?: string | undefined; calendars?: DevCalendar[]; clock?: () => number } = {}): DevGoogle {
   const clock = options.clock ?? Date.now;
@@ -128,8 +162,38 @@ export function devGoogle(options: { clientId?: string | undefined; clientSecret
       entry.version = changes++;
     },
   };
+  const business: DevBusiness = {
+    accounts: [],
+    locations: new Map(),
+    reviews: new Map(),
+    failure: null,
+    replyFailure: null,
+    add(location, review) {
+      const at = review.at ?? new Date(clock()).toISOString();
+      const stored: DevReview = {
+        name: `${location}/reviews/${review.id}`,
+        reviewId: review.id,
+        reviewer: review.anonymous ? { isAnonymous: true } : { displayName: review.name ?? "Cliente Exemplo" },
+        starRating: STARS[review.rating] ?? "STAR_RATING_UNSPECIFIED",
+        ...(review.comment === undefined ? {} : { comment: review.comment }),
+        createTime: at,
+        updateTime: at,
+        ...(review.reply ? { reviewReply: { comment: review.reply, updateTime: at } } : {}),
+        ...(review.arrives ? { arrives: true } : {}),
+      };
+      const list = business.reviews.get(location) ?? [];
+      list.push(stored);
+      business.reviews.set(location, list);
+      return stored;
+    },
+    edit(location, id, patch) {
+      const review = business.reviews.get(location)?.find((item) => item.reviewId === id);
+      if (review) Object.assign(review, patch);
+    },
+  };
   const google: DevGoogle = {
     people,
+    business,
     clientId: options.clientId ?? "dev-client.apps.googleusercontent.com",
     clientSecret: options.clientSecret ?? "dev-secret",
     calendars: options.calendars ?? [
@@ -161,11 +225,14 @@ export function devGoogle(options: { clientId?: string | undefined; clientSecret
       const auth = request.headers.get("authorization") ?? "";
       if (!auth.startsWith("Bearer ") || !google.accessTokens.has(auth.slice(7))) return json({ error: { code: 401 } }, 401);
       if (url.hostname === "people.googleapis.com") return peopleApi(url, request.method);
+      if (BUSINESS_HOSTS.has(url.hostname)) return businessApi(url, request.method, body);
       return api(url, request.method, body, request.headers);
     },
   };
 
   const codes = new Map<string, true>();
+  /** Locations listed at least once: the sample reviews that "arrive" wait for the second list. */
+  const listed = new Set<string>();
 
   async function token(url: URL, body: string): Promise<Response> {
     if (url.pathname === "/revoke") {
@@ -173,6 +240,8 @@ export function devGoogle(options: { clientId?: string | undefined; clientSecret
       const value = form.get("token") ?? "";
       google.revoked.push(value);
       google.refreshTokens.delete(value);
+      listed.clear();
+      business.restart?.();
       return json({});
     }
     if (url.pathname !== "/token") return json({ error: "not_found" }, 404);
@@ -205,6 +274,61 @@ export function devGoogle(options: { clientId?: string | undefined; clientSecret
       return issue();
     }
     return json({ error: "unsupported_grant_type" }, 400);
+  }
+
+  /**
+   * The Business Profile (step 19c): accounts.list, locations.list (by
+   * account) and the v4 reviews: list (newest change first, pages by offset),
+   * get, updateReply (creates or replaces) and deleteReply.
+   */
+  function businessApi(url: URL, method: string, body: string): Response {
+    if (business.failure) return json(business.failure.body, business.failure.status);
+    const path = url.pathname;
+    if (url.hostname === "mybusinessaccountmanagement.googleapis.com") {
+      if (path !== "/v1/accounts" || method !== "GET") return json({ error: { code: 404 } }, 404);
+      return json({ accounts: business.accounts.map((account) => ({ ...account, type: "PERSONAL" })) });
+    }
+    if (url.hostname === "mybusinessbusinessinformation.googleapis.com") {
+      const match = /^\/v1\/(accounts\/[^/]+)\/locations$/.exec(path);
+      if (!match || method !== "GET" || !url.searchParams.get("readMask")) return json({ error: { code: 400 } }, 400);
+      return json({ locations: business.locations.get(match[1] as string) ?? [] });
+    }
+    const list = /^\/v4\/(accounts\/[^/]+\/locations\/[^/]+)\/reviews$/.exec(path);
+    if (list && method === "GET") {
+      const location = list[1] as string;
+      const first = !listed.has(location);
+      listed.add(location);
+      for (const review of business.reviews.get(location) ?? []) {
+        if (!review.arrives || first) continue;
+        // It "arrives" now: written after the first read, as a new review would be.
+        delete review.arrives;
+        const now = new Date(clock()).toISOString();
+        review.createTime = now;
+        review.updateTime = now;
+      }
+      const all = [...(business.reviews.get(location) ?? [])].filter((review) => !review.arrives).sort((a, b) => b.updateTime.localeCompare(a.updateTime));
+      const size = Math.min(50, Number(url.searchParams.get("pageSize") ?? "50") || 50);
+      const offset = Number(url.searchParams.get("pageToken") ?? "0") || 0;
+      const page = all.slice(offset, offset + size);
+      return json({ reviews: page.map((review) => structuredClone(review)), totalReviewCount: all.length, ...(offset + size < all.length ? { nextPageToken: String(offset + size) } : {}) });
+    }
+    const one = /^\/v4\/(accounts\/[^/]+\/locations\/[^/]+)\/reviews\/([^/]+)(\/reply)?$/.exec(path);
+    const review = one ? business.reviews.get(one[1] as string)?.find((item) => item.reviewId === one[2]) : undefined;
+    if (!one || !review) return json({ error: { code: 404, status: "NOT_FOUND" } }, 404);
+    if (!one[3] && method === "GET") return json(structuredClone(review));
+    if (one[3] && method === "PUT") {
+      if (business.replyFailure === "throw") throw new Error("timeout");
+      if (business.replyFailure) return json({ error: { code: business.replyFailure } }, business.replyFailure);
+      const comment = (JSON.parse(body || "{}") as { comment?: unknown }).comment;
+      if (typeof comment !== "string" || !comment || new TextEncoder().encode(comment).length > 4096) return json({ error: { code: 400 } }, 400);
+      review.reviewReply = { comment, updateTime: new Date(clock()).toISOString() };
+      return json(review.reviewReply);
+    }
+    if (one[3] && method === "DELETE") {
+      delete review.reviewReply;
+      return json({});
+    }
+    return json({ error: { code: 405 } }, 405);
   }
 
   function calendarOf(id: string): DevCalendar | undefined {
@@ -378,6 +502,29 @@ function seed(google: DevGoogle): void {
   add("consultorio@exemplo.com.br", "Atendimento", { dateTime: at(0, 16) }, { dateTime: at(0, 17) });
   add("consultorio@exemplo.com.br", "Atendimento", { dateTime: at(1, 8) }, { dateTime: at(1, 9) });
   seedContacts(google, m, d);
+  seedReviews(google);
+}
+
+/** A sample profile with reviews (step 19c): two old ones the first read keeps as history, and three that arrive after it. */
+function seedReviews(google: DevGoogle): void {
+  google.business.accounts.push({ name: "accounts/101", accountName: "Exemplo Consultório" });
+  google.business.locations.set("accounts/101", [
+    { name: "locations/201", title: "Exemplo Consultório" },
+    { name: "locations/202", title: "Exemplo Filial" },
+  ]);
+  google.business.restart = () => sampleReviews(google);
+  sampleReviews(google);
+}
+
+function sampleReviews(google: DevGoogle): void {
+  google.business.reviews.set("accounts/101/locations/201", []);
+  const old = (days: number) => new Date(Date.now() - days * 86_400_000).toISOString();
+  google.business.add("accounts/101/locations/201", { id: "r1", rating: 5, name: "Ana Souza", comment: "Atendimento excelente, equipe muito atenciosa.", at: old(30), reply: "Obrigado, Ana! Equipe Exemplo" });
+  google.business.add("accounts/101/locations/201", { id: "r2", rating: 4, name: "Bruno Lima", at: old(20) });
+  // Three that arrive after the first read: a positive one to approve, a negative one for the team, a rating without text.
+  google.business.add("accounts/101/locations/201", { id: "r3", rating: 5, name: "Carla Mendes", comment: "Adorei o atendimento, equipe muito gentil e lugar aconchegante.", arrives: true });
+  google.business.add("accounts/101/locations/201", { id: "r4", rating: 2, name: "Diego Rocha", comment: "Esperei quase uma hora para ser atendido.", arrives: true });
+  google.business.add("accounts/101/locations/201", { id: "r5", rating: 5, name: "Elisa Prado", arrives: true });
 }
 
 /** Sample labels and contacts (step 19b): one birthday today, one special date next week, names with accents. */

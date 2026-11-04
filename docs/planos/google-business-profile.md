@@ -611,3 +611,25 @@ mesma avaliação em duas páginas. Cobertura nos pisos de sempre (agente 99%).
 
 - Notificação na hora pelo Pub/Sub ⚠️: fora até o Pablo pedir (seção 8).
 - Mais de 3 locais: pendência se o Pablo tiver mais perfis.
+
+## 15. O que mudou na implementação da 19c
+
+- **Tela.** A tela Avaliações virou uma aba de Contatos
+  (`/contatos/avaliacoes`), como a aba Clientes da 22b, e a configuração ficou
+  numa seção do cartão do Google em Integrações. As duas carregam sob demanda
+  e o JavaScript inicial não mudou (139.551 B, teto 139.600 B).
+- **Aprovação só na tela.** Publicar pelo privado do bot ficou para depois:
+  na 19c, só a tela publica. O bot avisa, mostra em `/status` e pausa com
+  `/pausar_rotinas`.
+- **Categoria dos avisos.** O `CHECK` da central não tem a categoria
+  `reviews`, e trocá-lo pediria recriar a tabela. Os avisos usam a categoria
+  `system`, e o tipo `reviews.*` decide o tópico "Avaliações" no grupo.
+- **Primeira leitura ao salvar.** Salvar a configuração já lê o perfil, para
+  o histórico existir antes da primeira avaliação nova.
+- **Avaliação antiga que aparece tarde.** Uma avaliação escrita antes de o
+  perfil ser ligado e que não veio na primeira leitura nunca vira nova. A
+  leitura olha uma hora para trás da marca d'água, porque o Google pode listar
+  uma avaliação um pouco depois do `updateTime` dela.
+- **Cota zero.** Antes do "Basic API Access", o Google responde 429 com
+  `quota_limit_value: "0"`. A Zuri trata como "O Google ainda não liberou o
+  acesso" e tenta de novo a cada 6 horas.

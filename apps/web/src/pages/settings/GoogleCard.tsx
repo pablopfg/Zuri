@@ -1,7 +1,7 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { CALENDAR_MODES, type CalendarMode, GOOGLE_STATE_PREFIX, type GoogleCalendarInfo, type GoogleProblem, type GoogleStatus } from "@zuri/shared";
 import { CalendarDays, RefreshCw } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { Link } from "react-router";
 import { useToast } from "../../components/Toaster.tsx";
 import { Button, Card, Dialog, ErrorNotice, Loading, Notice, SelectField } from "../../components/ui.tsx";
@@ -11,6 +11,8 @@ import { CONTACTS_STATUS_KEY } from "../../lib/contacts.ts";
 import { useI18n } from "../../lib/i18n.tsx";
 import { ContactsSection } from "./ContactsSection.tsx";
 
+// The reviews' part (step 19c) comes only when the account is connected: its code and texts stay out of Settings' download (rule P11).
+const ReviewsSection = lazy(() => import("./ReviewsSection.tsx").then((m) => ({ default: m.ReviewsSection })));
 
 type T = ReturnType<typeof useI18n>["t"];
 
@@ -54,7 +56,7 @@ function useGoogleReturn(): boolean {
     if (code !== null) body.code = code.slice(0, 2_048);
     if (error !== null) body.error = error.slice(0, 200);
     setFinishing(true);
-    api<GoogleStatus & { replaced?: boolean; purpose?: "calendar" | "contacts" }>("/google/callback", { method: "POST", body })
+    api<GoogleStatus & { replaced?: boolean; purpose?: "calendar" | "contacts" | "reviews" }>("/google/callback", { method: "POST", body })
       .then(async ({ replaced, purpose, ...status }) => {
         // The first reading may still be on its way (this page just opened), with the state from before. One still
         // on its way is joined, not restarted, by invalidateQueries: cancel it, then read again.
@@ -64,7 +66,9 @@ function useGoogleReturn(): boolean {
         // The contacts (step 19b) joined the same grant: their card reads again, the same way.
         await qc.cancelQueries({ queryKey: CONTACTS_STATUS_KEY, exact: true });
         void qc.invalidateQueries({ queryKey: ["contacts"] });
-        toast(t(replaced ? "web.google.replaced" : purpose === "contacts" ? "web.contacts.card.connected" : "web.google.connected"));
+        // And the reviews (step 19c).
+        void qc.invalidateQueries({ queryKey: ["reviews"] });
+        toast(t(replaced ? "web.google.replaced" : purpose === "contacts" ? "web.contacts.card.connected" : purpose === "reviews" ? "web.google.reviewsConnected" : "web.google.connected"));
       })
       .catch((failure: unknown) => toast(errorMessage(failure)))
       .finally(() => setFinishing(false));
@@ -192,6 +196,9 @@ export function GoogleCard() {
                 )}
               </section>
               <ContactsSection />
+              <Suspense fallback={<Loading rows={1} />}>
+                <ReviewsSection />
+              </Suspense>
               <div className="flex justify-end border-t border-border pt-4">
                 <Button variant="danger" onClick={() => setConfirming(true)}>
                   {t("web.google.disconnect")}

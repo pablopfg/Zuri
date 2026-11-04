@@ -771,6 +771,12 @@ const KIND_TEXT: Record<Exclude<NoticeKind, "security">, Text> = {
   "crm.followUps": { title: "notice.crm.followUps.title", body: "notice.crm.followUps.body" },
   "crm.birthdays": { title: "notice.crm.birthdays.title", body: "notice.crm.birthdays.body" },
   "crm.newClient": { title: "notice.crm.newClient.title", body: "notice.crm.newClient.body" },
+  "reviews.negative": { title: "notice.reviews.negative.title", body: null },
+  "reviews.worse": { title: "notice.reviews.worse.title", body: null },
+  "reviews.many": { title: "notice.reviews.many.title", body: "notice.reviews.many.body" },
+  "reviews.burst": { title: "notice.reviews.burst.title", body: "notice.reviews.burst.body" },
+  "reviews.draft": { title: "notice.reviews.draft.title", body: "notice.reviews.draft.body" },
+  "reviews.problem": { title: "notice.reviews.problem.title", body: "notice.reviews.problem.body" },
 };
 
 /** Security alerts: what happened and what to do if it was not the owner, never where it came from (it may show on a locked screen). */

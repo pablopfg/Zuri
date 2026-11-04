@@ -857,6 +857,57 @@ A etapa 19 liga a conta Google do dono pelo cliente OAuth dele mesmo
   ligado, só essa rota passa sem login, e só com token certo, sem cookie e sem
   `Authorization`.
 
+## Avaliações do Google
+
+A etapa 19c lê as avaliações do Perfil da Empresa e publica respostas
+aprovadas pelo dono (`docs/avaliacoes-google.md`). O texto de uma avaliação é
+escrito por qualquer pessoa na internet, então ele é o dado menos confiável
+que a Zuri lê. O que protege:
+
+- **Nada sai sem o dono.** Publicar é sempre um clique do dono na tela, preso
+  à versão da avaliação que ele viu (`updateTime` e hash do texto) e válido
+  por 72 horas. A resposta automática fica para a etapa 19d.
+- **Triagem fixa.** A nota decide primeiro e a regra é código: 1 a 3 estrelas
+  (ou sem nota) vão sempre para a equipe, avisadas mesmo sem cota de IA. A IA
+  só deixa uma avaliação mais cautelosa, nunca menos.
+- **Texto suspeito não chega à IA.** Texto com cara de instrução, link,
+  telefone, e-mail, marcação, entidade HTML, letras espaçadas uma a uma,
+  palavra que mistura alfabetos ou marca invisível (conferida no texto que o
+  Google mandou, antes da limpeza) vira "Texto suspeito" e só o dono
+  responde, escrevendo. Letras largas e estilizadas viram comuns antes da
+  conferência.
+- **Agente sem ferramentas.** O agente de avaliações não tem ferramentas,
+  histórico nem memórias. A avaliação entra em `<data source="review">`
+  neutralizada e a resposta dele é JSON validado por Zod.
+- **Conferência fixa em toda resposta.** Rascunho da IA, modelo ou texto do
+  dono, com os caracteres parecidos já trocados pelos comuns (`exemplo．com`,
+  `＠perfil`, `①`): tamanho, idioma medido na avaliação (o rótulo da IA só
+  acrescenta conferência), nenhuma letra de outro alfabeto, nenhum número, link, e-mail, `@` ou `#`, nenhum nome
+  além do primeiro nome de quem avaliou, nada copiado da avaliação, nenhuma
+  promessa, preço, assunto jurídico ou de saúde, sem invisíveis e com a
+  assinatura. O rascunho da IA ainda passa por uma segunda leitura que vê só
+  a resposta. A conferência roda de novo na hora de publicar.
+- **Releitura antes de publicar.** A avaliação vai para `sending` numa única
+  instrução (duas abas não publicam duas vezes), é lida de novo no Google e
+  só então vai o `PUT …/reply`. Se mudou, sumiu ou já tem resposta, nada sai.
+  O bloqueio e a pausa são conferidos de novo logo antes do envio. Sem
+  resposta do Google, ou com o objeto reiniciado no meio (um `sending` com
+  mais de 5 minutos), a avaliação fica `uncertain` e a leitura seguinte
+  confere no Google antes de qualquer coisa. Apagar só vale para a resposta cujo hash é
+  da Zuri; a resposta de outra pessoa nunca é tocada.
+- **Endereços fixos.** Só as três APIs do Perfil da Empresa, pela conexão
+  única do Google, com prazo de 10 s. Escopo `business.manage`, pedido à parte
+  com `include_granted_scopes`.
+- **Fora do log e do aviso curto.** Nome, texto e ids do Google nunca vão para
+  o log: só contagens e nomes de erro. O título do aviso não leva nome nem
+  texto; o corpo leva o primeiro nome e o texto numa linha só (não imita o
+  rodapé de outro aviso), que passam pelo `disarm()` do bot. No grupo da
+  equipe o aviso de avaliação é sempre discreto, mesmo com o texto completo
+  da categoria "Sistema" aberto: o texto de terceiros fica no app. A auditoria de 180 dias guarda só ações e códigos da conferência.
+- **Bloqueio e desligar.** No bloqueio nada lê o Google nem publica.
+  Desligar as avaliações ou desconectar o Google apaga a cópia guardada; no
+  Google nada muda.
+
 ## Dados apagados
 
 Apagar uma memória (ou esvaziar a lixeira) tira o registro da tabela e do

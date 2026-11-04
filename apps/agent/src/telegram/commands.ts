@@ -112,6 +112,8 @@ export interface CommandDeps {
   aiAvailable(): boolean;
   /** MCP servers waiting for the owner to sign in (step 18b), for /status. */
   mcpSignIn?: () => number;
+  /** The Google reviews (step 19c): how many wait for the owner, and whether replies are paused. */
+  reviews?: () => { enabled: boolean; needs: number; paused: boolean };
   /** The flows (step 22a), for /status: the monitors' sites and the flows whose last run failed. */
   flows?: () => { sites: { host: string; state: "up" | "down" | "unknown" }[]; failing: string[] };
   /** The Google Calendar (step 19): /hoje lists today's events of the calendars open to Zuri. */
@@ -415,6 +417,8 @@ export class TelegramCommands {
     ];
     const signIn = this.deps.mcpSignIn?.() ?? 0;
     if (signIn > 0) lines.push(this.#t("telegram.cmd.status.mcpSemLogin", { n: signIn }));
+    const reviews = this.deps.reviews?.();
+    if (reviews?.enabled) lines.push(this.#t(reviews.paused ? "telegram.cmd.status.avaliacoesPausadas" : "telegram.cmd.status.avaliacoes", { n: reviews.needs }));
     const flows = this.deps.flows?.();
     if (flows && flows.sites.length > 0) {
       const down = flows.sites.filter((site) => site.state === "down");

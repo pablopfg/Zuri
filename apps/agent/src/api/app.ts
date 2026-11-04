@@ -56,6 +56,7 @@ import { registerApprovalRoutes } from "./approvals.ts";
 import { registerSemanticRoutes, type SemanticDeps } from "./semantic.ts";
 import { type McpRouteDeps, registerMcpRoutes } from "./mcp.ts";
 import { type GoogleRouteDeps, registerGooglePush, registerGoogleRoutes } from "./google.ts";
+import { registerReviewRoutes } from "./reviews.ts";
 import { type FlowRouteDeps, registerFlowRoutes } from "./flows.ts";
 import { type CrmRouteDeps, registerCrmEvents, registerCrmRoutes } from "./crm.ts";
 import { registerTelegramRoutes, registerTelegramWebhook, type TelegramDeps } from "./telegram.ts";
@@ -500,6 +501,7 @@ export function createApi(deps: ApiDeps) {
   const mcp = deps.mcp;
   if (mcp) registerMcpRoutes(app, () => mcp(), client);
   if (google) registerGoogleRoutes(app, () => google(), client);
+  if (google) registerReviewRoutes(app, () => google(), client);
   const flows = deps.flows;
   if (flows) registerFlowRoutes(app, () => flows(), client);
   if (crm) registerCrmRoutes(app, () => crm(), client);

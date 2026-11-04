@@ -37,6 +37,7 @@ export {
   ptBRContacts,
   ptBRFlows,
   ptBRCrm,
+  ptBRReviews,
   t,
 } from "../i18n/index.ts";
 export { AGENT_INSTANCE_NAME } from "./constants.ts";
@@ -145,3 +146,5 @@ export * from "./flows.ts";
 export * from "./flows-schemas.ts";
 export * from "./crm.ts";
 export * from "./crm-schemas.ts";
+export * from "./reviews.ts";
+export * from "./reviews-schemas.ts";

@@ -4,7 +4,7 @@
  * change, whoever made it. The heartbeat and the chat's tool events carry the
  * numbers; a screen fetches again only the area whose number moved.
  */
-export const AREAS = ["tasks", "projects", "notes", "trash", "memories", "automations", "conversations", "calendar", "contacts", "flows", "crm"] as const;
+export const AREAS = ["tasks", "projects", "notes", "trash", "memories", "automations", "conversations", "calendar", "contacts", "flows", "crm", "reviews"] as const;
 export type Area = (typeof AREAS)[number];
 /** Numbers only, never content. An area left out is one this server does not count. */
 export type AreaVersions = Partial<Record<Area, number>>;
