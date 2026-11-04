@@ -106,6 +106,7 @@ describe("the migration list", () => {
       23: "5a2aa2b2a2bed010c38ab88ef70332d8f0e26857c4e03d98f8b2fc043509fb60",
       24: "02637c24812ac7cc5acd9322e995a05e0859f73f66f5e1f895c58f6f61221746",
       25: "ce608a49fa98841c41f6e75c05fb6af4a60fee7cf274f7b9d3627385b7380eb5",
+      26: "409d269640ed532a4505ff9a36d9026d52385cff136ae60972aceac4649af7eb",
     };
     for (const m of MIGRATIONS) {
       const digest = createHash("sha256").update(statementText(m).replace(/\r\n/g, "\n")).digest("hex");
@@ -121,7 +122,7 @@ describe("migrate", () => {
       expect(zurObjects(db)).toEqual([]);
 
       expect(migrate(db)).toBe(LATEST_SCHEMA_VERSION);
-      expect(schemaVersion(db)).toBe(25);
+      expect(schemaVersion(db)).toBe(26);
       // FTS5 keeps shadow tables of its own (zur_notes_fts_data and others): only ours are listed.
       expect(zurObjects(db).filter((name) => !/^table:zur_(notes|memories)_fts_/.test(name))).toEqual([
         "table:zur_activity",
@@ -189,6 +190,15 @@ describe("migrate", () => {
         "trigger:zur_area_projects_projects_delete",
         "trigger:zur_area_projects_projects_insert",
         "trigger:zur_area_projects_projects_update",
+        "trigger:zur_area_reviews_review_locations_delete",
+        "trigger:zur_area_reviews_review_locations_insert",
+        "trigger:zur_area_reviews_review_locations_update",
+        "trigger:zur_area_reviews_review_settings_delete",
+        "trigger:zur_area_reviews_review_settings_insert",
+        "trigger:zur_area_reviews_review_settings_update",
+        "trigger:zur_area_reviews_reviews_delete",
+        "trigger:zur_area_reviews_reviews_insert",
+        "trigger:zur_area_reviews_reviews_update",
         "trigger:zur_area_tasks_tasks_delete",
         "trigger:zur_area_tasks_tasks_insert",
         "trigger:zur_area_tasks_tasks_update",
@@ -351,6 +361,16 @@ describe("migrate", () => {
         "table:zur_push_devices",
         "index:zur_push_devices_browser",
         "table:zur_recovery_codes",
+        "table:zur_review_events",
+        "index:zur_review_events_at",
+        "table:zur_review_locations",
+        "table:zur_review_settings",
+        "table:zur_reviews",
+        "index:zur_reviews_drafts",
+        "index:zur_reviews_list",
+        "index:zur_reviews_location",
+        "index:zur_reviews_seen",
+        "index:zur_reviews_state",
         "table:zur_schema_version",
         "table:zur_sessions",
         "index:zur_sessions_last_seen",
@@ -705,11 +725,55 @@ describe("migrate", () => {
     });
   });
 
+  it("upgrades a database at version 25 to 26: the reviews off, their area moved only by what the Reviews tab shows, the checks holding", async () => {
+    await withEmptyDatabase("from-25", (db) => {
+      expect(migrate(db, MIGRATIONS.slice(0, 25))).toBe(25);
+      db.run(`UPDATE zur_area_versions SET crm = 3`);
+      expect(migrate(db)).toBe(26);
+      expect(db.one(`SELECT crm, reviews FROM zur_area_versions`)).toEqual({ crm: 3, reviews: 0 });
+      db.run(`INSERT INTO zur_review_settings (id) VALUES (1)`);
+      expect(db.one(`SELECT enabled, level, paused, tone, templates FROM zur_review_settings`)).toEqual({ enabled: 0, level: "approve", paused: 0, tone: "close", templates: "[]" });
+      expect(() => db.run(`INSERT INTO zur_review_settings (id) VALUES (2)`)).toThrow();
+      expect(db.one(`SELECT reviews FROM zur_area_versions`)).toEqual({ reviews: 1 });
+      // The check's bookkeeping moves nothing; the owner's choices do.
+      db.run(`UPDATE zur_review_settings SET running_since = 1, next_check = 2, drafts_today = 1, neurons_today = 5, day = 'd'`);
+      expect(db.one(`SELECT reviews FROM zur_area_versions`)).toEqual({ reviews: 1 });
+      db.run(`UPDATE zur_review_settings SET paused = 1`);
+      expect(db.one(`SELECT reviews FROM zur_area_versions`)).toEqual({ reviews: 2 });
+      expect(() => db.run(`UPDATE zur_review_settings SET level = 'auto'`)).toThrow();
+      expect(() => db.run(`UPDATE zur_review_settings SET tone = 'rude'`)).toThrow();
+      const insert = (id: string, state = "new", rating = 5) =>
+        db.run(
+          `INSERT INTO zur_reviews (id, location, google_name, rating, created_at, updated_at, state, seen_at) VALUES (?, 'l', ?, ?, 'x', 'x', ?, 1)`,
+          id,
+          `l/reviews/${id}`,
+          rating,
+          state,
+        );
+      insert("a");
+      expect(db.one(`SELECT reviews FROM zur_area_versions`)).toEqual({ reviews: 3 });
+      db.run(`UPDATE zur_reviews SET seen_at = 2, needs_draft = 1, insisted = 1`);
+      expect(db.one(`SELECT reviews FROM zur_area_versions`)).toEqual({ reviews: 3 });
+      db.run(`UPDATE zur_reviews SET state = 'proposed'`);
+      expect(db.one(`SELECT reviews FROM zur_area_versions`)).toEqual({ reviews: 4 });
+      expect(() => insert("a2", "auto")).toThrow();
+      expect(() => insert("a3", "new", 6)).toThrow();
+      expect(() => db.run(`UPDATE zur_reviews SET draft_source = 'model'`)).toThrow();
+      // One copy per review at Google.
+      expect(() => db.run(`INSERT INTO zur_reviews (id, location, google_name, rating, created_at, updated_at, state, seen_at) VALUES ('b', 'l', 'l/reviews/a', 5, 'x', 'x', 'new', 1)`)).toThrow();
+      db.run(`INSERT INTO zur_review_locations (google_name, title) VALUES ('l', 'Loja')`);
+      expect(db.one(`SELECT reviews FROM zur_area_versions`)).toEqual({ reviews: 5 });
+      db.run(`UPDATE zur_review_locations SET watermark = 'w', page_token = 't'`);
+      expect(db.one(`SELECT reviews FROM zur_area_versions`)).toEqual({ reviews: 5 });
+      expect(() => db.run(`UPDATE zur_review_locations SET selected = 2`)).toThrow();
+    });
+  });
+
   it("upgrades a database at version 24 to 25: the CRM, one settings row with events off, its area moved only by what the Clients tab shows", async () => {
     await withEmptyDatabase("from-24", (db) => {
       expect(migrate(db, MIGRATIONS.slice(0, 24))).toBe(24);
       db.run(`UPDATE zur_area_versions SET flows = 4`);
-      expect(migrate(db)).toBe(25);
+      expect(migrate(db, MIGRATIONS.slice(0, 25))).toBe(25);
       expect(db.one(`SELECT flows, crm FROM zur_area_versions`)).toEqual({ flows: 4, crm: 0 });
       // Events start off; every notice starts on.
       expect(db.one(`SELECT events_key, last_event_at, follow_ups, birthdays, new_clients, next_reminder FROM zur_crm_settings`)).toEqual({

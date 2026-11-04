@@ -210,6 +210,7 @@ export const ptBRSettings = {
   "web.google.finishing": "Terminando a conexão com o Google…",
   "web.google.connectedAs": "Conectado como {account}",
   "web.google.connected": "Google Agenda conectada. Agora escolha quais agendas a Zuri pode ver.",
+  "web.google.reviewsConnected": "Avaliações liberadas no Google. Escolha o perfil e o seu jeito de responder.",
   "web.google.replaced": "Conta do Google trocada. As agendas da conta anterior saíram da Zuri.",
   "web.google.refresh": "Atualizar lista",
   "web.google.refreshed": "Lista de agendas atualizada.",

@@ -55,6 +55,7 @@ import { McpService, OAUTH_CALLBACK_PATH } from "../mcp/service.ts";
 import { developmentGoogle, developmentGoogleNetwork } from "../google/dev-google.ts";
 import { GoogleCalendar } from "../google/service.ts";
 import { type ContactNotice, GoogleContacts } from "../google/contacts.ts";
+import { type ReviewNotice, ReviewService } from "../reviews/service.ts";
 import { FlowConnections } from "../flows/connections.ts";
 import { developmentFlowNetwork } from "../flows/dev-flows.ts";
 import { SiteStates } from "../flows/monitor.ts";
@@ -125,6 +126,8 @@ interface Store {
   google: GoogleCalendar;
   /** The read-only copy of the Google contacts (step 19b). */
   contacts: GoogleContacts;
+  /** The Google reviews (step 19c), on the same connection. */
+  reviews: ReviewService;
   /** The flows and the site monitor (step 22a). */
   flows: FlowService;
   /** The internal CRM (step 22b) and n8n's signed events. */
@@ -214,6 +217,7 @@ export class ZuriAgent extends Agent<WorkerEnv> {
     google: () => ({
       google: this.store.google,
       contacts: this.store.contacts,
+      reviews: this.store.reviews,
       auth: this.store.auth,
       timeZone: () => this.store.settings.field("timeZone"),
       rearm: () => this.store.automations.rearm(),
@@ -338,6 +342,12 @@ export class ZuriAgent extends Agent<WorkerEnv> {
       // The alarm was set by `wake` while this work was still due (a retry a minute out):
       // set again from the times the sync and the notice just moved, so no empty wake follows.
       if (await this.store.contacts.tick()) await automations.rearm();
+    } catch (error) {
+      log("error", "google_alarm_failed", { error });
+    }
+    // The reviews' check every 15 minutes (step 19c): set the alarm again when it ran.
+    try {
+      if (await this.store.reviews.tick()) await automations.rearm();
     } catch (error) {
       log("error", "google_alarm_failed", { error });
     }
@@ -610,6 +620,15 @@ export class ZuriAgent extends Agent<WorkerEnv> {
               return null;
             }
           })();
+          // The reviews' check (step 19c).
+          const reviewsDue = (() => {
+            try {
+              const at = reviews.nextDue();
+              return at === null ? null : new Date(at).toISOString();
+            } catch {
+              return null;
+            }
+          })();
           // The flows' runs and waits (step 22a).
           const flowsDue = (() => {
             try {
@@ -627,7 +646,7 @@ export class ZuriAgent extends Agent<WorkerEnv> {
               return null;
             }
           })();
-          const due = [tries, watch, indexing, tools, channels, people, flowsDue, crmDue].filter((at): at is string => Boolean(at)).sort()[0] ?? watch;
+          const due = [tries, watch, indexing, tools, channels, people, reviewsDue, flowsDue, crmDue].filter((at): at is string => Boolean(at)).sort()[0] ?? watch;
           // Work already past due is only left there when its step failed on the last
           // alarm (a full disk, say): wait a minute before trying again, never at once,
           // so a step that keeps failing can't spin the alarm through the day's quota.
@@ -696,6 +715,15 @@ export class ZuriAgent extends Agent<WorkerEnv> {
         createTask: (name, dueAt) => {
           productivity.tasks.create({ title: t(this.locale(), "contacts.task.title", { name }).slice(0, 200), dueAt });
         },
+      });
+      // The Google reviews (step 19c): the reviews' agent has no tools, only the metered model; its notices go to the center.
+      const reviews = new ReviewService({
+        db,
+        google,
+        ai: () => this.ai(),
+        timeZone: () => settings.field("timeZone"),
+        lockdown: () => auth.lockdown.active(),
+        notify: (notice) => reviewNotice(alerts, notice),
       });
       // The flows (step 22a): only the screen changes them; their calls go only to the connections the owner registered.
       const flowFetch = ((input: RequestInfo | URL, init?: RequestInit) => fetch(input, init)) as typeof fetch;
@@ -811,6 +839,7 @@ export class ZuriAgent extends Agent<WorkerEnv> {
         aiAvailable: () => usage.room(this.aiLimits()).neurons > 0,
         mcpSignIn: () => mcp.needingSignIn(),
         flows: () => flows.summary(),
+        reviews: () => reviews.summary(),
         calendar: google,
         buttons: commandButtons,
         state,
@@ -827,6 +856,14 @@ export class ZuriAgent extends Agent<WorkerEnv> {
         timeZone: () => settings.field("timeZone"),
         abortRuns: () => {
           for (const run of this.activeRuns.values()) run.abort();
+        },
+        reviews: {
+          active: () => {
+            if (!reviews.enabled()) return false;
+            const status = reviews.status();
+            return !status.paused && status.level !== "off";
+          },
+          pause: () => reviews.pause(true),
         },
       });
       const telegram = new TelegramService({
@@ -851,7 +888,7 @@ export class ZuriAgent extends Agent<WorkerEnv> {
         // Local development never reaches Telegram (src/telegram/dev-telegram.ts).
         ...(this.development() ? { fetcher: developmentTelegramFetcher as typeof fetch } : {}),
       });
-      this.#store = { db, settings, auth, productivity, memories, usage, conversations, actions, plans, automations, alerts, watchers, diagnostics, push, telegram, telegramConversation, semantic, mcp, google, contacts, flows, crm, crmEvents };
+      this.#store = { db, settings, auth, productivity, memories, usage, conversations, actions, plans, automations, alerts, watchers, diagnostics, push, telegram, telegramConversation, semantic, mcp, google, contacts, reviews, flows, crm, crmEvents };
     }
     return this.#store;
   }
@@ -979,6 +1016,36 @@ function crmNotice(alerts: AlertService, notice: CrmNotice): void {
       return;
     case "crm.newClient":
       alerts.raise({ kind: notice.kind, category: "reminders", priority: "normal", params: { name: notice.name }, link: "/contatos/clientes" });
+      return;
+  }
+}
+
+/**
+ * A notice of the Google reviews (step 19c): the first name and the text only
+ * in the notice itself (discreet on Telegram unless the owner shows "system"
+ * in full), never in a log. Never learns a lower priority (source null): a
+ * negative review must always reach the team.
+ */
+function reviewNotice(alerts: AlertService, notice: ReviewNotice): void {
+  const base = { category: "system" as const, link: "/contatos/avaliacoes" as const, source: null };
+  switch (notice.kind) {
+    case "reviews.negative":
+    case "reviews.worse":
+      alerts.raise({
+        ...base,
+        kind: notice.kind,
+        priority: "normal",
+        params: { n: notice.rating },
+        body: [notice.firstName, notice.comment].filter(Boolean).join(": ") || null,
+      });
+      return;
+    case "reviews.many":
+    case "reviews.burst":
+    case "reviews.draft":
+      alerts.raise({ ...base, kind: notice.kind, priority: "normal", params: { count: notice.count } });
+      return;
+    case "reviews.problem":
+      alerts.raise({ ...base, kind: notice.kind, priority: "normal", params: {}, link: "/configuracoes/integracoes", dedupeKey: `reviews-problem-${notice.problem}`, dedupeMs: 86_400_000 });
       return;
   }
 }

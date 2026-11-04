@@ -15,6 +15,7 @@ import { CSRF, call, HUMAN_TOKEN, ORIGIN, TEST_EMAIL, TEST_PASSWORD, testEnv } f
 import { mcpFixture } from "./mcp-fixture.ts";
 import { withChatWorld } from "./chat-world.ts";
 import { addConnection, withFlowWorld } from "./flow-world.ts";
+import { add, draftAnswer, LOCATION, SECOND_OK, turnOn, withReviewsWorld } from "./reviews-world.ts";
 
 // What each route costs in the units the Free plan bills: rows read and rows
 // written in the object's SQLite (docs/arquitetura/orcamento-free-tier.md). A
@@ -817,6 +818,51 @@ describe("Google contacts (step 19b)", () => {
       world.contacts.search({ query: "pessoa 4", limit: 50 });
       expect(world.googleSim.seen.length).toBe(calls);
       expect(world.db.usage.rowsRead - before.rowsRead).toBeLessThanOrEqual(1_000);
+    }));
+});
+
+// Step 19c, the plan's section 10: a profile with 1,000 reviews, read every 15 minutes (96 checks a day).
+describe("Google reviews (step 19c)", () => {
+  it("a quiet check, a check with five new reviews and the screen stay within the plan's numbers", () =>
+    withReviewsWorld(async (world) => {
+      // Written over the last day, before the profile was turned on.
+      world.clock.now -= 86_400_000;
+      for (let i = 0; i < 1_000; i++) {
+        world.clock.now += 60_000;
+        add(world, `h${String(i).padStart(4, "0")}`, (i % 5) + 1, i % 2 ? "Muito bom" : undefined);
+      }
+      world.clock.now += 86_400_000 - 60_000_000;
+      await turnOn(world);
+      const measure = async () => {
+        const before = { ...world.db.usage };
+        const calls = world.sim.seen.length;
+        world.clock.now += 16 * 60_000;
+        expect(await world.reviews.check("alarm")).toBe("ok");
+        return { read: world.db.usage.rowsRead - before.rowsRead, written: world.db.usage.rowsWritten - before.rowsWritten, calls: world.sim.seen.length - calls };
+      };
+      const quiet = await measure();
+      // One page of the profile (a token renewal at most).
+      expect(quiet.calls).toBeLessThanOrEqual(2);
+      // The settings row and the lock; the 50 reviews of the page looked up by their unique name (measured 5 and 167).
+      expect(quiet.written).toBeLessThanOrEqual(10);
+      expect(quiet.read).toBeLessThanOrEqual(200);
+      world.answers.push(draftAnswer("Obrigado pela visita, Ana! Ficamos muito felizes com a sua avaliação."), SECOND_OK);
+      for (let i = 0; i < 4; i++) add(world, `n${i}`, 1, "Ruim");
+      add(world, "p0", 5, "Adorei o atendimento, todos muito gentis.");
+      const busy = await measure();
+      expect(busy.calls).toBeLessThanOrEqual(2);
+      // Five reviews stored, triaged, drafted and audited, with their indexes and the area's number (measured 63 and 240).
+      expect(busy.written).toBeLessThanOrEqual(100);
+      expect(busy.read).toBeLessThanOrEqual(300);
+      const before = { ...world.db.usage };
+      const calls = world.sim.seen.length;
+      await world.reviews.list({ tab: "all" });
+      await world.reviews.list({ tab: "needs" });
+      world.reviews.status();
+      expect(world.sim.seen.length).toBe(calls);
+      // Two pages of 30 and their counts over the 55 stored reviews (measured 257).
+      expect(world.db.usage.rowsRead - before.rowsRead).toBeLessThanOrEqual(300);
+      expect(world.db.all(`SELECT id FROM zur_reviews WHERE location = ?`, LOCATION)).toHaveLength(55);
     }));
 });
 

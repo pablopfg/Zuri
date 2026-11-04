@@ -628,6 +628,20 @@ describe("the notices' group", () => {
     expect(sent("createForumTopic")).toHaveLength(0);
   });
 
+  it("step 19c: reviews go to their own topic 'Avaliações'; drafts, bursts and problems only to the private chat", async () => {
+    await linkOwner();
+    await linkGroup({ forum: true });
+    await raise({ kind: "reviews.negative", category: "system", priority: "normal", params: { n: 2 }, body: "Ana: Demorou", link: "/contatos/avaliacoes", origin: "system" });
+    expect(sent("createForumTopic").map((c) => c.body.name)).toEqual(["Avaliações"]);
+    expect(sent().map((m) => [m.body.chat_id, m.body.message_thread_id])).toEqual([[GROUP, topicIds]]);
+    botCalls.length = 0;
+    for (const kind of ["reviews.draft", "reviews.burst", "reviews.problem"] as const) {
+      await raise({ kind, category: "system", priority: "normal", params: { count: 2 }, link: "/contatos/avaliacoes", origin: "system" });
+    }
+    expect(sent().map((m) => m.body.chat_id)).toEqual([OWNER, OWNER, OWNER]);
+    expect(sent("createForumTopic")).toHaveLength(0);
+  });
+
   it("a deleted topic: the notice goes to the general topic and the topic is made again next time", async () => {
     await linkOwner();
     await linkGroup({ forum: true });
