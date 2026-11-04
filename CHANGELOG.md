@@ -19,6 +19,48 @@ funciona: [docs/agente/versionamento.md](docs/agente/versionamento.md).
 
 O que já entrou na `develop` e ainda não ganhou número fica em [`changelog/nao-lancado/`](changelog/nao-lancado/) por alguns minutos, até o workflow de versão escrever a seção.
 
+## [0.31.0] - 2026-11-04
+
+Mesclada às 00:31 (UTC-3) · commit [`1ce03cc`](https://github.com/pablopfg/Zuri/commit/1ce03ccad64ecfa8af83066b7cc6e6cc1aa701e9) · PR [#174](https://github.com/pablopfg/Zuri/pull/174) · Zuri publica sozinha as respostas às avaliações positivas (etapa 19d)
+
+### Adicionado
+
+- Avaliações do Google: em **Configurações › Integrações**, a opção
+  **Publica sozinha as positivas**. Ela libera depois que você aprova 10
+  rascunhos de avaliações positivas sem mudar nada (entre as suas 30 últimas
+  decisões), pede a sua senha e manda um alerta de segurança.
+- Com ela ligada, a Zuri publica sozinha as respostas às avaliações de 4 e 5
+  estrelas cujo rascunho passou pela conferência fixa e pela segunda leitura
+  (ou um modelo seu, quando a avaliação é só a nota), até 3 por leitura e 10
+  por dia. Antes de cada uma, ela lê a avaliação de novo no Google. Um aviso
+  no privado conta quantas saíram.
+- Aba **Publicadas sozinha** em **Contatos › Avaliações**, com **Apagar
+  resposta**.
+- Disjuntor: três rascunhos reprovados seguidos, uma recusa do Google ou uma
+  resposta da Zuri apagada ou trocada fazem a Zuri voltar a pedir sua aprovação. Ela
+  avisa você no privado e mostra o motivo na tela.
+
+### Segurança
+
+- Nada sai sozinho com as respostas pausadas, no modo de bloqueio ou durante
+  um pico de avaliações. Negativas, textos suspeitos e rascunhos que não
+  passaram nas conferências continuam esperando você. Só a tela muda esse
+  nível: a conversa, as rotinas e o bot não alcançam.
+
+### Atualização
+
+- O banco ganha a migration 27 (nível de publicar sozinha, período de
+  experiência, disjuntor e contador da aba). Ela roda sozinha e só acrescenta.
+  Nenhum secret novo.
+
+## [0.30.1] - 2026-11-03
+
+Mesclada às 23:52 (UTC-3) · commit [`6778cc5`](https://github.com/pablopfg/Zuri/commit/6778cc5bbe8eb4b90e1741bfa94944fa9a7ecf93) · PR [#173](https://github.com/pablopfg/Zuri/pull/173) · Etapa 19c mesclada (#169)
+
+### Alterado
+
+- Sem mudança visível: etapa 19c mesclada (#169).
+
 ## [0.30.0] - 2026-11-03
 
 Mesclada às 22:55 (UTC-3) · commit [`58f9193`](https://github.com/pablopfg/Zuri/commit/58f91935cf0f8a9f1ccd7409dc19b395fa1f74f4) · PR [#169](https://github.com/pablopfg/Zuri/pull/169) · Lê e responde as avaliações do Google com aprovação
@@ -2330,7 +2372,9 @@ Mesclada às 22:15 (UTC-3) · commit [`360a79e`](https://github.com/pablopfg/Zur
   `npm audit`), CodeQL, Dependabot e rulesets para a `develop` e a `main`.
 - `LICENSE` (MIT), `NOTICE.md`, `SECURITY.md` e `CONTRIBUTING.md`.
 
-[Não lançado]: https://github.com/pablopfg/Zuri/compare/v0.30.0...develop
+[Não lançado]: https://github.com/pablopfg/Zuri/compare/v0.31.0...develop
+[0.31.0]: https://github.com/pablopfg/Zuri/releases/tag/v0.31.0
+[0.30.1]: https://github.com/pablopfg/Zuri/releases/tag/v0.30.1
 [0.30.0]: https://github.com/pablopfg/Zuri/releases/tag/v0.30.0
 [0.29.1]: https://github.com/pablopfg/Zuri/releases/tag/v0.29.1
 [0.29.0]: https://github.com/pablopfg/Zuri/releases/tag/v0.29.0
