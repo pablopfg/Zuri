@@ -9,6 +9,10 @@ import { FlowConnections, type FlowNetwork } from "../src/flows/connections.ts";
 import { SiteStates } from "../src/flows/monitor.ts";
 import { type FlowNotice, FlowService } from "../src/flows/service.ts";
 import { McpCredentials } from "../src/mcp/credentials.ts";
+import { type DevGoogle, devGoogle, googleNetwork } from "../src/google/dev-google.ts";
+import { GoogleCalendar } from "../src/google/service.ts";
+import { GoogleContacts } from "../src/google/contacts.ts";
+import { InternalState } from "../src/db/internal-state.ts";
 import { DEFAULT_SETTINGS } from "@zuri/shared";
 import { testEnv } from "./helpers.ts";
 
@@ -72,6 +76,11 @@ export interface FlowWorld {
   rearms: { count: number };
   model: { provider: AIProvider };
   meter: UsageMeter;
+  /** Google of steps 19 and 19b, simulated (step 22c). */
+  google: GoogleCalendar;
+  googleSim: DevGoogle;
+  contacts: GoogleContacts;
+  googleLockdown: { active: boolean };
 }
 
 let objects = 0;
@@ -92,6 +101,21 @@ export function withFlowWorld<T>(fn: (world: FlowWorld) => T | Promise<T>, optio
     const key = "credentialKey" in options ? options.credentialKey : testEnv.MCP_CREDENTIAL_KEY;
     const connections = new FlowConnections(db, new McpCredentials(key, "flows-v1"), tick);
     const sites = new SiteStates(db);
+    const googleLockdown = { active: false };
+    const googleSim = devGoogle({ clientId: testEnv.GOOGLE_CLIENT_ID, clientSecret: testEnv.GOOGLE_CLIENT_SECRET, clock: tick });
+    const google = new GoogleCalendar({
+      db,
+      state: new InternalState(db),
+      clientId: () => testEnv.GOOGLE_CLIENT_ID,
+      clientSecret: () => testEnv.GOOGLE_CLIENT_SECRET,
+      credentialKey: testEnv.MCP_CREDENTIAL_KEY,
+      pushSecret: () => testEnv.SESSION_SECRET,
+      publicUrl: () => new URL("https://zuri.exemplo.com.br"),
+      lockdown: () => lockdown.active || googleLockdown.active,
+      clock: tick,
+    });
+    google.network = googleNetwork(googleSim, { fetch: () => Promise.reject(new Error("no network in tests")) });
+    const contacts = new GoogleContacts({ db, google, timeZone: () => TIME_ZONE, notify: () => {}, createTask: () => {}, clock: tick });
     const flows = new FlowService(
       {
         db,
@@ -111,11 +135,12 @@ export function withFlowWorld<T>(fn: (world: FlowWorld) => T | Promise<T>, optio
           rearms.count++;
         },
         notify: (notice) => notices.push(notice),
+        google: { calendar: () => google, contacts: () => contacts, timeZone: () => TIME_ZONE },
         clock: tick,
       },
       network,
     );
-    return fn({ db, flows, connections, sites, network, clock, lockdown, notices, rearms, model, meter });
+    return fn({ db, flows, connections, sites, network, clock, lockdown, notices, rearms, model, meter, google, googleSim, contacts, googleLockdown });
   });
 }
 

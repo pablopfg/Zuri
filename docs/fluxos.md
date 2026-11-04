@@ -42,10 +42,38 @@ passos, na ordem:
 | Avisar você | Manda um aviso, um só ou um por item (até 10) |
 | Pedir à IA | Resume ou classifica os itens; a IA só lê os itens como dados |
 | Olhar sites | O passo do monitor |
+| Ler a agenda | Lê os eventos de uma agenda aberta à Zuri (ou de todas), de tantos dias a partir de hoje; cada evento vira um item |
+| Criar evento | Cria um evento por item numa agenda em "ler e editar", sem convidados e sem e-mail a ninguém |
+| Buscar contatos | Busca na cópia dos seus contatos do Google, por nome, telefone, e-mail, etiqueta ou aniversário |
 
 Nos textos, `{{campo}}` põe o valor de um campo do item, por exemplo
 `Proposta de {{nome}}`. Não existe passo de código nem chamada a endereço
 livre.
+
+### Agenda e contatos
+
+Os três passos do Google usam a conexão de **Configurações › Integrações**.
+Sem o Google conectado, o passo mostra onde conectar.
+
+- **Ler a agenda**: "Começa em quantos dias" conta a partir de hoje no seu
+  fuso (0 é hoje, −1 é ontem) e "Quantos dias ler" vai de 1 a 31. Cada evento
+  vira um item com `id`, `calendar`, `title`, `start`, `end`, `allDay`,
+  `location`, `description` (até 500 caracteres), `guests`, `shared` e
+  `recurring`. Até 100 eventos; agenda fechada fica de fora.
+- **Criar evento**: o início sai do item e aceita `AAAA-MM-DD` (dia inteiro),
+  `AAAA-MM-DDTHH:mm` (no seu fuso) ou um instante ISO com fuso, como o
+  `{{start}}` do passo de leitura. Um item com data que não serve para a
+  execução antes de criar qualquer evento. São no máximo 10 eventos por
+  execução; com mais itens, nenhum é criado. A **chave contra repetição**
+  (por exemplo `{{id}}`) faz o mesmo item nunca virar um segundo evento,
+  mesmo em outra execução. O Google guarda a chave de um evento apagado, então
+  apagar o evento não faz o fluxo criá-lo de novo. Nenhum passo muda ou apaga
+  evento. Cada item ganha `event` com `id`, `calendar`, `start` e `created`.
+- **Buscar contatos**: lê só a cópia que a Zuri guarda (nenhuma chamada ao
+  Google). Sem "um por item", os contatos achados viram os itens (`id`,
+  `name`, `labels`, `phone`, `email`, `birthday`). Com "um por item", cada
+  item ganha `contact`, o primeiro contato achado pelo texto da busca (por
+  exemplo `{{telefone}}`), ou vazio.
 
 ### Conexões
 
@@ -97,6 +125,10 @@ travada, mostra só as contagens, sem endereços nem nomes de fluxos.
 | Execuções por dia | 500 |
 | IA dos fluxos por dia | 3.000 Neurons, dentro dos 9.000 do dia |
 | Histórico | últimas 2.000 execuções |
+| Eventos lidos por passo | 100, de no máximo 10 agendas |
+| Janela da leitura | começa de −30 a +365 dias, dura de 1 a 31 |
+| Eventos criados por execução | 10 |
+| Contatos por busca | 100 |
 
 ## Segurança
 
@@ -117,6 +149,9 @@ travada, mostra só as contagens, sem endereços nem nomes de fluxos.
 - No modo de bloqueio nada roda (as execuções ficam como **Pulada**) e as
   rotas dos fluxos respondem 423.
 - Dados de contato que passam por um fluxo ficam fora dos logs.
+- O que vem da agenda e dos contatos também é dado: entra na IA só dentro de
+  `<data source="flow">`. Um evento criado por fluxo nunca tem convidados e o
+  Google não manda e-mail a ninguém (`sendUpdates=none`).
 
 ## Custo no plano Free
 
@@ -125,7 +160,9 @@ fila. Cada despertar usa no máximo 20 subrequisições para os fluxos (uma
 consulta DNS conta 2), dentro do contador único do despertar, que soma
 todas as áreas do alarme e para antes de 45 (veja P9 em
 `docs/arquitetura/orcamento-free-tier.md`); o que não coube segue no despertar
-seguinte. Um
+seguinte. Ler a agenda faz uma chamada por agenda (mais a renovação do
+token, quando vence) e espera o despertar seguinte se não couberem todas;
+criar evento faz uma por item. Buscar contatos não faz chamada. Um
 despertar sem nada devido lê 4 linhas. Uma execução do monitor com 10 sites
 lê cerca de 80 linhas e grava cerca de 40, medido em
 `apps/agent/test/free-tier-budget.test.ts`.
