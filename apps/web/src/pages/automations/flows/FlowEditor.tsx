@@ -10,6 +10,7 @@ import {
   type FlowDefinition,
   type FlowDraft,
   type FlowFilterOp,
+  type FlowGoogleInfo,
   type FlowNode,
   type FlowNodeType,
   type FlowPriority,
@@ -82,7 +83,7 @@ function triggerOf(draft: TriggerDraft, original: FlowTrigger | null, untouched:
 }
 
 /** A new step of each type, ready to fill. */
-function newNode(type: FlowNodeType, connections: FlowConnection[]): FlowNode {
+function newNode(type: FlowNodeType, connections: FlowConnection[], google: FlowGoogleInfo): FlowNode {
   switch (type) {
     case "request":
       return { type, connection: connections[0]?.id ?? "", method: "GET", path: connections[0]?.paths[0] ?? "/", body: "none", each: false, itemsPath: "" };
@@ -98,6 +99,12 @@ function newNode(type: FlowNodeType, connections: FlowConnection[]): FlowNode {
       return { type, instruction: "", output: "resumo" };
     case "monitor":
       return { type, sites: [""] };
+    case "calendar":
+      return { type, calendar: "", startDays: 0, days: 1, query: "" };
+    case "calendar_create":
+      return { type, calendar: google.calendars.find((calendar) => calendar.writable)?.id ?? "", title: "", start: "", minutes: 60, description: "", key: "" };
+    case "contacts":
+      return { type, query: "", label: "", birthday: "", limit: 20, each: false };
   }
 }
 
@@ -114,7 +121,7 @@ function cleanNodes(nodes: FlowNode[]): FlowNode[] {
  * Creating or changing a flow: a name, when it runs and its steps, in order.
  * "Monitorar sites" opens it with one monitor step every 15 minutes.
  */
-export function FlowEditor({ editing, connections, onClose }: { editing: Editing; connections: FlowConnection[]; onClose: () => void }) {
+export function FlowEditor({ editing, connections, google, onClose }: { editing: Editing; connections: FlowConnection[]; google: FlowGoogleInfo; onClose: () => void }) {
   const { t } = useI18n();
   const qc = useQueryClient();
   const toast = useToast();
@@ -125,7 +132,7 @@ export function FlowEditor({ editing, connections, onClose }: { editing: Editing
   const [trigger, setTrigger] = useState<TriggerDraft>(() => triggerDraft(current?.definition.trigger ?? null));
   const [touched, setTouched] = useState(false);
   // Each step gets a key of its own for React, so moving one keeps its fields with it.
-  const [steps, setSteps] = useState<Step[]>(() => (current?.definition.nodes ?? (editing.mode === "monitor" ? [newNode("monitor", connections)] : [])).map(step));
+  const [steps, setSteps] = useState<Step[]>(() => (current?.definition.nodes ?? (editing.mode === "monitor" ? [newNode("monitor", connections, google)] : [])).map(step));
   const nodes = steps.map((item) => item.node);
   const [adding, setAdding] = useState<FlowNodeType>(editing.mode === "monitor" ? "notify" : "request");
   const [error, setError] = useState<unknown>(null);
@@ -221,7 +228,7 @@ export function FlowEditor({ editing, connections, onClose }: { editing: Editing
                     <X />
                   </IconButton>
                 </div>
-                <NodeFields node={node} connections={connections} onChange={(value) => change(index, value)} />
+                <NodeFields node={node} connections={connections} google={google} onChange={(value) => change(index, value)} />
               </li>
             ))}
           </ol>
@@ -236,7 +243,7 @@ export function FlowEditor({ editing, connections, onClose }: { editing: Editing
                   ))}
                 </SelectField>
               </div>
-              <Button variant="secondary" onClick={() => setSteps((list) => [...list, step(newNode(adding, connections))])}>
+              <Button variant="secondary" onClick={() => setSteps((list) => [...list, step(newNode(adding, connections, google))])}>
                 <Plus className="h-4 w-4" aria-hidden />
                 {t("web.flows.form.addStep")}
               </Button>
@@ -259,7 +266,7 @@ export function FlowEditor({ editing, connections, onClose }: { editing: Editing
 }
 
 /** The fields of one step, by its type. */
-function NodeFields({ node, connections, onChange }: { node: FlowNode; connections: FlowConnection[]; onChange: (node: FlowNode) => void }) {
+function NodeFields({ node, connections, google, onChange }: { node: FlowNode; connections: FlowConnection[]; google: FlowGoogleInfo; onChange: (node: FlowNode) => void }) {
   const { t } = useI18n();
   switch (node.type) {
     case "request": {
@@ -428,6 +435,168 @@ function NodeFields({ node, connections, onChange }: { node: FlowNode; connectio
           onChange={(e) => onChange({ ...node, sites: e.target.value.split("\n").slice(0, FLOW_LIMITS.sites) })}
         />
       );
+    case "calendar":
+    case "calendar_create":
+    case "contacts":
+      return <GoogleFields node={node} google={google} onChange={onChange} />;
+  }
+}
+
+/** A whole number from a number field ("" and junk count as 0; the server checks the range). */
+const whole = (value: string) => (Number.isFinite(Number(value)) ? Math.trunc(Number(value)) : 0);
+
+/** The fields of the Google steps (step 22c): the calendars and labels come with the list of flows. */
+function GoogleFields({
+  node,
+  google,
+  onChange,
+}: {
+  node: Extract<FlowNode, { type: "calendar" | "calendar_create" | "contacts" }>;
+  google: FlowGoogleInfo;
+  onChange: (node: FlowNode) => void;
+}) {
+  const { t } = useI18n();
+  const off = (key: MessageKey) => <p className="text-sm text-fg-muted">{t(key)}</p>;
+  switch (node.type) {
+    case "calendar": {
+      if (!google.connected) return off("web.flows.form.googleOff");
+      const known = node.calendar === "" || google.calendars.some((calendar) => calendar.id === node.calendar);
+      return (
+        <>
+          <SelectField label={t("web.flows.form.calendar")} value={node.calendar} onChange={(e) => onChange({ ...node, calendar: e.target.value })}>
+            <option value="">{t("web.flows.form.calendarAll")}</option>
+            {!known && <option value={node.calendar}>{node.calendar}</option>}
+            {google.calendars.map((calendar) => (
+              <option key={calendar.id} value={calendar.id}>
+                {calendar.name}
+              </option>
+            ))}
+          </SelectField>
+          <TextField
+            label={t("web.flows.form.startDays")}
+            hint={t("web.flows.form.startDaysHint")}
+            type="number"
+            inputMode="numeric"
+            min={FLOW_LIMITS.calendarStartMin}
+            max={FLOW_LIMITS.calendarStartMax}
+            value={String(node.startDays)}
+            onChange={(e) => onChange({ ...node, startDays: whole(e.target.value) })}
+          />
+          <TextField
+            label={t("web.flows.form.calendarDays")}
+            type="number"
+            inputMode="numeric"
+            min={1}
+            max={FLOW_LIMITS.calendarDays}
+            value={String(node.days)}
+            onChange={(e) => onChange({ ...node, days: whole(e.target.value) })}
+          />
+          <TextField
+            label={t("web.flows.form.calendarQuery")}
+            hint={t("web.flows.form.calendarHint")}
+            value={node.query}
+            maxLength={FLOW_LIMITS.calendarQuery}
+            onChange={(e) => onChange({ ...node, query: e.target.value })}
+          />
+        </>
+      );
+    }
+    case "calendar_create": {
+      if (!google.connected) return off("web.flows.form.googleOff");
+      const writable = google.calendars.filter((calendar) => calendar.writable);
+      if (writable.length === 0) return off("web.flows.form.noWritable");
+      const known = writable.some((calendar) => calendar.id === node.calendar);
+      return (
+        <>
+          <SelectField label={t("web.flows.form.calendar")} value={node.calendar} onChange={(e) => onChange({ ...node, calendar: e.target.value })}>
+            {!known && <option value={node.calendar}>{node.calendar}</option>}
+            {writable.map((calendar) => (
+              <option key={calendar.id} value={calendar.id}>
+                {calendar.name}
+              </option>
+            ))}
+          </SelectField>
+          <TextField label={t("web.flows.form.eventTitle")} value={node.title} maxLength={FLOW_LIMITS.eventTitle} onChange={(e) => onChange({ ...node, title: e.target.value })} />
+          <TextField
+            label={t("web.flows.form.eventStart")}
+            hint={t("web.flows.form.eventStartHint", { example: "2026-11-05T14:00" })}
+            value={node.start}
+            maxLength={FLOW_LIMITS.value}
+            spellCheck={false}
+            onChange={(e) => onChange({ ...node, start: e.target.value })}
+          />
+          <TextField
+            label={t("web.flows.form.eventMinutes")}
+            type="number"
+            inputMode="numeric"
+            min={FLOW_LIMITS.eventMinutesMin}
+            max={FLOW_LIMITS.eventMinutesMax}
+            value={String(node.minutes)}
+            onChange={(e) => onChange({ ...node, minutes: whole(e.target.value) })}
+          />
+          <TextAreaField
+            label={t("web.flows.form.eventDescription")}
+            value={node.description}
+            maxLength={FLOW_LIMITS.body}
+            onChange={(e) => onChange({ ...node, description: e.target.value })}
+          />
+          <TextField
+            label={t("web.flows.form.eventKey")}
+            hint={t("web.flows.form.eventKeyHint", { example: "{{id}}" })}
+            value={node.key}
+            maxLength={FLOW_LIMITS.eventKey}
+            spellCheck={false}
+            onChange={(e) => onChange({ ...node, key: e.target.value })}
+          />
+          <p className="text-xs leading-5 text-fg-muted">{t("web.flows.form.eventNote")}</p>
+        </>
+      );
+    }
+    case "contacts": {
+      if (!google.contacts) return off("web.flows.form.contactsOff");
+      const known = node.label === "" || google.labels.some((label) => label.id === node.label);
+      return (
+        <>
+          <TextField
+            label={t("web.flows.form.contactsQuery")}
+            hint={t("web.flows.form.contactsQueryHint", { example: "{{telefone}}" })}
+            value={node.query}
+            maxLength={FLOW_LIMITS.contactsQuery}
+            onChange={(e) => onChange({ ...node, query: e.target.value })}
+          />
+          <SelectField label={t("web.flows.form.contactsLabel")} value={node.label} onChange={(e) => onChange({ ...node, label: e.target.value })}>
+            <option value="">{t("web.flows.form.contactsLabelAll")}</option>
+            {!known && <option value={node.label}>{node.label}</option>}
+            {google.labels.map((label) => (
+              <option key={label.id} value={label.id}>
+                {label.name}
+              </option>
+            ))}
+          </SelectField>
+          <SelectField
+            label={t("web.flows.form.contactsBirthday")}
+            value={node.birthday}
+            onChange={(e) => onChange({ ...node, birthday: e.target.value as typeof node.birthday })}
+          >
+            <option value="">{t("web.flows.form.contactsBirthday.any")}</option>
+            <option value="today">{t("web.flows.form.contactsBirthday.today")}</option>
+            <option value="week">{t("web.flows.form.contactsBirthday.week")}</option>
+          </SelectField>
+          {!node.each && (
+            <TextField
+              label={t("web.flows.form.contactsLimit")}
+              type="number"
+              inputMode="numeric"
+              min={1}
+              max={FLOW_LIMITS.contacts}
+              value={String(node.limit)}
+              onChange={(e) => onChange({ ...node, limit: whole(e.target.value) })}
+            />
+          )}
+          <Check label={t("web.flows.form.contactsEach")} checked={node.each} onChange={(each) => onChange({ ...node, each })} />
+        </>
+      );
+    }
   }
 }
 

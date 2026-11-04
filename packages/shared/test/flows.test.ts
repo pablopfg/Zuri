@@ -293,3 +293,67 @@ describe("flow routes' bodies", () => {
     expect(flowRunsQuerySchema.safeParse({ before: "x" }).success).toBe(false);
   });
 });
+
+describe("the Google steps (step 22c)", () => {
+  const flow = (node: unknown) => flowDefinitionSchema.safeParse({ version: 1, trigger: { type: "manual" }, nodes: [node] }).success;
+  const read = (patch: Record<string, unknown> = {}) => ({ type: "calendar", calendar: "", startDays: 0, days: 1, query: "", ...patch });
+  const create = (patch: Record<string, unknown> = {}) => ({
+    type: "calendar_create",
+    calendar: "dono@exemplo.com.br",
+    title: "Retorno {{nome}}",
+    start: "{{data}}",
+    minutes: 60,
+    description: "",
+    key: "",
+    ...patch,
+  });
+  const contacts = (patch: Record<string, unknown> = {}) => ({ type: "contacts", query: "", label: "", birthday: "", limit: 20, each: false, ...patch });
+
+  it("bounds the read's start (−31, −30, 365, 366) and its days (0, 1, 31, 32)", () => {
+    expect(flow(read({ startDays: FLOW_LIMITS.calendarStartMin - 1 }))).toBe(false);
+    expect(flow(read({ startDays: FLOW_LIMITS.calendarStartMin }))).toBe(true);
+    expect(flow(read({ startDays: FLOW_LIMITS.calendarStartMax }))).toBe(true);
+    expect(flow(read({ startDays: FLOW_LIMITS.calendarStartMax + 1 }))).toBe(false);
+    expect(flow(read({ startDays: 1.5 }))).toBe(false);
+    expect(flow(read({ days: 0 }))).toBe(false);
+    expect(flow(read({ days: 1 }))).toBe(true);
+    expect(flow(read({ days: FLOW_LIMITS.calendarDays }))).toBe(true);
+    expect(flow(read({ days: FLOW_LIMITS.calendarDays + 1 }))).toBe(false);
+  });
+
+  it("takes a calendar id or every open one, never a path, and a short query", () => {
+    expect(flow(read({ calendar: "dono@exemplo.com.br" }))).toBe(true);
+    expect(flow(read({ calendar: "../x" }))).toBe(false);
+    expect(flow(read({ calendar: "a b" }))).toBe(false);
+    expect(flow(read({ query: "x".repeat(FLOW_LIMITS.calendarQuery) }))).toBe(true);
+    expect(flow(read({ query: "x".repeat(FLOW_LIMITS.calendarQuery + 1) }))).toBe(false);
+    expect(flow(read({ query: "a\nb" }))).toBe(false);
+  });
+
+  it("bounds an event's length (4, 5, 1440, 1441) and needs a calendar", () => {
+    expect(flow(create({ minutes: FLOW_LIMITS.eventMinutesMin - 1 }))).toBe(false);
+    expect(flow(create({ minutes: FLOW_LIMITS.eventMinutesMin }))).toBe(true);
+    expect(flow(create({ minutes: FLOW_LIMITS.eventMinutesMax }))).toBe(true);
+    expect(flow(create({ minutes: FLOW_LIMITS.eventMinutesMax + 1 }))).toBe(false);
+    expect(flow(create({ calendar: "" }))).toBe(false);
+  });
+
+  it("checks the placeholders of an event's fields and refuses unknown fields", () => {
+    expect(flow(create({ key: "{{id}}", description: "Linha 1\n{{nota}}" }))).toBe(true);
+    expect(flow(create({ title: "{{__proto__}}" }))).toBe(false);
+    expect(flow(create({ start: "{{a b}}" }))).toBe(false);
+    expect(flow(create({ key: "{{constructor.x}}" }))).toBe(false);
+    expect(flow(create({ title: "" }))).toBe(false);
+    expect(flow(create({ attendees: ["x@exemplo.com.br"] }))).toBe(false);
+  });
+
+  it("bounds a contacts search (0, 1, 100, 101) and takes only a label's resource name", () => {
+    expect(flow(contacts({ limit: 0 }))).toBe(false);
+    expect(flow(contacts({ limit: 1 }))).toBe(true);
+    expect(flow(contacts({ limit: FLOW_LIMITS.contacts }))).toBe(true);
+    expect(flow(contacts({ limit: FLOW_LIMITS.contacts + 1 }))).toBe(false);
+    expect(flow(contacts({ label: "contactGroups/clientes", birthday: "week", query: "{{telefone}}", each: true }))).toBe(true);
+    expect(flow(contacts({ label: "clientes" }))).toBe(false);
+    expect(flow(contacts({ birthday: "month" }))).toBe(false);
+  });
+});

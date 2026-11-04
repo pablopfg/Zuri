@@ -57,6 +57,8 @@ const REQUEST_TIMEOUT_MS = 10_000;
 /** Google's answers are read up to this size; a page of 250 events is far smaller. */
 const MAX_RESPONSE_BYTES = 1024 * 1024;
 const WRITABLE_ROLES = new Set(["owner", "writer"]);
+/** An event id Zuri chooses: Google's base32hex alphabet, 5 to 1024 characters. */
+const EVENT_ID = /^[a-v0-9]{5,1024}$/;
 const ROLES = new Set(["owner", "writer", "reader", "freeBusyReader"]);
 /** How long Zuri asks Google to keep a push channel (Google may keep it less). */
 const WATCH_TTL_S = 7 * 24 * 3_600;
@@ -113,7 +115,7 @@ export class GoogleMeter {
 
   constructor(
     readonly budget: number,
-    private readonly wake: WakeBudget | undefined = currentWake(),
+    private readonly wake: Pick<WakeBudget, "room" | "take"> | undefined = currentWake(),
   ) {}
 
   get used(): number {
@@ -813,10 +815,18 @@ export class GoogleCalendar {
     return row;
   }
 
-  /** Creates an event; nobody is invited or e-mailed. */
-  async createEvent(calendarId: string, body: Record<string, unknown>, meter: GoogleMeter): Promise<CalendarEvent> {
+  /**
+   * Creates an event; nobody is invited or e-mailed. `id` (a flow's step 22c)
+   * names it, so Google refuses a second one with the same id (409).
+   */
+  async createEvent(calendarId: string, body: Record<string, unknown>, meter: GoogleMeter, id?: string): Promise<CalendarEvent> {
     this.writableRow(calendarId);
-    const created = await this.api(`/calendars/${enc(calendarId)}/events`, meter, { method: "POST", query: { sendUpdates: "none" }, body: safeBody(body) });
+    if (id !== undefined && !EVENT_ID.test(id)) throw new GoogleError("invalid");
+    const created = await this.api(`/calendars/${enc(calendarId)}/events`, meter, {
+      method: "POST",
+      query: { sendUpdates: "none" },
+      body: { ...safeBody(body), ...(id === undefined ? {} : { id }) },
+    });
     this.touch(calendarId);
     const event = readEvent(created, calendarId);
     if (!event) throw new GoogleError("unavailable");

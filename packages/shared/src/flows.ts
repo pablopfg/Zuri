@@ -65,9 +65,29 @@ export const FLOW_LIMITS = {
   connectionPath: 200,
   credential: 4_096,
   headerName: 64,
+  /** Calendar steps (step 22c). Events one read gives, at most. */
+  calendarEvents: 100,
+  /** The read's window: it starts this many days from today (back or ahead) and lasts up to 31 days. */
+  calendarStartMin: -30,
+  calendarStartMax: 365,
+  calendarDays: 31,
+  calendarQuery: 100,
+  /** Calendars one read covers ("every open one" stops here); each is one Google call, plus a token renewal. */
+  calendarsPerRead: 10,
+  /** Events one run creates, all its "create event" steps together; more items and none is created. */
+  eventsPerRun: 10,
+  eventMinutesMin: 5,
+  eventMinutesMax: 1_440,
+  eventTitle: 200,
+  eventKey: 200,
+  /** Text of an event that goes into an item (descriptions are cut to it). */
+  eventDescription: 500,
+  /** Contacts one search gives. */
+  contacts: 100,
+  contactsQuery: 200,
 } as const;
 
-export const FLOW_NODE_TYPES = ["request", "filter", "set", "wait", "notify", "ai", "monitor"] as const;
+export const FLOW_NODE_TYPES = ["request", "filter", "set", "wait", "notify", "ai", "monitor", "calendar", "calendar_create", "contacts"] as const;
 export type FlowNodeType = (typeof FLOW_NODE_TYPES)[number];
 
 /** DELETE is not offered (step 22a): a flow never erases anything at a service. */
@@ -105,7 +125,23 @@ export type FlowNode =
   | { type: "wait"; minutes: number }
   | { type: "notify"; title: string; body: string; priority: FlowPriority; each: boolean }
   | { type: "ai"; instruction: string; output: string }
-  | { type: "monitor"; sites: string[] };
+  | { type: "monitor"; sites: string[] }
+  /**
+   * Reads the events of one open calendar ("" = every open one) from `startDays`
+   * after today (owner's zone) for `days` days; each event is an item (step 22c).
+   */
+  | { type: "calendar"; calendar: string; startDays: number; days: number; query: string }
+  /**
+   * One event per item on a calendar open for writing: no guests, nobody told.
+   * `start` filled from the item is "YYYY-MM-DD" (all day), "YYYY-MM-DDTHH:mm"
+   * (owner's zone) or an ISO instant. With a `key`, the same key never makes a second event.
+   */
+  | { type: "calendar_create"; calendar: string; title: string; start: string; minutes: number; description: string; key: string }
+  /**
+   * Searches Zuri's copy of the Google contacts (no call to Google). `each`: every
+   * item gets `contact`, the first one found for its query (or null).
+   */
+  | { type: "contacts"; query: string; label: string; birthday: "" | "today" | "week"; limit: number; each: boolean };
 
 export type FlowTrigger = { type: "manual" } | { type: "schedule"; schedule: Schedule };
 
@@ -146,6 +182,12 @@ export const FLOW_RUN_PROBLEMS = [
   "not_json",
   "interrupted",
   "failed",
+  // Step 22c: the Google steps.
+  "google_access",
+  "calendar_missing",
+  "contacts_off",
+  "invalid_date",
+  "events_limit",
 ] as const;
 export type FlowRunProblem = (typeof FLOW_RUN_PROBLEMS)[number];
 
@@ -219,6 +261,15 @@ export interface FlowRunPage {
   nextCursor: string | null;
 }
 
+/** What the editor offers to the Google steps (step 22c): the calendars open to Zuri and the contacts' labels. */
+export interface FlowGoogleInfo {
+  connected: boolean;
+  calendars: { id: string; name: string; writable: boolean }[];
+  /** The copy of the contacts is on. */
+  contacts: boolean;
+  labels: { id: string; name: string }[];
+}
+
 export interface FlowList {
   flows: Flow[];
   connections: FlowConnection[];
@@ -227,6 +278,7 @@ export interface FlowList {
   credentialsAvailable: boolean;
   /** Flows the chat suggested (step 22b), newest first, until saved or dropped. */
   drafts: FlowDraft[];
+  google: FlowGoogleInfo;
 }
 
 /** True when a step calls the model: the flow then runs at most hourly. */
