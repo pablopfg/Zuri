@@ -130,6 +130,7 @@ describe("reading the calendar", () => {
       const flow = await world.flows.create({ name: "Respostas", definition: manual([read({ calendar: PRIMARY })]) });
       world.googleLockdown.active = true;
       expect(await world.flows.runNow(flow.id)).toMatchObject({ status: "error", problem: "blocked" });
+      expect(reads(world)).toHaveLength(0);
       world.googleLockdown.active = false;
       world.googleSim.outage = 400;
       expect(await world.flows.runNow(flow.id)).toMatchObject({ status: "error", problem: "http_error", httpStatus: 400 });
@@ -229,7 +230,7 @@ describe("creating events", () => {
   it("creates nothing when one item's date isn't a date", async () => {
     await withFlowWorld(async (world) => {
       await connect(world);
-      for (const bad of ["amanhã", "2026-02-30", "2026-11-10 14:00", "", "2026-11-10T25:00"]) {
+      for (const bad of ["amanhã", "2026-02-30", "2026-11-10 14:00", "", "2026-11-10T25:00", "2026-02-30T10:00:00-03:00", "2026-11-10T24:00Z", "2026-11-10T10:60:00Z", "2026-11-10T10:00:00+15:00"]) {
         const flow = await world.flows.create({ name: `Ruim ${bad}`, definition: manual([one({ quando: bad }), create({ start: "{{quando}}" })]) });
         expect(await world.flows.runNow(flow.id)).toMatchObject({ status: "error", problem: "invalid_date" });
       }
@@ -308,7 +309,7 @@ describe("creating events", () => {
           return real.fetch(request);
         }) as typeof fetch,
       };
-      const flow = await world.flows.create({ name: "Retomar", definition: manual([read({ calendar: READER }), create(), tell("{{title}}")]) });
+      const flow = await world.flows.create({ name: "Retomar", definition: manual([read({ calendar: READER }), create({ key: "{{id}}" }), tell("{{title}}")]) });
       const first = await world.flows.runNow(flow.id);
       expect(first).toMatchObject({ status: "waiting" });
       world.clock.now += 60_000;
@@ -316,6 +317,29 @@ describe("creating events", () => {
       const created = (world.googleSim.events.get(PRIMARY) ?? []).map((item) => item.summary);
       expect(created).toEqual(["Retorno Primeiro", "Retorno Segundo"]);
       expect(titles(world)).toEqual(["Primeiro", "Segundo"]);
+    });
+  });
+
+  it("stops rather than trying again after a passing failure when there is no key, so nothing is made twice", async () => {
+    await withFlowWorld(async (world) => {
+      await connect(world);
+      world.googleSim.outage = 503;
+      const flow = await world.flows.create({ name: "Sem chave", definition: manual([one({ quando: "2026-11-10" }), create({ start: "{{quando}}" })]) });
+      expect(await world.flows.runNow(flow.id)).toMatchObject({ status: "error", problem: "unavailable" });
+      const keyed = await world.flows.create({ name: "Com chave", definition: manual([one({ quando: "2026-11-10", id: "a1" }), create({ start: "{{quando}}", key: "{{id}}" })]) });
+      expect(await world.flows.runNow(keyed.id)).toMatchObject({ status: "waiting" });
+    });
+  });
+
+  it("keeps markup from outside out of the description", async () => {
+    await withFlowWorld(async (world) => {
+      await connect(world);
+      const flow = await world.flows.create({
+        name: "Sem tags",
+        definition: manual([one({ quando: "2026-11-10", nota: '<a href="https://golpe.exemplo.com.br">clique</a>' }), create({ start: "{{quando}}", description: "Nota: {{nota}}" })]),
+      });
+      await world.flows.runNow(flow.id);
+      expect(JSON.parse(posts(world)[0]?.body ?? "{}")).toMatchObject({ description: 'Nota: a href="https://golpe.exemplo.com.br"clique/a' });
     });
   });
 
@@ -334,9 +358,9 @@ describe("finding contacts", () => {
   async function contactsOn(world: FlowWorld): Promise<void> {
     world.googleSim.people.groups.push({ resourceName: CLIENTS, name: "Clientes", groupType: "USER_CONTACT_GROUP", memberCount: 3 });
     const member = { memberships: [{ contactGroupMembership: { contactGroupResourceName: CLIENTS } }] };
-    world.googleSim.people.add({ resourceName: "people/c1", names: [{ displayName: "Ana Souza" }], phoneNumbers: [{ value: "(11) 99999-0001", canonicalForm: "+5511999990001" }], ...member });
+    world.googleSim.people.add({ resourceName: "people/c1", names: [{ displayName: "Ana Souza" }], phoneNumbers: [{ value: "(11) 99999-0001", canonicalForm: "+5511999990001" }], birthdays: [{ date: { month: 11, day: 11 } }], ...member });
     world.googleSim.people.add({ resourceName: "people/c2", names: [{ displayName: "Bruno Lima" }], emailAddresses: [{ value: "bruno@exemplo.com.br" }], birthdays: [{ date: { month: 11, day: 3 } }], ...member });
-    world.googleSim.people.add({ resourceName: "people/c3", names: [{ displayName: "Carla Dias" }], ...member });
+    world.googleSim.people.add({ resourceName: "people/c3", names: [{ displayName: "Carla Dias" }], birthdays: [{ date: { month: 11, day: 9 } }], ...member });
     await connect(world);
     const url = new URL(await world.google.begin("sessao", "contacts"));
     await world.google.finish({ state: url.searchParams.get("state") ?? "", code: `dev.${url.searchParams.get("code_challenge") ?? ""}` }, "sessao");
@@ -357,6 +381,9 @@ describe("finding contacts", () => {
       const birthday = await world.flows.create({ name: "Aniversário", definition: manual([search({ birthday: "today" }), tell("{{name}}")]) });
       await world.flows.runNow(birthday.id);
       expect(titles(world).slice(2)).toEqual(["Bruno Lima"]);
+      const week = await world.flows.create({ name: "Semana", definition: manual([search({ birthday: "week" }), tell("{{name}}")]) });
+      await world.flows.runNow(week.id);
+      expect(titles(world).slice(3)).toEqual(["Bruno Lima", "Carla Dias"]);
       expect(world.googleSim.seen.length).toBe(before);
     });
   });

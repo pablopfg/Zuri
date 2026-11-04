@@ -66,7 +66,11 @@ Sem o Google conectado, o passo mostra onde conectar.
   execução antes de criar qualquer evento. São no máximo 10 eventos por
   execução; com mais itens, nenhum é criado. A **chave contra repetição**
   (por exemplo `{{id}}`) faz o mesmo item nunca virar um segundo evento,
-  mesmo em outra execução. O Google guarda a chave de um evento apagado, então
+  mesmo em outra execução. Sem chave, uma falha passageira do Google para a
+  execução em vez de tentar de novo, porque o evento pode ter sido criado. Use
+  a chave sempre que o item tiver um id. Um fluxo a cada 15 minutos pode criar
+  até 960 eventos por dia; prefira intervalos maiores. Os sinais `<` e `>`
+  que vêm dos itens saem da descrição. O Google guarda a chave de um evento apagado, então
   apagar o evento não faz o fluxo criá-lo de novo. Nenhum passo muda ou apaga
   evento. Cada item ganha `event` com `id`, `calendar`, `start` e `created`.
 - **Buscar contatos**: lê só a cópia que a Zuri guarda (nenhuma chamada ao

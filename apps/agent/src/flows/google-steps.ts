@@ -1,4 +1,4 @@
-import { FLOW_LIMITS, type FlowNode, sha256Hex } from "@zuri/shared";
+import { FLOW_LIMITS, type FlowNode, isValidCalendarDate, sha256Hex } from "@zuri/shared";
 import type { GoogleContacts } from "../google/contacts.ts";
 import { DATE, DATE_TIME, localInstant, localToday, nextDay } from "../google/events.ts";
 import { type GoogleCalendar, GoogleError, GoogleMeter } from "../google/service.ts";
@@ -21,7 +21,18 @@ export interface FlowGoogle {
 }
 
 /** An ISO instant with its offset ("2026-11-05T14:00:00-03:00", "…Z"). */
-const INSTANT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,3})?)?(?:Z|[+-]\d{2}:\d{2})$/;
+const INSTANT = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2})(?:\.\d{1,3})?)?(?:Z|[+-](\d{2}):(\d{2}))$/;
+
+/**
+ * An ISO instant whose parts are real: Date.parse turns 30/02 into 02/03 and
+ * accepts 24:00, which would put the event on another day.
+ */
+function realInstant(value: string): boolean {
+  const m = INSTANT.exec(value);
+  if (!m) return false;
+  const [y, mo, d, h, mi, sec = "0", oh = "0", om = "0"] = m.slice(1);
+  return isValidCalendarDate(Number(y), Number(mo), Number(d)) && Number(h) <= 23 && Number(mi) <= 59 && Number(sec) <= 59 && Number(oh) <= 14 && Number(om) <= 59;
+}
 const MINUTE = 60_000;
 
 /** A Google failure in the words of a run: a passing one is tried again, the rest stop it. */
@@ -136,11 +147,14 @@ function times(value: string, minutes: number, zone: string): { start: Record<st
   }
   let start: Date | null = null;
   if (DATE_TIME.test(v)) start = localInstant(v, zone);
-  else if (INSTANT.test(v) && Number.isFinite(Date.parse(v))) start = new Date(v);
+  else if (realInstant(v)) start = new Date(v);
   if (!start || Number.isNaN(start.getTime())) return null;
   const end = new Date(start.getTime() + minutes * MINUTE);
   return { start: { dateTime: start.toISOString(), timeZone: zone }, end: { dateTime: end.toISOString(), timeZone: zone }, at: start.toISOString() };
 }
+
+/** A value from an item, with no `<` or `>` (no tag reaches the event). */
+const noMarkup = (value: string) => value.replace(/[<>]/g, "");
 
 /** The id an event gets from a flow and a key: the same key never makes a second event there. */
 async function eventId(flowId: string, calendarId: string, key: string): Promise<string> {
@@ -161,7 +175,8 @@ export async function createEvents(node: Extract<FlowNode, { type: "calendar_cre
     item,
     title: titleOf(fill(node.title, item)),
     when: times(fill(node.start, item), node.minutes, zone),
-    description: node.description ? [...fill(node.description, item)].slice(0, FLOW_LIMITS.body).join("") : "",
+    // Google shows markup in a description as links: a value from outside never brings any.
+    description: node.description ? [...fill(node.description, item, {}, noMarkup)].slice(0, FLOW_LIMITS.body).join("") : "",
     key: node.key ? fill(node.key, item).trim() : "",
   }));
   if (!state.partial && (state.created ?? 0) + planned.length > FLOW_LIMITS.eventsPerRun) throw new FlowStepError("events_limit");
@@ -186,7 +201,12 @@ export async function createEvents(node: Extract<FlowNode, { type: "calendar_cre
     } catch (error) {
       // 409: an event with this key is there already (or was, and was deleted): nothing new is made.
       if (id && error instanceof GoogleError && error.status === 409) made = { id, created: false };
-      else throw problemOf(error);
+      else {
+        const problem = problemOf(error);
+        // Without a key, a call that timed out may have made the event: trying again could make a second one.
+        if (!id && problem instanceof FlowStepError && problem.transient) throw new FlowStepError(problem.problem, false, problem.httpStatus);
+        throw problem;
+      }
     } finally {
       state.calls += meter.used;
     }
