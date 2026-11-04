@@ -359,3 +359,16 @@ acrescente aqui cada armadilha nova que encontrar (sem dados pessoais).
   como fechado (sem nome), mas a página de trás segue inerte e engole teclas
   (#146, `Ctrl+S` das notas no celular). Abra e feche no `useLayoutEffect`,
   como o `Dialog` de `ui.tsx` (03/11/2026).
+- O Google simulado (`dev-google.ts`) dá todos os escopos de uma vez na tela
+  de consentimento do e2e: um teste que espera o botão de pedir a permissão
+  nova nunca o vê. Cubra a segunda ida ao Google no teste de rota do agente
+  (03/11/2026).
+- Uma consulta da interface cuja chave começa pela área do canal ao vivo
+  (por exemplo `["reviews", …]`) é refeita a cada gravação da área. Se a
+  própria rota grava a área ao responder (um upsert que sempre escreve),
+  vira um ciclo de refetch. Use chave fora da área para listas que vêm do
+  Google e um `WHERE` no `DO UPDATE` que só grava quando algo mudou
+  (03/11/2026, etapa 19c).
+- A API do Perfil da Empresa responde 429 com `quota_limit_value: "0"`
+  enquanto o "Basic API Access" não sai. Não é limite de taxa: tratar como
+  sem acesso e tentar de novo em horas, não em segundos (03/11/2026).

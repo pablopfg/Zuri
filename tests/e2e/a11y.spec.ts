@@ -81,6 +81,14 @@ for (const scheme of ["light", "dark"] as const) {
       await expectAccessible(page, "/automacoes/fluxos");
       expect(await tooSmallControls(page)).toEqual([]);
     });
+
+    test(`the Reviews tab, off, has no serious violation (${scheme}) @mobile`, async ({ page }) => {
+      await page.goto("/contatos/avaliacoes");
+      await signIn(page);
+      await expect(page.getByText("Avaliações desligadas", { exact: true })).toBeVisible();
+      await expectAccessible(page, "/contatos/avaliacoes");
+      expect(await tooSmallControls(page)).toEqual([]);
+    });
   });
 }
 

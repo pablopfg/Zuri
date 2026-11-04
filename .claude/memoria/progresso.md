@@ -39,10 +39,17 @@ etapas ficam detalhadas; as mais antigas viram uma linha na tabela.
 | 18b | mesclada (03/11/2026) | #111 | Login OAuth nos servidores MCP (PKCE, registro dinâmico, botão **Entrar no serviço**), triagem das ferramentas pelo significado, aprovação de chamadas externas pelo bot e pela página `/aprovar` |
 | 19 | mesclada (03/11/2026) | #136 | Google Agenda: OAuth próprio do dono, agendas fechada/só ler/ler e editar, 5 ferramentas (apagar e mudar evento com convidados são propostas), `/hoje` com agenda, modelos de rotina, tela **Agenda** (dia, semana, mês) em tempo real por push do Google |
 | 19b | mesclada (03/11/2026) | #144 | Google Contatos: cópia só leitura das etiquetas escolhidas (até 5.000, de hora em hora com `syncToken`), tela **Contatos**, avisos de aniversário e datas especiais, `search_contacts` e `get_contact` |
+| 19c | em revisão (03/11/2026) | — | Avaliações do Google: leitura a cada 15 min (até 3 perfis), triagem fixa pela nota, aviso das negativas no tópico "Avaliações", agente de avaliações sem ferramentas, conferência fixa e segunda leitura, publicação só com aprovação na tela e releitura antes, aba **Avaliações** em Contatos |
 | 22a | mesclada (03/11/2026) | #153 | Motor de fluxos no alarme único (7 passos de catálogo fechado), conexões com métodos marcados e credencial cifrada, monitor de sites como modelo, aba **Fluxos** em Automações, `/status` com os sites |
 | 22b | mesclada (03/11/2026) | #161 | CRM interno na aba **Clientes** de Contatos (funil editável, etiquetas, retorno, aniversário, histórico), avisos do CRM, eventos do n8n assinados com HMAC, 5 ferramentas do CRM, sugestões de fluxo da conversa na aba Fluxos |
 
 ## Últimas etapas (detalhe)
+
+### Etapa 19c · Avaliações do Google
+- Entregou: `apps/agent/src/reviews/` (`triage.ts` regras fixas da nota e do texto suspeito; `guard.ts` conferência fixa, sem IA; `responder.ts` agente sem ferramentas, JSON por Zod, segunda leitura que só vê a resposta; `service.ts` `ReviewService` com `check` no alarme a cada 15 min, marca d'água com 1 h de folga, `approve` com `sending` atômico, releitura e `uncertain`; `store.ts` `forgetReviews`), rotas `api/reviews.ts` (`PATCH /reviews/settings` faz a primeira leitura na hora), `GoogleCalendar.business()` e `begin(session, "reviews")`, cota zero do Google (429 com `quota_limit_value: "0"`) vira `no_access`, Perfil da Empresa simulado em `dev-google.ts` (avaliações que "chegam" depois da primeira leitura; o revoke recomeça o perfil), avisos `reviews.*` no tópico "Avaliações" (categoria `system`), `/status` e `/pausar_rotinas`, aba `pages/contacts/reviews/ReviewsPanel.tsx` e `pages/settings/ReviewsSection.tsx` (textos em `pt-BR-reviews.ts`, carregadas sob demanda), mapas de texto em `apps/web/src/lib/reviews.ts`. Doc: `docs/avaliacoes-google.md`. Plano: `docs/planos/google-business-profile.md`.
+- Migrations: 26 (`google_reviews`: `zur_review_settings`, `zur_review_locations` com `enabled_at`, `zur_reviews`, `zur_review_events`, coluna `reviews` em `zur_area_versions`). A próxima livre é a 27.
+- Desvios do plano: a tela é uma aba de Contatos (`/contatos/avaliacoes`) pelo orçamento do JS inicial (139.551 B, sem mudança); aprovar pelo bot ficou para depois (só a tela publica); categoria `system` com o tópico decidido pelo tipo `reviews.*`; avaliação escrita antes de ligar o perfil nunca vira nova.
+- Para as próximas: a 19d acrescenta o nível automático (só depois de 10 aprovações do dono; os eventos `approved` de `zur_review_events` somem em 180 dias, então um contador próprio é mais seguro) e usa a mesma conferência; o backup (23) deixa de fora `zur_review*` (a cópia se refaz do Google).
 
 ### Etapa 22b · CRM interno e eventos do n8n
 - Entregou: `apps/agent/src/crm/` (`service.ts` `CrmService` com `atomic()` aninhável, funil com etapas padrão no idioma do dono, `tick` no alarme para retornos e aniversários às 9 h no fuso do dono, `announceNew`; `events.ts` `CrmEvents` com `receive` na ordem bloqueio → chave → assinatura → limites → formato → repetição → aplicar inteiro), `gates/crm-events.ts` (segredo derivado de `SESSION_SECRET`, assinatura conferida no Worker antes do Access e de novo no objeto), rotas `api/crm.ts`, ferramentas `tools/crm.ts` (`search_clients`, `get_client`, `crm_summary`, `add_client`, `update_client`) e `tools/flows.ts` (`propose_flow`, só rascunho, com o manejo estreito `flowDrafts`), aba `pages/contacts/crm/ClientsPanel.tsx` (textos em `pt-BR-crm.ts`, carregada sob demanda), seção **Sugestões da Zuri** em Fluxos. Doc: `docs/crm.md`. Plano: `docs/planos/etapa-22b-crm-interno.md`.
@@ -120,6 +127,6 @@ etapas ficam detalhadas; as mais antigas viram uma linha na tabela.
 
 ## Próxima etapa
 
-- Número e nome: 19c · Avaliações do Google Business Profile (o Pablo confirmou o pedido do "Basic API Access" em 03/11/2026); depois dela, 22c · Passos da agenda e dos contatos
-- Dependências mescladas: 19 (Google Agenda) e 19b (Google Contatos)
-- Precisa de algo do Pablo antes: que o Google tenha aprovado o "Basic API Access" (a aprovação pode levar dias; a etapa pode começar pelo que não depende da API).
+- Número e nome: 19d · Resposta automática às avaliações positivas; depois dela, 22c · Passos da agenda e dos contatos
+- Dependências mescladas: 19c (quando a PR dela entrar)
+- Precisa de algo do Pablo antes: nada para codar (Google simulado); para usar de verdade, o "Basic API Access" aprovado pelo Google.

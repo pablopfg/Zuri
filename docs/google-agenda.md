@@ -131,6 +131,10 @@ configurado e nada mais muda.
 A etapa 19b (Google Contatos) vai pedir uma permissão a mais na mesma conexão:
 o Google mostra a tela de novo só com o que falta.
 
+As avaliações do Google (etapa 19c) pedem mais três APIs, o escopo
+`.../auth/business.manage` e o "Basic API Access" do Perfil da Empresa; o
+passo a passo está em [avaliacoes-google.md](avaliacoes-google.md#para-quem-instala).
+
 ## Como funciona
 
 | Parte | Onde |

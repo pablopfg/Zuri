@@ -5,7 +5,7 @@
  * one or look like markup; line breaks become spaces, so one item is one line.
  */
 
-export const DATA_SOURCES = ["memory", "note", "task", "tool", "summary", "mcp", "telegram_forward", "calendar", "remote_event", "settings", "contact", "flow", "crm"] as const;
+export const DATA_SOURCES = ["memory", "note", "task", "tool", "summary", "mcp", "telegram_forward", "calendar", "remote_event", "settings", "contact", "flow", "crm", "review"] as const;
 export type DataSource = (typeof DATA_SOURCES)[number];
 
 /**

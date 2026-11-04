@@ -2,10 +2,11 @@
 // Google contacts. They come with the screen, on demand (rule P11).
 export const ptBRContacts = {
   "web.contacts.title": "Contatos",
-  "web.contacts.tabsDescription": "Os contatos do seu Google e os clientes do seu CRM, num lugar só.",
+  "web.contacts.tabsDescription": "Os contatos do seu Google, os clientes do seu CRM e as avaliações do seu perfil, num lugar só.",
   "web.contacts.tabs": "Seções de Contatos",
   "web.contacts.tab.google": "Google",
   "web.contacts.tab.clients": "Clientes",
+  "web.contacts.tab.reviews": "Avaliações",
   "web.contacts.description": "Os contatos das etiquetas que você escolheu no Google. Aqui é só leitura: para mudar algo, use o Google Contatos.",
   "web.contacts.search": "Buscar por nome, telefone ou e-mail",
   "web.contacts.label": "Etiqueta",

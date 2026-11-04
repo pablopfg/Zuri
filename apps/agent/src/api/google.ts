@@ -17,6 +17,7 @@ import type { ClientInfo } from "../auth/client.ts";
 import type { AuthService } from "../auth/service.ts";
 import { CHANNEL_ID, GOOGLE_CHANNEL_HEADER, GOOGLE_PUSH_PATH, GOOGLE_STATE_HEADER, GOOGLE_TOKEN_HEADER, isGooglePushToken } from "../gates/google-push.ts";
 import type { GoogleContacts } from "../google/contacts.ts";
+import type { ReviewService } from "../reviews/service.ts";
 import { toAppError } from "../google/errors.ts";
 import { type EventDraft, eventBody, localInstant, nextDay } from "../google/events.ts";
 import { type GoogleCalendar, GoogleError, GoogleMeter } from "../google/service.ts";
@@ -28,6 +29,8 @@ export interface GoogleRouteDeps {
   google: GoogleCalendar;
   /** The copy of the Google contacts (step 19b). */
   contacts: GoogleContacts;
+  /** The Google reviews (step 19c). */
+  reviews: ReviewService;
   auth: AuthService;
   timeZone: () => string;
   /** Sets the shared alarm again (a sync or a notice became due). */

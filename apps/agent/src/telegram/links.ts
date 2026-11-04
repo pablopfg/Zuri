@@ -29,6 +29,10 @@ interface LinkRow {
   last_used_at: string | null;
 }
 
+/** A topic of the group: one per category, and the Google reviews' own (step 19c, "Avaliações"). */
+export type TopicKey = AlertCategory | "reviews";
+const TOPIC_KEYS: readonly TopicKey[] = [...ALERT_CATEGORIES, "reviews"];
+
 /** The notices' group (step 13): where it is and what the bot knows about its topics. */
 export interface GroupLink {
   chatId: number;
@@ -38,7 +42,7 @@ export interface GroupLink {
   /** Telegram refused to create a topic (the bot isn't an admin): no more tries until the group is linked again. */
   topicsOff: boolean;
   /** The topic (message_thread_id) of each category, created on first use. */
-  topics: Partial<Record<AlertCategory, number>>;
+  topics: Partial<Record<TopicKey, number>>;
   linkedAt: string;
 }
 
@@ -138,8 +142,8 @@ export class TelegramLinks {
     } catch {
       // A broken row still sends to the group, without topics.
     }
-    const topics: Partial<Record<AlertCategory, number>> = {};
-    for (const category of ALERT_CATEGORIES) {
+    const topics: Partial<Record<TopicKey, number>> = {};
+    for (const category of TOPIC_KEYS) {
       const value = state.ids?.[category];
       if (typeof value === "number" && Number.isSafeInteger(value) && value > 0) topics[category] = value;
     }
@@ -180,7 +184,7 @@ export class TelegramLinks {
   }
 
   /** Saves the topics' state, only if the group is still the one the topics belong to. */
-  setTopics(chatId: number, change: { topics?: Partial<Record<AlertCategory, number>>; topicsOff?: boolean; forum?: boolean }): void {
+  setTopics(chatId: number, change: { topics?: Partial<Record<TopicKey, number>>; topicsOff?: boolean; forum?: boolean }): void {
     const group = this.group();
     if (!group || group.chatId !== chatId) return;
     const state: TopicState = { forum: change.forum ?? group.forum, off: change.topicsOff ?? group.topicsOff, ids: change.topics ?? group.topics };

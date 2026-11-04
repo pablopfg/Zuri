@@ -119,6 +119,27 @@ export async function seed(page: Page, base: string): Promise<{ conversationId: 
     const opened = await page.request.patch(`${base}/api/google/calendars/${encodeURIComponent(id)}`, { headers: CSRF, data: { mode } });
     if (!opened.ok()) throw new Error(`/api/google/calendars: ${opened.status()}`);
   }
+  // Google reviews (step 19c): the sample profile of the same simulator. Saving makes the first read
+  // (two old reviews, kept as history); "Check now" brings the three that arrive after it.
+  const listed = await page.request.get(`${base}/api/reviews/locations`, { headers: CSRF });
+  if (!listed.ok()) throw new Error(`/api/reviews/locations: ${listed.status()}`);
+  const reviews = await page.request.patch(`${base}/api/reviews/settings`, {
+    headers: CSRF,
+    data: {
+      locations: ["accounts/101/locations/201"],
+      signature: "Equipe Exemplo",
+      tone: "close",
+      templates: [
+        "Muito obrigado pela sua avaliação, ficamos felizes com o seu carinho!",
+        "Agradecemos de coração pela avaliação e esperamos ver você de novo em breve!",
+        "Que alegria receber a sua avaliação, obrigado pela confiança de sempre!",
+      ],
+      banned: [],
+      level: "approve",
+    },
+  });
+  if (!reviews.ok()) throw new Error(`/api/reviews/settings: ${reviews.status()}`);
+  await post("/api/reviews/check", {});
   // Flows (step 22a): over loopback the Worker answers *.exemplo.com.br itself (apps/agent/src/flows/dev-flows.ts),
   // with fora.exemplo.com.br down and a small client list at api.exemplo.com.br.
   const monitor = await post("/api/flows", {

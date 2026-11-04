@@ -32,6 +32,8 @@ export interface SecurityDeps {
   timeZone(): string;
   /** Stops every turn running now (chat in the app or in the bot): a lockdown doesn't wait for them. */
   abortRuns(): void;
+  /** The Google reviews' replies (step 19c): whether some may be published now, and pausing them with the routines. */
+  reviews?: { active(): boolean; pause(): void };
 }
 
 /** What a tap on one of these buttons did; `relock`: the link was suspended with it. */
@@ -137,8 +139,11 @@ export class TelegramSecurity {
 
   #pauseAsk(): Out {
     const routines = this.deps.automations.activeAgentRoutines();
-    if (routines === 0) return { text: this.#t("telegram.seg.pausar.vazio") };
-    return this.#ask(this.#t("telegram.seg.pausar.pergunta", { n: routines }), "routines_pause", "telegram.seg.pausar.botao");
+    const reviews = this.deps.reviews?.active() === true;
+    if (routines === 0 && !reviews) return { text: this.#t("telegram.seg.pausar.vazio") };
+    const question = routines > 0 ? this.#t("telegram.seg.pausar.pergunta", { n: routines }) : "";
+    const extra = reviews ? this.#t("telegram.seg.pausar.avaliacoes") : "";
+    return this.#ask([question, extra].filter(Boolean).join("\n"), "routines_pause", "telegram.seg.pausar.botao");
   }
 
   #lockdownAsk(): Out {
@@ -187,8 +192,11 @@ export class TelegramSecurity {
           return { keyboard: [], out: { text: ended > 0 ? this.#t("telegram.seg.encerrar.feito", { n: ended }) : this.#t("telegram.seg.sessoes.vazio") } };
         }
         case "routines_pause": {
+          const reviews = this.deps.reviews?.active() === true;
+          if (reviews) this.deps.reviews?.pause();
           const paused = await this.#pauseAll();
-          return { keyboard: [], out: { text: paused > 0 ? this.#t("telegram.seg.pausar.feito", { n: paused }) : this.#t("telegram.seg.pausar.vazio") } };
+          const lines = [paused > 0 ? this.#t("telegram.seg.pausar.feito", { n: paused }) : reviews ? "" : this.#t("telegram.seg.pausar.vazio"), reviews ? this.#t("telegram.seg.pausar.avaliacoesFeito") : ""];
+          return { keyboard: [], out: { text: lines.filter(Boolean).join("\n") } };
         }
         case "lockdown": {
           const entered = this.deps.auth.enterLockdown(linkId, suspendLink);

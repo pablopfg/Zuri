@@ -1304,6 +1304,106 @@ export const MIGRATIONS: readonly Migration[] = [
       ...areaTriggers("crm", "zur_crm_settings", "OF events_key, follow_ups, birthdays, new_clients"),
     ],
   },
+  {
+    version: 26,
+    name: "google_reviews",
+    statements: [
+      // Google reviews (step 19c). One row: the owner's choices (the reply style, the level, the pause),
+      // the check's lock and times, and the day's counters of AI drafts and Neurons.
+      `CREATE TABLE IF NOT EXISTS zur_review_settings (
+        id INTEGER PRIMARY KEY CHECK (id = 1),
+        enabled INTEGER NOT NULL DEFAULT 0 CHECK (enabled IN (0, 1)),
+        level TEXT NOT NULL DEFAULT 'approve' CHECK (level IN ('off', 'approve')),
+        paused INTEGER NOT NULL DEFAULT 0 CHECK (paused IN (0, 1)),
+        signature TEXT NOT NULL DEFAULT '',
+        tone TEXT NOT NULL DEFAULT 'close' CHECK (tone IN ('close', 'formal')),
+        templates TEXT NOT NULL DEFAULT '[]',
+        banned TEXT NOT NULL DEFAULT '[]',
+        problem TEXT,
+        problem_noticed_at INTEGER,
+        failures INTEGER NOT NULL DEFAULT 0,
+        running_since INTEGER,
+        next_check INTEGER,
+        checked_now_at INTEGER,
+        listed_at INTEGER,
+        saved_read_at INTEGER,
+        last_ok_at INTEGER,
+        day TEXT NOT NULL DEFAULT '',
+        drafts_today INTEGER NOT NULL DEFAULT 0,
+        neurons_today INTEGER NOT NULL DEFAULT 0,
+        burst_noticed_at INTEGER
+      )`,
+      // The profiles (locations) of the account; selected = read. watermark: the newest updateTime read whole;
+      // page_token/page_top: a check that ran out of pages goes on from there on the next wake.
+      `CREATE TABLE IF NOT EXISTS zur_review_locations (
+        google_name TEXT PRIMARY KEY,
+        title TEXT NOT NULL,
+        selected INTEGER NOT NULL DEFAULT 0 CHECK (selected IN (0, 1)),
+        watermark TEXT,
+        page_token TEXT,
+        page_top TEXT,
+        enabled_at INTEGER
+      )`,
+      // The reviews: a copy of third parties' text, never in a log nor in the backup. Only the first name.
+      `CREATE TABLE IF NOT EXISTS zur_reviews (
+        id TEXT PRIMARY KEY,
+        location TEXT NOT NULL,
+        google_name TEXT NOT NULL UNIQUE,
+        rating INTEGER NOT NULL CHECK (rating BETWEEN 0 AND 5),
+        first_name TEXT NOT NULL DEFAULT '',
+        anonymous INTEGER NOT NULL DEFAULT 0 CHECK (anonymous IN (0, 1)),
+        comment TEXT NOT NULL DEFAULT '',
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL,
+        state TEXT NOT NULL CHECK (state IN ('history', 'new', 'escalated', 'proposed', 'sending', 'uncertain', 'replied', 'replied_elsewhere', 'resolved', 'removed')),
+        reasons TEXT NOT NULL DEFAULT '[]',
+        needs_draft INTEGER NOT NULL DEFAULT 0 CHECK (needs_draft IN (0, 1)),
+        draft TEXT,
+        draft_source TEXT CHECK (draft_source IN ('ai', 'template', 'owner')),
+        fallback TEXT NOT NULL DEFAULT '[]',
+        proposed_at INTEGER,
+        reply TEXT,
+        reply_hash TEXT,
+        replied_at TEXT,
+        seen_at INTEGER NOT NULL,
+        escalated_at INTEGER,
+        sending_at INTEGER,
+        insisted INTEGER NOT NULL DEFAULT 0 CHECK (insisted IN (0, 1))
+      )`,
+      `CREATE INDEX IF NOT EXISTS zur_reviews_state ON zur_reviews (state, updated_at)`,
+      `CREATE INDEX IF NOT EXISTS zur_reviews_location ON zur_reviews (location, updated_at)`,
+      `CREATE INDEX IF NOT EXISTS zur_reviews_list ON zur_reviews (updated_at, id)`,
+      `CREATE INDEX IF NOT EXISTS zur_reviews_drafts ON zur_reviews (needs_draft, seen_at) WHERE needs_draft = 1`,
+      `CREATE INDEX IF NOT EXISTS zur_reviews_seen ON zur_reviews (seen_at)`,
+      `CREATE INDEX IF NOT EXISTS zur_reviews_escalated ON zur_reviews (escalated_at) WHERE escalated_at IS NOT NULL`,
+      // Counters of all and per state, so the tab's numbers and /status read a few rows, never the table.
+      `INSERT INTO zur_counts (kind, n) VALUES ('reviews', 0), ('reviews_history', 0), ('reviews_new', 0), ('reviews_escalated', 0), ('reviews_proposed', 0), ('reviews_sending', 0), ('reviews_uncertain', 0), ('reviews_replied', 0), ('reviews_replied_elsewhere', 0), ('reviews_resolved', 0), ('reviews_removed', 0) ON CONFLICT (kind) DO NOTHING`,
+      `CREATE TRIGGER IF NOT EXISTS zur_counts_reviews_insert AFTER INSERT ON zur_reviews BEGIN
+        UPDATE zur_counts SET n = n + 1 WHERE kind IN ('reviews', 'reviews_' || new.state);
+      END`,
+      `CREATE TRIGGER IF NOT EXISTS zur_counts_reviews_delete AFTER DELETE ON zur_reviews BEGIN
+        UPDATE zur_counts SET n = n - 1 WHERE kind IN ('reviews', 'reviews_' || old.state);
+      END`,
+      `CREATE TRIGGER IF NOT EXISTS zur_counts_reviews_state AFTER UPDATE OF state ON zur_reviews WHEN old.state != new.state BEGIN
+        UPDATE zur_counts SET n = n - 1 WHERE kind = 'reviews_' || old.state;
+        UPDATE zur_counts SET n = n + 1 WHERE kind = 'reviews_' || new.state;
+      END`,
+      // What happened to each review (who approved, the checker's codes): never the text. 180 days.
+      `CREATE TABLE IF NOT EXISTS zur_review_events (
+        id INTEGER PRIMARY KEY,
+        review_id TEXT NOT NULL,
+        action TEXT NOT NULL,
+        actor TEXT NOT NULL,
+        codes TEXT NOT NULL DEFAULT '[]',
+        at INTEGER NOT NULL
+      )`,
+      `CREATE INDEX IF NOT EXISTS zur_review_events_at ON zur_review_events (at)`,
+      `ALTER TABLE zur_area_versions ADD COLUMN reviews INTEGER NOT NULL DEFAULT 0`,
+      ...areaTriggers("reviews", "zur_reviews", "OF rating, comment, state, draft, reply, updated_at"),
+      ...areaTriggers("reviews", "zur_review_settings", "OF enabled, level, paused, signature, tone, templates, banned, problem, last_ok_at"),
+      ...areaTriggers("reviews", "zur_review_locations", "OF title, selected"),
+    ],
+  },
 ];
 
 /** The three triggers that move an area's number when a row of `table` is added, changed or removed. Frozen: migration 21 is built from it. */

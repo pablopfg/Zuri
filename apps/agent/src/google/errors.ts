@@ -27,6 +27,7 @@ const MESSAGE: Record<GoogleError["kind"], [AppError["code"], MessageKey]> = {
   expired: ["SERVICE_UNAVAILABLE", "error.googleUnavailable"],
   api_disabled: ["CONFLICT", "error.googleApiDisabled"],
   contacts_scope: ["VALIDATION_FAILED", "error.googleContactsScope"],
+  business_scope: ["VALIDATION_FAILED", "error.googleBusinessScope"],
 };
 
 const INPUT: Record<EventInputError["reason"], MessageKey> = {

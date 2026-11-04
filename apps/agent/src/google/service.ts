@@ -1,4 +1,5 @@
 import {
+  BUSINESS_SCOPE,
   type CalendarMode,
   CONTACTS_SCOPE,
   GOOGLE_CALLBACK_PATH,
@@ -18,6 +19,7 @@ import type { InternalState } from "../db/internal-state.ts";
 import { googlePushToken, GOOGLE_PUSH_PATH } from "../gates/google-push.ts";
 import { log } from "../log.ts";
 import { McpCredentials } from "../mcp/credentials.ts";
+import { forgetReviews } from "../reviews/store.ts";
 import { forgetContacts } from "./contacts-store.ts";
 import { type CalendarEvent, cleanText, readEvent, startMs } from "./events.ts";
 
@@ -27,9 +29,17 @@ export const GOOGLE_REVOKE_URL = "https://oauth2.googleapis.com/revoke";
 export const GOOGLE_CALENDAR_API = "https://www.googleapis.com/calendar/v3";
 /** The People API (step 19b): the contacts and their labels, read only. */
 export const GOOGLE_PEOPLE_API = "https://people.googleapis.com/v1";
+/** The Business Profile APIs (step 19c): accounts, locations and the reviews (still v4). Fixed here, never from input. */
+export const GOOGLE_ACCOUNTS_API = "https://mybusinessaccountmanagement.googleapis.com/v1";
+export const GOOGLE_LOCATIONS_API = "https://mybusinessbusinessinformation.googleapis.com/v1";
+export const GOOGLE_REVIEWS_API = "https://mybusiness.googleapis.com/v4";
+const BUSINESS_APIS: readonly string[] = [GOOGLE_ACCOUNTS_API, GOOGLE_LOCATIONS_API, GOOGLE_REVIEWS_API];
 
-/** What a consent asks for: the calendar (step 19), or the contacts joined to the same grant (step 19b). */
-export type GooglePurpose = "calendar" | "contacts";
+/** What a consent asks for: the calendar (step 19), or the contacts (step 19b) or the reviews (step 19c) joined to the same grant. */
+export type GooglePurpose = "calendar" | "contacts" | "reviews";
+
+/** The scope each joined purpose adds to the calendar's grant. */
+const JOINED_SCOPE: Record<Exclude<GooglePurpose, "calendar">, string> = { contacts: CONTACTS_SCOPE, reviews: BUSINESS_SCOPE };
 
 /**
  * The narrowest scopes that do the job: the list of calendars (read only) and
@@ -84,7 +94,8 @@ export type GoogleErrorKind =
   | "lockdown"
   | "expired"
   | "api_disabled"
-  | "contacts_scope";
+  | "contacts_scope"
+  | "business_scope";
 
 export class GoogleError extends Error {
   constructor(
@@ -312,8 +323,8 @@ export class GoogleCalendar {
   /** The Google page where the owner allows access. Nothing about the account is stored until `finish`. */
   async begin(session: string, purpose: GooglePurpose = "calendar"): Promise<string> {
     this.assertReady();
-    // The contacts join a grant that exists: the account comes from connecting the calendar.
-    if (purpose === "contacts" && this.account()?.status !== "connected") throw new GoogleError("not_connected");
+    // The contacts and the reviews join a grant that exists: the account comes from connecting the calendar.
+    if (purpose !== "calendar" && this.account()?.status !== "connected") throw new GoogleError("not_connected");
     const state = `${GOOGLE_STATE_PREFIX}${randomToken(32)}`;
     const verifier = randomToken(48);
     const challenge = toBase64Url(new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier))));
@@ -330,7 +341,7 @@ export class GoogleCalendar {
       client_id: this.deps.clientId()?.trim() ?? "",
       redirect_uri: this.redirectUri(),
       response_type: "code",
-      scope: (purpose === "contacts" ? [CONTACTS_SCOPE] : GOOGLE_CALENDAR_SCOPES).join(" "),
+      scope: (purpose === "calendar" ? GOOGLE_CALENDAR_SCOPES : [JOINED_SCOPE[purpose]]).join(" "),
       access_type: "offline",
       // Asked every time, so Google always hands out a refresh token.
       prompt: "consent",
@@ -382,13 +393,13 @@ export class GoogleCalendar {
     const refresh = typeof token.refresh_token === "string" ? token.refresh_token : "";
     const granted = typeof token.scope === "string" ? token.scope.split(" ") : [];
     const previous = this.account();
-    const purpose: GooglePurpose = pending.purpose === "contacts" ? "contacts" : "calendar";
-    const required: readonly string[] = purpose === "contacts" ? [...GOOGLE_CALENDAR_SCOPES, CONTACTS_SCOPE] : GOOGLE_CALENDAR_SCOPES;
+    const purpose: GooglePurpose = pending.purpose === "contacts" || pending.purpose === "reviews" ? pending.purpose : "calendar";
+    const required: readonly string[] = purpose === "calendar" ? GOOGLE_CALENDAR_SCOPES : [...GOOGLE_CALENDAR_SCOPES, JOINED_SCOPE[purpose]];
     if (!refresh || !required.every((scope) => granted.includes(scope))) {
       // Unticked permissions on Google's page: give back what was granted and stop. Not while an account is
       // connected: revoking ends the whole grant, which may be that account's.
       if (!previous) await this.revoke(refresh || (typeof token.access_token === "string" ? token.access_token : ""), meter);
-      throw new GoogleError(purpose === "contacts" ? "contacts_scope" : "scopes");
+      throw new GoogleError(purpose === "contacts" ? "contacts_scope" : purpose === "reviews" ? "business_scope" : "scopes");
     }
     const access = accessFrom(token, this.clock());
     const list = await this.calendarList(access.token, meter);
@@ -404,6 +415,7 @@ export class GoogleCalendar {
       if (replaced) {
         this.deps.db.run(`DELETE FROM zur_google_calendars`);
         forgetContacts(this.deps.db);
+        forgetReviews(this.deps.db);
       }
       this.deps.db.run(
         `INSERT INTO zur_google_account (id, email, refresh_token, access_token, access_expires_at, scopes, status, problem, problem_noticed_at, connected_at, checked_at)
@@ -493,8 +505,9 @@ export class GoogleCalendar {
     this.deps.db.transaction(() => {
       this.deps.db.run(`DELETE FROM zur_google_calendars`);
       this.deps.db.run(`DELETE FROM zur_google_account`);
-      // The contacts' copy goes with the access that read them (step 19b).
+      // The contacts' and the reviews' copies go with the access that read them (steps 19b and 19c).
       forgetContacts(this.deps.db);
+      forgetReviews(this.deps.db);
       this.deps.state.delete("google_oauth_pending");
     });
     this.#due = undefined;
@@ -629,6 +642,20 @@ export class GoogleCalendar {
     return body;
   }
 
+  /**
+   * A Business Profile call (step 19c), with the account's token: only to the
+   * three fixed APIs. GET, PUT (the reply) and DELETE (Zuri's own reply).
+   */
+  async business(
+    base: string,
+    path: string,
+    meter: GoogleMeter,
+    init: { method?: "GET" | "PUT" | "DELETE"; query?: Record<string, string>; body?: unknown } = {},
+  ): Promise<Record<string, unknown> | null> {
+    if (!BUSINESS_APIS.includes(base)) throw new GoogleError("not_found");
+    return this.call(base, path, meter, init);
+  }
+
   private async call(
     base: string,
     path: string,
@@ -677,6 +704,12 @@ export class GoogleCalendar {
         if (reasons.has("SERVICE_DISABLED") || reasons.has("accessNotConfigured")) throw new GoogleError("api_disabled", 403);
         if (reasons.has("ACCESS_TOKEN_SCOPE_INSUFFICIENT") || reasons.has("insufficientPermissions")) throw new GoogleError("scopes", 403);
         throw new GoogleError("forbidden", 403);
+      }
+      if (res.status === 429) {
+        // A quota of zero isn't "slow down": the project has no access yet (the Business Profile's
+        // Basic API Access before Google approves it). Waiting won't help; the owner can act.
+        if (quotaZero(await readJson(res))) throw new GoogleError("forbidden", 429);
+        throw apiError(429);
       }
       if ((res.status === 400 || res.status === 410) && base === GOOGLE_PEOPLE_API) {
         // A sync token older than 7 days: the caller reads everything again.
@@ -994,6 +1027,15 @@ function errorReasons(body: Record<string, unknown> | null): Set<string> {
     }
   }
   return out;
+}
+
+/** Whether a 429's body says the quota itself is zero (google.rpc.ErrorInfo, metadata.quota_limit_value). */
+function quotaZero(body: Record<string, unknown> | null): boolean {
+  const details = (body?.error as { details?: unknown } | undefined)?.details;
+  return (Array.isArray(details) ? details.slice(0, 20) : []).some((item) => {
+    const metadata = item && typeof item === "object" ? (item as { metadata?: unknown }).metadata : undefined;
+    return !!metadata && typeof metadata === "object" && (metadata as { quota_limit_value?: unknown }).quota_limit_value === "0";
+  });
 }
 
 /** Whether a 403's body is Google's "slow down" (usageLimits), not a refusal of the access. */
