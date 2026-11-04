@@ -17,12 +17,12 @@ Tokens pessoais `zur_pat_` (escopos `read`, `write` e `events`, 90 dias, só HMA
 1. Token `read` recebe 403 em toda rota de escrita (teste que percorre as rotas). → `remote-routes.test.ts`
 2. Nenhum token (read, write, events) alcança `/api/auth*`, `/api/telegram*`, `/api/approvals*`, `/api/lockdown*`, `/api/actions*`, `/api/plans*`, `/api/flows*`, `/api/crm*`, `/api/remote/tokens*` nem outra rota fora da lista; o handler nunca roda (teste que percorre todas as rotas registradas). → `remote-routes.test.ts`
 3. Token inválido, vencido, revogado, suspenso ou com o acesso remoto desligado recebe 401 e nunca cai para o cookie. → `remote-routes.test.ts`
-4. O banco guarda só o HMAC; o token aparece uma vez na criação. → `remote-tokens.test.ts`
-5. 10 tentativas inválidas por rede em 15 min dão 429 mesmo com o token certo; 120 pedidos por minuto por token. → `remote-tokens.test.ts`
+4. O banco guarda só o HMAC; o token aparece uma vez na criação. → `remote-routes.test.ts`
+5. 10 tentativas inválidas por rede em 15 min dão 429 mesmo com o token certo; 120 pedidos por minuto por token. → `remote-routes.test.ts`
 6. `POST /api/remote/events` só com token `events`; 60 por hora e 100 por dia (429 + `Retry-After`); repetição de `source`+`id` em 24 h é descartada; `critical` recusado; título com a origem, numa linha, links desarmados; eventos usam no máximo metade do limite de cada canal; no máximo 3 insistem ao mesmo tempo. → `remote-events.test.ts`
-7. Bloqueio suspende os tokens e sair do bloqueio devolve; troca de senha, recuperação e redefinição revogam todos. → `remote-tokens.test.ts`, `auth-lockdown` existente
-8. `/tokens` do bot lista os tokens com **Revogar** (um toque, alerta que só o app reconhece). → `telegram-security.test.ts`
-9. Tela Configurações › Segurança › **Acesso remoto**: ligar/desligar, criar (nome e escopo), copiar uma vez, revogar um e todos; estados vazio, carregando, erro; claro/escuro; teclado; axe. → e2e `remote-access.spec.ts`
+7. Bloqueio suspende os tokens e sair do bloqueio devolve; troca de senha, recuperação e redefinição revogam todos. → `remote-routes.test.ts`, `auth-password-route.test.ts`
+8. `/tokens` do bot lista os tokens com **Revogar** (um toque, alerta que só o app reconhece). → `telegram-lockdown.test.ts`
+9. Tela Configurações › Segurança › **Acesso remoto**: ligar/desligar, criar (nome e escopo), copiar uma vez, revogar um e todos; estados vazio, carregando, erro; claro/escuro; teclado; axe. → e2e `acesso-remoto.spec.ts`
 
 ## 4. Escopo
 
@@ -58,7 +58,7 @@ Chaves `web.remote.*` em `pt-BR-security.ts` (tela) e `en.ts`; `telegram.seg.tok
 | Pedidos por token | 120 por 60 s (memória do objeto) | 429 + `Retry-After` |
 | Bearer inválido | 10 por rede em 15 min | 429 + `Retry-After`, mesmo com token certo |
 | Eventos | 60/h e 100/dia, todos os tokens | 429 + `Retry-After` |
-| Corpo do evento | 2 KB; título 1–120, corpo ≤ 1.000 | 413 / 400 |
+| Corpo do evento | 2 KB; título 1–120, corpo ≤ 1.000 | 400 |
 | Eventos nos canais | metade do limite por hora e por dia de cada canal | fica só no app (`channel_limit`) |
 | Eventos insistindo | 3 | os outros saem uma vez |
 
@@ -78,9 +78,9 @@ Rotas permitidas (caminho comparado como chegou, `:id` = UUID; `HEAD` = `GET`):
 
 ### Arquivos
 
-- `packages/shared/src/remote.ts` (tipos e constantes, sem Zod) e `remote-schemas.ts` (Zod, só servidor).
-- `apps/agent/src/remote/allowlist.ts` (função pura), `tokens.ts` (`RemoteTokens`: criar, validar, listar, revogar, suspender, limites), `events.ts` (`RemoteEvents`), `gate.ts` (middleware Bearer).
-- `apps/agent/src/api/remote.ts` (rotas de administração e de eventos); `app.ts` registra o gate antes de tudo e pula CSRF/sessão só para o chamador validado.
+- `packages/shared/src/remote.ts` (tipos, constantes e schemas Zod marcados `/* @__PURE__ */`, fora do JS inicial).
+- `apps/agent/src/remote/allowlist.ts` (função pura), `tokens.ts` (`RemoteTokens`: criar, validar, listar, revogar, suspender, limites), `events.ts` (`RemoteEvents`).
+- `apps/agent/src/api/remote.ts` (porteiro Bearer, rotas de administração e de eventos); `app.ts` registra o gate antes de tudo e pula CSRF/sessão só para o chamador validado.
 - `apps/agent/src/alerts/service.ts`: tipo `remote.event`, metade do limite para ele, teto de 3 insistindo.
 - `apps/agent/src/telegram/security.ts`: `/tokens` com Revogar.
 - `apps/web/src/components/security/RemoteAccessCard.tsx` dentro do chunk de Configurações.
@@ -117,16 +117,16 @@ Sem recurso novo. Cada pedido remoto é um pedido ao Worker e ao objeto (100 mil
 
 | Ameaça | Defesa | Teste |
 | --- | --- | --- |
-| Token vazado do banco | só HMAC(`SESSION_SECRET`, token) | `remote-tokens` |
+| Token vazado do banco | só HMAC(`SESSION_SECRET`, token) | `remote-routes` |
 | Token alcança rota sensível | default deny + segmentos negados + teste que percorre todas as rotas | `remote-routes` |
 | Bearer ruim cai no cookie | gate falha fechado | `remote-routes` |
-| Força bruta de token | 10 falhas por rede/15 min, 256 bits de entropia | `remote-tokens` |
+| Força bruta de token | 10 falhas por rede/15 min, 256 bits de entropia | `remote-routes` |
 | CSRF com Bearer | CORS fechado; Bearer não vai sozinho pelo navegador | — |
 | Evento se passa pela Zuri | título com a origem; origem com "zuri" ou o nome da agente vira `remote` | `remote-events` |
 | Evento com link/HTML | links desarmados, uma linha, texto puro na central | `remote-events` |
 | Evento inunda o dono | 60/h, 100/dia, metade do canal, 3 insistindo, nunca crítico | `remote-events` |
 | Token cria rotina com IA | 403 para `agent_prompt` | `remote-routes` |
-| Bloqueio | suspende tokens; volta ao sair | `remote-tokens` |
+| Bloqueio | suspende tokens; volta ao sair | `remote-routes` |
 | Log | nunca token, corpo ou query; só nome e prefixo do id | `log.test` existente |
 
 ## 10. Testes

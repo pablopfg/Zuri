@@ -46,6 +46,7 @@ quatro partes:
 | Falha nova nesta versão | sistema | normal | Uma vez por dia por tipo de falha |
 | Evento de acesso marcado para alerta | segurança | sempre crítica | Novo acesso, 2FA ou passkey mudando, senha trocada etc. |
 | A prioridade que aprende baixou ou subiu um tipo de aviso | sistema | baixa | Um por mudança; leva a Configurações › Avisos |
+| Evento remoto (`POST /api/remote/events`, etapa 20) | eventos | a do evento (padrão normal; nunca crítica) | Título com a origem; 60 por hora e 100 por dia; repetição de origem e id em 24 h descartada ([acesso-remoto.md](acesso-remoto.md)) |
 
 Os vigias rodam a cada 15 minutos, no máximo 5 avisos de tarefa por rodada e 20
 em 24 horas. O resumo do dia sai uma vez por dia local, no horário escolhido
@@ -160,6 +161,9 @@ normal), escolhido no formulário. Crítica fica só para segurança e sistema.
   outro canal. Apagar um alerta de segurança pede a senha digitada há pouco.
 - Cada canal tem limite por hora (padrão 6, de 1 a 60) e por dia (padrão 30,
   de 1 a 500); prioridade baixa não sai do app. Alerta crítico ignora as rotas.
+- Eventos remotos usam no máximo metade de cada limite (arredondada para
+  baixo); passado isso, ficam só no app, e os seus avisos continuam saindo. No
+  máximo 3 eventos remotos insistem ao mesmo tempo.
 
 ## Limites e retenção
 

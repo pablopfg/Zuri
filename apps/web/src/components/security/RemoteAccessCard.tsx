@@ -87,15 +87,7 @@ export function RemoteAccessCard() {
   const tokens = data?.tokens ?? [];
 
   return (
-    <Card
-      title={t("web.remote.title")}
-      description={t("web.remote.description")}
-      actions={
-        <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-accent-soft text-accent-text" aria-hidden>
-          <KeySquare className="h-5 w-5" />
-        </span>
-      }
-    >
+    <Card title={t("web.remote.title")} description={t("web.remote.description")}>
       {overview.isPending ? (
         <Loading />
       ) : overview.isError || !data ? (
@@ -250,8 +242,8 @@ function TokenRow({
   const expired = Date.parse(token.expiresAt) <= Date.now();
   return (
     <li className="space-y-3 p-4">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="min-w-0">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0 flex-1">
           <p className="break-words font-medium">
             {token.name} <span className="font-normal text-fg-muted">· {t(SCOPE_TEXT[token.scope].short)} · …{token.hint}</span>
           </p>
@@ -265,7 +257,7 @@ function TokenRow({
           {token.suspended && <p className="text-sm font-medium text-warning">{t("web.remote.suspended")}</p>}
         </div>
         {idle && (
-          <Button variant="danger" onClick={onAsk} aria-label={t("web.remote.revokeNamed", { name: token.name })}>
+          <Button variant="danger" className="shrink-0" onClick={onAsk} aria-label={t("web.remote.revokeNamed", { name: token.name })}>
             {t("web.remote.revoke")}
           </Button>
         )}
