@@ -288,7 +288,7 @@ O orçamento de cada cota está em [docs/arquitetura/orcamento-free-tier.md](doc
 | | 18b | Login OAuth nos servidores MCP | ✅ |
 | | 19 | Google Agenda | ✅ |
 | | 19b | Google Contatos | ✅ |
-| | 19c | Avaliações do Google com aprovação | ⬜ |
+| | 19c | Avaliações do Google com aprovação | 🚧 |
 | | 19d | Resposta automática das avaliações | ⬜ |
 | | 20 | Acesso remoto e eventos | ⬜ |
 | | 21 | Modelos pagos ⚠️ | ⬜ |
