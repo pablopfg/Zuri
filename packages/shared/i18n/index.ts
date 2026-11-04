@@ -23,6 +23,7 @@ import { ptBRAgenda } from "./pt-BR-agenda.ts";
 import { ptBRContacts } from "./pt-BR-contacts.ts";
 import { ptBRFlows } from "./pt-BR-flows.ts";
 import { ptBRCrm } from "./pt-BR-crm.ts";
+import { ptBRReviews } from "./pt-BR-reviews.ts";
 
 export type MessageKey = keyof typeof ptBR;
 export type Messages = Record<MessageKey, string>;
@@ -65,6 +66,7 @@ export {
   ptBRContacts,
   ptBRFlows,
   ptBRCrm,
+  ptBRReviews,
 };
 
 export type Params = Record<string, string | number>;

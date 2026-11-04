@@ -388,6 +388,32 @@ describe("/pausar_rotinas", () => {
   });
 });
 
+describe("/pausar_rotinas and the Google reviews (step 19c)", () => {
+  it("pauses the reviews' replies too, and /status says how many wait", async () => {
+    await linkOwner();
+    await idle(13 * HOUR);
+    await inOwner((agent) => {
+      vi.spyOn(agent.store.reviews, "enabled").mockReturnValue(true);
+      agent.store.db.run(`INSERT INTO zur_review_settings (id, enabled) VALUES (1, 1)`);
+      agent.store.db.run(`INSERT INTO zur_reviews (id, location, google_name, rating, created_at, updated_at, state, seen_at) VALUES ('r', 'l', 'l/reviews/r', 1, 'x', 'x', 'escalated', 1)`);
+    });
+    try {
+      expect(await command("/status")).toContain("Avaliações do Google esperando você: 1.");
+      expect(await command("/pausar_rotinas")).toBe("As respostas às avaliações do Google também param. Para retomar, só pelo app.");
+      await press("Pausar todas");
+      expect(texts()).toContain("Pausei as respostas às avaliações do Google. A leitura e os avisos continuam.");
+      expect(await inOwner((agent) => agent.store.db.one(`SELECT paused FROM zur_review_settings`))).toEqual({ paused: 1 });
+      expect(await command("/status")).toContain("Avaliações do Google esperando você: 1 (respostas pausadas).");
+      expect(await command("/pausar_rotinas")).toBe("Nenhuma rotina com IA ativa.");
+    } finally {
+      await inOwner((agent) => {
+        agent.store.reviews.disable();
+        agent.store.db.run(`DELETE FROM zur_review_settings`);
+      });
+    }
+  });
+});
+
 describe("/bloquear and the lockdown", () => {
   it("works with the AI down and reading locked: sessions end, routines with AI wait, the alert goes out", async () => {
     await linkOwner();

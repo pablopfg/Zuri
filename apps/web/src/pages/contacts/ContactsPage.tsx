@@ -31,15 +31,17 @@ const birthdayText = (value: string, locale: string) => {
 
 // The Clients tab (step 22b) comes only when opened: its code and texts stay out of this screen's download (rule P11).
 const ClientsPanel = lazy(() => import("./crm/ClientsPanel.tsx").then((m) => ({ default: m.ClientsPanel })));
+// The Reviews tab (step 19c), the same way.
+const ReviewsPanel = lazy(() => import("./reviews/ReviewsPanel.tsx").then((m) => ({ default: m.ReviewsPanel })));
 
 /**
- * Contacts: the Google copy (step 19b) and the internal CRM's clients (step
- * 22b), each a tab with its own address.
+ * Contacts: the Google copy (step 19b), the internal CRM's clients (step
+ * 22b) and the Google reviews (step 19c), each a tab with its own address.
  */
 export function ContactsPage() {
   const { t } = useI18n();
   const { aba } = useParams();
-  if (aba !== undefined && aba !== "clientes") return <Navigate to="/contatos" replace />;
+  if (aba !== undefined && aba !== "clientes" && aba !== "avaliacoes") return <Navigate to="/contatos" replace />;
   return (
     <div className="space-y-6">
       <PageHeader title={t("web.contacts.title")} description={t("web.contacts.tabsDescription")} />
@@ -47,6 +49,10 @@ export function ContactsPage() {
       {aba === "clientes" ? (
         <Suspense fallback={<Loading rows={4} />}>
           <ClientsPanel />
+        </Suspense>
+      ) : aba === "avaliacoes" ? (
+        <Suspense fallback={<Loading rows={4} />}>
+          <ReviewsPanel />
         </Suspense>
       ) : (
         <GoogleTab />
@@ -69,6 +75,9 @@ function Tabs() {
       </NavLink>
       <NavLink to="/contatos/clientes" className={tab}>
         {t("web.contacts.tab.clients")}
+      </NavLink>
+      <NavLink to="/contatos/avaliacoes" className={tab}>
+        {t("web.contacts.tab.reviews")}
       </NavLink>
     </nav>
   );

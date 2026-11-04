@@ -15,7 +15,17 @@ import type { AlertChannel, AlertMessage, SendResult } from "../alerts/channels.
 import { log } from "../log.ts";
 import type { TelegramCallbacks } from "./callbacks.ts";
 import { TelegramApiError, TelegramBudgetError, type TelegramClient } from "./client.ts";
-import type { GroupLink, TelegramLinks } from "./links.ts";
+import type { GroupLink, TelegramLinks, TopicKey } from "./links.ts";
+
+/**
+ * The Google reviews' notices (step 19c) go to the group's own "Avaliações"
+ * topic (the owner's choice: the team handles negative reviews there). The
+ * ones meant for the owner alone (a draft to approve, a burst, a problem of
+ * the connection) never go to the group.
+ */
+const REVIEWS_PRIVATE = new Set(["reviews.draft", "reviews.burst", "reviews.problem"]);
+const topicOf = (notice: { kind: string; category: AlertCategory }): TopicKey => (notice.kind.startsWith("reviews.") ? "reviews" : notice.category);
+const privateOnly = (notice: { kind: string; security: boolean }, attempt: number) => notice.security || attempt >= ESCALATION.tries || REVIEWS_PRIVATE.has(notice.kind);
 
 export interface TelegramChannelDeps {
   links: TelegramLinks;
@@ -61,13 +71,13 @@ export class TelegramChannel implements AlertChannel {
    * a 429, so each counts twice.
    */
   cost({ notice, attempt }: AlertMessage): number {
-    return notice.security || attempt >= ESCALATION.tries || !this.deps.links.group() ? 2 : 6;
+    return privateOnly(notice, attempt) || !this.deps.links.group() ? 2 : 6;
   }
 
   async send({ notice, attempt, origin }: AlertMessage): Promise<SendResult> {
     const account = this.deps.links.private();
     if (!this.deps.configured() || account?.status !== "active") return { status: "skipped", reason: account ? "no_target" : "not_configured" };
-    const group = notice.security || attempt >= ESCALATION.tries ? null : this.deps.links.group();
+    const group = privateOnly(notice, attempt) ? null : this.deps.links.group();
     const chatId = group ? group.chatId : account.chatId;
     const locale = this.deps.locale();
     let client: TelegramClient;
@@ -101,8 +111,10 @@ export class TelegramChannel implements AlertChannel {
       disable_notification: notice.priority !== "high" && notice.priority !== "critical",
       reply_markup: { inline_keyboard: keyboard },
     };
-    const text = formatNotice(notice, attempt, this.deps.fullText().includes(notice.category), locale);
-    const topic = group ? await this.#topic(client, group, notice.category, locale) : null;
+    // A review in the team's group is always discreet (Pablo, 03/11/2026): a third party's text stays in the app.
+    const full = this.deps.fullText().includes(notice.category) && !(group && notice.kind.startsWith("reviews."));
+    const text = formatNotice(notice, attempt, full, locale);
+    const topic = group ? await this.#topic(client, group, topicOf(notice), locale) : null;
     try {
       const sent = await client.sendMessage(chatId, text, topic ? { ...params, message_thread_id: topic } : params);
       if (data && Number.isSafeInteger(sent?.message_id)) this.deps.callbacks.attach(Object.values(data), sent.message_id);
@@ -111,7 +123,7 @@ export class TelegramChannel implements AlertChannel {
       // The topic was deleted in the group: forget it and use the general one (recreated next time).
       if (topic && group && error instanceof TelegramApiError && error.status === 400 && /thread/i.test(error.description)) {
         const topics = { ...group.topics };
-        delete topics[notice.category];
+        delete topics[topicOf(notice)];
         this.deps.links.setTopics(group.chatId, { topics });
         try {
           const sent = await client.sendMessage(chatId, text, params);
@@ -126,7 +138,7 @@ export class TelegramChannel implements AlertChannel {
   }
 
   /** The category's topic in a forum group, created on first use; null for the general topic. */
-  #topic(client: TelegramClient, group: GroupLink, category: AlertCategory, locale: Locale): Promise<number | null> {
+  #topic(client: TelegramClient, group: GroupLink, category: TopicKey, locale: Locale): Promise<number | null> {
     if (!group.forum || group.topicsOff) return Promise.resolve(null);
     const known = group.topics[category];
     if (known) return Promise.resolve(known);
@@ -139,9 +151,9 @@ export class TelegramChannel implements AlertChannel {
     return creating;
   }
 
-  async #createTopic(client: TelegramClient, group: GroupLink, category: AlertCategory, locale: Locale): Promise<number | null> {
+  async #createTopic(client: TelegramClient, group: GroupLink, category: TopicKey, locale: Locale): Promise<number | null> {
     try {
-      const topic = await client.createForumTopic(group.chatId, t(locale, CATEGORY_NAME[category]));
+      const topic = await client.createForumTopic(group.chatId, t(locale, category === "reviews" ? "telegram.notice.topic.reviews" : CATEGORY_NAME[category]));
       if (!Number.isSafeInteger(topic?.message_thread_id) || topic.message_thread_id <= 0) return null;
       // Read again: another topic may have been saved meanwhile.
       const current = this.deps.links.group();

@@ -109,7 +109,10 @@ describe("Markdown", () => {
     expect(boxes[1]).toContain('aria-label="Feito"');
   });
 
-  it("renders a very long note without throwing", () => {
+  // What it checks is that a huge note renders, not how fast: 5,000 links take about 3 s under the
+  // coverage instrumentation alone, and past the 5 s default on the CI's runner while the agent's suite
+  // shares the machine (PR #169). The time the screen takes is the Lighthouse check's job.
+  it("renders a very long note without throwing", { timeout: 30_000 }, () => {
     const source = "# t\n\n".concat("palavra **forte** [link](https://exemplo.com.br) ".repeat(5_000));
     expect(() => render(source)).not.toThrow();
   });
