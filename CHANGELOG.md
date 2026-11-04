@@ -19,6 +19,14 @@ funciona: [docs/agente/versionamento.md](docs/agente/versionamento.md).
 
 O que já entrou na `develop` e ainda não ganhou número fica em [`changelog/nao-lancado/`](changelog/nao-lancado/) por alguns minutos, até o workflow de versão escrever a seção.
 
+## [0.29.1] - 2026-11-03
+
+Mesclada às 20:46 (UTC-3) · commit [`719aed4`](https://github.com/pablopfg/Zuri/commit/719aed4f0b670fd61d433a98f3865db0b2e4401c) · PR [#165](https://github.com/pablopfg/Zuri/pull/165) · Etapa 22b mesclada (#161)
+
+### Alterado
+
+- Sem mudança visível: etapa 22b mesclada (#161).
+
 ## [0.29.0] - 2026-11-03
 
 Mesclada às 19:53 (UTC-3) · commit [`8bdf664`](https://github.com/pablopfg/Zuri/commit/8bdf664ec00d21cfd501e5b1f636f7746bb0eab5) · PR [#161](https://github.com/pablopfg/Zuri/pull/161) · Adiciona o CRM interno e os eventos do n8n (etapa 22b)
@@ -2267,7 +2275,8 @@ Mesclada às 22:15 (UTC-3) · commit [`360a79e`](https://github.com/pablopfg/Zur
   `npm audit`), CodeQL, Dependabot e rulesets para a `develop` e a `main`.
 - `LICENSE` (MIT), `NOTICE.md`, `SECURITY.md` e `CONTRIBUTING.md`.
 
-[Não lançado]: https://github.com/pablopfg/Zuri/compare/v0.29.0...develop
+[Não lançado]: https://github.com/pablopfg/Zuri/compare/v0.29.1...develop
+[0.29.1]: https://github.com/pablopfg/Zuri/releases/tag/v0.29.1
 [0.29.0]: https://github.com/pablopfg/Zuri/releases/tag/v0.29.0
 [0.28.2]: https://github.com/pablopfg/Zuri/releases/tag/v0.28.2
 [0.28.1]: https://github.com/pablopfg/Zuri/releases/tag/v0.28.1
