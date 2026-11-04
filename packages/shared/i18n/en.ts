@@ -2567,7 +2567,7 @@ export const en: Messages = {
   "web.reviews.auto.status": "Zuri publishes replies to positive reviews on its own: {n} of {max} today.",
   "web.reviews.breaker.rejected": "Zuri went back to asking for your approval on {when}: three drafts in a row failed the check. To publish on its own again, turn it on in Settings › Integrations.",
   "web.reviews.breaker.refused": "Zuri went back to asking for your approval on {when}: Google refused a reply. To publish on its own again, turn it on in Settings › Integrations.",
-  "web.reviews.breaker.deleted": "Zuri went back to asking for your approval on {when}: one of its replies was deleted. To publish on its own again, turn it on in Settings › Integrations.",
+  "web.reviews.breaker.deleted": "Zuri went back to asking for your approval on {when}: one of its replies was deleted or replaced. To publish on its own again, turn it on in Settings › Integrations.",
   "web.reviews.empty.all.title": "No reviews read",
   "web.reviews.empty.all.body": "The first read keeps what already exists as history. The next ones bring the new reviews.",
   "web.reviews.more": "Load more",

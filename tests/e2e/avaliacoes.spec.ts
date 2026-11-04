@@ -184,7 +184,7 @@ test("lists the replies published by itself with Delete reply, and shows why the
   status.autoToday = 0;
   status.breaker = { reason: "deleted", at: "2026-11-03T16:00:00.000Z" };
   await page.reload();
-  await expect(page.getByText(/A Zuri voltou a pedir sua aprovação em .*: uma resposta dela foi apagada\./)).toBeVisible();
+  await expect(page.getByText(/A Zuri voltou a pedir sua aprovação em .*: uma resposta dela foi apagada ou trocada\./)).toBeVisible();
   await expect(page.getByText(/publica sozinha as respostas/)).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Publicadas sozinha (1)" })).toBeVisible();
   await expectAccessible(page, "contatos-avaliacoes-disjuntor");

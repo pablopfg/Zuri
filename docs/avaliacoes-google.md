@@ -109,9 +109,12 @@ no privado quando:
 - três rascunhos seguidos de avaliações positivas não passam na conferência
   ou na segunda leitura;
 - o Google recusa uma resposta;
-- uma resposta da Zuri é apagada, pela tela ou direto no Google.
+- uma resposta da Zuri é apagada ou trocada, pela tela ou direto no Google.
 
-O motivo aparece na aba e em Integrações até você salvar de novo. Para voltar
+Falta de Neurons ou a IA fora do ar não contam como reprovação: nesses casos a
+avaliação ganha um modelo seu e espera a sua aprovação.
+
+O motivo aparece na aba e em Integrações até você ligar de novo. Para voltar
 a publicar sozinha, escolha a opção outra vez (senha e alerta de novo).
 
 ### A conferência de toda resposta

@@ -35,7 +35,7 @@ export const ptBRReviews = {
   "web.reviews.auto.status": "A Zuri publica sozinha as respostas às positivas: {n} de {max} hoje.",
   "web.reviews.breaker.rejected": "A Zuri voltou a pedir sua aprovação em {when}: três rascunhos seguidos não passaram na conferência. Para publicar sozinha de novo, ligue em Configurações › Integrações.",
   "web.reviews.breaker.refused": "A Zuri voltou a pedir sua aprovação em {when}: o Google recusou uma resposta. Para publicar sozinha de novo, ligue em Configurações › Integrações.",
-  "web.reviews.breaker.deleted": "A Zuri voltou a pedir sua aprovação em {when}: uma resposta dela foi apagada. Para publicar sozinha de novo, ligue em Configurações › Integrações.",
+  "web.reviews.breaker.deleted": "A Zuri voltou a pedir sua aprovação em {when}: uma resposta dela foi apagada ou trocada. Para publicar sozinha de novo, ligue em Configurações › Integrações.",
   "web.reviews.empty.all.title": "Nenhuma avaliação lida",
   "web.reviews.empty.all.body": "A primeira leitura guarda o que já existe como histórico. As próximas trazem as novas.",
   "web.reviews.more": "Carregar mais",

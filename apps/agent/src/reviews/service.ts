@@ -160,6 +160,8 @@ export interface ReviewRow {
 
 /** What one check found, told at its end. */
 interface Found {
+  /** Positive reviews proposed by this check (the "drafts ready" notice counts those still waiting at its end). */
+  proposed?: string[];
   negatives: ReviewRow[];
   worse: ReviewRow[];
   drafts: number;
@@ -245,7 +247,9 @@ export class ReviewService {
 
   /** A draft of Zuri's a decision counts for: a positive review's, untouched by any reason for care. */
   private trialDraft(row: ReviewRow): boolean {
-    return row.state === "proposed" && row.rating >= 4 && row.draft !== null && (row.draft_source === "ai" || row.draft_source === "template") && parseList(row.reasons).length === 0;
+    // Only the AI's own drafts that passed both checks: approving one of the owner's templates says nothing about
+    // what the AI writes, and the AI's text is what goes out by itself.
+    return row.state === "proposed" && row.rating >= 4 && row.draft !== null && row.draft_source === "ai" && parseList(row.fallback).length === 0 && parseList(row.reasons).length === 0;
   }
 
   /**
@@ -397,13 +401,16 @@ export class ReviewService {
         now,
       );
       // Only what is proposed from now on goes out by itself: the queue the owner was counting on stays theirs.
-      // Saving is the owner looking at the breaker's reason, so it clears.
+      // The breaker's reason stays on the screen until the owner turns publishing by itself on again.
       this.db.run(
         `UPDATE zur_review_settings SET auto = ?, auto_since = CASE WHEN ? = 0 THEN NULL WHEN auto = 1 THEN auto_since ELSE ? END,
-           rejections = CASE WHEN ? = 1 AND auto = 0 THEN 0 ELSE rejections END, breaker = NULL, breaker_at = NULL WHERE id = 1`,
+           rejections = CASE WHEN ? = 1 AND auto = 0 THEN 0 ELSE rejections END,
+           breaker = CASE WHEN ? = 1 THEN NULL ELSE breaker END, breaker_at = CASE WHEN ? = 1 THEN NULL ELSE breaker_at END WHERE id = 1`,
         auto ? 1 : 0,
         auto ? 1 : 0,
         now,
+        auto ? 1 : 0,
+        auto ? 1 : 0,
         auto ? 1 : 0,
       );
       // Level off: nothing is drafted for approval any more (what was proposed stays for the owner).
@@ -507,7 +514,9 @@ export class ReviewService {
       const published = await this.autoPublish(stamp, bursting);
       if (!this.mine(stamp)) return "off";
       if (published > 0) this.deps.notify({ kind: "reviews.auto", count: published });
-      const waiting = found.drafts - published;
+      // Only this check's proposals that nothing published: a leftover of an earlier check going out takes no draft off.
+      const ids = found.proposed ?? [];
+      const waiting = ids.length ? (this.db.one<{ n: number }>(`SELECT count(*) AS n FROM zur_reviews WHERE state = 'proposed' AND id IN (${ids.map(() => "?").join(", ")})`, ...ids)?.n ?? 0) : 0;
       if (waiting > 0) this.deps.notify({ kind: "reviews.draft", count: waiting });
       const done = this.clock();
       this.db.run(
@@ -620,8 +629,10 @@ export class ReviewService {
     if (reply) {
       const mine = row.reply_hash !== null && ReviewService.replyHash(reply) === row.reply_hash;
       const state: ReviewState = mine ? "replied" : row.state === "history" || row.state === "resolved" || row.state === "removed" ? row.state : "replied_elsewhere";
-      this.db.run(`UPDATE zur_reviews SET reply = ?, state = ?, needs_draft = 0 WHERE id = ?`, reply, state, row.id);
+      this.db.run(`UPDATE zur_reviews SET reply = ?, state = ?, needs_draft = 0, auto = CASE WHEN ? THEN auto ELSE 0 END WHERE id = ?`, reply, state, mine ? 1 : 0, row.id);
       if (state !== row.state) this.event(row.id, state === "replied" ? "replied" : "replied_elsewhere", "check");
+      // A reply of Zuri's someone replaced at Google is as good as deleted: nothing more goes out by itself.
+      if (!mine && row.state === "replied" && row.reply_hash !== null) this.trip("deleted");
       return;
     }
     // The reply is gone at Google (the owner deleted it there): the review waits again, never replied over.
@@ -810,7 +821,10 @@ export class ReviewService {
     const rows = this.db.all<ReviewRow>(`SELECT * FROM zur_reviews WHERE needs_draft = 1 ORDER BY seen_at, id LIMIT ?`, REVIEW_LIMITS.draftsPerWake);
     for (const row of rows) {
       if (!this.mine(stamp)) return;
-      if (await this.draftOne(row)) found.drafts++;
+      if (await this.draftOne(row)) {
+        found.drafts++;
+        found.proposed = [...(found.proposed ?? []), row.id];
+      }
     }
   }
 
@@ -853,14 +867,14 @@ export class ReviewService {
       );
       this.event(row.id, "drafted", "check", fallback);
     };
-    const fallback = (codes: ReviewGuardCode[]): boolean => {
+    const fallback = (codes: ReviewGuardCode[], counted = codes.length > 0): boolean => {
       if (!positive) {
         this.db.run(`UPDATE zur_reviews SET needs_draft = 0 WHERE id = ? ${same}`, row.id, ...version);
         if (codes.length) this.event(row.id, "draft_failed", "check", codes);
         return false;
       }
       // Zuri's own draft of a positive review failed a check: three in a row stop publishing by itself (step 19d).
-      if (codes.length) this.rejected();
+      if (counted) this.rejected();
       const text = this.template(row, pattern);
       if (!text) {
         this.db.run(`UPDATE zur_reviews SET needs_draft = 0 WHERE id = ? ${same}`, row.id, ...version);
@@ -912,7 +926,10 @@ export class ReviewService {
       // The review's language is measured, never taken from the AI; its label only counts where nothing could be measured.
       const codes = guard(reply, this.guardContext(row, pattern, languageOf(row.comment) ?? language));
       if (codes.length) return fallback(codes);
-      if (left <= 0 || !(await this.responder.secondRead(reply, left, onNeurons))) return fallback(["second_read"]);
+      // Out of Neurons before the second reading isn't the draft's fault (like the model out of reach): a template, labelled as
+      // not read again for the owner, but no failure counted toward the breaker.
+      if (left <= 0) return fallback(["second_read"], false);
+      if (!(await this.responder.secondRead(reply, left, onNeurons))) return fallback(["second_read"]);
       propose(reply, "ai", []);
       if (positive) this.db.run(`UPDATE zur_review_settings SET rejections = 0 WHERE id = 1 AND rejections != 0`);
       return positive;
@@ -980,7 +997,9 @@ export class ReviewService {
     if (codes.length) throw new AppError("VALIDATION_FAILED", "error.reviewRejected", { codes });
     // The trial of publishing by itself (step 19d): the owner's decision on a draft of Zuri's, once it holds.
     const counts = this.trialDraft(row);
-    await this.publish(row, text, actor, { onClaimed: () => counts && this.remember(text === row.draft) });
+    await this.publish(row, text, actor);
+    // Counted once it went out: an approval Google refused or that found the review changed never counts.
+    if (counts) this.remember(text === row.draft);
     return this.item(this.byId(id) as ReviewRow);
   }
 
@@ -991,7 +1010,7 @@ export class ReviewService {
    * the review is "uncertain" until the next check reads it. A refusal from
    * Google restores the review and is told to `onRefused`.
    */
-  private async publish(row: ReviewRow, text: string, actor: ReviewActor, hooks: { onClaimed?: () => void; onRefused?: () => void } = {}): Promise<void> {
+  private async publish(row: ReviewRow, text: string, actor: ReviewActor, hooks: { onRefused?: () => void; meter?: GoogleMeter } = {}): Promise<void> {
     const id = row.id;
     const auto = actor === "auto" ? 1 : 0;
     const source: ReviewDraftSource = row.draft !== null && text === row.draft ? (row.draft_source ?? "owner") : "owner";
@@ -999,7 +1018,9 @@ export class ReviewService {
     // The text and its hash go with the claim: if the object stops before Google answers, the check finds the
     // row "sending" past its time, makes it "uncertain" and reads Google to learn whether it went out.
     const claimed = this.db.run(
-      `UPDATE zur_reviews SET state = 'sending', sending_at = ?, draft = ?, draft_source = ?, reply_hash = ?, auto = ? WHERE id = ? AND state = ? AND updated_at = ?`,
+      // The draft and its time too: a draft written again (or discarded and written again) meanwhile is not the one approved.
+      `UPDATE zur_reviews SET state = 'sending', sending_at = ?, draft = ?, draft_source = ?, reply_hash = ?, auto = ?
+       WHERE id = ? AND state = ? AND updated_at = ? AND draft IS ? AND proposed_at IS ?`,
       this.clock(),
       text,
       source,
@@ -1008,9 +1029,10 @@ export class ReviewService {
       id,
       row.state,
       row.updated_at,
+      row.draft,
+      row.proposed_at,
     ).rowsWritten;
     if (!claimed) throw new AppError("CONFLICT", "error.reviewHandled");
-    hooks.onClaimed?.();
     const restore = () =>
       this.db.run(
         `UPDATE zur_reviews SET state = ?, sending_at = NULL, draft = ?, draft_source = ?, reply_hash = ?, auto = 0 WHERE id = ? AND state = 'sending'`,
@@ -1021,7 +1043,7 @@ export class ReviewService {
         id,
       );
     this.event(id, "approved", actor);
-    const meter = new GoogleMeter(PUBLISH_BUDGET);
+    const meter = hooks.meter ?? new GoogleMeter(PUBLISH_BUDGET);
     let current: GoogleReview;
     try {
       const body = await this.deps.google.business(GOOGLE_REVIEWS_API, `/${row.google_name}`, meter);
@@ -1111,36 +1133,53 @@ export class ReviewService {
     const rows = this.db.all<ReviewRow>(
       // A template stands in for the AI's draft only on a rating without text: one that replaced a draft the
       // model never wrote (out of reach, out of Neurons) means nobody read the text, so the owner does.
+      // A few more than the room: one that changed at Google meanwhile leaves its place to the next.
       `SELECT * FROM zur_reviews WHERE state = 'proposed' AND rating >= 4 AND reasons = '[]' AND fallback = '[]' AND draft IS NOT NULL
          AND (draft_source = 'ai' OR (draft_source = 'template' AND comment = '')) AND proposed_at >= ? AND created_at >= ? ORDER BY proposed_at, id LIMIT ?`,
       settings.auto_since,
       new Date(this.clock() - REVIEW_LIMITS.maxAgeDays * 86_400_000).toISOString(),
-      room,
+      room + REVIEW_LIMITS.autoPerCheck,
     );
     const pattern = this.pattern(settings);
     let published = 0;
-    for (const row of rows) {
-      if (!this.mine(stamp) || this.row()?.auto !== 1) break;
-      if (row.draft === null || this.clock() - (row.proposed_at ?? 0) > REVIEW_LIMITS.proposalTtlMs) continue;
-      // The owner's banned words or signature may have changed since the draft: the checker again, on the text as it goes.
-      if (guard(row.draft, this.guardContext(row, pattern, languageOf(row.comment))).length) continue;
-      // The day's slot is taken before Google is asked: a publication cut halfway still counts.
+    let used = 0;
+    const slot = () => {
+      used++;
       this.db.run(
         `UPDATE zur_review_settings SET auto_today = CASE WHEN auto_day = ? THEN auto_today + 1 ELSE 1 END, auto_day = ? WHERE id = 1`,
         day,
         day,
       );
+    };
+    for (const listed of rows) {
+      if (used >= room || !this.mine(stamp) || this.row()?.auto !== 1) break;
+      // Read again: the owner may have discarded or rewritten it while Google answered for the one before.
+      const row = this.byId(listed.id);
+      if (!row || row.state !== "proposed" || row.draft === null || row.draft !== listed.draft || row.proposed_at !== listed.proposed_at) continue;
+      if (this.clock() - (row.proposed_at ?? 0) > REVIEW_LIMITS.proposalTtlMs) continue;
+      // The owner's banned words or signature may have changed since the draft: the checker again, on the text as it goes.
+      if (guard(row.draft, this.guardContext(row, pattern, languageOf(row.comment))).length) continue;
+      // Room for the re-read and the reply in this wake, or it waits: a reply never set out isn't "uncertain".
+      const meter = new GoogleMeter(PUBLISH_BUDGET);
+      if (!meter.room(2)) break;
       let refused = false;
       try {
-        await this.publish(row, row.draft, "auto", { onRefused: () => (refused = true) });
+        await this.publish(row, row.draft, "auto", { onRefused: () => (refused = true), meter });
+        // The day's slot is spent by what went out (or may have: see below), never by a review that changed.
+        slot();
         published++;
       } catch (error) {
         if (refused) {
           this.trip("refused");
           break;
         }
-        // Changed, answered or removed at Google: that review waits or is done; the others may still go.
+        if (error instanceof AppError && error.code === "SERVICE_UNAVAILABLE") {
+          // No answer from Google: it may have gone out, so it counts; the rest waits for the next check.
+          slot();
+          break;
+        }
         if (error instanceof AppError && error.messageKey === "error.reviewsPaused") break;
+        // Changed, answered or removed at Google, or taken by the owner: that review waits or is done; the others may still go.
         if (error instanceof AppError && (error.code === "TARGET_CHANGED" || error.code === "CONFLICT")) continue;
         // Google out of reach or the wake's calls spent: the rest waits for the next check.
         log("warn", "reviews_auto_stopped", { error });
@@ -1163,15 +1202,17 @@ export class ReviewService {
         if (reply && ReviewService.replyHash(reply) === row.reply_hash) {
           this.db.run(`UPDATE zur_reviews SET state = 'replied', reply = ?, replied_at = ? WHERE id = ?`, reply, new Date(this.clock()).toISOString(), row.id);
           this.event(row.id, "published", "check");
+          // One that went out by itself is told like the others (step 19d).
+          if (row.auto === 1) this.deps.notify({ kind: "reviews.auto", count: 1 });
         } else if (reply) {
-          this.db.run(`UPDATE zur_reviews SET state = 'replied_elsewhere', reply = ?, reply_hash = NULL WHERE id = ?`, reply, row.id);
+          this.db.run(`UPDATE zur_reviews SET state = 'replied_elsewhere', reply = ?, reply_hash = NULL, auto = 0 WHERE id = ?`, reply, row.id);
         } else {
-          // It didn't go out: back to the owner, the draft kept.
-          this.db.run(`UPDATE zur_reviews SET state = 'proposed', reply_hash = NULL, proposed_at = ? WHERE id = ?`, this.clock(), row.id);
+          // It didn't go out: back to the owner, the draft kept (no longer "by itself").
+          this.db.run(`UPDATE zur_reviews SET state = 'proposed', reply_hash = NULL, auto = 0, proposed_at = ? WHERE id = ?`, this.clock(), row.id);
         }
       } catch (error) {
         if (error instanceof GoogleError && error.kind === "not_found") {
-          this.db.run(`UPDATE zur_reviews SET state = 'removed' WHERE id = ?`, row.id);
+          this.db.run(`UPDATE zur_reviews SET state = 'removed', auto = 0 WHERE id = ?`, row.id);
           continue;
         }
         throw error;
@@ -1193,7 +1234,7 @@ export class ReviewService {
       current = parsed.data;
     } catch (error) {
       if (error instanceof GoogleError && error.kind === "not_found") {
-        this.db.run(`UPDATE zur_reviews SET state = 'removed' WHERE id = ?`, id);
+        this.db.run(`UPDATE zur_reviews SET state = 'removed', auto = 0 WHERE id = ?`, id);
         throw new AppError("CONFLICT", "error.reviewRemoved");
       }
       throw error;
@@ -1204,7 +1245,7 @@ export class ReviewService {
       return this.item(this.byId(id) as ReviewRow);
     }
     if (ReviewService.replyHash(reply) !== row.reply_hash) {
-      this.db.run(`UPDATE zur_reviews SET state = 'replied_elsewhere', reply = ?, reply_hash = NULL WHERE id = ?`, reply, id);
+      this.db.run(`UPDATE zur_reviews SET state = 'replied_elsewhere', reply = ?, reply_hash = NULL, auto = 0 WHERE id = ?`, reply, id);
       throw new AppError("CONFLICT", "error.reviewNotMine");
     }
     await this.deps.google.business(GOOGLE_REVIEWS_API, `/${row.google_name}/reply`, meter, { method: "DELETE" });

@@ -174,6 +174,18 @@ aba e do nível (computador e celular, claro e escuro).
 - Qualquer resposta da Zuri apagada pelo dono com o automático ligado desarma
   o disjuntor, mesmo uma que ele mesmo aprovou.
 
+- Só contam no período de experiência os rascunhos escritos pela IA que
+  passaram nas duas conferências. Aprovar um modelo do dono não diz nada
+  sobre a IA. A aprovação conta só depois que o Google aceitou a resposta.
+- Falta de Neurons antes da segunda leitura e IA fora do ar não contam como
+  reprovação: a avaliação recebe um modelo e espera o dono.
+- A vaga do dia só é gasta pelo que saiu (ou pode ter saído, quando o Google
+  não respondeu). Avaliação que mudou no caminho não gasta vaga.
+- A publicação sozinha só reserva a avaliação se o rascunho e a hora da
+  proposta ainda forem os que foram lidos; cada avaliação é relida antes.
+- Resposta da Zuri trocada por outra no Google desarma como "apagada".
+- O motivo do disjuntor fica na tela até o dono ligar o nível de novo.
+
 ## 14. Entrevista com o Pablo
 
 Sem perguntas novas: as decisões de 03/11/2026 cobrem a etapa.

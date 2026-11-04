@@ -104,6 +104,28 @@ describe("the trial", () => {
       expect(level(world, "off").level).toBe("off");
     }));
 
+  it("counts only the AI's drafts, and an approval only once Google took it", () =>
+    withReviewsWorld(async (world) => {
+      await turnOn(world);
+      // A rating without text gets the owner's template: approving it says nothing about the AI.
+      add(world, "s1", 5);
+      await later(world);
+      const template = await world.reviews.item(row(world, "s1") as never);
+      await world.reviews.approve(template.id, { text: template.draft as string, version: template.version }, "app");
+      expect(settings(world)?.trial).toBe("");
+      // Google refuses the reply: the approval didn't happen, so nothing is counted.
+      praise(world, "p1");
+      await later(world);
+      world.sim.business.replyFailure = 400;
+      const refused = await world.reviews.item(row(world, "p1") as never);
+      await expect(world.reviews.approve(refused.id, { text: SIGNED, version: refused.version }, "app")).rejects.toThrow();
+      expect(settings(world)?.trial).toBe("");
+      world.sim.business.replyFailure = null;
+      const again = await world.reviews.item(row(world, "p1") as never);
+      await world.reviews.approve(again.id, { text: SIGNED, version: again.version }, "app");
+      expect(settings(world)?.trial).toBe("1");
+    }));
+
   it("keeps only the last 30 decisions", () =>
     withReviewsWorld(async (world) => {
       await turnOn(world);
@@ -221,6 +243,68 @@ describe("publishing by itself", () => {
       expect(world.reviews.status().autoToday).toBe(1);
     }));
 
+  it("starts the day over at midnight in the owner's zone, not in UTC", () =>
+    withReviewsWorld(async (world) => {
+      await autoOn(world);
+      // 02:34 UTC on Nov 5 is 23:34 on Nov 4 in São Paulo; the check below runs at 23:50 there.
+      world.clock.now = Date.parse("2026-11-05T02:34:00Z");
+      world.db.run(`UPDATE zur_review_settings SET auto_day = '2026-11-04', auto_today = ?`, REVIEW_LIMITS.autoPerDay);
+      add(world, "s1", 5);
+      await later(world);
+      expect(published(world)).toBe(0);
+      expect(row(world, "s1")?.state).toBe("proposed");
+      // 00:06 on Nov 5 there: a new day.
+      await later(world);
+      expect(published(world)).toBe(1);
+      expect(settings(world)?.auto_today).toBe(1);
+    }));
+
+  it("holds back during a burst of negatives (5 in an hour), and not at 4", () =>
+    withReviewsWorld(async (world) => {
+      await autoOn(world);
+      for (let i = 0; i < 4; i++) add(world, `n${i}`, 1, "Péssimo.");
+      // Short checks, all within the hour: the negatives' careful drafts go first (3 a wake), then s1's.
+      await later(world, 5);
+      await later(world, 5);
+      add(world, "s1", 5);
+      await later(world, 5);
+      expect(row(world, "s1")?.state).toBe("replied");
+      add(world, "n4", 1, "Péssimo.");
+      await later(world, 5);
+      expect(world.notices.some((n) => n.kind === "reviews.burst")).toBe(true);
+      add(world, "s2", 5);
+      await later(world, 5);
+      await later(world, 5);
+      expect(row(world, "s2")?.state).toBe("proposed");
+      expect(published(world)).toBe(1);
+    }));
+
+  it("doesn't publish a draft that changed while the one before it went out", () =>
+    withReviewsWorld(async (world) => {
+      await autoOn(world);
+      add(world, "s1", 5);
+      add(world, "s2", 5);
+      const business = world.google.business.bind(world.google);
+      let first: string | null = null;
+      world.google.business = (async (...args: Parameters<typeof business>) => {
+        const body = await business(...args);
+        const match = /\/reviews\/(s[12])$/.exec(String(args[1]));
+        // A new draft of the other one lands while the first is being published (the owner editing it on the screen).
+        if (match?.[1] && first === null) {
+          first = match[1];
+          const other = first === "s1" ? "s2" : "s1";
+          world.db.run(`UPDATE zur_reviews SET draft = 'Outro texto.', proposed_at = proposed_at + 1 WHERE google_name = ?`, `${LOCATION}/reviews/${other}`);
+        }
+        return body;
+      }) as typeof world.google.business;
+      await later(world);
+      const other = first === "s1" ? "s2" : "s1";
+      expect(row(world, first ?? "")?.state).toBe("replied");
+      expect(row(world, other)).toMatchObject({ state: "proposed", draft: "Outro texto.", auto: 0 });
+      expect(published(world)).toBe(1);
+      expect(settings(world)?.auto_today).toBe(1);
+    }));
+
   it("holds back during a burst (10 new reviews in an hour), and not below it (9)", () =>
     withReviewsWorld(async (world) => {
       await autoOn(world);
@@ -306,7 +390,9 @@ describe("the breaker", () => {
       expect(status.level).toBe("approve");
       expect(status.breaker?.reason).toBe("rejected");
       expect(world.notices.filter((n) => n.kind === "reviews.breaker")).toEqual([{ kind: "reviews.breaker", reason: "rejected" }]);
-      // A second reading that refuses counts too, and a draft out of shape.
+      // Saving the profile at "approve" keeps the reason on the screen; turning it back on clears it.
+      level(world, "approve");
+      expect(world.reviews.status().breaker?.reason).toBe("rejected");
       trial(world, "1".repeat(10));
       level(world, "auto");
       expect(world.reviews.status().breaker).toBeNull();
@@ -365,6 +451,8 @@ describe("the breaker", () => {
       world.sim.business.edit(LOCATION, "s1", { reviewReply: { comment: row(world, "s1")?.draft as string, updateTime: new Date(world.clock.now).toISOString() } });
       await later(world);
       expect(row(world, "s1")).toMatchObject({ state: "replied", auto: 1 });
+      // The owner hears of it once it is settled, not while it was in doubt.
+      expect(world.notices.filter((n) => n.kind === "reviews.auto")).toEqual([{ kind: "reviews.auto", count: 1 }]);
     }));
 
   it("goes back to asking when the owner deletes a reply of Zuri's on the screen", () =>
@@ -394,6 +482,18 @@ describe("the breaker", () => {
       world.sim.business.edit(LOCATION, "e1", { reviewReply: undefined, updateTime: new Date(world.clock.now + 1000).toISOString() });
       await later(world);
       expect(settings(world)?.auto).toBe(1);
+    }));
+
+  it("goes back to asking when a reply of Zuri's is replaced at Google", () =>
+    withReviewsWorld(async (world) => {
+      await autoOn(world);
+      add(world, "s1", 5);
+      await later(world);
+      expect(row(world, "s1")?.auto).toBe(1);
+      world.sim.business.edit(LOCATION, "s1", { reviewReply: { comment: "Valeu! Equipe Exemplo", updateTime: new Date(world.clock.now + 1000).toISOString() }, updateTime: new Date(world.clock.now + 1000).toISOString() });
+      await later(world);
+      expect(row(world, "s1")).toMatchObject({ state: "replied_elsewhere", auto: 0 });
+      expect(settings(world)).toMatchObject({ auto: 0, breaker: "deleted" });
     }));
 
   it("turning the reviews off turns publishing by itself off and keeps the trial", () =>
