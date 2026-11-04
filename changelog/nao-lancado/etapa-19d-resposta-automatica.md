@@ -13,7 +13,7 @@
 - Aba **Publicadas sozinha** em **Contatos › Avaliações**, com **Apagar
   resposta**.
 - Disjuntor: três rascunhos reprovados seguidos, uma recusa do Google ou uma
-  resposta da Zuri apagada fazem a Zuri voltar a pedir sua aprovação. Ela
+  resposta da Zuri apagada ou trocada fazem a Zuri voltar a pedir sua aprovação. Ela
   avisa você no privado e mostra o motivo na tela.
 
 ### Segurança
@@ -22,3 +22,9 @@
   um pico de avaliações. Negativas, textos suspeitos e rascunhos que não
   passaram nas conferências continuam esperando você. Só a tela muda esse
   nível: a conversa, as rotinas e o bot não alcançam.
+
+### Atualização
+
+- O banco ganha a migration 27 (nível de publicar sozinha, período de
+  experiência, disjuntor e contador da aba). Ela roda sozinha e só acrescenta.
+  Nenhum secret novo.
