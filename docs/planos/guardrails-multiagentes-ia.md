@@ -200,7 +200,7 @@ olhar o campo de tokens em cache no `usage`.
 1. **Fixar a temperatura por tarefa no código**, numa tabela em `packages/shared` (ex.: conversa 0,4; resumo e fluxos 0,2; JSON e verificação 0). Hoje trocar o modelo da conversa muda o comportamento sem ninguém ver (0,15 no Scout, 0,6 no Qwen e no Llama 3.3).
 2. `top_p` só se a medição mostrar ganho; o padrão do modelo já é razoável.
 3. Não usar `seed`, `top_k` nem `repetition_penalty`: o SDK não manda e os modelos não aceitam todos. Repetição se resolve no prompt e no `max_tokens`.
-4. **Não pôr temperatura na tela.** Para um dono só, um controle a mais é um jeito a mais de piorar a resposta sem perceber. (Pergunta 2 da seção 8.)
+4. ~~Não pôr temperatura na tela.~~ O Pablo decidiu pôr temperatura, parâmetros e prompt na tela (seção 8.1). Os valores do código viram o padrão de cada agente.
 5. O teste do cache de prefixo entra no mesmo PR, medido no teste de orçamento.
 
 ## 7. Gerenciamento seguro de prompts
@@ -211,7 +211,7 @@ olhar o campo de tokens em cache no `usage`.
 | --- | --- | --- | --- |
 | No código versionado (hoje) | Revisão por PR, histórico no Git, testes, mesmo commit do código que o usa, nada editável em produção | Mudar um prompt pede deploy | **Manter** |
 | No banco (SQLite do DO) | Muda sem deploy | Quem entra na conta (ou um bug de escrita) muda o comportamento da IA sem revisão; o backup passa a carregar instruções; o repositório deixa de ser a fonte da verdade | Não |
-| Editável pela tela | Ajuste rápido pelo dono | É exatamente a injeção pela interface que o pedido quer evitar | Não |
+| Editável pela tela | Ajuste rápido pelo dono | Sem cuidado, vira injeção pela interface | **Sim, só a camada do dono** (decisão de 04/11/2026, seção 8.1) |
 
 ### Regras que já valem (e passam a constar aqui)
 
@@ -229,15 +229,32 @@ olhar o campo de tokens em cache no `usage`.
    - Fora da CI, com IA real e teto: `scripts/avaliar-prompts.ts` roda um conjunto fixo de casos (datas, idioma, recusa de instrução em `<data>`, afirmação sem ferramenta, JSON das avaliações) contra a conta do próprio dono, com teto de 300 Neurons por rodada, e imprime acertos por caso. Roda antes de mudar prompt ou modelo padrão. A CI não tem acesso à IA da conta nem deve ter.
 4. **Regra de revisão.** Toda mudança de prompt é PR com a seção "Prompt" no modelo: o que mudou, o resultado do `avaliar-prompts` e a versão nova. Fica em `.claude/rules/` como regra da área.
 
-## 8. Perguntas ao Pablo
+## 8. Perguntas ao Pablo (respondidas em 04/11/2026)
 
-1. **Segunda leitura por IA nas rotinas com ferramenta externa no automático?** Custa ~7 a 19 Neurons por chamada externa. Recomendação: **sim**, só nesse caso. Reprovou, vira proposta para aprovar.
-2. **Temperatura e parâmetros ajustáveis na tela de IA?** Recomendação: **não**. Ficam fixos por tarefa no código, revisados por PR. A tela continua só com modelo, limites e Neurons.
-3. **Rodar `avaliar-prompts` na sua conta antes de cada mudança de prompt ou de modelo padrão?** Gasta até 300 Neurons por rodada, de um dia com 9.000. Recomendação: **sim**, só quando um PR muda prompt ou modelo.
+1. **Segunda leitura por IA nas rotinas com ferramenta externa no automático?** Resposta: **sim**. Custa ~7 a 19 Neurons por chamada externa; reprovou, vira proposta para aprovar.
+2. **Temperatura e parâmetros ajustáveis na tela de IA?** Resposta: **sim, e o prompt de cada agente também.** Isso muda a recomendação da seção 6 e da seção 7 (ver 8.1).
+3. **Rodar `avaliar-prompts` na conta do dono antes de cada mudança de prompt ou de modelo padrão?** Resposta: **sim**. Teto de 300 Neurons por rodada.
+
+O Pablo pediu também que os especialistas sejam padronizados buscando a máxima performance e assertividade (seção 4).
+
+### 8.1 Como fica a edição pela tela, sem abrir brecha
+
+A tela de IA ganha, para a conversa e para cada especialista, a temperatura (e o
+`top_p`) dentro da faixa que o modelo aceita, o máximo de tokens e um prompt
+editável. Para que isso não vire porta de injeção:
+
+- **Duas camadas por agente.** A camada de segurança (regras sobre `<data>`, ferramentas, propostas, datas, idioma, formato JSON dos especialistas) continua fixa no código e vai sempre primeiro. A tela edita só a camada do dono (persona, tom, estilo, tarefa), que entra depois dela com origem própria no contrato (`owner_prompt`), é limpa de caracteres invisíveis e não pode trazer `<data`.
+- **Só o dono, só pela tela.** Mudar prompt ou parâmetro pede a senha de novo (como a troca de senha), fica bloqueado no modo de bloqueio e não existe ferramenta, comando do bot, MCP ou fluxo que mude isso. A IA nunca edita o próprio prompt.
+- **Versões.** Cada mudança vira uma versão nova com data, guardada no banco (migration de acréscimo), com "voltar para a anterior" e "voltar ao padrão". A versão em uso fica gravada em cada resposta, rodada de rotina e rascunho de avaliação.
+- **Limites.** Teto de tamanho por prompt, faixa por parâmetro e modelo, e o teste canário e o corpus de injeção passam a rodar também com um prompt do dono plantado.
+- **Teste antes de salvar.** A tela oferece "Testar" com alguns casos do `avaliar-prompts` (com teto de Neurons), para ver o efeito antes de valer.
+
+O que não muda: o padrão de cada agente continua no código versionado e revisado
+por PR; o que o dono edita é uma camada por cima, que dá para desfazer.
 
 ## 9. Próximos passos sugeridos
 
-Um PR avulso, depois da 19c, na ordem:
+Implementação em PR própria, na ordem (com a seção 8.1 entre os passos 2 e 3):
 
 1. Tabela de temperatura por tarefa + conversa com temperatura fixa + teste do cache de prefixo (~0,5 dia).
 2. Módulo `specialists/` com o contrato, levando resumo, nó de IA e avaliações para `composePrompt`, e `PROMPT_VERSION` gravado (~1 dia).
