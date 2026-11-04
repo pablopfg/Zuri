@@ -151,9 +151,10 @@ Google Cloud, então a Zuri lê de 15 em 15 minutos.
   gatilhos, então a aba e o `/status` não leem a tabela inteira.
 - Avisos: categoria "system", sem prioridade que aprende. No Telegram, os
   tipos `reviews.*` vão para o tópico "Avaliações" do grupo; rascunho pronto,
-  pico e problema de acesso vão só ao chat privado. O título nunca leva o
-  nome nem o texto; o corpo leva o primeiro nome e o texto, que passam pelo
-  `disarm()` do bot.
+  pico e problema de acesso vão só ao chat privado. No grupo o aviso é
+  sempre discreto. O título nunca leva o nome nem o texto; o corpo, no app e
+  no privado com o texto completo ligado, leva o primeiro nome e o texto numa
+  linha só, que passam pelo `disarm()` do bot.
 - No bloqueio nada lê o Google nem publica. Nada da avaliação (nome, texto,
   ids do Google) vai para o log: só contagens e nomes de erro.
 

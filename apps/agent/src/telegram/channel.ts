@@ -111,7 +111,9 @@ export class TelegramChannel implements AlertChannel {
       disable_notification: notice.priority !== "high" && notice.priority !== "critical",
       reply_markup: { inline_keyboard: keyboard },
     };
-    const text = formatNotice(notice, attempt, this.deps.fullText().includes(notice.category), locale);
+    // A review in the team's group is always discreet (Pablo, 03/11/2026): a third party's text stays in the app.
+    const full = this.deps.fullText().includes(notice.category) && !(group && notice.kind.startsWith("reviews."));
+    const text = formatNotice(notice, attempt, full, locale);
     const topic = group ? await this.#topic(client, group, topicOf(notice), locale) : null;
     try {
       const sent = await client.sendMessage(chatId, text, topic ? { ...params, message_thread_id: topic } : params);

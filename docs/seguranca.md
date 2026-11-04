@@ -901,9 +901,9 @@ que a Zuri lê. O que protege:
 - **Fora do log e do aviso curto.** Nome, texto e ids do Google nunca vão para
   o log: só contagens e nomes de erro. O título do aviso não leva nome nem
   texto; o corpo leva o primeiro nome e o texto numa linha só (não imita o
-  rodapé de outro aviso), que passam pelo `disarm()` do bot. O texto inteiro
-  só chega ao Telegram se o dono abriu o texto completo da categoria
-  "Sistema" nos avisos; sem isso, o grupo recebe o aviso discreto. A auditoria de 180 dias guarda só ações e códigos da conferência.
+  rodapé de outro aviso), que passam pelo `disarm()` do bot. No grupo da
+  equipe o aviso de avaliação é sempre discreto, mesmo com o texto completo
+  da categoria "Sistema" aberto: o texto de terceiros fica no app. A auditoria de 180 dias guarda só ações e códigos da conferência.
 - **Bloqueio e desligar.** No bloqueio nada lê o Google nem publica.
   Desligar as avaliações ou desconectar o Google apaga a cópia guardada; no
   Google nada muda.
